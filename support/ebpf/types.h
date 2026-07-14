@@ -376,6 +376,11 @@ enum {
   // number of thread context attribute payloads truncated to fit the buffer
   metricID_UnwindThreadContextAttrsTruncated,
 
+  // number of heap allocs dropped due to per-PID live-heap cap
+  metricID_HeapPerPIDLimitHit,
+
+  // number of dropped heap alloc entries due to map full
+  metricID_HeapLiveMapFull,
   //
   // Metric IDs above are for counters (cumulative values)
   //

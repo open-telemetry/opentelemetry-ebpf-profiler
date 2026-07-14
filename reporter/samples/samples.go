@@ -114,6 +114,38 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
+// SnapshotProfile is a set of snapshot samples produced by a probe's SnapshotSource
+// implementation at each collection interval, rather than from individual trace
+// events. The reporter folds them into the TraceEventsTree, so they are exported
+// by the same path as event-driven samples and pick up any DerivedProfiles
+// declared on ProfileType.
+type SnapshotProfile struct {
+	// ProfileType describes how the samples are exported. Snapshot profiles
+	// normally set OmitThreadContext, having no per-thread attribution.
+	ProfileType *TypeMetadata
+	// Samples are the data rows.
+	Samples []SnapshotSample
+}
+
+// SnapshotSample is a single sample row produced by a SnapshotSource probe.
+type SnapshotSample struct {
+	PID       libpf.PID
+	TraceHash libpf.TraceHash
+	Frames    libpf.Frames
+	// Value is interpreted per ProfileType.SampleType.
+	Value int64
+	// ValueExtra carries auxiliary values, mirroring TraceEventMeta.ValueExtra.
+	// It is what ProfileType's DerivedProfiles transforms receive.
+	ValueExtra [2]uint64
+}
+
+// ProcessMeta holds per-process metadata needed when building OTLP
+// resource attributes for profile export.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
+}
+
 // TypeMetadata describes how profiling events of a particular kind
 // should be interpreted and exported as an OTel profile.
 type TypeMetadata struct {
@@ -141,6 +173,11 @@ type TypeMetadata struct {
 	// ReportValues indicates whether a sample's value should be included
 	// in the exported sample (e.g. off-CPU durations).
 	ReportValues bool
+
+	// OmitThreadContext suppresses the per-sample thread and CPU attributes.
+	// Interval snapshots aggregate across threads and have no meaningful TID
+	// or CPU, so emitting zeros for them would misattribute the samples.
+	OmitThreadContext bool
 
 	// Additional profile types that can be derived from the primary profile
 	// plus any AdditionalValue data.

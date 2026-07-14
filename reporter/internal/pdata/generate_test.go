@@ -752,6 +752,71 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
 }
 
+// TestOmitThreadContextDropsThreadAttrs verifies that a profile type declaring
+// OmitThreadContext emits no thread.id or cpu.logical_number attributes. Interval
+// snapshots have no TID or CPU, and a zero for either would misattribute the
+// sample to thread 0 on CPU 0.
+func TestOmitThreadContextDropsThreadAttrs(t *testing.T) {
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(11, 12),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	for _, tc := range []struct {
+		name        string
+		omit        bool
+		wantThreadA bool
+	}{
+		{name: "omitted", omit: true, wantThreadA: false},
+		{name: "reported", omit: false, wantThreadA: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := New(100, nil)
+			require.NoError(t, err)
+
+			profileType := &samples.TypeMetadata{
+				SampleType:        "inuse_space",
+				SampleUnit:        "bytes",
+				ReportValues:      true,
+				OmitThreadContext: tc.omit,
+			}
+			profiles, err := testGenerate(d, samples.TraceEventsTree{
+				{ExecutablePath: libpf.Intern("/bin/app")}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileType: {
+							{TID: 7, CPU: 3}: &samples.TraceEvents{
+								Frames:     frames,
+								Timestamps: []uint64{1},
+								Values:     []int64{4096},
+							},
+						},
+					},
+				},
+			}, "agent", "v1")
+			require.NoError(t, err)
+
+			dic := profiles.Dictionary()
+			sample := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).
+				Profiles().At(0).Samples().At(0)
+
+			var gotTID, gotCPU bool
+			for _, idx := range sample.AttributeIndices().AsRaw() {
+				attr := dic.AttributeTable().At(int(idx))
+				switch dic.StringTable().At(int(attr.KeyStrindex())) {
+				case string(semconv.ThreadIDKey):
+					gotTID = true
+				case string(semconv.CPULogicalNumberKey):
+					gotCPU = true
+				}
+			}
+			assert.Equal(t, tc.wantThreadA, gotTID, "thread.id presence")
+			assert.Equal(t, tc.wantThreadA, gotCPU, "cpu.logical_number presence")
+		})
+	}
+}
+
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string

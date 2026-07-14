@@ -422,3 +422,57 @@ func TestValuesExtraUnusedByDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestMergeSnapshotsIntoTree verifies that probe snapshot samples land in
+// the event tree keyed by their process, so that Generate exports them through
+// the normal path together with any derived profiles.
+func TestMergeSnapshotsIntoTree(t *testing.T) {
+	profileType := &samples.TypeMetadata{
+		SampleType:        "inuse_space",
+		SampleUnit:        "bytes",
+		ReportValues:      true,
+		OmitThreadContext: true,
+		DerivedProfiles: []samples.DerivedProfile{{
+			SampleType: "inuse_objects",
+			SampleUnit: "count",
+			Value: func(_ int64, extra [2]uint64) int64 {
+				return int64(extra[0])
+			},
+		}},
+	}
+
+	reporter := createTestBaseReporter(t, &Config{
+		Name:             "test-agent",
+		Version:          "v1.0.0",
+		SamplesPerSecond: 100,
+		SnapshotSources: func() []samples.SnapshotProfile {
+			return []samples.SnapshotProfile{{
+				ProfileType: profileType,
+				Samples: []samples.SnapshotSample{{
+					PID:        42,
+					TraceHash:  libpf.NewTraceHash(1, 2),
+					Value:      4096,
+					ValueExtra: [2]uint64{7, 0},
+				}},
+			}}
+		},
+		ProcessMetaForPID: func(libpf.PID) samples.ProcessMeta {
+			return samples.ProcessMeta{ExecutablePath: libpf.Intern("/bin/app")}
+		},
+	})
+
+	ts := time.Unix(1700, 0)
+	tree := make(samples.TraceEventsTree)
+	reporter.mergeSnapshots(tree, ts)
+
+	rtp, ok := tree[samples.ResourceKey{PID: 42, ExecutablePath: libpf.Intern("/bin/app")}]
+	require.True(t, ok, "no resource entry for the snapshot's PID")
+	events := rtp.Events[profileType]
+	require.Len(t, events, 1)
+
+	ev, ok := events[samples.SampleKey{Hash: libpf.NewTraceHash(1, 2)}]
+	require.True(t, ok, "snapshot sample is not keyed by its trace hash")
+	assert.Equal(t, []int64{4096}, ev.Values)
+	assert.Equal(t, [][2]uint64{{7, 0}}, ev.ValuesExtra)
+	assert.Equal(t, []uint64{uint64(ts.UnixNano())}, ev.Timestamps)
+}

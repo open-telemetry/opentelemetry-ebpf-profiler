@@ -237,10 +237,12 @@ func (p *Pdata) setProfile(
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, sampleKey.Comm.String())
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, sampleKey.TID)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		if !profileType.OmitThreadContext {
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.ThreadIDKey, sampleKey.TID)
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)

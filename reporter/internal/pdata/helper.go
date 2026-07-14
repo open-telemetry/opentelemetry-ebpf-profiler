@@ -47,9 +47,8 @@ func hashLocationIndices(locationIndices []int32) uint64 {
 // It returns the index of the stack in the dictionary's StackTable.
 //
 // This is the single source of truth for turning a libpf.Frames into a stack
-// index. Both the main profile path (setProfile) and the source-profile path
-// (appendSourceProfile) call it so their mapping/location/stack encoding, and
-// crucially the attributes attached to them, cannot drift apart.
+// index, so that mapping/location/stack encoding, and crucially the attributes
+// attached to them, cannot drift apart between callers.
 func appendFramesAsStack(
 	frames libpf.Frames,
 	dic pprofile.ProfilesDictionary,

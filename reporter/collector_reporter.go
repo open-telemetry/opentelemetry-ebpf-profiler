@@ -91,6 +91,10 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
+	// Snapshot samples from probes join the event tree before generation so
+	// they travel the same export path as event-driven samples.
+	r.mergeSnapshots(reportedEvents, collectionEndTime)
+
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
 		collectionStartTime, collectionEndTime)
 	if err != nil {
