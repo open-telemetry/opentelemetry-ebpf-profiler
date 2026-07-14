@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -110,6 +111,24 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	c.tracer = trc
 	log.Info("eBPF tracer loaded")
+
+	// Wire probe sample sources and process metadata into the reporter.
+	if setter, ok := c.reporter.(interface {
+		SetSampleSources(func() []samples.SourceProfile)
+	}); ok {
+		setter.SetSampleSources(trc.CollectSampleSources)
+	}
+	if setter, ok := c.reporter.(interface {
+		SetProcessMetaForPID(func(libpf.PID) samples.ProcessMeta)
+	}); ok {
+		setter.SetProcessMetaForPID(func(pid libpf.PID) samples.ProcessMeta {
+			meta := trc.ProcessManager().MetaForPID(pid)
+			return samples.ProcessMeta{
+				ExecutablePath: meta.Executable,
+				ContainerID:    meta.ContainerID,
+			}
+		})
+	}
 
 	now := time.Now()
 

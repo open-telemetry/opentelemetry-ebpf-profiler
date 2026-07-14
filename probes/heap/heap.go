@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -23,13 +24,29 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-const heapProbeProvider = "otel_memory"
+const (
+	defaultLiveHeapMaxEntriesPerPID = 10_000
+	heapProbeProvider               = "otel_memory"
+)
 
 // Config holds configuration for the heap probe.
 type Config struct {
 	// LiveHeapProfiling additionally loads the free probe so that
 	// deallocations can be tracked for live/inuse heap reporting.
 	LiveHeapProfiling bool `mapstructure:"live_heap_profiling"`
+
+	// LiveHeapMaxEntriesPerPID is the maximum number of live allocations
+	// tracked per process in the eBPF heap_alloc_live map. Allocations
+	// beyond this limit are not tracked for inuse profiling.
+	LiveHeapMaxEntriesPerPID int `mapstructure:"live_heap_max_entries_per_pid"`
+}
+
+// Validate implements confmap.Validator.
+func (c *Config) Validate() error {
+	if c.LiveHeapMaxEntriesPerPID < 0 {
+		return fmt.Errorf("heap: live_heap_max_entries_per_pid must not be negative")
+	}
+	return nil
 }
 
 type attachmentKey struct {
@@ -43,6 +60,7 @@ type Probe struct {
 	cfg        Config
 	discoverer *usdt.Discoverer
 	programs   map[string]*cebpf.Program
+	tracker    *Tracker
 
 	mu          sync.Mutex
 	attachments map[libpf.PID]map[attachmentKey]link.Link
@@ -50,12 +68,36 @@ type Probe struct {
 	// heapLivePids is the eBPF map that gates per-PID live-heap tracking.
 	heapLivePids *cebpf.Map
 
+	// heapAllocLive is the eBPF hash map correlating alloc/free for live-heap.
+	heapAllocLive *cebpf.Map
+
+	// heapPIDAllocCount is the eBPF map holding per-PID live alloc counts.
+	heapPIDAllocCount *cebpf.Map
+
+	// heapPIDAllocLimit is the eBPF array map holding the per-PID alloc cap.
+	heapPIDAllocLimit *cebpf.Map
+
 	// originAlloc and originFree are the dynamically-assigned origin IDs.
 	originAlloc uint16
 	originFree  uint16
 
+	// pendingAlloc* fields are stashed by PreHandleTrace for alloc events
+	// and consumed by PostHandleTrace after symbolization. Safe because
+	// trace processing is single-goroutine.
+	pendingAllocPID   libpf.PID
+	pendingAllocPtr   uint64
+	pendingAllocValue int64
+
 	// livePIDMapFullCount counts PIDs that failed to be added to heap_live_pids.
 	livePIDMapFullCount uint64
+}
+
+// heapAllocKey mirrors the eBPF HeapAllocKey struct used as the key for
+// the heap_alloc_live map.
+type heapAllocKey struct {
+	PID uint32
+	_   uint32 // padding
+	Ptr uint64
 }
 
 // New creates a heap probe with the given configuration.
@@ -145,9 +187,33 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 		return fmt.Errorf("creating USDT discoverer: %w", err)
 	}
 
-	// Grab map handle for userspace operations.
+	// Grab map handles for userspace operations.
 	if m, ok := pctx.Map("heap_live_pids"); ok {
 		hp.heapLivePids = m
+	}
+	if m, ok := pctx.Map("heap_alloc_live"); ok {
+		hp.heapAllocLive = m
+	}
+	if m, ok := pctx.Map("heap_pid_alloc_count"); ok {
+		hp.heapPIDAllocCount = m
+	}
+	if m, ok := pctx.Map("heap_pid_alloc_limit"); ok {
+		hp.heapPIDAllocLimit = m
+	}
+
+	// Write the per-PID alloc limit into the eBPF array map so the
+	// kernel-side code enforces the cap.
+	if hp.heapPIDAllocLimit != nil && hp.cfg.LiveHeapMaxEntriesPerPID > 0 {
+		key := uint32(0)
+		val := uint32(hp.cfg.LiveHeapMaxEntriesPerPID)
+		if err := hp.heapPIDAllocLimit.Put(key, val); err != nil {
+			log.Warnf("heap probe: failed to set heap_pid_alloc_limit: %v", err)
+		}
+	}
+
+	// Create the live heap tracker if live profiling is enabled.
+	if hp.cfg.LiveHeapProfiling {
+		hp.tracker = NewTracker()
 	}
 
 	// Register for per-process callbacks via ProbeAttacher.
@@ -268,6 +334,27 @@ func (hp *Probe) Detach(pid libpf.PID) {
 		}
 	}
 
+	// Purge userspace live-heap state and collect pointers for eBPF cleanup.
+	var ptrs []uint64
+	if hp.tracker != nil {
+		ptrs = hp.tracker.HandleProcessExit(pid)
+	}
+
+	// Remove entries from heap_alloc_live for this PID.
+	if hp.heapAllocLive != nil && len(ptrs) > 0 {
+		for _, ptr := range ptrs {
+			key := heapAllocKey{PID: uint32(pid), Ptr: ptr}
+			_ = hp.heapAllocLive.Delete(key)
+		}
+	}
+
+	// Remove per-PID alloc count.
+	if hp.heapPIDAllocCount != nil {
+		pidKey := uint32(pid)
+		_ = hp.heapPIDAllocCount.Delete(pidKey)
+	}
+
+	// Remove from heap_live_pids.
 	if hp.heapLivePids != nil {
 		hp.setHeapLivePID(pid, false)
 	}
@@ -278,18 +365,98 @@ func (hp *Probe) Detach(pid libpf.PID) {
 func (hp *Probe) Unload() error { return nil }
 
 // PreOrigins implements tracer.PreTraceHandler.
-func (h *Probe) PreOrigins() []uint16 {
-	return []uint16{h.originFree}
+func (hp *Probe) PreOrigins() []uint16 {
+	return []uint16{hp.originFree, hp.originAlloc}
 }
 
-// PreHandleTrace implements tracer.PreTraceHandler. It consumes heap free
-// events (which need no symbolization or reporting) and lets everything else
-// through.
-func (h *Probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
-	return false // consumed: origin-gated dispatch ensures only free events arrive here
+// PostOrigins implements tracer.PostTraceHandler.
+func (hp *Probe) PostOrigins() []uint16 {
+	return []uint16{hp.originAlloc}
 }
 
-// setHeapLivePID adds or removes a PID from the heap_live_pids eBPF map.
+// PreHandleTrace implements tracer.PreTraceHandler.
+// For free events: updates the tracker and consumes the trace.
+// For alloc events: stashes raw eBPF fields for PostHandleTrace and
+// continues with symbolization.
+func (hp *Probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
+	if trace.Origin == hp.originFree {
+		if hp.tracker != nil {
+			hp.tracker.HandleFree(trace.PID, trace.Ptr)
+		}
+		return false // consumed
+	}
+	// Alloc event: stash raw fields for PostHandleTrace.
+	hp.pendingAllocPID = trace.PID
+	hp.pendingAllocPtr = trace.Ptr
+	hp.pendingAllocValue = trace.Value
+	return true
+}
+
+// PostHandleTrace implements tracer.PostTraceHandler. It feeds heap alloc
+// events to the live heap tracker after symbolization.
+func (hp *Probe) PostHandleTrace(trace *libpf.Trace) {
+	if hp.tracker == nil {
+		return
+	}
+	hp.tracker.HandleAlloc(
+		hp.pendingAllocPID,
+		hp.pendingAllocPtr,
+		trace.Hash(),
+		hp.pendingAllocValue,
+		trace.Frames,
+	)
+}
+
+// ProduceSamples implements tracer.SampleSource. Returns inuse profiles
+// from the live heap tracker snapshot.
+func (hp *Probe) ProduceSamples() []samples.SourceProfile {
+	if hp.tracker == nil {
+		return nil
+	}
+	entries := hp.tracker.Snapshot()
+	if len(entries) == 0 {
+		return nil
+	}
+
+	result := make([]samples.SourceSample, len(entries))
+	for i, e := range entries {
+		result[i] = samples.SourceSample{
+			PID:       e.PID,
+			TraceHash: e.TraceHash,
+			Frames:    e.Frames,
+			Values:    []int64{e.Space, e.Objects},
+		}
+	}
+
+	return []samples.SourceProfile{{
+		SampleTypes: []samples.SourceSampleType{
+			{Type: "inuse_space", Unit: "bytes"},
+			{Type: "inuse_objects", Unit: "count"},
+		},
+		Samples: result,
+	}}
+}
+
+// GetAndResetMetrics implements tracer.MetricsProvider.
+func (hp *Probe) GetAndResetMetrics() []metrics.Metric {
+	var result []metrics.Metric
+	if hp.tracker != nil {
+		result = hp.tracker.GetAndResetMetrics()
+	}
+
+	// Append probe-level metrics.
+	if hp.livePIDMapFullCount > 0 {
+		result = append(result, metrics.Metric{
+			ID:    metrics.IDHeapLivePIDMapFull,
+			Value: metrics.MetricValue(hp.livePIDMapFullCount),
+		})
+		hp.livePIDMapFullCount = 0
+	}
+	return result
+}
+
+// setHeapLivePID adds or removes a PID from the heap_live_pids eBPF map
+// and notifies the userspace live heap tracker.
 func (hp *Probe) setHeapLivePID(pid libpf.PID, enabled bool) {
 	key := uint32(pid)
 	if enabled {
@@ -302,5 +469,11 @@ func (hp *Probe) setHeapLivePID(pid libpf.PID, enabled bool) {
 		if err := hp.heapLivePids.Delete(key); err != nil {
 			log.Debugf("heap probe: delete heap_live_pids for PID %d: %v", pid, err)
 		}
+	}
+
+	// Notify the userspace tracker so it accepts/rejects alloc samples for this PID.
+	if hp.tracker != nil {
+		log.Debugf("heap probe: SetPIDLiveHeapSupport PID %d enabled=%v", pid, enabled)
+		hp.tracker.SetPIDLiveHeapSupport(pid, enabled)
 	}
 }

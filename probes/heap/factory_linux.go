@@ -18,7 +18,9 @@ import (
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
 		metadata.Type,
-		func() component.Config { return &Config{} },
+		func() component.Config {
+			return &Config{LiveHeapMaxEntriesPerPID: defaultLiveHeapMaxEntriesPerPID}
+		},
 		createExtension,
 		metadata.ExtensionsStability,
 	)
