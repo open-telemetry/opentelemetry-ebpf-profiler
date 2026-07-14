@@ -436,6 +436,17 @@ type PostTraceHandler interface {
 	PostHandleTrace(trace *libpf.Trace)
 }
 
+// SnapshotSource is an optional interface that Probe implementations may satisfy
+// to produce additional profiles at each report interval. This allows probes to
+// emit data that isn't tied to individual traces (e.g. live/inuse heap snapshots
+// aggregated from alloc/free correlation).
+//
+// The tracer checks whether a Probe satisfies SnapshotSource after Enable and, if
+// so, includes it in the periodic collection performed by CollectSnapshots.
+type SnapshotSource interface {
+	ProduceSnapshots() []samples.SnapshotProfile
+}
+
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
@@ -484,5 +495,19 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		}
 	}
 
+	if ss, ok := p.(SnapshotSource); ok {
+		t.snapshotSources = append(t.snapshotSources, ss)
+	}
+
 	return nil
+}
+
+// CollectSnapshots invokes all registered SnapshotSource probes and returns
+// their combined profiles. Called by the reporter once per collection interval.
+func (t *Tracer) CollectSnapshots() []samples.SnapshotProfile {
+	var profiles []samples.SnapshotProfile
+	for _, ss := range t.snapshotSources {
+		profiles = append(profiles, ss.ProduceSnapshots()...)
+	}
+	return profiles
 }

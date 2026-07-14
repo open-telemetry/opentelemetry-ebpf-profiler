@@ -218,6 +218,10 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// snapshotSources are probes that implement SnapshotSource and produce
+	// additional profiles at each collection interval.
+	snapshotSources []SnapshotSource
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -229,6 +233,13 @@ type Tracer struct {
 // when the tracer should be stopped.
 func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
+}
+
+// ProcessMetaForPID returns the process metadata needed to attribute snapshot
+// profiles to their executable and container resources.
+func (t *Tracer) ProcessMetaForPID(pid libpf.PID) process.Meta {
+	meta, _ := t.processManager.MetaForPID(pid)
+	return meta
 }
 
 // signalDone closes the done channel to indicate an unrecoverable error.
