@@ -227,6 +227,16 @@ func (hp *Probe) close() {
 	}
 }
 
+// PreHandleTrace implements tracer.PreTraceHandler. It consumes heap free
+// events (which need no symbolization or reporting) and lets everything else
+// through.
+func (h *Probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
+	if trace.Origin == h.originFree {
+		return false // consumed
+	}
+	return true
+}
+
 // reconcileLoop periodically re-scans PIDs that have no attachments yet.
 func (hp *Probe) reconcileLoop(ctx context.Context) {
 	defer close(hp.done)
