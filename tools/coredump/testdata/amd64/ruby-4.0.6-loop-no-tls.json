@@ -1,17 +1,19 @@
 {
-  "coredump-ref": "1df3f85c49df333abbb61dce1d28786b2e6e26bcba5a32b1fb5a0f0c168cbd62",
+  "coredump-ref": "5c68e2f404d48aac9888ff3ff0fe3e1942bdc1b759693944fbaa6fc6f6e89a61",
   "threads": [
     {
-      "lwp": 1486,
+      "lwp": 2965,
       "frames": [
         "libc.so.6+0x9eb2c",
         "libc.so.6+0x4527d",
         "ruby+0x35846",
         "ruby+0x137e95",
         "libc.so.6+0x4532f",
-        "ruby+0x1c5048",
-        "ruby+0x1ca058",
-        "ruby+0xf2573",
+        "ruby+0x1aeffa",
+        "ruby+0x1bc69b",
+        "ruby+0x1c3541",
+        "ruby+0x1c4a5f",
+        "ruby+0xf253d",
         "ruby+0x1afe21",
         "ruby+0x1bf994",
         "ruby+0x1cf4f9",
@@ -24,7 +26,7 @@
         "Range#each+0 in <cfunc>:0",
         "Object#is_prime+0 in /tmp/loop.rb:14",
         "Object#sum_of_primes+0 in /tmp/loop.rb:24",
-        "?+0x0",
+        "block (2 levels) in <main>+0 in /tmp/loop.rb:34",
         "ruby+0x1c0013",
         "ruby+0x387b4",
         "ruby+0x3b3d8",
@@ -35,7 +37,7 @@
       ]
     },
     {
-      "lwp": 1488,
+      "lwp": 2967,
       "frames": [
         "libc.so.6+0x12a072",
         "ruby+0x1795d0",
@@ -45,6 +47,10 @@
     }
   ],
   "modules": [
+    {
+      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
     {
       "ref": "1b87a1a50b496cfead2b0ad134c2ff536705c82608db240c7e8aa48d6c0e4217",
       "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
@@ -68,10 +74,6 @@
     {
       "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
       "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
-    },
-    {
-      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
-      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
     }
   ]
 }
