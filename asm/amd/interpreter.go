@@ -98,6 +98,26 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.setX86asm(dst, expression.Add(left, right))
 			}
 		}
+	case x86asm.SUB:
+		// SUB is ADD with the right operand negated (-1 * x). Multiply/Add fold
+		// the immediate case, so `sub reg, imm` cancels a later `+imm`. Note that
+		// symbolic cancellation doesn't happen, so X + (-1 * X) doesn't become 0.
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			left := i.Regs.GetX86(dst)
+			var right expression.Expression
+			switch src := inst.Args[1].(type) {
+			case x86asm.Imm:
+				right = expression.Imm(uint64(src))
+			case x86asm.Reg:
+				right = i.Regs.GetX86(src)
+			case x86asm.Mem:
+				right = expression.MemWithSegment(src.Segment, i.MemArg(src), inst.MemBytes)
+			}
+			if right != nil {
+				neg := expression.Multiply(expression.Imm(^uint64(0)), right)
+				i.Regs.setX86asm(dst, expression.Add(left, neg))
+			}
+		}
 	case x86asm.SHL:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
