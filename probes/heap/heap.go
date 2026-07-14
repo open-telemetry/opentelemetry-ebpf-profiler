@@ -276,6 +276,19 @@ func (hp *Probe) Detach(pid libpf.PID) {
 // Unload implements tracer.Probe. The heap probe has no global kernel links;
 // per-PID resources are released via Detach.
 func (hp *Probe) Unload() error { return nil }
+
+// PreOrigins implements tracer.PreTraceHandler.
+func (h *Probe) PreOrigins() []uint16 {
+	return []uint16{h.originFree}
+}
+
+// PreHandleTrace implements tracer.PreTraceHandler. It consumes heap free
+// events (which need no symbolization or reporting) and lets everything else
+// through.
+func (h *Probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
+	return false // consumed: origin-gated dispatch ensures only free events arrive here
+}
+
 // setHeapLivePID adds or removes a PID from the heap_live_pids eBPF map.
 func (hp *Probe) setHeapLivePID(pid libpf.PID, enabled bool) {
 	key := uint32(pid)

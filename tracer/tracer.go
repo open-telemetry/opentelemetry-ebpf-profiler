@@ -156,6 +156,14 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// sampleSources are probes that implement SampleSource and produce
+	// additional profiles at each collection interval.
+	sampleSources []SampleSource
+
+	// metricsProviders are probes that implement MetricsProvider and expose
+	// operational metrics collected once per report interval.
+	metricsProviders []MetricsProvider
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
