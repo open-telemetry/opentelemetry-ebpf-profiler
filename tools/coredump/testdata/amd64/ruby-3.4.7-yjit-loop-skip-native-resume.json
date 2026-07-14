@@ -1,5 +1,10 @@
 {
   "coredump-ref": "7918f8b3303996c779d53a84af6aea00b197529ae02e51337592c8bb0d69df09",
+  "interpreters": {
+    "ruby": {
+      "skip_native_resume": true
+    }
+  },
   "threads": [
     {
       "lwp": 780083,
@@ -14,8 +19,7 @@
         "Range#each+0 in <cfunc>:0",
         "block in <main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:33",
         "Kernel#loop+0 in <internal:kernel>:168",
-        "<main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:32",
-        "<error ruby_jit_native_resume_unsupported>"
+        "<main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:32"
       ]
     },
     {
