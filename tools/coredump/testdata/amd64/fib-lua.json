@@ -1,0 +1,70 @@
+{
+  "coredump-ref": "0d7ccb0fdf87d61410c70884c49c2b96acfebb3d265299f0f580c98b04af4453",
+  "threads": [
+    {
+      "lwp": 104311,
+      "frames": [
+        "?+0x0",
+        "fib+16777215 in @tools/coredump/testsources/luajit/fib.lua:0",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+8 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "fib+11 in @tools/coredump/testsources/luajit/fib.lua:6",
+        "luajit+0x1ac8f",
+        "luajit+0x1215b",
+        "luajit+0x13a06",
+        "luajit+0x785d5",
+        "luajit+0x1ace3",
+        "luajit+0x86d6",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "luajit+0x8754"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "1b87a1a50b496cfead2b0ad134c2ff536705c82608db240c7e8aa48d6c0e4217",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "1cd555ac46b7887edeaf3c42aac5408c8135e52f6b37870da2cf82d5fe14e829",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "6211ad8cd0d8603bed26e7e38a98aa95a1a343744cee06729215c1f37469c3f2",
+      "local-path": "/usr/bin/luajit"
+    }
+  ]
+}
