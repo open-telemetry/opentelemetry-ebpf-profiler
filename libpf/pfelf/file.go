@@ -628,10 +628,48 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 	return ErrNoteNotFound
 }
 
+// visitBuildIDNoteSections iterates the named ELF note sections that can contain build IDs.
+// The visitor must make copies of the 'data' it keeps after return.
+func (f *File) visitBuildIDNoteSections(visitor func(uint64, []byte) bool) error {
+	if f.InsideCore {
+		return ErrNoteNotFound
+	}
+
+	if err := f.LoadSections(); err != nil {
+		return ErrNoteNotFound
+	}
+
+	rdr := pfbufio.GetReader()
+	defer pfbufio.PutReader(rdr)
+
+	visited := false
+	buildIDSections := []string{".note.gnu.build-id", ".note.go.buildid", ".notes"}
+	for i := range f.Sections {
+		section := &f.Sections[i]
+		if section.Type != elf.SHT_NOTE || section.Size == 0 ||
+			!slices.Contains(buildIDSections, section.Name) {
+			continue
+		}
+		visited = true
+
+		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
+		err := visitNotes(rdr, visitor)
+		if errors.Is(err, ErrNoteNotFound) {
+			continue
+		}
+		return err
+	}
+
+	if !visited {
+		return ErrNoteNotFound
+	}
+	return nil
+}
+
 // parseNotes parses and caches the ELF notes for the File.
 func (f *File) parseNotes() error {
 	if f.notesError == errNotProcessed {
-		f.notesError = f.VisitNotes(func(note uint64, desc []byte) bool {
+		cacheNote := func(note uint64, desc []byte) bool {
 			switch note {
 			case NoteGnuBuildId:
 				f.gnuBuildId = hex.EncodeToString(desc)
@@ -639,11 +677,19 @@ func (f *File) parseNotes() error {
 				f.goBuildId = string(desc)
 			}
 			return true
-		})
-		if errors.Is(f.notesError, ErrNoteNotFound) {
-			// Visiting every note is expected here because parseNotes caches all
-			// build ID notes, which results in terminating with ErrNoteNotFound.
-			f.notesError = nil
+		}
+
+		f.notesError = f.visitBuildIDNoteSections(cacheNote)
+		if f.notesError != nil && !errors.Is(f.notesError, ErrNoteNotFound) {
+			return f.notesError
+		}
+		if f.notesError != nil || f.gnuBuildId == "" || f.goBuildId == "" {
+			f.notesError = f.VisitNotes(cacheNote)
+			if errors.Is(f.notesError, ErrNoteNotFound) {
+				// Visiting every note is expected here because parseNotes caches all
+				// build ID notes, which results in terminating with ErrNoteNotFound.
+				f.notesError = nil
+			}
 		}
 	}
 	return f.notesError
