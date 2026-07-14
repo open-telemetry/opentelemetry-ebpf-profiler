@@ -1,5 +1,10 @@
 {
   "coredump-ref": "8c1e6935075c6928d549a8830a58514d864668a0a962c28c1562bedc29947034",
+  "interpreters": {
+    "ruby": {
+      "skip_native_resume": true
+    }
+  },
   "threads": [
     {
       "lwp": 53260,
@@ -14,8 +19,7 @@
         "Range#each+0 in <cfunc>:0",
         "block in <main>+0 in /Users/dalehamel/src/github.com/Shopify/otel-ebpf-pr1102/tools/coredump/testsources/ruby/loop.rb:33",
         "Kernel#loop+0 in <internal:kernel>:168",
-        "<main>+0 in /Users/dalehamel/src/github.com/Shopify/otel-ebpf-pr1102/tools/coredump/testsources/ruby/loop.rb:32",
-        "<error ruby_jit_native_resume_unsupported>"
+        "<main>+0 in /Users/dalehamel/src/github.com/Shopify/otel-ebpf-pr1102/tools/coredump/testsources/ruby/loop.rb:32"
       ]
     },
     {

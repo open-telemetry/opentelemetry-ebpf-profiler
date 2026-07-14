@@ -490,7 +490,14 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
       // We have processed all frames in the Ruby VM and can stop here.
       // Stop instead of resuming native unwinding when native resume is disabled.
       // Also stop if JIT was detected, because the PC is in the JIT region and
-      // native unwinding would fail.
+      // native unwinding would fail. If native resume was requested, add an error
+      // frame to make the intentional truncation visible in the profile.
+      if (record->rubyUnwindState.jit_detected && !ruby_skip_native_resume) {
+        error = push_error(
+          &record->state, trace, FRAME_MARKER_RUBY, ERR_RUBY_JIT_NATIVE_RESUME_UNSUPPORTED);
+        if (error != ERR_OK)
+          return error;
+      }
       *next_unwinder = (ruby_skip_native_resume || record->rubyUnwindState.jit_detected)
                          ? PROG_UNWIND_STOP
                          : PROG_UNWIND_NATIVE;
