@@ -15,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -507,4 +508,63 @@ func TestCustomLabelsArePartOfSampleIdentity(t *testing.T) {
 		"tenant-a": 2,
 		"tenant-b": 1,
 	}, timestampsByLabel)
+}
+
+type testSnapshotProvider struct {
+	profiles []samples.SnapshotProfile
+	meta     process.Meta
+}
+
+func (p *testSnapshotProvider) CollectSnapshots() []samples.SnapshotProfile {
+	return p.profiles
+}
+
+func (p *testSnapshotProvider) ProcessMetaForPID(libpf.PID) process.Meta {
+	return p.meta
+}
+
+// TestMergeSnapshotsIntoTree verifies that probe snapshot samples land in the
+// event tree keyed by their process and use the same value transform as events.
+func TestMergeSnapshotsIntoTree(t *testing.T) {
+	profileType := &samples.TypeMetadata{
+		SampleTypes: []samples.SampleType{
+			{Type: "inuse_space", Unit: "bytes"},
+			{Type: "inuse_objects", Unit: "count"},
+		},
+		ReportValues:      true,
+		OmitThreadContext: true,
+		AppendValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			return append(dst, int64(meta.ContextValues[0]), int64(meta.ContextValues[1]))
+		},
+	}
+
+	reporter := createTestBaseReporter(t, &Config{
+		Name:    "test-agent",
+		Version: "v1.0.0",
+	})
+	reporter.SetSnapshotProvider(&testSnapshotProvider{
+		profiles: []samples.SnapshotProfile{{
+			ProfileType: profileType,
+			Samples: []samples.SnapshotSample{{
+				PID:           42,
+				TraceHash:     libpf.NewTraceHash(1, 2),
+				ContextValues: []uint64{4096, 7},
+			}},
+		}},
+		meta: process.Meta{Executable: libpf.Intern("/bin/app")},
+	})
+
+	ts := time.Unix(1700, 0)
+	tree := make(samples.TraceEventsTree)
+	reporter.mergeSnapshots(tree, ts)
+
+	rtp, ok := tree[samples.ResourceKey{PID: 42, ExecutablePath: libpf.Intern("/bin/app")}]
+	require.True(t, ok, "no resource entry for the snapshot's PID")
+	events := rtp.Events[profileType]
+	require.Len(t, events, 1)
+
+	ev, ok := events[samples.SampleKey{Hash: libpf.NewTraceHash(1, 2)}]
+	require.True(t, ok, "snapshot sample is not keyed by its trace hash")
+	assert.Equal(t, []int64{4096, 7}, ev.Values)
+	assert.Equal(t, []uint64{uint64(ts.UnixNano())}, ev.Timestamps)
 }
