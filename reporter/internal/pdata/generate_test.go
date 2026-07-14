@@ -17,6 +17,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -871,7 +872,6 @@ func TestGenerate_Validate(t *testing.T) {
 		CheckSampleTimestampShape: true}).Check(&data)
 	require.NoError(t, err)
 }
-
 func TestHeapAllocProducesSpaceAndObjectsProfiles(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
@@ -1033,7 +1033,7 @@ func TestCompareSampleKeys(t *testing.T) {
 // TestSampleKeys_SortedDeterministic verifies that sampleKeys(_, true) returns a
 // stable, fully-ordered sequence (independent of Go's randomized map iteration),
 // and that sampleKeys(_, false) still returns the full set. This guards the
-// sort that keeps the paired alloc profiles aligned — removing it would make the
+// sort that keeps the paired alloc profiles aligned; removing it would make the
 // sorted call non-deterministic and fail here.
 func TestSampleKeys_SortedDeterministic(t *testing.T) {
 	events := samples.SampleToEvents{}
@@ -1128,4 +1128,86 @@ func TestGenerate_HeapAllocProfilesAligned(t *testing.T) {
 		distinct[s] = struct{}{}
 	}
 	assert.Len(t, distinct, n, "each key should map to a distinct stack")
+}
+
+// TestGenerate_InuseProfiles covers appendInuseProfiles: a live-heap snapshot
+// produces paired inuse_space/inuse_objects profiles under a per-PID resource,
+// with the correct values, and (regression for the shared frame-walk) the
+// same frame-type and build-ID attributes as the main profile path.
+func TestGenerate_InuseProfiles(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		FileID:   libpf.NewFileID(7, 8),
+		FileName: libpf.Intern("/lib/libheap.so"),
+	})
+	frames := singleFrameNative(mappingFile, 0x2000, 0x2000, 0x3000, 0x200)
+
+	sourceProfiles := []samples.SourceProfile{{
+		SampleTypes: []samples.SourceSampleType{
+			{Type: "inuse_space", Unit: "bytes"},
+			{Type: "inuse_objects", Unit: "count"},
+		},
+		Samples: []samples.SourceSample{
+			{PID: 42, TraceHash: libpf.NewTraceHash(0, 1), Frames: frames, Values: []int64{4096, 3}},
+		},
+	}}
+
+	// Empty event tree: the inuse profiles stand alone and create their own
+	// per-PID ResourceProfiles.
+	tree := make(samples.TraceEventsTree)
+	profiles, err := d.Generate(tree, "agent", "v1",
+		testCollectionStart, testCollectionEnd, sourceProfiles, nil)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	rp := profiles.ResourceProfiles().At(0)
+	pidVal, ok := rp.Resource().Attributes().Get(string(semconv.ProcessPIDKey))
+	require.True(t, ok, "inuse resource must carry the process PID")
+	assert.Equal(t, int64(42), pidVal.Int())
+
+	require.Equal(t, 1, rp.ScopeProfiles().Len())
+	sp := rp.ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len(), "inuse_space + inuse_objects")
+
+	strings := profiles.Dictionary().StringTable()
+	byType := make(map[string]pprofile.Profile)
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		byType[strings.At(int(prof.SampleType().TypeStrindex()))] = prof
+	}
+
+	space, ok := byType["inuse_space"]
+	require.True(t, ok, "inuse_space profile present")
+	assert.Equal(t, "bytes", strings.At(int(space.SampleType().UnitStrindex())))
+	require.Equal(t, 1, space.Samples().Len())
+	assert.Equal(t, []int64{4096}, space.Samples().At(0).Values().AsRaw())
+
+	objects, ok := byType["inuse_objects"]
+	require.True(t, ok, "inuse_objects profile present")
+	assert.Equal(t, "count", strings.At(int(objects.SampleType().UnitStrindex())))
+	require.Equal(t, 1, objects.Samples().Len())
+	assert.Equal(t, []int64{3}, objects.Samples().At(0).Values().AsRaw())
+
+	// The only frames in this request are the inuse ones, so the presence of
+	// these attribute keys proves appendInuseProfiles attached them (via the
+	// shared appendFramesAsStack helper).
+	assert.True(t, attrKeyPresent(profiles.Dictionary(), string(semconv.ProfileFrameTypeKey)),
+		"inuse locations must carry the frame-type attribute")
+	assert.True(t, attrKeyPresent(profiles.Dictionary(), string(semconv.ProcessExecutableBuildIDHtlhashKey)),
+		"inuse mappings must carry the build-ID attribute")
+}
+
+// attrKeyPresent reports whether any entry in the dictionary's attribute table
+// uses the given key.
+func attrKeyPresent(dic pprofile.ProfilesDictionary, key string) bool {
+	strings := dic.StringTable()
+	at := dic.AttributeTable()
+	for i := 0; i < at.Len(); i++ {
+		if strings.At(int(at.At(i).KeyStrindex())) == key {
+			return true
+		}
+	}
+	return false
 }
