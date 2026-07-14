@@ -92,6 +92,12 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
+// ProcessMeta holds process metadata for profile resource attributes.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
+}
+
 // SourceProfile is a set of samples sharing the same sample type schema,
 // produced by a probe's SampleSource implementation at each collection interval.
 type SourceProfile struct {

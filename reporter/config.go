@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -53,6 +54,10 @@ type Config struct {
 	// SampleSources returns additional profiles produced by probes at each
 	// collection interval. May be nil if no probes implement SampleSource.
 	SampleSources func() []samples.SourceProfile
+
+	// MetricsProviders returns operational metrics from probes at each
+	// collection interval. May be nil.
+	MetricsProviders func() []metrics.Metric
 
 	// ProcessMetaForPID resolves PID to process metadata for profile resource
 	// attributes. May be nil (resource attrs will be minimal).

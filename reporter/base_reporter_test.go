@@ -148,6 +148,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		reporter.version,
 		collectionStart,
 		collectionEnd,
+		nil, nil,
 	)
 
 	// Validate the generation succeeded

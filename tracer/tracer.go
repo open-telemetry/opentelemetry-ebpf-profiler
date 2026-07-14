@@ -180,6 +180,11 @@ func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
 }
 
+// ProcessManager returns the process manager.
+func (t *Tracer) ProcessManager() *pm.ProcessManager {
+	return t.processManager
+}
+
 // signalDone closes the done channel to indicate an unrecoverable error.
 // It is safe to call multiple times.
 func (t *Tracer) signalDone() {
