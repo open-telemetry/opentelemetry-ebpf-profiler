@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux && (amd64 || arm64)
+
 package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 
 import (
@@ -105,15 +107,6 @@ func (cfg *Config) Validate() error {
 		)
 	}
 
-	if cfg.ProbabilisticThreshold < 1 ||
-		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		return fmt.Errorf(
-			"invalid argument for probabilistic-threshold. Value "+
-				"should be between 1 and %d",
-			tracer.ProbabilisticThresholdMax,
-		)
-	}
-
 	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
 		return errors.New(
 			"invalid argument for off-cpu-threshold. The value " +
@@ -126,18 +119,29 @@ func (cfg *Config) Validate() error {
 				"should be in the range [0..1]. 0 disables jitter")
 	}
 
-	if !cfg.NoKernelVersionCheck {
-		major, minor, patch, err := linux.GetCurrentKernelVersion()
-		if err != nil {
-			return fmt.Errorf("failed to get kernel version: %v", err)
-		}
+	if cfg.ProbabilisticThreshold < 1 ||
+		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
+		return fmt.Errorf(
+			"invalid argument for probabilistic-threshold. Value "+
+				"should be between 1 and %d",
+			tracer.ProbabilisticThresholdMax,
+		)
+	}
 
-		var minMajor, minMinor uint32
-		minMajor, minMinor = 5, 10
-		if major < minMajor || (major == minMajor && minor < minMinor) {
-			return fmt.Errorf("host Agent requires kernel version "+
-				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
-		}
+	if cfg.NoKernelVersionCheck {
+		return nil
+	}
+
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %v", err)
+	}
+
+	var minMajor, minMinor uint32
+	minMajor, minMinor = 5, 10
+	if major < minMajor || (major == minMajor && minor < minMinor) {
+		return fmt.Errorf("host Agent requires kernel version "+
+			"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
 	}
 
 	return nil
