@@ -1,0 +1,92 @@
+{
+  "coredump-ref": "d77c654c4baa33e21e08960f7d29348e632d2f0036f0c5bce01dafebdfed4d7e",
+  "threads": [
+    {
+      "lwp": 116134,
+      "frames": [
+        "ruby+0x1ec430",
+        "ruby+0x203f0f",
+        "ruby+0x12d423",
+        "ruby+0x1eefbf",
+        "ruby+0x1f9ebf",
+        "ruby+0x2082a7",
+        "ruby+0x1fa8cb",
+        "ruby+0x1feea3",
+        "ruby+0x12d2d3",
+        "ruby+0x1eefbf",
+        "ruby+0x1f9ebf",
+        "ruby+0x2082a7",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /tmp/loop.rb:14",
+        "Object#sum_of_primes+0 in /tmp/loop.rb:24",
+        "block (2 levels) in <main>+0 in /tmp/loop.rb:34",
+        "ruby+0x1fa5bf",
+        "ruby+0x6a033",
+        "ruby+0x6c9ab",
+        "ruby+0x675af",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "ruby+0x6766f"
+      ]
+    },
+    {
+      "lwp": 116136,
+      "frames": [
+        "libc.so.6+0xebe74",
+        "ruby+0x1b461f",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xebb4b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "82accf1f18cb9964e5c86f6198ae51524db1c3cdbdca4d7598ab593c8a6bc1ae",
+      "local-path": "/home/korniltsev/ruby-check/install-4.0.6/lib/ruby/4.0.0/aarch64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "fe5966a43e068ad7cb389c3affa069f4ee6f296e07d7ccc0398a23cfde4f0b7e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "f2d3ad2bf0b61f6bc944cc37d7b6ab7f88d2582b41ff989ca164803f56cc5f20",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "d5b262e559d38769e4959f036a1cc2c4009fa60b4ec836a7a19ca8554aebf5a5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "b41cebf0be70f869bf60228cb5761f875ced865b0f4016f544d82f7a9ded28b0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "170380b4e7ab28ec86eb090b48df90f84089392cb72fecd5067e5b7a4dc5239f",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.3"
+    },
+    {
+      "ref": "075c5d22f93ca55b1ce22bcf2f11218f24a67e0989e067e9fabd4bf6c66bbb18",
+      "local-path": "/home/korniltsev/ruby-check/install-4.0.6/lib/ruby/4.0.0/aarch64-linux/monitor.so"
+    },
+    {
+      "ref": "210b2068922587c05bdb3779cecd681986f390c61abe53bc8108663cf4bb1493",
+      "local-path": "/home/korniltsev/ruby-check/install-4.0.6/lib/ruby/4.0.0/aarch64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "39b6701812ed7135f28df49352b3f6664c7a9f56880a3fe50c1b87cd7681db9b",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "393384096ffa869e1be20d2f91fdf08dfadb9f3e531dfe724085d8501d3f85d9",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "f26d61a395e4800cfc165f120af1de6341512b2a3e31c616001b19bc3902bb29",
+      "local-path": "/usr/lib/locale/locale-archive"
+    },
+    {
+      "ref": "a1969d5211836524f32ccd02928572bd74dfc2e109708611f475fd2d2b7888f4",
+      "local-path": "/tmp/ruby-notls/ruby"
+    }
+  ]
+}
