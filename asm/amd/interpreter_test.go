@@ -218,3 +218,55 @@ func TestRIPRelativeAddressing(t *testing.T) {
 
 	assertEval(t, rcxVal, expectedExpr)
 }
+
+func TestDisplacementSignExtension(t *testing.T) {
+	// x86asm zero-extends 32-bit displacements, so immFromDisp must recover the
+	// sign for backward references while leaving a full 64-bit moffs address
+	// intact. Cover both immFromDisp call sites (MemArg and the RIP-relative
+	// MOV special case) plus the moffs64 form.
+	mem8 := func(addr uint64) expression.Expression {
+		return expression.ZeroExtend(expression.Mem(expression.Imm(addr), 8), 64)
+	}
+	for _, tc := range []struct {
+		name string
+		code []byte
+		base uint64
+		reg  x86asm.Reg
+		want expression.Expression
+	}{
+		{
+			// lea -0x1d13(%rip),%rdx at 0x6d96c -> 0x6bc60 (MemArg path).
+			name: "lea-negative-rip",
+			code: []byte{0x48, 0x8d, 0x15, 0xed, 0xe2, 0xff, 0xff},
+			base: 0x6d96c,
+			reg:  x86asm.RDX,
+			want: expression.Imm(0x6bc60),
+		},
+		{
+			// mov -0x1234(%rip),%rax at 0x10000: RIP=0x10007 -> [0xedd3]
+			// (RIP-relative MOV path, not MemArg).
+			name: "mov-negative-rip",
+			code: []byte{0x48, 0x8b, 0x05, 0xcc, 0xed, 0xff, 0xff},
+			base: 0x10000,
+			reg:  x86asm.RAX,
+			want: mem8(0xedd3),
+		},
+		{
+			// movabs rax, [0x1122334455667788]: the moffs64 form carries a full
+			// 64-bit address that must not be truncated to 32 bits.
+			name: "moffs64-full-width",
+			code: []byte{0x48, 0xa1, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11},
+			base: 0,
+			reg:  x86asm.RAX,
+			want: mem8(0x1122334455667788),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := NewInterpreterWithCode(tc.code)
+			it.CodeAddress = expression.Imm(tc.base)
+			_, err := it.Step()
+			require.NoError(t, err)
+			assertEval(t, it.Regs.GetX86(tc.reg), tc.want)
+		})
+	}
+}
