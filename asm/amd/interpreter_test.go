@@ -174,9 +174,6 @@ func TestMoveSignExtend(t *testing.T) {
 }
 
 func TestSub(t *testing.T) {
-	// SUB negates its right operand (-1 * x) and adds it. When x folds to an
-	// immediate the offset collapses just like ADD; a symbolic x stays a -1*x
-	// term - in particular X + (-1*X) does NOT fold to 0 (the mem case).
 	for _, tc := range []struct {
 		name string
 		code []byte
