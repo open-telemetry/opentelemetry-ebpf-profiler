@@ -120,7 +120,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				if src.Base == x86asm.RIP {
 					// For RIP-relative, the address is RIP + displacement.
 					// RIP points to the already updated next instruction.
-					v = expression.Add(i.Regs.GetX86(x86asm.RIP), expression.Imm(uint64(src.Disp)))
+					v = expression.Add(i.Regs.GetX86(x86asm.RIP), immFromDisp(src.Disp))
 				} else {
 					v = i.MemArg(src)
 				}
@@ -163,10 +163,21 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	return inst, nil
 }
 
+// immFromDisp builds an immediate from an x86asm displacement. x86asm doesn't
+// sign-extend 32-bit displacements: they arrive zero-extended in
+// [0, math.MaxUint32], so recover the sign. A full 64-bit displacement (the
+// moffs64 absolute MOV form) is already the intended value and passes through.
+func immFromDisp(disp int64) expression.Expression {
+	if uint64(disp) <= math.MaxUint32 {
+		return expression.Imm(uint64(int32(disp)))
+	}
+	return expression.Imm(uint64(disp))
+}
+
 func (i *Interpreter) MemArg(src x86asm.Mem) expression.Expression {
 	vs := make([]expression.Expression, 0, 3)
 	if src.Disp != 0 {
-		vs = append(vs, expression.Imm(uint64(src.Disp)))
+		vs = append(vs, immFromDisp(src.Disp))
 	}
 	if src.Base != 0 {
 		vs = append(vs, i.Regs.GetX86(src.Base))
