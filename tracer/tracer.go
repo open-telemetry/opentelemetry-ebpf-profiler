@@ -131,7 +131,7 @@ type Tracer struct {
 	probabilisticThreshold uint
 	memProfileHooks        xsync.RWMutex[map[libpf.PID][]*link.Link]
 	memProfileBlock        atomic.Uint64
-	memProfileTargetPids   xsync.RWMutex[map[libpf.PID]bool]
+	profilingFilter        libpf.ProcessFilter
 }
 
 type Config struct {
@@ -161,9 +161,8 @@ type Config struct {
 	OffCPUThreshold uint32
 	// MemProfile switch memprofile
 	// TargetPIDs is the PIDFilter for CPU profiling target PID filtering.
-	TargetPIDs libpf.PIDFilter
-	// MemTargetPIDs is the PIDFilter for memory profiling target PID filtering.
-	MemTargetPIDs libpf.PIDFilter
+	// ProfilingFilter defines the profiling policy (PID filters, language rules).
+	ProfilingFilter libpf.ProcessFilter
 	// 每分配MemProfileBlock字节的内存就采集一次
 	MemProfileBlock uint64
 }
@@ -306,7 +305,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, nil, cfg.Reporter, elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.TargetPIDs)
+		cfg.FilterErrorFrames, cfg.ProfilingFilter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -344,17 +343,9 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		memProfileHooks:        xsync.NewRWMutex(memProfileHooks),
-		memProfileTargetPids:   xsync.NewRWMutex(make(map[libpf.PID]bool)),
 	}
 
-	// Subscribe to MemTargetPIDs changes for dynamic memory profiling target updates.
-	if cfg.MemTargetPIDs != nil {
-		libpf.ApplyFilterOnChange(cfg.MemTargetPIDs, func(pids map[libpf.PID]bool) {
-			mp := t.memProfileTargetPids.WLock()
-			*mp = pids
-			t.memProfileTargetPids.WUnlock(&mp)
-		})
-	}
+	t.profilingFilter = cfg.ProfilingFilter
 	return t, nil
 }
 

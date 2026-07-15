@@ -43,8 +43,7 @@ type Config struct {
 
 	Fs *flag.FlagSet
 
-	TargetPIDs      libpf.MutablePIDFilter
-	MemTargetPIDs   libpf.MutablePIDFilter
+	ProfilingFilter libpf.ProcessFilter
 	MemProfileBlock uint64
 }
 

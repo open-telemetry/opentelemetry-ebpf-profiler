@@ -3,7 +3,6 @@ package controller // import "github.com/toliu/opentelemetry-ebpf-profiler/inter
 import (
 	"context"
 	"fmt"
-	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -86,8 +85,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
-		TargetPIDs:             c.config.TargetPIDs,
-		MemTargetPIDs:          c.config.MemTargetPIDs,
+		ProfilingFilter:        c.config.ProfilingFilter,
 		MemProfileBlock:        c.config.MemProfileBlock,
 	})
 	if err != nil {
@@ -160,15 +158,6 @@ func (c *Controller) Shutdown() {
 	if c.tracer != nil {
 		c.tracer.Close()
 	}
-}
-
-func (c *Controller) SyncTargetPIDs(targetPids map[libpf.PID]bool) error {
-	c.config.TargetPIDs.Update(targetPids)
-	return nil
-}
-
-func (c *Controller) SyncMemTargetPIDs(targetPids map[libpf.PID]bool) {
-	c.config.MemTargetPIDs.Update(targetPids)
 }
 
 func (c *Controller) SyncMemProfileBlock(memProfileBlock uint64) error {

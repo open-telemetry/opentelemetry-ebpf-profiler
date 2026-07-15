@@ -66,7 +66,7 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, targetPIDs libpf.PIDFilter) (*ProcessManager, error) {
+	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, filter libpf.ProcessFilter) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -103,8 +103,8 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		filterErrorFrames:        filterErrorFrames,
 	}
 
-	if targetPIDs != nil {
-		libpf.ApplyFilterOnChange(targetPIDs, func(pids map[libpf.PID]bool) {
+	if filter != nil {
+		libpf.ApplyFilterOnChange(filter.CPUFilter(), func(pids map[libpf.PID]bool) {
 			if err := ebpf.ConfigureTargetPIDs(pids); err != nil {
 				log.Warnf("Failed to configure target PIDs: %v", err)
 			}

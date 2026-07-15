@@ -11,19 +11,40 @@ import (
 	"github.com/toliu/opentelemetry-ebpf-profiler/tracer"
 )
 
+// colasoftFilter implements libpf.ProcessFilter with colasoft's profiling policies.
+type colasoftFilter struct {
+	targetPIDs    libpf.MutablePIDFilter
+	memTargetPIDs libpf.MutablePIDFilter
+	langFilter    map[libpf.InterpreterType]bool
+}
+
+func (f *colasoftFilter) CPUFilter() libpf.PIDFilter { return f.targetPIDs }
+
+func (f *colasoftFilter) MemFilter() libpf.PIDFilter { return f.memTargetPIDs }
+
+func (f *colasoftFilter) ShouldProfileMem(_ libpf.PID, lang libpf.InterpreterType) bool {
+	if len(f.langFilter) == 0 {
+		// Default: only HotSpot and Golang are allowed.
+		return lang == libpf.HotSpot || lang == libpf.Golang
+	}
+	return f.langFilter[lang]
+}
+
 type (
 	Collector struct {
 		sr SymbolReporter
 
-		ctrl     *controller.Controller
-		reporter *reporter.ColaSoft
-		cfg      *controller.Config
+		ctrl            *controller.Controller
+		reporter        *reporter.ColaSoft
+		cfg             *controller.Config
+		profilingFilter *colasoftFilter
 	}
 
 	StartCfg struct {
 		Freq, OffCpuThreshold, CacheEventSTolerance int
 		Interval, CacheEventSTimeout                time.Duration
 		TargetPids, MemTargetPIDs                   map[libpf.PID]bool
+		MemProfLangFilter                           map[libpf.InterpreterType]bool
 		MemProfileBlock                             uint64
 	}
 )
@@ -47,6 +68,12 @@ func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 		return err
 	}
 
+	filter := &colasoftFilter{
+		targetPIDs:    libpf.NewMutablePIDFilter(cfg.TargetPids),
+		memTargetPIDs: libpf.NewMutablePIDFilter(cfg.MemTargetPIDs),
+		langFilter:    cfg.MemProfLangFilter,
+	}
+
 	controllerCfg := &controller.Config{
 		MonitorInterval: time.Second * 5, ClockSyncInterval: time.Minute * 3,
 		NoKernelVersionCheck: true, ProbabilisticInterval: time.Minute,
@@ -54,8 +81,7 @@ func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 		ReporterInterval:       cfg.Interval, SamplesPerSecond: cfg.Freq, Reporter: rpt,
 		Tracers:         "perl,php,python,hotspot,ruby,v8",
 		OffCPUThreshold: uint(cfg.OffCpuThreshold),
-		TargetPIDs:      libpf.NewMutablePIDFilter(cfg.TargetPids),
-		MemTargetPIDs:   libpf.NewMutablePIDFilter(cfg.MemTargetPIDs),
+		ProfilingFilter: filter,
 		MemProfileBlock: cfg.MemProfileBlock,
 	}
 	ctrl := controller.New(controllerCfg)
@@ -65,6 +91,7 @@ func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 	c.ctrl = ctrl
 	c.reporter = rpt
 	c.cfg = controllerCfg
+	c.profilingFilter = filter
 	return nil
 }
 
@@ -74,7 +101,22 @@ func (c *Collector) Stop() {
 		c.ctrl = nil
 		c.reporter = nil
 		c.cfg = nil
+		c.profilingFilter = nil
 	}
+}
+
+func (c *Collector) SyncTargetPIDs(targetPIds map[libpf.PID]bool) error {
+	if c.profilingFilter != nil {
+		c.profilingFilter.targetPIDs.Update(targetPIds)
+	}
+	return nil
+}
+
+func (c *Collector) SyncMemTargetPIDs(targetPIds map[libpf.PID]bool) error {
+	if c.profilingFilter != nil {
+		c.profilingFilter.memTargetPIDs.Update(targetPIds)
+	}
+	return nil
 }
 
 func (c *Collector) SyncMemProfileBlock(memProfileBlock uint64) error {

@@ -217,6 +217,11 @@ func (t *Tracer) triggerMemProfile(p process.Process) error {
 	if memProfileInfo == nil {
 		return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", pid)
 	}
+
+	if t.profilingFilter != nil && !t.profilingFilter.ShouldProfileMem(pid, memProfileInfo.Lang) {
+		return nil
+	}
+
 	var startProfiling func(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) ([]*link.Link, error)
 	var exec *link.Executable
 	var execPath string
@@ -284,11 +289,11 @@ func (t *Tracer) monitorMemProfilePids(keys *[]uint32) {
 		return
 	}
 
-	pids := t.memProfileTargetPids.RLock()
-	defer t.memProfileTargetPids.RUnlock(&pids)
+	// Allocates a full copy each cycle — acceptable for small PID sets.
+	pids := t.profilingFilter.MemFilter().Snapshot()
 
 	var memProfileTargetPids []libpf.PID
-	for pid, add := range *pids {
+	for pid, add := range pids {
 		if pid == 0 {
 			continue
 		}
