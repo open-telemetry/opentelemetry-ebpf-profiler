@@ -16,8 +16,7 @@ func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
 	if numBytesWanted == 0 {
 		return 0, nil
 	}
-	localIov := []unix.Iovec{{Base: &p[0]}}
-	localIov[0].SetLen(numBytesWanted)
+	localIov := []unix.Iovec{{Base: &p[0], Len: uint64(numBytesWanted)}}
 	remoteIov := []unix.RemoteIovec{{Base: uintptr(off), Len: numBytesWanted}}
 	numBytesRead, err := unix.ProcessVMReadv(int(vm.pid), localIov, remoteIov, 0)
 	if err != nil {
