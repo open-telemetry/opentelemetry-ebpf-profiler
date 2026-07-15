@@ -129,7 +129,7 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
-	memProfileHooks        xsync.RWMutex[map[libpf.PID][]*link.Link]
+	memProfileHooks        xsync.RWMutex[map[libpf.PID]*memProfileEntry]
 	memProfileBlock        atomic.Uint64
 	profilingFilter        libpf.ProcessFilter
 }
@@ -323,7 +323,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	perfEventList := []*perf.Event{}
-	memProfileHooks := map[libpf.PID][]*link.Link{}
+	memProfileHooks := map[libpf.PID]*memProfileEntry{}
 
 	t := &Tracer{
 		processManager:         processManager,
@@ -364,21 +364,23 @@ func (t *Tracer) Close() {
 	*events = nil
 	t.perfEntrypoints.WUnlock(&events)
 
-	memProfileHooks := t.memProfileHooks.WLock()
-	for pid, links := range *memProfileHooks {
-		if links == nil {
+	mh := t.memProfileHooks.WLock()
+	for pid, entry := range *mh {
+		if entry == nil || entry.links == nil {
 			if r, ok := t.reporter.(reporter.HotspotMemReporter); ok {
 				r.StopHotspotMemProfiling(int(pid))
 			}
 		}
-		for _, l := range links {
-			if err := (*l).Close(); err != nil {
-				log.Errorf("Failed to close mem profile hook: %v", err)
+		if entry != nil {
+			for _, l := range entry.links {
+				if err := (*l).Close(); err != nil {
+					log.Errorf("Failed to close mem profile hook: %v", err)
+				}
 			}
 		}
 	}
-	memProfileHooks = nil
-	t.memProfileHooks.WUnlock(&memProfileHooks)
+	mh = nil
+	t.memProfileHooks.WUnlock(&mh)
 
 	// Avoid resource leakage by closing all kernel hooks.
 	for hookPoint, hook := range t.hooks {
