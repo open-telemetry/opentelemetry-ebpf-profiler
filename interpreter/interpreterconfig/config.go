@@ -1,8 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build (amd64 || arm64) && !windows
-
 // Package interpreterconfig aggregates per-interpreter configuration.
 package interpreterconfig // import "go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 
