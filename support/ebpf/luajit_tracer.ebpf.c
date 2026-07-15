@@ -1,4 +1,4 @@
-// This file contains the code and map definitions for the Luajit tracer
+// This file contains the code and map definitions for the LuaJIT tracer
 
 #include "bpfdefs.h"
 #include "errors.h"
