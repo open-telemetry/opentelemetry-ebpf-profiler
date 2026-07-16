@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -30,6 +31,7 @@ type Config struct {
 	Dotnet  dotnet.Config  `mapstructure:"dotnet" json:"dotnet,omitempty"`
 	Go      golang.Config  `mapstructure:"go" json:"go,omitempty"`
 	BEAM    beam.Config    `mapstructure:"beam" json:"beam,omitempty"`
+	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit,omitempty"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
@@ -48,6 +50,7 @@ func NoInterpreters() Config {
 		Dotnet:  dotnet.Config{BaseConfig: disabled},
 		Go:      golang.Config{BaseConfig: disabled},
 		BEAM:    beam.Config{BaseConfig: disabled},
+		LuaJIT:  luajit.Config{BaseConfig: disabled},
 	}
 }
 
@@ -71,6 +74,8 @@ func (cfg *Config) IsMapEnabled(mapName string) bool {
 		return !cfg.Dotnet.IsDisabled()
 	case beam.BPFMapName:
 		return !cfg.BEAM.IsDisabled()
+	case luajit.BPFMapName:
+		return !cfg.LuaJIT.IsDisabled()
 	case golang.BPFMapName, apmint.BPFMapName:
 		// go_procs is read from collect_trace (preloaded into the PerCPURecord)
 		// and apm_int_procs from unwind_stop, so both must always be loaded.
