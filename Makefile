@@ -36,6 +36,7 @@ export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 BRANCH = $(shell git branch --show-current)
 
 GO_TAGS := osusergo,netgo
+# Some github action test job matrix entries pass GO_FLAGS=-race
 GO_FLAGS ?=
 EBPF_FLAGS :=
 
