@@ -38,7 +38,7 @@ BPF_RODATA_VAR(u32, task_stack_offset, 0)
 BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 
 // origin_id_sampling is set during load time.
-BPF_RODATA_VAR(u32, origin_id_sampling, 0)
+BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given

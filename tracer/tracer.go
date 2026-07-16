@@ -1469,14 +1469,14 @@ type originRegistry struct {
 	// lastID is the most recently assigned origin ID.
 	lastID atomic.Uint32
 
-	// types maps a trace origin (libpf.Origin) to its *samples.TypeMetadata.
+	// types maps a trace origin (uint16) to its *samples.TypeMetadata.
 	types sync.Map
 }
 
 // register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) register(metadata *samples.TypeMetadata) uint16 {
-	id := libpf.Origin(r.lastID.Add(1))
+	id := uint16(r.lastID.Add(1))
 	r.types.Store(id, metadata)
 	return id
 }

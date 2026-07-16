@@ -3,7 +3,7 @@
 #include "types.h"
 
 // origin_id_probe is set during load time.
-BPF_RODATA_VAR(u32, origin_id_probe, 0)
+BPF_RODATA_VAR(u16, origin_id_probe, 0)
 
 static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
 {

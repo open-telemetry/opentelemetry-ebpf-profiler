@@ -158,7 +158,7 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
-	Origin             uint32
+	Origin             uint16
 	Value              uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64

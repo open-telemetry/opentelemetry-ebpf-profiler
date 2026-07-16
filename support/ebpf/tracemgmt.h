@@ -54,7 +54,7 @@ extern u32 vma_vm_file_offset;
 extern u32 vma_vm_flags_offset;
 
 // origin_id_sampling is declared in native_stack_trace.ebpf.c
-extern u32 origin_id_sampling;
+extern u16 origin_id_sampling;
 
 // Strips the PAC tag from a pointer.
 //
@@ -921,8 +921,13 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 #endif // TESTING_COREDUMP
 
 static inline EBPF_INLINE int
-collect_trace(struct pt_regs *ctx, u32 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
+collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
 {
+  // Only continue processing the trace with a valid origin.
+  if (origin == 0) {
+    return -1;
+  }
+
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
   DEBUG_PRINT("Resetting CPU record");

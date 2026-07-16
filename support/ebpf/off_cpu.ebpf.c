@@ -22,7 +22,7 @@ struct sched_times_t {
 BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 
 // origin_id_off_cpu is set during load time.
-BPF_RODATA_VAR(u32, origin_id_off_cpu, 0)
+BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
 
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
