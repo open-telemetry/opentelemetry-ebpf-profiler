@@ -671,18 +671,33 @@ const (
 	// Number of Go custom labels dropped because the label value was not valid UTF-8
 	IDGoLabelsDroppedInvalidValue = 294
 
+	// Number of times bpf_find_vma found no VMA for the current PC
+	IDUnwindNativeErrNoVMA = 295
+
+	// Number of native-only anonymous executable VMA misses suppressed in eBPF
+	IDUnwindNativeErrUnsupportedAnonymousMapping = 296
+
+	// Number of times the current PC was found in a non-executable VMA
+	IDUnwindNativeErrNonExecutableVMA = 297
+
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 298
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 299
+
 	// Number of failures to get TSD base for thread context
-	IDUnwindThreadContextErrReadTsdBase = 295
+	IDUnwindThreadContextErrReadTsdBase = 300
 
 	// Number of failures to read the thread context buffer
-	IDUnwindThreadContextErrReadThreadCtxBuf = 296
+	IDUnwindThreadContextErrReadThreadCtxBuf = 301
 
 	// Number of failures to read the thread context attributes
-	IDUnwindThreadContextErrReadThreadCtxAttrs = 297
+	IDUnwindThreadContextErrReadThreadCtxAttrs = 302
 
 	// Number of successful reads of thread context info
-	IDUnwindThreadContextReadSuccesses = 298
+	IDUnwindThreadContextReadSuccesses = 303
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 299
+	IDMax = 304
 )

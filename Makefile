@@ -33,22 +33,13 @@ export GOARCH = $(TARGET_ARCH)
 export CC = $(ARCH_PREFIX)-linux-gnu-gcc
 export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
-BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
-COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
-
-VERSION ?= v0.0.0
-BUILD_TIMESTAMP ?= $(shell date +%s)
-REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
-
-LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
-	-extldflags=-static
+BRANCH = $(shell git branch --show-current)
 
 GO_TAGS := osusergo,netgo
+# Some github action test job matrix entries pass GO_FLAGS=-race
+GO_FLAGS ?=
 EBPF_FLAGS :=
 
-GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 GO_TOOLS := -modfile=internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
@@ -63,7 +54,7 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@$(MAKE) -C processcontext/integrationtests/testdata clean
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
+	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 	@cargo clean
 
@@ -81,10 +72,10 @@ generate-collector:
 		--output-path cmd/otelcol-ebpf-profiler
 
 ebpf-profiler: ebpf
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
+	go build -tags $(GO_TAGS)
 
 otelcol-ebpf-profiler: ebpf generate-collector
-	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@
+	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
 
 # Sets opentelemetry collector modules to be pulled from local source tree.
 # This command allows you to make changes to your local checkout of otel core and build
@@ -145,38 +136,43 @@ TESTDATA_DIRS:= \
 	libpf/pfelf/testdata \
 	reporter/testdata
 
-test-deps:
+GOLABELS_TESTDATA_TARGETS := pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
+
+test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/golabels/integrationtests
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
 
 processctx-execs:
 	$(MAKE) -C processcontext/integrationtests/testdata
 
-pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
 
 pprof_1_23:
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_1_24:
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_1_24_cgo:
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_1_24_cgo_pie:
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_stable:
-	CGO_ENABLED=0 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_stable_buildinfo_cgo:
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_stable_cgo:
-	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_stable_cgo_pie:
-	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
@@ -190,7 +186,7 @@ docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
-	./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
+	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
 legal:
 	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES

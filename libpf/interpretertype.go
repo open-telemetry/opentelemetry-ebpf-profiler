@@ -47,11 +47,8 @@ const (
 	// APMInt identifies the pseudo-interpreter for the APM integration.
 	APMInt InterpreterType = 0x100
 
-	// Go identifies the pseudo-interpreter for Go custom labels support.
-	GoLabels InterpreterType = 0x101
-
 	// ThreadContext identifies the pseudo-interpreter for thread context support.
-	ThreadContext InterpreterType = 0x102
+	ThreadContext InterpreterType = 0x101
 )
 
 // Frame converts the interpreter type into the corresponding frame type.
@@ -80,7 +77,6 @@ var interpreterTypeToString = map[InterpreterType]string{
 	APMInt:        "apm-integration",
 	LuaJIT:        "luajit",
 	Go:            "go",
-	GoLabels:      "go-labels",
 	ThreadContext: "thread-context",
 }
 

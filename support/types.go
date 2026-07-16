@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6e
+	MetricIDBeginCumulative = 0x73
 )
 
 const (
@@ -206,7 +206,7 @@ type BEAMProcInfo struct {
 type DotnetProcInfo struct {
 	Version uint32
 }
-type GoLabelsOffsets struct {
+type GoRuntimeOffsets struct {
 	M_offset               uint32
 	Curg                   uint32
 	Labels                 uint32
@@ -517,8 +517,13 @@ var MetricsTranslation = []metrics.MetricID{
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 	0x68: metrics.IDUnwindErrBadDTVRead,
 	0x69: metrics.IDBPFRingbufOutputErr,
-	0x6a: metrics.IDUnwindThreadContextErrReadTsdBase,
-	0x6b: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
-	0x6c: metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,
-	0x6d: metrics.IDUnwindThreadContextReadSuccesses,
+	0x6a: metrics.IDUnwindNativeErrNoVMA,
+	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
+	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
+	0x6d: metrics.IDUnwindLuaJITAttempts,
+	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x6f: metrics.IDUnwindThreadContextErrReadTsdBase,
+	0x70: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x71: metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,
+	0x72: metrics.IDUnwindThreadContextReadSuccesses,
 }

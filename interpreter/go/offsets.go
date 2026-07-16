@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
 	"go/version"
@@ -13,8 +13,8 @@ import (
 // However since DWARF information can be stripped we record them here.
 // TODO: Should we look for DWARF information to support new versions
 // automatically when available?
-func getOffsets(vers string) support.GoLabelsOffsets {
-	offsets := support.GoLabelsOffsets{
+func getOffsets(vers string) support.GoRuntimeOffsets {
+	offsets := support.GoRuntimeOffsets{
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L410
 		M_offset: 48,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L541

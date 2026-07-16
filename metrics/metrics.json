@@ -2155,31 +2155,66 @@
     "id": 294
   },
   {
+    "description": "Number of times bpf_find_vma found no VMA for the current PC",
+    "type": "counter",
+    "name": "UnwindNativeErrNoVMA",
+    "field": "bpf.native.errors.no_vma",
+    "id": 295
+  },
+  {
+    "description": "Number of native-only anonymous executable VMA misses suppressed in eBPF",
+    "type": "counter",
+    "name": "UnwindNativeErrUnsupportedAnonymousMapping",
+    "field": "bpf.native.errors.unsupported_anonymous_mapping",
+    "id": 296
+  },
+  {
+    "description": "Number of times the current PC was found in a non-executable VMA",
+    "type": "counter",
+    "name": "UnwindNativeErrNonExecutableVMA",
+    "field": "bpf.native.errors.non_executable_vma",
+    "id": 297
+  },
+  {
+    "description": "Number of attempted LuaJIT unwinds",
+    "type": "counter",
+    "name": "UnwindLuaJITAttempts",
+    "field": "bpf.luajit.attempts",
+    "id": 298
+  },
+  {
+    "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
+    "type": "counter",
+    "name": "UnwindLuaJITErrNoProcInfo",
+    "field": "bpf.luajit.errors.no_proc_info",
+    "id": 299
+  },
+  {
     "description": "Number of failures to get TSD base for thread context",
     "type": "counter",
     "name": "UnwindThreadContextErrReadTsdBase",
     "field": "bpf.threadctx.errors.read_tsd_base",
-    "id": 295
+    "id": 300
   },
   {
     "description": "Number of failures to read the thread context buffer",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxBuf",
     "field": "bpf.threadctx.errors.read_thread_ctx_buf",
-    "id": 296
+    "id": 301
   },
   {
     "description": "Number of failures to read the thread context attributes",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxAttrs",
     "field": "bpf.threadctx.errors.read_thread_ctx_attrs",
-    "id": 297
+    "id": 302
   },
   {
     "description": "Number of successful reads of thread context info",
     "type": "counter",
     "name": "UnwindThreadContextReadSuccesses",
     "field": "bpf.threadctx.read_successes",
-    "id": 298
+    "id": 303
   }
 ]

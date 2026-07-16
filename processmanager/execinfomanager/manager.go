@@ -18,9 +18,9 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -120,17 +120,20 @@ func NewExecutableInfoManager(
 	if !interpretersConfig.Dotnet.IsDisabled() {
 		loaders = append(loaders, dotnet.GetLoader(interpretersConfig.Dotnet))
 	}
+	// The Go runtime offsets are needed for native stack unwinding across the
+	// Go runtime and by the labels program. Load them whenever Go support is
+	// enabled, independent of the labels and symbolization sub-toggles.
 	if !interpretersConfig.Go.IsDisabled() {
 		loaders = append(loaders, golang.GetLoader(interpretersConfig.Go))
 	}
 	if !interpretersConfig.BEAM.IsDisabled() {
 		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))
 	}
+	if !interpretersConfig.LuaJIT.IsDisabled() {
+		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
+	}
 
 	loaders = append(loaders, apmint.Loader)
-	if !interpretersConfig.Labels.IsDisabled() {
-		loaders = append(loaders, golabels.GetLoader(interpretersConfig.Labels))
-	}
 	if !interpretersConfig.ThreadContext.IsDisabled() {
 		loaders = append(loaders, threadcontext.GetLoader(interpretersConfig.ThreadContext))
 	}

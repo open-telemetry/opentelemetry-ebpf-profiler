@@ -182,6 +182,15 @@ typedef enum ErrorCode {
   // Native: Code is running in x86_64 32-bit compat mode.
   ERR_NATIVE_X64_32BIT_COMPAT_MODE = 4017,
 
+  // Native: The instruction pointer is in an executable mapping that cannot be unwound
+  ERR_NATIVE_UNSUPPORTED_MAPPING = 4018,
+
+  // Native: No VMA contains the current instruction pointer
+  ERR_NATIVE_NO_VMA = 4019,
+
+  // Native: The instruction pointer is in a non-executable VMA
+  ERR_NATIVE_NON_EXECUTABLE_VMA = 4020,
+
   // V8: Encountered a bad frame pointer during V8 unwinding
   ERR_V8_BAD_FP = 5000,
 
@@ -222,7 +231,10 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // LuaJIT: No entry for this process exists in the LuaJIT process info array
+  ERR_LUAJIT_NO_PROC_INFO = 8000
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

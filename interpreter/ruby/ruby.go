@@ -1009,7 +1009,7 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
 		methodName, err = r.getStringCached(methodNamePtr, r.readRubyString)
 		if err != nil {
-			log.Warnf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
+			log.Debugf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
 		}
 	}
 
@@ -1125,7 +1125,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		if err != nil {
 			// Failing to read the class name is not a fatal error, keep going with just the method name
 			// and provide an incomplete label rather than nothing at all.
-			log.Errorf("Failed to read class name for cme (%d): %v", frameAddrType, err)
+			log.Debugf("Failed to read class name for cme (%d): %v", frameAddrType, err)
 		}
 	}
 
@@ -1141,7 +1141,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		lineNo, err := r.getRubyLineNo(cfpIseq, uint64(pc))
 		if err != nil {
 			lineNo = 0
-			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+			log.Debugf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
 		}
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType)
 		if err != nil {
@@ -1412,7 +1412,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to visit symbols: %v", err)
+		log.Debugf("failed to visit symbols: %v", err)
 	}
 
 	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
@@ -1427,7 +1427,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to locate TLS descriptor: %v", err)
+		log.Debugf("failed to locate TLS descriptor: %v", err)
 	}
 
 	// For statically-linked ruby, extract the direct TP-relative offset from
@@ -1437,7 +1437,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if isBinRuby {
 		offset, ecErr := extractEcTLSOffset(ef)
 		if ecErr != nil {
-			log.Warnf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+			log.Debugf("failed to extract EC TLS offset for static ruby: %v", ecErr)
 		} else {
 			staticTLSOffset = offset
 		}
@@ -1451,7 +1451,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false
 	}, pfelf.RelDTPMOD64); err != nil {
-		log.Warnf("failed to find DTPMOD64 relocation: %v", err)
+		log.Debugf("failed to find DTPMOD64 relocation: %v", err)
 	}
 
 	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, dtpmod offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x",
@@ -1559,6 +1559,13 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vms.vm_struct.gc_objspace = 1248
 		} else {
 			vms.vm_struct.gc_objspace = 1272
+		}
+		if version >= rubyVersion(4, 0, 6) {
+			// Ruby 4.0.6 inserted rb_vm_t.master_box before root_box,
+			// shifting the gc.objspace field by one pointer.
+			// https://github.com/ruby/ruby/blob/v4.0.6/vm_core.h
+			// https://github.com/ruby/ruby/commit/99aac00fa13c03f71d3a4d89686e447f2950df68
+			vms.vm_struct.gc_objspace += 8
 		}
 		vms.objspace.flags = 28
 	default:
@@ -1715,6 +1722,14 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 				vms.rb_ractor_struct.running_ec = 0x138
 			} else {
 				vms.rb_ractor_struct.running_ec = 0x148
+			}
+			if version >= rubyVersion(4, 0, 6) {
+				// Ruby 4.0.6 added runnable_hot_th and runnable_hot_th_waiting
+				// to struct rb_thread_sched, which is embedded in
+				// rb_ractor_struct.threads before running_ec.
+				// https://github.com/ruby/ruby/blob/v4.0.6/thread_pthread.h
+				// https://github.com/ruby/ruby/commit/21a2595676d2d3df0eccd3af74065e2ba2a876b5
+				vms.rb_ractor_struct.running_ec += 8
 			}
 		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {

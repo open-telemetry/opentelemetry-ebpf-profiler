@@ -10,8 +10,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -31,8 +31,8 @@ type Config struct {
 	V8            nodev8.Config        `mapstructure:"v8" json:"v8,omitempty"`
 	Dotnet        dotnet.Config        `mapstructure:"dotnet" json:"dotnet,omitempty"`
 	Go            golang.Config        `mapstructure:"go" json:"go,omitempty"`
-	Labels        golabels.Config      `mapstructure:"labels" json:"labels,omitempty"`
 	BEAM          beam.Config          `mapstructure:"beam" json:"beam,omitempty"`
+	LuaJIT        luajit.Config        `mapstructure:"luajit" json:"luajit,omitempty"`
 	ThreadContext threadcontext.Config `mapstructure:"thread_context" json:"thread_context,omitempty"`
 }
 
@@ -51,8 +51,8 @@ func NoInterpreters() Config {
 		V8:            nodev8.Config{BaseConfig: disabled},
 		Dotnet:        dotnet.Config{BaseConfig: disabled},
 		Go:            golang.Config{BaseConfig: disabled},
-		Labels:        golabels.Config{BaseConfig: disabled},
 		BEAM:          beam.Config{BaseConfig: disabled},
+		LuaJIT:        luajit.Config{BaseConfig: disabled},
 		ThreadContext: threadcontext.Config{BaseConfig: disabled},
 	}
 }
@@ -77,9 +77,12 @@ func (cfg *Config) IsMapEnabled(mapName string) bool {
 		return !cfg.Dotnet.IsDisabled()
 	case beam.BPFMapName:
 		return !cfg.BEAM.IsDisabled()
-	case golabels.BPFMapName, apmint.BPFMapName, threadcontext.BPFMapName:
-		// go_labels_procs, apm_int_procs and thread_context_procs are called
-		// from unwind_stop and therefore need to be available all the time.
+	case luajit.BPFMapName:
+		return !cfg.LuaJIT.IsDisabled()
+	case golang.BPFMapName, apmint.BPFMapName, threadcontext.BPFMapName:
+		// go_procs is read from collect_trace (preloaded into the PerCPURecord),
+		// apm_int_procs and thread_context_procs from unwind_stop, so all three
+		// must always be loaded.
 		return true
 	default:
 		return true // Not an interpreter map, so it should be loaded

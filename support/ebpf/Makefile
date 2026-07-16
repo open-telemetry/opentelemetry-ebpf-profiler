@@ -62,6 +62,7 @@ arm64:
 
 errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
+	$(CLANG_FORMAT) -i -style=file $@
 
 %.ebpf.$(TARGET_ARCH).o: %.ebpf.c errors.h
 	$(BPF_CLANG) $(FLAGS) -MMD -MP -o $@
@@ -84,7 +85,7 @@ lint:
 	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 format:
-	$(CLANG_FORMAT) -i -style=file *.[ch]
+	$(CLANG_FORMAT) -i -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 clean:
 	rm -f *.o *.d

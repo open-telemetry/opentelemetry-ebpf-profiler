@@ -296,6 +296,21 @@
     "description": "Native: Code is running in x86_64 32-bit compat mode."
   },
   {
+    "id": 4018,
+    "name": "native_unsupported_mapping",
+    "description": "Native: The instruction pointer is in an executable mapping that cannot be unwound"
+  },
+  {
+    "id": 4019,
+    "name": "native_no_vma",
+    "description": "Native: No VMA contains the current instruction pointer"
+  },
+  {
+    "id": 4020,
+    "name": "native_non_executable_vma",
+    "description": "Native: The instruction pointer is in a non-executable VMA"
+  },
+  {
     "id": 5000,
     "name": "v8_bad_fp",
     "description": "V8: Encountered a bad frame pointer during V8 unwinding"
@@ -364,5 +379,10 @@
     "id": 7006,
     "name": "beam_range_search_exhausted",
     "description": "BEAM: Ran out of iterations searching for the current code header"
+  },
+  {
+    "id": 8000,
+    "name": "luajit_no_proc_info",
+    "description": "LuaJIT: No entry for this process exists in the LuaJIT process info array"
   }
 ]
