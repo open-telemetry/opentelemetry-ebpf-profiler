@@ -1475,7 +1475,7 @@ type originRegistry struct {
 
 // register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
-func (r *originRegistry) register(metadata *samples.TypeMetadata) libpf.Origin {
+func (r *originRegistry) register(metadata *samples.TypeMetadata) uint16 {
 	id := libpf.Origin(r.lastID.Add(1))
 	r.types.Store(id, metadata)
 	return id

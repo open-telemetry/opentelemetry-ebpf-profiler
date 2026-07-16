@@ -644,7 +644,7 @@ typedef struct Trace {
 
   // origin indicates the source of the trace and it set as
   // RODATA variable at load time.
-  u32 origin;
+  u16 origin;
 
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
