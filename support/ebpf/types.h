@@ -340,6 +340,12 @@ enum {
   // number of times the current PC was found in a non-executable VMA
   metricID_UnwindNativeErrNonExecutableVMA,
 
+  // number of attempts to unwind LuaJIT
+  metricID_UnwindLuaJITAttempts,
+
+  // number of failures to read LuaJIT proc info
+  metricID_UnwindLuaJITErrNoProcInfo,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -556,6 +562,11 @@ typedef struct BEAMProcInfo {
   // Introspection Struct Offsets
   u8 ranges_sizeof;
 } BEAMProcInfo;
+
+// Stub until we land the full LuaJIT interpreter.
+typedef struct LuaJITProcInfo {
+  u8 dummy;
+} LuaJITProcInfo;
 
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
