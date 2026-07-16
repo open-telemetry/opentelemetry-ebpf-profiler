@@ -145,7 +145,7 @@ type EbpfTrace struct {
 	TID              PID
 	PID              PID
 	NumFrames        uint16
-	Origin           Origin
+	Origin           uint16
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
 }

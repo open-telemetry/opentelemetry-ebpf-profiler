@@ -1153,7 +1153,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
 		PID:              pid,
 		TID:              libpf.PID(ptr.Tid),
-		Origin:           libpf.Origin(ptr.Origin),
+		Origin:           ptr.Origin,
 		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
@@ -1483,7 +1483,7 @@ func (r *originRegistry) register(metadata *samples.TypeMetadata) uint16 {
 
 // lookup returns the profile type metadata registered for origin, or nil if
 // origin is unknown.
-func (r *originRegistry) lookup(origin libpf.Origin) *samples.TypeMetadata {
+func (r *originRegistry) lookup(origin uint16) *samples.TypeMetadata {
 	v, ok := r.types.Load(origin)
 	if !ok {
 		return nil

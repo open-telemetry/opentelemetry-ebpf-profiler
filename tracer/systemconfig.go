@@ -600,7 +600,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		SampleType: "samples",
 		SampleUnit: "count",
 	})
-	if err := coll.Variables["origin_id_sampling"].Set(uint32(sampling)); err != nil {
+	if err := coll.Variables["origin_id_sampling"].Set(uint16(sampling)); err != nil {
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
 	}
 
@@ -610,7 +610,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 			SampleUnit:   "nanoseconds",
 			ReportValues: true,
 		})
-		if err := coll.Variables["origin_id_off_cpu"].Set(uint32(offCPU)); err != nil {
+		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
 			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
 		}
 	}
@@ -620,7 +620,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 			SampleType: "events",
 			SampleUnit: "count",
 		})
-		if err := coll.Variables["origin_id_probe"].Set(uint32(probe)); err != nil {
+		if err := coll.Variables["origin_id_probe"].Set(uint16(probe)); err != nil {
 			return fmt.Errorf("failed to set origin_id_probe: %v", err)
 		}
 	}
