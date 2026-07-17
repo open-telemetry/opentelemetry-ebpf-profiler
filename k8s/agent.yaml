@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: opentelemetry-ebpf-profiler
+spec:
+  selector:
+    matchLabels:
+      app: opentelemetry-ebpf-profiler
+  template:
+    metadata:
+      labels:
+        app: opentelemetry-ebpf-profiler
+    spec:
+      # hostPID: true
+      containers:
+        - name: opentelemetry-ebpf-profiler
+          securityContext: # Run the daemon as the root user and group for proper metrics collection.
+            capabilities:
+              add:
+                - BPF
+                - SYS_ADMIN
+                - SYSLOG # read /proc/kallsyms
+                - CAP_SYS_PTRACE
+            runAsUser: 0
+            runAsGroup: 0
+            privileged: true
+          image: opentelemetry-ebpf-profiler:dev
+          args:
+            - "--config=/etc/otel-collector-config.yaml"
+            - "--feature-gates=+service.profilesSupport"
+          ports:
+            - containerPort: 8888 # OTLP HTTP
+          resources:
+            requests:
+              cpu: "50m" # Minimal CPU request
+              memory: "64Mi" # Minimal memory request
+            limits:
+              cpu: "100m" # Minimal CPU limit
+              memory: "800Mi" # Minimal memory limit
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-collector-config.yaml
+              subPath: otel-collector-config.yaml
+            - name: tracefs
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: procfs
+              mountPath: /host_fs
+      volumes:
+        - name: tracefs
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: procfs
+          hostPath:
+            path: /host_fs
+        - name: config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  otel-collector-config.yaml: |
+    connectors:
+      profilingmetrics: {}
+      # count: {}
+    receivers:
+      # [Profiling receiver](https://github.com/open-telemetry/opentelemetry-ebpf-profiler)
+      profiling:
+        root_fs: /host_fs
+
+    processors:
+      attributes:
+        actions:
+          - key: data_stream.dataset
+            value: profilingmetrics-kind
+            action: upsert
+
+    exporters:
+      debug: {}
+      elasticsearch/otel:
+        endpoints: # List of Elasticsearch endpoints.
+          - (ENDPOINT)
+        api_key: (API_KEY)
+        # Enable in order to skip the SSL certificate Check
+        # tls:
+        #   insecure_skip_verify: true
+        mapping:
+          mode: otel
+
+    service:
+      telemetry:
+        logs:
+          level: debug
+      pipelines:
+        metrics:
+          receivers: [profilingmetrics]
+          processors: [attributes]
+          exporters:
+            - elasticsearch/otel
+        profiles:
+          receivers: [profiling]
+          processors: []
+          exporters:
+            - profilingmetrics
