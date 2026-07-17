@@ -8,10 +8,11 @@ struct tracer_pid_t {
 } tracer_pid_m SEC(".maps");
 
 SEC("uprobe")
-int store_tracer_pid(UNUSED void *ctx) {
-    u64 pid_tgid = bpf_get_current_pid_tgid();
-    u32 pid      = pid_tgid >> 32;
-    u32 key      = 0;
-    bpf_map_update_elem(&tracer_pid_m, &key, &pid, BPF_ANY);
-    return 0;
+int store_tracer_pid(UNUSED void *ctx)
+{
+  u64 pid_tgid = bpf_get_current_pid_tgid();
+  u32 pid      = pid_tgid >> 32;
+  u32 key      = 0;
+  bpf_map_update_elem(&tracer_pid_m, &key, &pid, BPF_ANY);
+  return 0;
 }

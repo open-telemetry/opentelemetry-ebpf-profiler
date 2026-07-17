@@ -31,7 +31,7 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done)  {
+  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done) {
     // Execute the hook only in the context of requesting task.
     return 0;
   }
@@ -65,12 +65,15 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done)  {
+  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done) {
     // Execute the hook only in the context of requesting task.
     return 0;
   }
 
-  DEBUG_PRINT("Reading task_struct data; Tracer PID: %u, Thread ID: %llu\n", tracer_pid, (bpf_get_current_pid_tgid() >> 32));
+  DEBUG_PRINT(
+    "Reading task_struct data; Tracer PID: %u, Thread ID: %llu\n",
+    tracer_pid,
+    (bpf_get_current_pid_tgid() >> 32));
 
   // Mark request handled
   sys->done = true;
