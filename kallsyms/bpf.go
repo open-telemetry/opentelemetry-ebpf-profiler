@@ -33,7 +33,8 @@ type bpfSymbol struct {
 // bpfSymbolTable is a sorted (by address) snapshot of all known BPF program
 // symbols. It is stored atomically so readers never block writers.
 type bpfSymbolTable struct {
-	symbols []bpfSymbol
+	generation Generation
+	symbols    []bpfSymbol
 }
 
 // lookup returns the symbol containing addr, or ("", false) if none does.
@@ -64,6 +65,13 @@ func (t *bpfSymbolTable) lookup(addr libpf.Address) (string, uint, bool) {
 	return sym.name, uint(addr - sym.address), true
 }
 
+func (t *bpfSymbolTable) symbolGeneration() Generation {
+	if t == nil {
+		return makeBPFGeneration(0)
+	}
+	return t.generation
+}
+
 // bpfSymbolizer is responsible for getting updates from `PERF_RECORD_KSYMBOL`.
 // The symbolizer is not ready to use until startMonitor is called to load the symbols.
 type bpfSymbolizer struct {
@@ -72,17 +80,6 @@ type bpfSymbolizer struct {
 	cancel  context.CancelFunc
 	table   atomic.Pointer[bpfSymbolTable]
 	wg      sync.WaitGroup
-}
-
-// LookupSymbol resolves addr to a BPF program symbol name and offset.
-// Returns ("", 0, false) if no BPF program covers addr.
-func (s *bpfSymbolizer) LookupSymbol(addr libpf.Address) (string, uint, bool) {
-	t := s.table.Load()
-	if t == nil {
-		return "", 0, false
-	}
-
-	return t.lookup(addr)
 }
 
 // loadBPFPrograms enumerates all loaded BPF programs via the bpf syscall and
@@ -141,7 +138,11 @@ func (s *bpfSymbolizer) loadBPFPrograms() error {
 		return cmp.Compare(a.address, b.address)
 	})
 
-	s.table.Store(&bpfSymbolTable{symbols: symbols})
+	old := s.table.Load()
+	s.table.Store(&bpfSymbolTable{
+		generation: old.symbolGeneration().next(),
+		symbols:    symbols,
+	})
 
 	return nil
 }
@@ -306,7 +307,10 @@ func (s *bpfSymbolizer) addBPFSymbol(addr libpf.Address, name string, size uint3
 	newSymbols[idx] = newSym
 	copy(newSymbols[idx+1:], oldSymbols[idx:])
 
-	s.table.Store(&bpfSymbolTable{symbols: newSymbols})
+	s.table.Store(&bpfSymbolTable{
+		generation: old.symbolGeneration().next(),
+		symbols:    newSymbols,
+	})
 }
 
 // removeBPFSymbol removes a BPF program symbol from the table by address.
@@ -327,11 +331,14 @@ func (s *bpfSymbolizer) removeBPFSymbol(addr libpf.Address) {
 	copy(newSymbols, old.symbols[:idx])
 	copy(newSymbols[idx:], old.symbols[idx+1:])
 
-	s.table.Store(&bpfSymbolTable{symbols: newSymbols})
+	s.table.Store(&bpfSymbolTable{
+		generation: old.symbolGeneration().next(),
+		symbols:    newSymbols,
+	})
 }
 
-// Close frees resources associated with bpfSymbolizer.
-func (s *bpfSymbolizer) Close() {
+// close frees resources associated with bpfSymbolizer.
+func (s *bpfSymbolizer) close() {
 	// Cancel the context first so reader goroutines and reloadWorker
 	// observe ctx.Done() and exit before we close the perf events.
 	if s.cancel != nil {

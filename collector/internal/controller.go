@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux && (amd64 || arm64)
+
 package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal"
 
 import (
@@ -87,7 +89,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	}, nil
 }
 
-// Start starts the receiver.
+// Start the receiver.
 func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
@@ -100,7 +102,7 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 	return nil
 }
 
-// Shutdown stops the receiver.
+// Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {

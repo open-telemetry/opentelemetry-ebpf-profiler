@@ -833,7 +833,7 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 			}
 		}
 		if stubHeapArea == nil {
-			log.Warnf("Unable to find heap for stub: pid = %d, stub.start = 0x%x",
+			log.Debugf("Unable to find heap for stub: pid = %d, stub.start = 0x%x",
 				pid, stub.start)
 			continue
 		}
@@ -841,12 +841,12 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 		// Create and insert a jitArea for the stub.
 		stubArea, err := jitAreaForStubArm64(&stub, stubHeapArea, d.rm)
 		if err != nil {
-			log.Warnf("Failed to create JIT area for stub (pid = %d, stub.start = 0x%x): %v",
+			log.Debugf("Failed to create JIT area for stub (pid = %d, stub.start = 0x%x): %v",
 				pid, stub.start, err)
 			continue
 		}
 		if err = d.addJitArea(ebpf, pid, stubArea); err != nil {
-			log.Warnf("Failed to insert JIT area for stub (pid = %d, stub.start = 0x%x): %v",
+			log.Debugf("Failed to insert JIT area for stub (pid = %d, stub.start = 0x%x): %v",
 				pid, stub.start, err)
 			continue
 		}

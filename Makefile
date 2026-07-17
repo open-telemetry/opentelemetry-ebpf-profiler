@@ -36,6 +36,8 @@ export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 BRANCH = $(shell git branch --show-current)
 
 GO_TAGS := osusergo,netgo
+# Some github action test job matrix entries pass GO_FLAGS=-race
+GO_FLAGS ?=
 EBPF_FLAGS :=
 
 GO_TOOLS := -modfile=internal/tools/go.mod
@@ -122,11 +124,11 @@ vanity-import-fix:
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
-	CGO_ENABLED=1 go test -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \

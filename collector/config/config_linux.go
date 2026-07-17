@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux && (amd64 || arm64)
+
 package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 
 import (
@@ -17,6 +19,9 @@ import (
 const (
 	// 1TB of executable address space
 	MaxArgMapScaleFactor = 8
+
+	minFrameCacheSize = 1024
+	maxFrameCacheSize = 1024 * 1024
 )
 
 // ErrorMode controls how the profiler receiver handles startup errors.
@@ -46,6 +51,7 @@ type Config struct {
 	ReporterJitter         float64                  `mapstructure:"reporter_jitter"`
 	MonitorInterval        time.Duration            `mapstructure:"monitor_interval"`
 	SamplesPerSecond       int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize         uint                     `mapstructure:"frame_cache_size"`
 	ProbabilisticInterval  time.Duration            `mapstructure:"probabilistic_interval"`
 	ProbabilisticThreshold uint                     `mapstructure:"probabilistic_threshold"`
 	Interpreters           interpreterconfig.Config `mapstructure:"interpreters"`
@@ -78,6 +84,11 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}
 
+	if cfg.FrameCacheSize < minFrameCacheSize || cfg.FrameCacheSize > maxFrameCacheSize {
+		return fmt.Errorf("invalid frame cache size %d (min: %d, max: %d)",
+			cfg.FrameCacheSize, minFrameCacheSize, maxFrameCacheSize)
+	}
+
 	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
 		return fmt.Errorf(
 			"eBPF map scaling factor %d exceeds limit (max: %d)",
@@ -96,15 +107,6 @@ func (cfg *Config) Validate() error {
 		)
 	}
 
-	if cfg.ProbabilisticThreshold < 1 ||
-		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		return fmt.Errorf(
-			"invalid argument for probabilistic-threshold. Value "+
-				"should be between 1 and %d",
-			tracer.ProbabilisticThresholdMax,
-		)
-	}
-
 	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
 		return errors.New(
 			"invalid argument for off-cpu-threshold. The value " +
@@ -117,18 +119,29 @@ func (cfg *Config) Validate() error {
 				"should be in the range [0..1]. 0 disables jitter")
 	}
 
-	if !cfg.NoKernelVersionCheck {
-		major, minor, patch, err := linux.GetCurrentKernelVersion()
-		if err != nil {
-			return fmt.Errorf("failed to get kernel version: %v", err)
-		}
+	if cfg.ProbabilisticThreshold < 1 ||
+		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
+		return fmt.Errorf(
+			"invalid argument for probabilistic-threshold. Value "+
+				"should be between 1 and %d",
+			tracer.ProbabilisticThresholdMax,
+		)
+	}
 
-		var minMajor, minMinor uint32
-		minMajor, minMinor = 5, 10
-		if major < minMajor || (major == minMajor && minor < minMinor) {
-			return fmt.Errorf("host Agent requires kernel version "+
-				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
-		}
+	if cfg.NoKernelVersionCheck {
+		return nil
+	}
+
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %v", err)
+	}
+
+	var minMajor, minMinor uint32
+	minMajor, minMinor = 5, 10
+	if major < minMajor || (major == minMajor && minor < minMinor) {
+		return fmt.Errorf("host Agent requires kernel version "+
+			"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
 	}
 
 	return nil

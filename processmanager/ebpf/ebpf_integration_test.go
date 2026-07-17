@@ -80,13 +80,7 @@ func TestLPM(t *testing.T) {
 func TestBatchOperations(t *testing.T) {
 	for _, mapType := range []cebpf.MapType{cebpf.Hash, cebpf.Array, cebpf.LPMTrie} {
 		t.Run(mapType.String(), func(t *testing.T) {
-			err := probeBatchOperations(mapType)
-			if err != nil {
-				require.ErrorIs(t, err, cebpf.ErrNotSupported)
-			}
-
-			err = probeBatchLookupAndDelete(mapType)
-			if err != nil {
+			if err := probeBatchOperations(mapType); err != nil {
 				require.ErrorIs(t, err, cebpf.ErrNotSupported)
 			}
 		})
