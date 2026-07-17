@@ -130,7 +130,7 @@ func TestBPFSymbolizerDynamic(t *testing.T) {
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	s, err := NewSymbolizer("/proc")
+	s, err := NewSymbolizer("/")
 	require.NoError(t, err)
 
 	err = s.bpf.startMonitor(t.Context(), linearCPUs())

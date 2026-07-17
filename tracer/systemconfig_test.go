@@ -24,14 +24,14 @@ func TestValidateSystemAnalysisResult(t *testing.T) {
 	})
 
 	t.Run("helper failure", func(t *testing.T) {
-		err := validateSystemAnalysisResult(support.SystemAnalysis{Err: -14}, address)
+		err := validateSystemAnalysisResult(support.SystemAnalysis{Done: true, Err: -14}, address)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, errSystemAnalysisFailed))
 		require.ErrorContains(t, err, "helper err=-14")
 	})
 
 	t.Run("success", func(t *testing.T) {
-		err := validateSystemAnalysisResult(support.SystemAnalysis{}, address)
+		err := validateSystemAnalysisResult(support.SystemAnalysis{Done: true}, address)
 		require.NoError(t, err)
 	})
 }

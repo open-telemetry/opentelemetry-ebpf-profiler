@@ -162,11 +162,11 @@ type Symbolizer struct {
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
-func NewSymbolizer(procFsPath string) (*Symbolizer, error) {
+func NewSymbolizer(rootFsPath string) (*Symbolizer, error) {
 	s := &Symbolizer{
 		bpf:           &bpfSymbolizer{},
 		reloadModules: make(chan libpf.Void, 1),
-		rootFs:        procFsPath,
+		rootFs:        rootFsPath,
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
