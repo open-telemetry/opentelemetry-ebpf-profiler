@@ -2190,10 +2190,10 @@
     "id": 299
   },
   {
-    "description": "Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX",
+    "description": "Number of PID resynchronizations triggered by the prctl monitor",
     "type": "counter",
-    "name": "NumPrctlSetVmaOtelCtx",
-    "field": "bpf.num_prctl_set_vma_otel_ctx",
+    "name": "NumSyncsFromPrctl",
+    "field": "bpf.num_syncs_from_prctl",
     "id": 300
   }
 ]

@@ -505,5 +505,5 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
 	0x6d: metrics.IDUnwindLuaJITAttempts,
 	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
-	0x6f: metrics.IDNumPrctlSetVmaOtelCtx,
+	0x6f: metrics.IDNumSyncsFromPrctl,
 }

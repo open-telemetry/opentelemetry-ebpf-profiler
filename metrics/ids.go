@@ -686,8 +686,8 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 299
 
-	// Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX
-	IDNumPrctlSetVmaOtelCtx = 300
+	// Number of PID resynchronizations triggered by the prctl monitor
+	IDNumSyncsFromPrctl = 300
 
 	// max number of ID values, keep this as *last entry*
 	IDMax = 301

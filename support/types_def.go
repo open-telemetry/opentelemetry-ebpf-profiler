@@ -314,5 +314,5 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNativeErrNonExecutableVMA:            metrics.IDUnwindNativeErrNonExecutableVMA,
 	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
 	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
-	C.metricID_NumPrctlSetVmaOtelCtx:                      metrics.IDNumPrctlSetVmaOtelCtx,
+	C.metricID_NumSyncsFromPrctl:                          metrics.IDNumSyncsFromPrctl,
 }
