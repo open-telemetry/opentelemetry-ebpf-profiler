@@ -4,13 +4,12 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -18,6 +17,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -315,48 +316,88 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	return errors.New("unable to find task stack offset")
 }
 
-// hostNamespacePID returns the profiler's PID as seen by the host (init) PID
-// namespace, which is what bpf_get_current_pid_tgid() returns in BPF context.
-// When running in a container without hostPID:true, os.Getpid() returns the
-// container-namespace PID, which differs from the host-namespace PID.
-//
-// /proc/self/status lists NStgid entries from innermost to outermost namespace,
-// so the last field is always the host-namespace PID. If the process is in the
-// host namespace, there is a single entry equal to os.Getpid(). Falls back to
-// os.Getpid() when NStgid is absent (kernels without PID namespace support).
-func hostNamespacePID() (uint32, error) {
-	f, err := os.Open("/proc/self/status")
+func retrievePkgName(val any) string {
+	pc := reflect.ValueOf(val).Pointer()
+	return runtime.FuncForPC(pc).Name()
+}
+
+func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
+	selfFilePath, err := os.Executable()
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "NStgid:") {
-			continue
-		}
-		fields := strings.Fields(strings.TrimPrefix(line, "NStgid:"))
-		if len(fields) == 0 {
-			return 0, errors.New("empty NStgid in /proc/self/status")
-		}
-		// Last field is the outermost (host) namespace PID.
-		pid, err := strconv.ParseUint(fields[len(fields)-1], 10, 32)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse NStgid: %w", err)
-		}
-		return uint32(pid), nil
+	file, err := pfelf.Open(selfFilePath)
+	if err != nil {
+		return 0, err
 	}
-	// Kernel without PID namespace support — the single namespace PID is correct.
-	return uint32(os.Getpid()), nil
+	goPclntab, err := elfunwindinfo.NewGopclntab(file)
+	if err != nil {
+		return 0, err
+	}
+	symbolName := retrievePkgName(storePid)
+	sym, err := goPclntab.LookupSymbol(libpf.SymbolName(symbolName))
+	if err != nil {
+		return 0, err
+	}
+	addr, err := file.VirtAddrToFileOffset(uint64(sym.Address))
+	if err != nil {
+		return 0, err
+	}
+	progSpec, err := ParseProbe(fmt.Sprintf("uprobe:%s:%s", selfFilePath, symbolName))
+	if err != nil {
+		return 0, err
+	}
+
+	new := &cebpf.CollectionSpec{
+		Maps:     make(map[string]*cebpf.MapSpec),
+		Programs: make(map[string]*cebpf.ProgramSpec),
+	}
+	new.Maps["tracer_pid_m"] = orig.Maps["tracer_pid_m"].Copy()
+	new.Programs["store_tracer_pid"] = orig.Programs["store_tracer_pid"].Copy()
+	maps := make(map[string]*cebpf.Map)
+
+	if err := loadAllMaps(new, &Config{}, maps); err != nil {
+		return 0, err
+	}
+
+	if err := rewriteMaps(new, maps); err != nil {
+		return 0, fmt.Errorf("failed to rewrite maps: %v", err)
+	}
+
+	uprobeProg, err := cebpf.NewProgram(new.Programs["store_tracer_pid"])
+	if err != nil {
+		return 0, err
+	}
+	ex, err := link.OpenExecutable(progSpec.Target)
+	if err != nil {
+		return 0, err
+	}
+
+	uprobeLink, err := ex.Uprobe(progSpec.Symbol, uprobeProg, &link.UprobeOptions{Address: addr})
+	if err != nil {
+		return 0, err
+	}
+	defer uprobeLink.Close()
+	// trigger uprobe
+	storePid()
+
+	key0 := uint32(0)
+	var tracerPid uint32
+	if err = maps["tracer_pid_m"].Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&tracerPid)); err != nil {
+		return 0, err
+	}
+
+	return tracerPid, nil
 }
+
+//go:noinline
+func storePid() {}
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
-	tracerPid, err := hostNamespacePID()
+	tracerPid, err := loadTracerPID(orig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to determine host-namespace PID: %w", err)
+		return nil, nil, err
 	}
 
 	if err := orig.Variables["tracer_pid"].Set(tracerPid); err != nil {
@@ -420,7 +461,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		// to calculate the offset of struct pt_regs in the entry stack.
 		// The value also depends of some kernel configurations, so lets
 		// analyze it dynamically for now.
-		if err = determineStackPtregs(coll, maps, vars); err != nil {
+		if err := determineStackPtregs(coll, maps, vars); err != nil {
 			return err
 		}
 	}

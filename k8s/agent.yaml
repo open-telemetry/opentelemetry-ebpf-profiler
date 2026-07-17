@@ -11,19 +11,20 @@ spec:
       labels:
         app: opentelemetry-ebpf-profiler
     spec:
-      # hostPID: true
+      hostPID: false
       containers:
         - name: opentelemetry-ebpf-profiler
-          securityContext: # Run the daemon as the root user and group for proper metrics collection.
+          securityContext:
             capabilities:
               add:
                 - BPF
                 - SYS_ADMIN
-                - SYSLOG # read /proc/kallsyms
-                - CAP_SYS_PTRACE
-            runAsUser: 0
-            runAsGroup: 0
-            privileged: true
+                - PERFMON
+                - SYSLOG
+                - SYS_PTRACE
+                - SYS_RESOURCE
+            seccompProfile:
+              type: Unconfined  # kubernetes default seccomp blocks the bpf() syscall
           image: opentelemetry-ebpf-profiler:dev
           args:
             - "--config=/etc/otel-collector-config.yaml"
@@ -63,45 +64,28 @@ metadata:
   name: otel-collector-config
 data:
   otel-collector-config.yaml: |
-    connectors:
-      profilingmetrics: {}
-      # count: {}
     receivers:
       # [Profiling receiver](https://github.com/open-telemetry/opentelemetry-ebpf-profiler)
       profiling:
         root_fs: /host_fs
 
-    processors:
-      attributes:
-        actions:
-          - key: data_stream.dataset
-            value: profilingmetrics-kind
-            action: upsert
-
     exporters:
       debug: {}
-      elasticsearch/otel:
-        endpoints: # List of Elasticsearch endpoints.
-          - (ENDPOINT)
-        api_key: (API_KEY)
-        # Enable in order to skip the SSL certificate Check
-        # tls:
-        #   insecure_skip_verify: true
-        mapping:
-          mode: otel
+      otlp/local:
+        # equivalent to -collection-agent deprecated cli flag
+        endpoint: http://172.18.0.1:4317
+        # equivalent to -disable-tls deprecated cli flag
+        tls:
+          insecure: true
+          insecure_skip_verify: true
 
     service:
       telemetry:
         logs:
-          level: debug
+          level: info
       pipelines:
-        metrics:
-          receivers: [profilingmetrics]
-          processors: [attributes]
-          exporters:
-            - elasticsearch/otel
         profiles:
           receivers: [profiling]
           processors: []
           exporters:
-            - profilingmetrics
+            - otlp/local

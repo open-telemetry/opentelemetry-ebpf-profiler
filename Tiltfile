@@ -1,7 +1,7 @@
 # Settings
 APP_NAME = 'opentelemetry-ebpf-profiler'
 IMAGE = 'opentelemetry-ebpf-profiler:dev'
-BIN_PATH = 'bin/otelcol-ebpf-profiler'
+BIN_PATH = 'otelcol-ebpf-profiler'
 
 # -----------------------------------------------------------------------------
 # Build the Go binary locally
