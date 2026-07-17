@@ -1138,19 +1138,20 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	procMeta := t.processManager.MetaForPID(pid)
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
-		Comm:             libpf.NewComm(ptr.Comm),
-		ExecutablePath:   procMeta.Executable,
-		ContainerID:      procMeta.ContainerID,
-		ProcessName:      procMeta.Name,
-		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
-		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
-		PID:              pid,
-		TID:              libpf.PID(ptr.Tid),
-		Origin:           libpf.Origin(ptr.Origin),
-		Value:            int64(ptr.Value),
-		KTime:            int64(ptr.Ktime),
-		CpuID:            ptr.Cpu_id,
-		EnvVars:          procMeta.EnvVariables,
+		Comm:                  libpf.NewComm(ptr.Comm),
+		ExecutableMappingFile: procMeta.ExecutableMappingFile,
+		ExecutablePath:        procMeta.Executable,
+		ContainerID:           procMeta.ContainerID,
+		ProcessName:           procMeta.Name,
+		APMTraceID:            *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
+		APMTransactionID:      *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
+		PID:                   pid,
+		TID:                   libpf.PID(ptr.Tid),
+		Origin:                libpf.Origin(ptr.Origin),
+		Value:                 int64(ptr.Value),
+		KTime:                 int64(ptr.Ktime),
+		CpuID:                 ptr.Cpu_id,
+		EnvVars:               procMeta.EnvVariables,
 	}
 
 	switch trace.Origin {

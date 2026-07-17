@@ -386,6 +386,12 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	})
 
 	resourceKey := samples.ResourceKey{
+		ExecutableMappingFile: libpf.FrameMappingFileData{
+			FileID:     libpf.NewFileID(0x0011223344556677, 0x8899aabbccddeeff),
+			FileName:   libpf.Intern("test"),
+			GnuBuildID: "gnu-build-id",
+			GoBuildID:  "go-build-id",
+		},
 		ExecutablePath: filePath,
 		PID:            123,
 		APMServiceName: "svc",
@@ -415,6 +421,12 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	rp := profiles.ResourceProfiles().At(0)
 	val, _ := rp.Resource().Attributes().Get(string(semconv.ContainerIDKey))
 	assert.Equal(t, "container1", val.Str())
+	val, _ = rp.Resource().Attributes().Get(string(semconv.ProcessExecutableBuildIDGNUKey))
+	assert.Equal(t, "gnu-build-id", val.Str())
+	val, _ = rp.Resource().Attributes().Get(string(semconv.ProcessExecutableBuildIDGoKey))
+	assert.Equal(t, "go-build-id", val.Str())
+	val, _ = rp.Resource().Attributes().Get(string(semconv.ProcessExecutableBuildIDHtlhashKey))
+	assert.Equal(t, "00112233445566778899aabbccddeeff", val.Str())
 	assert.Equal(t, semconv.SchemaURL, rp.SchemaUrl())
 	require.Equal(t, 1, rp.ScopeProfiles().Len())
 	sp := rp.ScopeProfiles().At(0)

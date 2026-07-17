@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // CoredumpProcess implements Process interface to ELF coredumps.
@@ -209,6 +210,21 @@ func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
 
 func (cd *CoredumpProcess) GetExe() (libpf.String, error) {
 	return cd.fname, nil
+}
+
+func (cd *CoredumpProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	executable := cd.MainExecutable()
+	if executable == "" {
+		return util.OnDiskFileIdentifier{}, errors.New("main executable is unknown")
+	}
+	cf, ok := cd.files[executable]
+	if !ok {
+		return util.OnDiskFileIdentifier{}, fmt.Errorf("executable file %q not found", executable)
+	}
+	return util.OnDiskFileIdentifier{
+		DeviceID: 1,
+		InodeNum: cf.inode,
+	}, nil
 }
 
 // IterateMappings implements the Process interface.

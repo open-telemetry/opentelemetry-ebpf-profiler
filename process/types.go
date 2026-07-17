@@ -112,6 +112,8 @@ type ProcessMeta struct {
 	Name libpf.String
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String
+	// mapping file data for the executable mapping matching /proc/PID/exe
+	ExecutableMappingFile libpf.FrameMappingFileData
 	// process env vars from /proc/PID/environ
 	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
@@ -136,6 +138,9 @@ type Process interface {
 
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)
+
+	// GetExecutableFileIdentifier returns the device and inode of /proc/PID/exe.
+	GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error)
 
 	// IterateMappings parses process memory mappings and calls the
 	// callback for each mapping. The RawMapping's Path field may reference

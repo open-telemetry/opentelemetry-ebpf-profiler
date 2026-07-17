@@ -57,10 +57,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	key := samples.ResourceKey{
-		APMServiceName: meta.APMServiceName,
-		ContainerID:    meta.ContainerID,
-		PID:            int64(meta.PID),
-		ExecutablePath: meta.ExecutablePath,
+		APMServiceName:        meta.APMServiceName,
+		ContainerID:           meta.ContainerID,
+		PID:                   int64(meta.PID),
+		ExecutableMappingFile: meta.ExecutableMappingFile,
+		ExecutablePath:        meta.ExecutablePath,
 	}
 	traceHash := traceutil.HashTrace(trace)
 
