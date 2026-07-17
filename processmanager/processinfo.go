@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -43,29 +42,17 @@ import (
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
 func (pm *ProcessManager) isPIDLive(pid libpf.PID) (bool, error) {
-	// Check first with the kill syscall which is the fastest route.
-	// A kill syscall with a 0 signal is documented to still do the check
-	// whether the process exists: https://linux.die.net/man/2/kill
-	err := unix.Kill(int(pid), 0)
-	if err == nil {
-		return true, nil
-	}
-
-	var errno unix.Errno
-	if errors.As(err, &errno) {
-		switch errno {
-		case unix.ESRCH:
-			return false, nil
-		case unix.EPERM:
-			// It seems that in some rare cases this check can fail with
-			// a permission error. Fallback to a procfs check.
-		default:
-			return true, err
-		}
-	}
-
+	// We intentionally skip kill(pid, 0) as a liveness check and rely solely on
+	// the procfs stat below. kill(pid, 0) resolves PIDs in the caller's PID
+	// namespace: when the profiler runs in a container without hostPID:true but
+	// with the host /proc bind-mounted, the PIDs reported by eBPF are
+	// host-namespace PIDs that are invisible to kill, which would return ESRCH
+	// for every live process and cause CleanupPIDs to tear down all interpreter
+	// state on every tick. The procfs check works correctly in both cases
+	// (with or without hostPID:true) as long as procFsPath points to the host
+	// /proc filesystem.
 	path := path.Join(pm.procFsPath, fmt.Sprintf("/%d/maps", pid))
-	_, err = os.Stat(path)
+	_, err := os.Stat(path)
 	if err != nil && os.IsNotExist(err) {
 		return false, nil
 	}
