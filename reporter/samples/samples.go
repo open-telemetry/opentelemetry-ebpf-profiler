@@ -4,6 +4,7 @@
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
@@ -14,6 +15,7 @@ type TraceEventMeta struct {
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
+	Resource       *pcommon.Resource
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
 	ProfileType    *TypeMetadata
@@ -42,6 +44,9 @@ type ResourceToProfiles struct {
 	// comparable.
 	EnvVars map[libpf.String]libpf.String
 
+	// Resource is the OTel resource from ProcessContext, if available.
+	Resource *pcommon.Resource
+
 	// Events holds the actual profiling information.
 	Events map[*TypeMetadata]SampleToEvents
 }
@@ -64,6 +69,9 @@ type ResourceKey struct {
 	// APMServiceName is provided by the eBPF programs
 	APMServiceName string
 
+	// ContextKey is the unique identifier for a service instance
+	ContextKey libpf.String
+
 	PID int64
 }
 
@@ -83,6 +91,11 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+
+	// LabelsHash is a hash of the custom labels attached to the trace.
+	// It separates samples that share the same stack / TID / SpanID / TraceID
+	// but carry different labels so their labels aren't merged.
+	LabelsHash uint64
 }
 
 // TypeMetadata describes how profiling events of a particular kind

@@ -346,6 +346,18 @@ enum {
   // number of failures to read LuaJIT proc info
   metricID_UnwindLuaJITErrNoProcInfo,
 
+  // number of failures to get TSD base for thread context
+  metricID_UnwindThreadContextErrReadTsdBase,
+
+  // number of failures read the thread context buffer
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of failures read the thread context attributes
+  metricID_UnwindThreadContextErrReadThreadCtxAttrs,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -609,6 +621,14 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+  u8 valid;
+  u8 _reserved;
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 #define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
 // Big enough to hold UUIDs, etc.
 #define CUSTOM_LABEL_MAX_VAL_LEN 48
@@ -624,6 +644,17 @@ typedef struct CustomLabelsArray {
   unsigned len;
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
+
+typedef struct CustomLabelsData {
+  u16 size;
+  u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
+} CustomLabelsData;
+
+enum CustomLabelsType {
+  CUSTOM_LABELS_TYPE_NONE,
+  CUSTOM_LABELS_TYPE_NATIVE,
+  CUSTOM_LABELS_TYPE_GO,
+};
 
 // Container for a stack trace
 typedef struct Trace {
@@ -641,8 +672,13 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
+  // Custom labels type (Native or Go)
+  u8 custom_labels_type;
+  union {
+    // Custom labels data
+    CustomLabelsData custom_labels_data;
+    CustomLabelsArray custom_labels;
+  };
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
@@ -1084,5 +1120,16 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+typedef struct ThreadContextProcInfo {
+  // tls_offset is the variable's offset: TP-relative for static TLS
+  // (local-exec / initial-exec, when module_id == 0), or the offset within the
+  // module's TLS block for dynamic TLS.
+  s32 tls_offset;
+  // module_id is the TLS module ID for dynamic TLS, or 0 for static TLS.
+  u32 module_id;
+  // dtv_info locates the DTV for dynamic TLS (unused when module_id == 0).
+  DTVInfo dtv_info;
+} ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H

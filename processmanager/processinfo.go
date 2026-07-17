@@ -132,6 +132,7 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 
 	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 	pm.fillSelfContainerID(pid, &meta)
+
 	info := &processInfo{
 		meta:     meta,
 		libcInfo: nil,
@@ -582,9 +583,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	oldProcessContextInfo := info.meta.ProcessContextInfo
 
 	// Get existing info
+	oldProcessContextPublishedAtNs := info.meta.ProcessContextInfo.PublishedAtNs
+	oldEnvVars := info.meta.EnvVariables
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
 	var numInterpreters int
@@ -617,17 +619,20 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	capHint := max(32, min(len(oldMappings), 256))
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
-	var processContextInfo processcontext.Info
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
+
+	// Address of the OTel ProcessContext mapping, or 0 if absent. Reading the
+	// payload is deferred until after GetProcessMeta so env vars are available for the merge.
+	var contextMappingAddr uint64
 
 	// This callback processes each memory mapping, keeping only executable
 	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
-			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
+			contextMappingAddr = m.Vaddr
 			// Even if process context is not found, it might be published in the future.
 			// For now, we rely on a new call to synchronizeMappings to pick it up.
 			// TODO: Add some kind of polling mechanism or a hook on prctl to be notified
@@ -758,10 +763,16 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Update metadata of the process.
 	var meta process.ProcessMeta
+	envVars := oldEnvVars
 	if updateProcessMeta {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 		pm.fillSelfContainerID(pid, &meta)
+		envVars = meta.EnvVariables
 	}
+
+	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
+		contextMappingAddr, pid, pr.GetRemoteMemory(),
+		oldProcessContextPublishedAtNs, envVars, updateProcessMeta || newProcess)
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
@@ -772,7 +783,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		if updateProcessMeta {
 			info.meta = meta
 		}
-		info.meta.ProcessContextInfo = processContextInfo
+		if publishProcessContextInfo {
+			info.meta.ProcessContextInfo = newProcessContextInfo
+		}
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -919,25 +932,4 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
-}
-
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
-	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
-	if err == nil {
-		return ctxInfo
-	}
-	if errors.Is(err, processcontext.ErrNoUpdate) {
-		return oldProcessContextInfo
-	}
-	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearExtraAttributes()
-		return oldProcessContextInfo
-	}
-
-	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
-	return processcontext.Info{}
 }

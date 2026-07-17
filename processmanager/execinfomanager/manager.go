@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/threadcontext"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -133,6 +134,9 @@ func NewExecutableInfoManager(
 	}
 
 	loaders = append(loaders, apmint.Loader)
+	if !interpretersConfig.ThreadContext.IsDisabled() {
+		loaders = append(loaders, threadcontext.GetLoader(interpretersConfig.ThreadContext))
+	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })

@@ -1151,6 +1151,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 		EnvVars:          procMeta.EnvVariables,
+		Resource:         procMeta.ProcessContextInfo.Resource,
 	}
 
 	switch trace.Origin {
@@ -1161,23 +1162,29 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
-				continue
+	switch ptr.Custom_labels_type {
+	case support.CustomLabelsTypeGo:
+		customLabels := (*support.CustomLabelsArray)(unsafe.Pointer(&ptr.Custom_labels_data))
+		if customLabels.Len > 0 {
+			trace.CustomLabels = make(map[libpf.String]libpf.String, int(customLabels.Len))
+			for i := 0; i < int(customLabels.Len); i++ {
+				lbl := customLabels.Labels[i]
+				keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
+				if !ok {
+					log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+					continue
+				}
+				key := libpf.Intern(pfunsafe.ToString(keyBytes))
+				valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
+				if !ok {
+					log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+					continue
+				}
+				trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
 			}
-			key := libpf.Intern(pfunsafe.ToString(keyBytes))
-			valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
-				continue
-			}
-			trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
 		}
+	case support.CustomLabelsTypeNative:
+		trace.CustomLabels = procMeta.ProcessContextInfo.DecodeThreadLabels(ptr.Custom_labels_data.Data[:ptr.Custom_labels_data.Size])
 	}
 
 	trace.NumFrames = ptr.Num_frames

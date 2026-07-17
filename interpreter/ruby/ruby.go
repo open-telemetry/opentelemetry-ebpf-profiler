@@ -1446,7 +1446,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Look for DTPMOD64 relocation to find the TLS module ID offset.
 	// This is used for DTV-based TLS access when TLSDESC is unavailable.
 	var tlsModuleIdOffset libpf.Address
-	if err = ef.VisitRelocations(func(r pfelf.ElfReloc, _ string) bool {
+	if err = ef.VisitRelocations(func(r pfelf.ElfReloc, _ string, _ pfelf.RelocType) bool {
 		log.Debugf("Found DTPMOD64 relocation at offset %x", r.Off)
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false

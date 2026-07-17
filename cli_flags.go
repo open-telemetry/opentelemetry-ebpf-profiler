@@ -234,6 +234,8 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 			cfg.Go.Labels.Disabled = false
 		case "beam":
 			cfg.BEAM.Disabled = false
+		case "thread_context":
+			cfg.ThreadContext.Disabled = false
 		case "luajit":
 			log.Warn("The LuaJIT interpreter is incomplete and may not work properly")
 			cfg.LuaJIT.Disabled = false

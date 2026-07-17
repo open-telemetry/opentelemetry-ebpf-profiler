@@ -352,7 +352,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 
 		if !interpretersConfig.Perl.IsDisabled() || !interpretersConfig.Python.IsDisabled() ||
-			!interpretersConfig.Go.IsLabelsDisabled() {
+			!interpretersConfig.Go.IsLabelsDisabled() || !interpretersConfig.ThreadContext.IsDisabled() {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {

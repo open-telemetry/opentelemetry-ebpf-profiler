@@ -686,6 +686,18 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 299
 
+	// Number of failures to get TSD base for thread context
+	IDUnwindThreadContextErrReadTsdBase = 300
+
+	// Number of failures to read the thread context buffer
+	IDUnwindThreadContextErrReadThreadCtxBuf = 301
+
+	// Number of failures to read the thread context attributes
+	IDUnwindThreadContextErrReadThreadCtxAttrs = 302
+
+	// Number of successful reads of thread context info
+	IDUnwindThreadContextReadSuccesses = 303
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 300
+	IDMax = 304
 )
