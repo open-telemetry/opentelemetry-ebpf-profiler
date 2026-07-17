@@ -642,7 +642,7 @@ typedef struct Trace {
   // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
   u16 num_kernel_frames;
 
-  // origin indicates the source of the trace and it set as
+  // origin indicates the source of the trace and it is set as
   // RODATA variable at load time.
   u16 origin;
 

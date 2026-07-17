@@ -600,7 +600,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		SampleType: "samples",
 		SampleUnit: "count",
 	})
-	if err := coll.Variables["origin_id_sampling"].Set(uint16(sampling)); err != nil {
+	if err := coll.Variables["origin_id_sampling"].Set(sampling); err != nil {
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
 	}
 
