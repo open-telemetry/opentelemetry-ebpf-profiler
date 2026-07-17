@@ -6,11 +6,9 @@
 
 #include "types.h"
 
-#ifndef TESTING_COREDUMP
-
-  // prctl constants from include/uapi/linux/prctl.h
-  #define PR_SET_VMA           0x53564d41
-  #define PR_SET_VMA_ANON_NAME 0
+// prctl constants from include/uapi/linux/prctl.h
+#define PR_SET_VMA           0x53564d41
+#define PR_SET_VMA_ANON_NAME 0
 
 // tracepoint__sys_exit_prctl detects when a process names an anonymous VMA
 // "OTEL_CTX" and triggers a PID resynchronization so the profiler can discover
@@ -84,5 +82,3 @@ int tracepoint__sys_exit_prctl(void *ctx)
 exit:
   return 0;
 }
-
-#endif
