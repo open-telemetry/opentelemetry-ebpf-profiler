@@ -82,19 +82,25 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	i.code = i.code[inst.Len:]
 	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
 	switch inst.Op {
-	case x86asm.ADD:
+	case x86asm.ADD, x86asm.SUB:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			left := i.Regs.GetX86(dst)
+			var right expression.Expression
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				right := expression.Imm(uint64(src))
-				i.Regs.setX86asm(dst, expression.Add(left, right))
+				right = expression.Imm(uint64(src))
 			case x86asm.Reg:
-				right := i.Regs.GetX86(src)
-				i.Regs.setX86asm(dst, expression.Add(left, right))
+				right = i.Regs.GetX86(src)
 			case x86asm.Mem:
-				right := i.MemArg(src)
-				right = expression.MemWithSegment(src.Segment, right, inst.MemBytes)
+				right = expression.MemWithSegment(src.Segment, i.MemArg(src), inst.MemBytes)
+			}
+			if right != nil {
+				// SUB is ADD with the right operand negated (-1 * x). Multiply/Add fold
+				// the immediate case, so `sub reg, imm` cancels a later `+imm`. Note that
+				// symbolic cancellation doesn't happen, so X + (-1 * X) doesn't become 0.
+				if inst.Op == x86asm.SUB {
+					right = expression.Multiply(expression.Imm(^uint64(0)), right)
+				}
 				i.Regs.setX86asm(dst, expression.Add(left, right))
 			}
 		}
