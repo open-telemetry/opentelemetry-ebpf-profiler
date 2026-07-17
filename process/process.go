@@ -93,7 +93,7 @@ func New(pid, tid libpf.PID, procRootPath string) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
-		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
+		remoteMemory: remotememory.NewProcessVirtualMemory(pid, procRootPath),
 		rootFs:       procRootPath,
 	}
 }
