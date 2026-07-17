@@ -1475,10 +1475,13 @@ type originRegistry struct {
 
 // register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
-func (r *originRegistry) register(metadata *samples.TypeMetadata) uint16 {
+func (r *originRegistry) register(metadata *samples.TypeMetadata) (uint16, error) {
+	if last := r.lastID.Load(); last >= math.MaxUint16 {
+		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
+	}
 	id := uint16(r.lastID.Add(1))
 	r.types.Store(id, metadata)
-	return id
+	return id, nil
 }
 
 // lookup returns the profile type metadata registered for origin, or nil if

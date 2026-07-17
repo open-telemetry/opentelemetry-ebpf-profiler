@@ -594,32 +594,41 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 // TODO: this is a temporary helper and will be removed once tracer manages
 // custom probes.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
-	sampling := origins.register(&samples.TypeMetadata{
+	sampling, err := origins.register(&samples.TypeMetadata{
 		PeriodType: "cpu",
 		PeriodUnit: "nanoseconds",
 		SampleType: "samples",
 		SampleUnit: "count",
 	})
+	if err != nil {
+		return err
+	}
 	if err := coll.Variables["origin_id_sampling"].Set(sampling); err != nil {
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
 	}
 
 	if cfg.OffCPUThreshold > 0 {
-		offCPU := origins.register(&samples.TypeMetadata{
+		offCPU, err := origins.register(&samples.TypeMetadata{
 			SampleType:   "off_cpu",
 			SampleUnit:   "nanoseconds",
 			ReportValues: true,
 		})
+		if err != nil {
+			return err
+		}
 		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
 			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
 		}
 	}
 
 	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
-		probe := origins.register(&samples.TypeMetadata{
+		probe, err := origins.register(&samples.TypeMetadata{
 			SampleType: "events",
 			SampleUnit: "count",
 		})
+		if err != nil {
+			return err
+		}
 		if err := coll.Variables["origin_id_probe"].Set(uint16(probe)); err != nil {
 			return fmt.Errorf("failed to set origin_id_probe: %v", err)
 		}
