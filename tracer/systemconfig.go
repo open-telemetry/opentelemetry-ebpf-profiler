@@ -405,6 +405,13 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 		return nil, nil, fmt.Errorf("failed to set tracer_pid: %v", err)
 	}
 
+	// VariableSpec.Set only updates the in-memory Value; it does not write
+	// into the MapSpec byte slice. Sync now so the .Copy() below picks up
+	// the correct tracer_pid bytes.
+	if err := syncVariablesToMapSpecs(orig); err != nil {
+		return nil, nil, fmt.Errorf("failed to sync tracer_pid to rodata: %v", err)
+	}
+
 	new := &cebpf.CollectionSpec{
 		Maps:     make(map[string]*cebpf.MapSpec),
 		Programs: make(map[string]*cebpf.ProgramSpec),
