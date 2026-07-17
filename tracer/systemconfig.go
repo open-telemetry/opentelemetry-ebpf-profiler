@@ -343,11 +343,6 @@ func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	progSpec, err := ParseProbe(fmt.Sprintf("uprobe:%s:%s", selfFilePath, symbolName))
-	if err != nil {
-		return 0, err
-	}
-
 	new := &cebpf.CollectionSpec{
 		Maps:     make(map[string]*cebpf.MapSpec),
 		Programs: make(map[string]*cebpf.ProgramSpec),
@@ -368,12 +363,12 @@ func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
-	ex, err := link.OpenExecutable(progSpec.Target)
+	ex, err := link.OpenExecutable(selfFilePath)
 	if err != nil {
 		return 0, err
 	}
 
-	uprobeLink, err := ex.Uprobe(progSpec.Symbol, uprobeProg, &link.UprobeOptions{Address: addr})
+	uprobeLink, err := ex.Uprobe(symbolName, uprobeProg, &link.UprobeOptions{Address: addr})
 	if err != nil {
 		return 0, err
 	}
