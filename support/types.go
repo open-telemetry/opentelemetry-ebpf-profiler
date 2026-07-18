@@ -88,13 +88,6 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
-const (
-	TraceOriginUnknown  = 0x0
-	TraceOriginSampling = 0x1
-	TraceOriginOffCPU   = 0x2
-	TraceOriginProbe    = 0x3
-)
-
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
@@ -165,7 +158,7 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
-	Origin             uint32
+	Origin             uint16
 	Value              uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
