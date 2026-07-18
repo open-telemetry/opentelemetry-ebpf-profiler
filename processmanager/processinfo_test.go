@@ -275,7 +275,7 @@ func TestHandleNewInterpreterRecordsAnonymousMappingInterestLocally(t *testing.T
 	}
 
 	anonymousMappingsWanted, err := pm.handleNewInterpreter(
-		process.New(pid, pid), 0, oid, data, false)
+		process.New(pid, pid, "/"), 0, oid, data, false)
 	require.NoError(err)
 	require.Contains(pm.interpreters[pid], oid)
 	require.True(anonymousMappingsWanted)
@@ -300,7 +300,7 @@ func TestHandleNewInterpreterDoesNotAssignOnAttachFailure(t *testing.T) {
 	}
 
 	anonymousMappingsWanted, err := pm.handleNewInterpreter(
-		process.New(pid, pid), 0, oid, data, false)
+		process.New(pid, pid, "/"), 0, oid, data, false)
 	require.ErrorIs(err, attachErr)
 	require.False(anonymousMappingsWanted)
 	require.NotContains(pm.interpreters, pid)
@@ -327,7 +327,7 @@ func TestHandleNewInterpreterKeepsExistingInterpreter(t *testing.T) {
 	}
 
 	anonymousMappingsWanted, err := pm.handleNewInterpreter(
-		process.New(pid, pid), 0, newOID, data, true)
+		process.New(pid, pid, "/"), 0, newOID, data, true)
 	require.NoError(err)
 	require.Contains(pm.interpreters[pid], oldOID)
 	require.Contains(pm.interpreters[pid], newOID)

@@ -89,12 +89,12 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid, tid libpf.PID, procRootPath string) Process {
+func New(pid, tid libpf.PID, rootFsPath string) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
-		remoteMemory: remotememory.NewProcessVirtualMemory(pid, procRootPath),
-		rootFs:       procRootPath,
+		remoteMemory: remotememory.NewProcessVirtualMemory(pid, rootFsPath),
+		rootFs:       rootFsPath,
 	}
 }
 

@@ -42,5 +42,5 @@ func TestProcessVirtualMemory(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skipf("unsupported os %s", runtime.GOOS)
 	}
-	RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(os.Getpid())))
+	RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(os.Getpid()), "/"))
 }

@@ -347,7 +347,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			// Get current process mappings
 			pid := libpf.PID(os.Getpid())
-			proc := process.New(pid, pid)
+			proc := process.New(pid, pid, "")
 			defer proc.Close()
 
 			var contextMappingAddr uint64
