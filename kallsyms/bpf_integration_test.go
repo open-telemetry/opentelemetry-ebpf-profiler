@@ -161,7 +161,7 @@ func TestBPFSymbolizerPreexisting(t *testing.T) {
 	// Load the program before starting the monitor.
 	prog := loadSocketFilter(t, preexistingProgName)
 
-	s, err := NewSymbolizer("/proc")
+	s, err := NewSymbolizer("/")
 	require.NoError(t, err)
 
 	err = s.bpf.startMonitor(t.Context(), linearCPUs())

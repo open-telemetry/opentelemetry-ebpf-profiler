@@ -36,7 +36,7 @@ func procMemRemoteMemory(rootFsPath string, pid libpf.PID) func(p []byte, off in
 	}
 }
 
-func processVmRemoteMemory(pid libpf.PID) func(p []byte, off int64) (int, error) {
+func processVMRemoteMemory(pid libpf.PID) func(p []byte, off int64) (int, error) {
 	return func(p []byte, off int64) (int, error) {
 		numBytesWanted := len(p)
 		if numBytesWanted == 0 {
@@ -53,11 +53,4 @@ func processVmRemoteMemory(pid libpf.PID) func(p []byte, off int64) (int, error)
 		}
 		return numBytesRead, err
 	}
-}
-
-func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	return vm.remoteRead(p, off)
 }

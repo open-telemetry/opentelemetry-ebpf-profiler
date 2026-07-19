@@ -323,6 +323,12 @@ func retrievePkgName(val any) string {
 }
 
 func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return 0, fmt.Errorf("failed to adjust rlimit: %v", err)
+	}
+	defer restoreRlimit()
+
 	selfFilePath, err := os.Executable()
 	if err != nil {
 		return 0, err
