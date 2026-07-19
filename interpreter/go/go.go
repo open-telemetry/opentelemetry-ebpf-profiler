@@ -96,7 +96,7 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		return nil, err
 	}
 	if !file.IsGolang() {
-		return nil, err
+		return nil, nil
 	}
 
 	// Go plugins are shared objects that share the runtime with the main

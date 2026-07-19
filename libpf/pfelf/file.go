@@ -1313,7 +1313,9 @@ func decodeString(rdr *pfbufio.Reader) (string, error) {
 	if n <= 0 || size >= maxBytesSmallSection {
 		return "", errNoGoBuildinfo
 	}
-	rdr.Discard(int(n))
+	if _, err = rdr.Discard(int(n)); err != nil {
+		return "", err
+	}
 	return rdr.ReadStringN(int(size))
 }
 
