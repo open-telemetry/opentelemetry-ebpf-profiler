@@ -206,6 +206,11 @@
     "description": "Ruby: Unable to read objspace flags"
   },
   {
+    "id": 3034,
+    "name": "ruby_jit_native_resume_unsupported",
+    "description": "Ruby: Native resume requested after Ruby JIT, but unwinding was stopped because JIT frames cannot resume native unwinding"
+  },
+  {
     "id": 4000,
     "name": "native_lookup_text_section",
     "description": "Native: Unable to find the code section in the stack delta page info map"

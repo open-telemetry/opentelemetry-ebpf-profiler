@@ -134,7 +134,7 @@ type Data interface {
 // Instance is the interface to operate on per-PID data.
 type Instance interface {
 	// UsesAnonymousMappings returns true if this interpreter needs anonymous
-	// executable mappings from the process manager.
+	// mappings from the process manager.
 	//
 	// This value must not change during the lifetime of the instance.
 	UsesAnonymousMappings() bool
@@ -145,9 +145,9 @@ type Instance interface {
 
 	// SynchronizeMappings is called when the processmanager has reread process
 	// memory mappings. The mappings slice contains only the subset of mappings
-	// that are relevant to interpreters: executable anonymous mappings (for JIT
-	// engines like HotSpot, V8, BEAM) and DLL file-backed mappings (for .NET
-	// PE assemblies). The processmanager decides which mappings are included;
+	// that are relevant to interpreters: anonymous mappings (for JIT engines like
+	// HotSpot, V8, BEAM, Ruby) and DLL file-backed mappings (for .NET PE assemblies).
+	// The processmanager decides which mappings are included;
 	// this can be made more dynamic in the future if needed.
 	//
 	// The mappings are in /proc/PID/maps order (ascending by virtual address)
