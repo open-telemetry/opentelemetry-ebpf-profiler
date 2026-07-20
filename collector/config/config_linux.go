@@ -71,6 +71,7 @@ type Config struct {
 	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
 	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
+	CustomProbes           map[string]any           `mapstructure:"custom_probes"`
 }
 
 // Validate validates the config.
