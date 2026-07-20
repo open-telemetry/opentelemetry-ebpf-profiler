@@ -38,6 +38,21 @@ type sysConfigVars struct {
 	vma_lookup_enabled  bool
 	vma_vm_file_offset  uint32
 	vma_vm_flags_offset uint32
+
+	// Offsets and sizes for translating kernel-root PIDs (emitted by eBPF
+	// helpers) to PIDs in the profiler's own PID namespace (the view its /proc
+	// uses). See the matching extern declarations in support/ebpf/bpfdefs.h.
+	task_thread_pid_offset   uint32
+	task_group_leader_offset uint32
+	pid_level_offset         uint32
+	pid_numbers_offset       uint32
+	upid_size                uint32
+	upid_nr_offset           uint32
+
+	// profiler_pidns_level is the depth of the profiler's own PID namespace in
+	// the kernel hierarchy. Discovered at startup via read_pid_level; 0 when the
+	// profiler runs in the initial PID namespace (translation is then a no-op).
+	profiler_pidns_level uint32
 }
 
 var (
@@ -168,6 +183,148 @@ func parseBTF(vars *sysConfigVars) error {
 	vars.tpbase_offset = uint64(tpbaseOffset)
 	parseVMAOffsets(spec, vars)
 
+	return nil
+}
+
+// parsePidStructLayout best-effort populates the task_struct/pid/upid offsets
+// used by the BPF helpers to translate kernel-root PIDs to PIDs in the
+// profiler's own pidns. Returns true on success. On failure (kernels older than
+// 4.19, which lack task_struct.thread_pid, or missing BTF) it returns false and
+// leaves the offsets at 0; the BPF helpers then short-circuit to the existing
+// kernel-root behavior, preserving the pre-fix path where the fix cannot apply.
+func parsePidStructLayout(vars *sysConfigVars) bool {
+	fh, err := os.Open("/sys/kernel/btf/vmlinux")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: cannot open BTF: %v", err)
+		return false
+	}
+	defer fh.Close()
+	spec, err := btf.LoadSplitSpecFromReader(fh, nil)
+	if err != nil {
+		log.Infof("PID-ns translation disabled: cannot load BTF: %v", err)
+		return false
+	}
+
+	var taskStruct *btf.Struct
+	if err = spec.TypeByName("task_struct", &taskStruct); err != nil {
+		log.Infof("PID-ns translation disabled: task_struct not in BTF: %v", err)
+		return false
+	}
+	threadPidOff, err := calculateFieldOffset(taskStruct, "thread_pid")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: task_struct.thread_pid missing (kernel < 4.19?): %v", err)
+		return false
+	}
+	groupLeaderOff, err := calculateFieldOffset(taskStruct, "group_leader")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: task_struct.group_leader missing: %v", err)
+		return false
+	}
+	var pidStruct *btf.Struct
+	if err = spec.TypeByName("pid", &pidStruct); err != nil {
+		log.Infof("PID-ns translation disabled: struct pid not in BTF: %v", err)
+		return false
+	}
+	levelOff, err := calculateFieldOffset(pidStruct, "level")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: struct pid.level missing: %v", err)
+		return false
+	}
+	numbersOff, err := calculateFieldOffset(pidStruct, "numbers")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: struct pid.numbers missing: %v", err)
+		return false
+	}
+	var upidStruct *btf.Struct
+	if err = spec.TypeByName("upid", &upidStruct); err != nil {
+		log.Infof("PID-ns translation disabled: struct upid not in BTF: %v", err)
+		return false
+	}
+	nrOff, err := calculateFieldOffset(upidStruct, "nr")
+	if err != nil {
+		log.Infof("PID-ns translation disabled: struct upid.nr missing: %v", err)
+		return false
+	}
+
+	vars.task_thread_pid_offset = uint32(threadPidOff)
+	vars.task_group_leader_offset = uint32(groupLeaderOff)
+	vars.pid_level_offset = uint32(levelOff)
+	vars.pid_numbers_offset = uint32(numbersOff)
+	vars.upid_size = uint32(upidStruct.Size)
+	vars.upid_nr_offset = uint32(nrOff)
+	return true
+}
+
+// setPidLayoutVars applies the PID-layout offsets to coll's rodata. Called
+// before prepareAnalysis so the analysis sub-collection sees these values via
+// the Variables copy in prepareAnalysis.
+func setPidLayoutVars(coll *cebpf.CollectionSpec, vars *sysConfigVars) error {
+	setters := []struct {
+		name  string
+		value uint32
+	}{
+		{"task_thread_pid_offset", vars.task_thread_pid_offset},
+		{"task_group_leader_offset", vars.task_group_leader_offset},
+		{"pid_level_offset", vars.pid_level_offset},
+		{"pid_numbers_offset", vars.pid_numbers_offset},
+		{"upid_size", vars.upid_size},
+		{"upid_nr_offset", vars.upid_nr_offset},
+	}
+	for _, s := range setters {
+		if err := coll.Variables[s.name].Set(s.value); err != nil {
+			return fmt.Errorf("failed to set %s: %v", s.name, err)
+		}
+	}
+	return nil
+}
+
+// loadPidNsLevel runs the read_pid_level analysis probe and returns the depth of
+// the profiler's own PID namespace in the kernel hierarchy (0 = initial ns).
+func loadPidNsLevel(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) (uint32, error) {
+	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_pid_level"], maps, 0)
+	if err != nil {
+		return 0, fmt.Errorf("read_pid_level probe: %w", err)
+	}
+	if len(code) < 4 {
+		return 0, fmt.Errorf("read_pid_level returned short result: %d bytes", len(code))
+	}
+	return binary.LittleEndian.Uint32(code[0:4]), nil
+}
+
+// applyVariablesToMapSpec folds the collection's VariableSpec values into the
+// Contents of the given data-section MapSpec (e.g. ".rodata.var"). cilium/ebpf
+// performs this internally at NewCollection time via the unexported
+// MapSpec.updateDataSection, but the system-analysis sub-collection is loaded
+// with loadAllMaps (so it can share maps by FD), which does not. It is a no-op
+// when the section does not exist or has no variables.
+func applyVariablesToMapSpec(spec *cebpf.CollectionSpec, sectionName string) error {
+	mapSpec, ok := spec.Maps[sectionName]
+	if !ok {
+		return nil
+	}
+	if len(mapSpec.Contents) != 1 {
+		return fmt.Errorf("rodata section %s: expected 1 KV entry, got %d",
+			sectionName, len(mapSpec.Contents))
+	}
+	data, ok := mapSpec.Contents[0].Value.([]byte)
+	if !ok {
+		return fmt.Errorf("rodata section %s: Contents[0].Value is %T, not []byte",
+			sectionName, mapSpec.Contents[0].Value)
+	}
+	// Contents may share backing storage with the original spec; clone first.
+	dataCopy := append([]byte(nil), data...)
+	for _, vs := range spec.Variables {
+		if vs.SectionName != sectionName || len(vs.Value) == 0 {
+			continue
+		}
+		end := int(vs.Offset) + len(vs.Value)
+		if end > len(dataCopy) {
+			return fmt.Errorf("variable %s (offset %d size %d) exceeds rodata size %d",
+				vs.Name, vs.Offset, len(vs.Value), len(dataCopy))
+		}
+		copy(dataCopy[vs.Offset:end], vs.Value)
+	}
+	mapSpec.Contents = []cebpf.MapKV{{Key: uint32(0), Value: dataCopy}}
 	return nil
 }
 
@@ -317,8 +474,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
 	new := &cebpf.CollectionSpec{
-		Maps:     make(map[string]*cebpf.MapSpec),
-		Programs: make(map[string]*cebpf.ProgramSpec),
+		Maps:      make(map[string]*cebpf.MapSpec),
+		Programs:  make(map[string]*cebpf.ProgramSpec),
+		Variables: make(map[string]*cebpf.VariableSpec),
 	}
 	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
 	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
@@ -328,6 +486,24 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
 	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+	new.Programs["read_pid_level"] = orig.Programs["read_pid_level"].Copy()
+
+	// The analysis probes consult the PID-layout rodata (via is_our_analysis_task),
+	// but cilium/ebpf only folds VariableSpec values into a data-section map at
+	// NewCollection time (via the unexported MapSpec.updateDataSection); this
+	// sub-collection is built with loadAllMaps so it can share maps by FD, which
+	// skips that step. Copy the Variables and fold their values into the rodata
+	// maps here so the analysis probes observe the same offsets the main
+	// collection does.
+	for name, vs := range orig.Variables {
+		new.Variables[name] = vs.Copy()
+	}
+	if err := applyVariablesToMapSpec(new, ".rodata.var"); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply variables to .rodata.var: %v", err)
+	}
+	if err := applyVariablesToMapSpec(new, ".rodata"); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply variables to .rodata: %v", err)
+	}
 
 	maps := make(map[string]*cebpf.Map)
 
@@ -557,6 +733,27 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	rodataVars := sysConfigVars{}
 	configureVMALookup(coll, cfg, &rodataVars)
 
+	// PID-namespace translation setup. Must run before prepareAnalysis so the
+	// analysis probes (is_our_analysis_task) see the layout offsets via the
+	// Variables copy. On any BTF / old-kernel failure we leave the offsets at 0
+	// and the BPF helpers fall back to the kernel-root path.
+	var translate bool
+	switch cfg.PIDNamespaceTranslation {
+	case "", "auto", "on":
+		translate = true
+	case "off":
+		translate = false
+	default:
+		return fmt.Errorf("invalid pid_namespace_translation %q (want off|on|auto)",
+			cfg.PIDNamespaceTranslation)
+	}
+	if translate && !parsePidStructLayout(&rodataVars) {
+		translate = false
+	}
+	if err := setPidLayoutVars(coll, &rodataVars); err != nil {
+		return err
+	}
+
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
 	if err != nil {
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
@@ -565,6 +762,24 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
+
+	// Discover the profiler's own PID-namespace depth. Only meaningful when the
+	// task-walking offsets were populated; level 0 is the initial namespace,
+	// where get_pid_in_profiler_ns() is a no-op.
+	if translate && rodataVars.task_thread_pid_offset != 0 {
+		lvl, lerr := loadPidNsLevel(systemAnalysisColl, maps)
+		if lerr != nil {
+			return fmt.Errorf("failed to discover profiler PID namespace level: %v", lerr)
+		}
+		rodataVars.profiler_pidns_level = lvl
+		if lvl > 0 {
+			log.Infof("PID-namespace translation active: profiler at PID namespace depth %d; "+
+				"PIDs are translated into the profiler's namespace", lvl)
+		}
+	}
+	// read_pid_level is only used at startup; drop it from the main collection so
+	// it is not attached to sys_enter for the lifetime of the collector.
+	delete(coll.Programs, "read_pid_level")
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
 		return fmt.Errorf("failed to set tpbase_offset: %v", err)
 	}
@@ -582,6 +797,9 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["vma_vm_flags_offset"].Set(rodataVars.vma_vm_flags_offset); err != nil {
 		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
+	}
+	if err := coll.Variables["profiler_pidns_level"].Set(rodataVars.profiler_pidns_level); err != nil {
+		return fmt.Errorf("failed to set profiler_pidns_level: %v", err)
 	}
 
 	return nil

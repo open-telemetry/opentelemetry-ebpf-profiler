@@ -7,9 +7,8 @@ BPF_RODATA_VAR(u16, origin_id_probe, 0)
 
 static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
 {
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = pid_tgid >> 32;
-  u32 tid      = pid_tgid & 0xFFFFFFFF;
+  u32 pid = get_pid_in_profiler_ns();
+  u32 tid = (u32)(bpf_get_current_pid_tgid() & 0xFFFFFFFF);
 
   if (pid == 0 || tid == 0) {
     return 0;

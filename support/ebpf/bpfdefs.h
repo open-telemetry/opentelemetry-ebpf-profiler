@@ -77,6 +77,19 @@ static inline u64 bpf_get_current_pid_tgid(void)
   return __cgo_ctx->id;
 }
 
+// PID-namespace translation is a no-op for coredump analysis (a single-process
+// snapshot has no nested namespaces). Provide fast-path stubs so the shared
+// eBPF sources that call these helpers also compile under TESTING_COREDUMP.
+static inline u32 get_pid_in_profiler_ns(void)
+{
+  return (u32)(bpf_get_current_pid_tgid() >> 32);
+}
+
+static inline bool is_our_analysis_task(u32 caller_pid)
+{
+  return caller_pid == (u32)(bpf_get_current_pid_tgid() >> 32);
+}
+
 static inline void *bpf_map_lookup_elem(void *map, const void *key)
 {
   void *__bpf_map_lookup_elem(u64, void *, const void *);
@@ -156,6 +169,124 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 static long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;
 
   #define bpf_probe_read_user_with_test_fault bpf_probe_read_user
+
+// PID namespace translation: ports the kernel's task_tgid_nr_ns() helper to
+// BPF so PIDs emitted to userspace match the profiler's /proc view when it
+// runs in a nested PID namespace (e.g. a kind/minikube DaemonSet). When
+// profiler_pidns_level == 0 the helpers short-circuit to
+// bpf_get_current_pid_tgid() >> 32, so flat host / EKS deployments are
+// unchanged.
+//
+// task_struct / struct pid / struct upid offsets are filled from BTF at load
+// time by parsePidStructLayout(); profiler_pidns_level is discovered once at
+// startup by the read_pid_level analysis probe.
+extern u32 task_thread_pid_offset;
+extern u32 task_group_leader_offset;
+extern u32 pid_level_offset;
+extern u32 pid_numbers_offset;
+extern u32 upid_size;
+extern u32 upid_nr_offset;
+extern u32 profiler_pidns_level;
+
+  // Upper bound on PID-ns nesting we ever expect to walk. Used to constrain
+  // arithmetic the verifier can't otherwise bound.
+  #define MAX_PID_NS_LEVELS                   8
+
+// pidns_translation_available is true when parsePidStructLayout() populated the
+// task_struct / pid layout offsets. Without them, the walk helpers return
+// 0 / false and we fall back to the kernel-root PID for compatibility with
+// pre-4.19 kernels and kernels without BTF.
+static inline __attribute__((__always_inline__)) bool pidns_translation_available(void)
+{
+  return task_thread_pid_offset != 0;
+}
+
+// current_task_tgid_at_level returns the TGID (i.e. what getpid(2) returns) of
+// the on-CPU task as it appears in the PID namespace at depth `level`. Walks
+// via task->group_leader->thread_pid so the result is the process TGID
+// regardless of which thread of the process is currently on-CPU. This mirrors
+// the kernel's task_tgid_nr_ns() and, crucially, works for any task whose
+// namespace is at `level` OR DEEPER (e.g. a pod one level below the profiler),
+// which is what the DaemonSet case needs. Returns 0 for kernel threads, for
+// tasks shallower than `level`, or on any read failure.
+static inline __attribute__((__always_inline__)) u32 current_task_tgid_at_level(u32 level)
+{
+  // Fast path: profiler at kernel-root pidns, or task walking unavailable
+  // (pre-4.19 / no BTF). Either way the kernel-root PID is what we want.
+  if (level == 0 || !pidns_translation_available())
+    return (u32)(bpf_get_current_pid_tgid() >> 32);
+
+  void *task = (void *)bpf_get_current_task();
+  void *leader;
+  if (bpf_probe_read_kernel(&leader, sizeof(leader), task + task_group_leader_offset))
+    return 0;
+  if (!leader)
+    return 0;
+
+  void *pid;
+  if (bpf_probe_read_kernel(&pid, sizeof(pid), leader + task_thread_pid_offset))
+    return 0;
+  if (!pid)
+    return 0;
+
+  u32 task_level;
+  if (bpf_probe_read_kernel(&task_level, sizeof(task_level), pid + pid_level_offset))
+    return 0;
+  if (task_level > MAX_PID_NS_LEVELS || level > task_level)
+    return 0;
+
+  u32 nr;
+  if (bpf_probe_read_kernel(
+        &nr, sizeof(nr), pid + pid_numbers_offset + level * upid_size + upid_nr_offset))
+    return 0;
+  return nr;
+}
+
+// is_our_analysis_task filters the analysis probes to the userspace caller's
+// process. Compares against the task's deepest-namespace TGID, which is what
+// os.Getpid() returns in userspace. The previous kernel-root comparison only
+// worked when the profiler ran in the kernel-root pidns.
+static inline __attribute__((__always_inline__)) bool is_our_analysis_task(u32 caller_pid)
+{
+  // When PID-ns translation isn't available (pre-4.19 / no BTF), preserve the
+  // pre-fix kernel-root comparison. This means the analysis probes only
+  // succeed if the profiler runs in the kernel-root pidns, same as before.
+  if (!pidns_translation_available())
+    return caller_pid == (u32)(bpf_get_current_pid_tgid() >> 32);
+
+  void *task = (void *)bpf_get_current_task();
+  void *leader;
+  if (bpf_probe_read_kernel(&leader, sizeof(leader), task + task_group_leader_offset))
+    return false;
+  if (!leader)
+    return false;
+
+  void *pid;
+  if (bpf_probe_read_kernel(&pid, sizeof(pid), leader + task_thread_pid_offset))
+    return false;
+  if (!pid)
+    return false;
+
+  u32 task_level;
+  if (bpf_probe_read_kernel(&task_level, sizeof(task_level), pid + pid_level_offset))
+    return false;
+  if (task_level > MAX_PID_NS_LEVELS)
+    return false;
+
+  u32 nr;
+  if (bpf_probe_read_kernel(
+        &nr, sizeof(nr), pid + pid_numbers_offset + task_level * upid_size + upid_nr_offset))
+    return false;
+  return nr == caller_pid;
+}
+
+// get_pid_in_profiler_ns returns the on-CPU task's TGID as the profiler's
+// /proc view sees it. Drop-in replacement for `bpf_get_current_pid_tgid() >> 32`
+// at sites that emit a PID for downstream /proc lookups.
+static inline __attribute__((__always_inline__)) u32 get_pid_in_profiler_ns(void)
+{
+  return current_task_tgid_at_level(profiler_pidns_level);
+}
 
   #define printt(fmt, ...)                                                                         \
     ({                                                                                             \
