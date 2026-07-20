@@ -18,7 +18,7 @@ receivers:
 exporters:
   otlp/local:
     # equivalent to -collection-agent deprecated cli flag
-    endpoint: http://127.0.0.1:4317
+    endpoint: http://127.0.0.1:11000
     # equivalent to -disable-tls deprecated cli flag
     tls:
       insecure: true

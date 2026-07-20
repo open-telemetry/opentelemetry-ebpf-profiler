@@ -48,6 +48,12 @@ var (
 	errSystemAnalysisFailed     = errors.New("system analysis helper failed")
 )
 
+// executeSystemAnalysisFn is a function that runs a named BPF analysis program
+// against a kernel symbol address and returns the read bytes, the resolved
+// address, and any error. The program name must be one of the programs
+// registered in prepareAnalysis.
+type executeSystemAnalysisFn = func(string, libpf.SymbolValue) ([]byte, uint64, error)
+
 func btfMembers(t btf.Type) ([]btf.Member, error) {
 	switch typ := t.(type) {
 	case *btf.Struct:
@@ -175,14 +181,14 @@ func parseBTF(vars *sysConfigVars) error {
 }
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
-func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
+func executeSystemAnalysisBpfCode(pid uint32, progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue,
 ) (code []byte, addr uint64, err error) {
 	systemAnalysis := maps["system_analysis"]
 
 	key0 := uint32(0)
 	data := support.SystemAnalysis{
-		Done:    false,
+		Pid:     pid,
 		Address: uint64(address),
 	}
 
@@ -235,8 +241,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if !data.Done {
-		return fmt.Errorf("%w at 0x%x", errSystemAnalysisNotHandled, address)
+	if data.Pid != 0 {
+		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
 	}
 
 	if data.Err != 0 {
@@ -251,10 +257,10 @@ func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.Sym
 }
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.
-func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func loadKernelCode(execFn executeSystemAnalysisFn,
 	address libpf.SymbolValue,
 ) ([]byte, error) {
-	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
+	code, _, err := execFn("read_kernel_memory", address)
 	if err != nil {
 		log.Warnf("Failed to load code: %v.\n"+
 			"Possible reasons include using a kernel without syscall tracepoints enabled.", err)
@@ -264,18 +270,18 @@ func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 
 // readTaskStruct will request the ebpf code to read bytes from the given offset from
 // the current task_struct.
-func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func readTaskStruct(execFn executeSystemAnalysisFn,
 	address libpf.SymbolValue,
 ) (code []byte, addr uint64, err error) {
-	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address)
+	return execFn("read_task_struct", address)
 }
 
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
 // when the `stack` field offset within `task_struct` is already known.
-func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func determineStackPtregs(execFn executeSystemAnalysisFn,
 	vars *sysConfigVars,
 ) error {
-	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset))
+	data, ptregs, err := readTaskStruct(execFn, libpf.SymbolValue(vars.task_stack_offset))
 	if err != nil {
 		return err
 	}
@@ -286,7 +292,7 @@ func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 
 // determineStackLayout scans `task_struct` for offset of the `stack` field, and using
 // its value determines the offset of `struct pt_regs` within the entry stack.
-func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func determineStackLayout(execFn executeSystemAnalysisFn,
 	vars *sysConfigVars,
 ) error {
 	const maxTaskStructSize = 8 * 1024
@@ -295,7 +301,7 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	pageSizeMinusOne := uint64(os.Getpagesize() - 1)
 
 	for offs := 0; offs < maxTaskStructSize; {
-		data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(offs))
+		data, ptregs, err := readTaskStruct(execFn, libpf.SymbolValue(offs))
 		if err != nil {
 			return err
 		}
@@ -322,7 +328,13 @@ func retrievePkgName(val any) string {
 	return runtime.FuncForPC(pc).Name()
 }
 
-func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
+// loadSelfHostNamespacePID returns the host PID namespace TGID of the current
+// process by attaching a BPF uprobe to a local no-op function and reading
+// bpf_get_current_pid_tgid() from within the kernel. This is necessary when the
+// profiler runs inside a container with its own PID namespace, where os.Getpid()
+// returns the container-namespace PID while BPF helpers always report the
+// host-namespace TGID.
+func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return 0, fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -370,6 +382,8 @@ func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
 	if err != nil {
 		return 0, err
 	}
+	defer uprobeProg.Close()
+
 	ex, err := link.OpenExecutable(selfFilePath)
 	if err != nil {
 		return 0, err
@@ -396,21 +410,26 @@ func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
 func storePid() {}
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
-func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
-	tracerPid, err := loadTracerPID(orig)
-	if err != nil {
-		return nil, nil, err
-	}
+func prepareAnalysis(cfg *Config, orig *cebpf.CollectionSpec) (executeSystemAnalysisFn, error) {
+	var tracerPid uint32
+	var err error
 
-	if err := orig.Variables["tracer_pid"].Set(tracerPid); err != nil {
-		return nil, nil, fmt.Errorf("failed to set tracer_pid: %v", err)
-	}
-
-	// VariableSpec.Set only updates the in-memory Value; it does not write
-	// into the MapSpec byte slice. Sync now so the .Copy() below picks up
-	// the correct tracer_pid bytes.
-	if err := syncVariablesToMapSpecs(orig); err != nil {
-		return nil, nil, fmt.Errorf("failed to sync tracer_pid to rodata: %v", err)
+	if cfg.RootFs != "/" && len(cfg.RootFs) != 0 {
+		// When the host root filesystem is mounted at a path other than "/", the
+		// profiler is running inside a container with its own PID namespace. In
+		// that case os.Getpid() returns the container-namespace PID, which the
+		// BPF helper (bpf_get_current_pid_tgid) would not match because it always
+		// reports the host-namespace TGID. We use a BPF uprobe to capture the
+		// host-namespace PID instead.
+		tracerPid, err = loadSelfHostNamespacePID(orig)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// RootFs == "/" implies the profiler shares the host PID namespace
+		// (hostPID: true in Kubernetes terms), so os.Getpid() already returns
+		// the host-namespace PID that the BPF helper will see.
+		tracerPid = uint32(os.Getpid())
 	}
 
 	new := &cebpf.CollectionSpec{
@@ -429,30 +448,32 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	maps := make(map[string]*cebpf.Map)
 
 	if err := loadAllMaps(new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := rewriteMaps(new, maps); err != nil {
-		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
+		return nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	return new, maps, nil
+	return func(programName string, sv libpf.SymbolValue) ([]byte, uint64, error) {
+		return executeSystemAnalysisBpfCode(tracerPid, new.Programs[programName], maps, sv)
+	}, nil
 }
 
-func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func determineSysConfig(setupFn executeSystemAnalysisFn,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, vars *sysConfigVars,
 ) error {
 	if err := parseBTF(vars); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
 
-		if err = determineStackLayout(coll, maps, vars); err != nil {
+		if err = determineStackLayout(setupFn, vars); err != nil {
 			return err
 		}
 
 		if !interpretersConfig.Perl.IsDisabled() || !interpretersConfig.Python.IsDisabled() ||
 			!interpretersConfig.Go.IsLabelsDisabled() {
 			var tpbaseOffset uint64
-			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
+			tpbaseOffset, err = loadTPBaseOffset(setupFn, kmod)
 			if err != nil {
 				return err
 			}
@@ -463,7 +484,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		// to calculate the offset of struct pt_regs in the entry stack.
 		// The value also depends of some kernel configurations, so lets
 		// analyze it dynamically for now.
-		if err := determineStackPtregs(coll, maps, vars); err != nil {
+		if err := determineStackPtregs(setupFn, vars); err != nil {
 			return err
 		}
 	}
@@ -598,7 +619,7 @@ func stripProgramExtInfos(insns asm.Instructions) {
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
-	major, minor uint32, origins *originRegistry,
+	major, minor, patch uint32, origins *originRegistry,
 ) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
@@ -654,12 +675,27 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	rodataVars := sysConfigVars{}
 	configureVMALookup(coll, cfg, &rodataVars)
 
-	systemAnalysisColl, maps, err := prepareAnalysis(coll)
+	systemAnalysisFn, err := prepareAnalysis(cfg, coll)
 	if err != nil {
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
 
-	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, &rodataVars); err != nil {
+	if cfg.KernelVersionCheck {
+		if hasProbeReadBug(major, minor, patch) {
+			if err = checkForMaccessPatch(systemAnalysisFn, kmod); err != nil {
+				return fmt.Errorf("your kernel version %d.%d.%d may be "+
+					"affected by a Linux kernel bug that can lead to system "+
+					"freezes, terminating host agent now to avoid "+
+					"triggering this bug.\n"+
+					"If you are certain your kernel is not affected, "+
+					"you can override this check at your own risk "+
+					"with -no-kernel-version-check.\n"+
+					"Error: %v", major, minor, patch, err)
+			}
+		}
+	}
+
+	if err := determineSysConfig(systemAnalysisFn, kmod, cfg.InterpretersConfig, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {

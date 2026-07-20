@@ -2,6 +2,7 @@
 // and analysis related functions.
 
 #include "bpfdefs.h"
+#include "extmaps.h"
 #include "types.h"
 
 #ifndef TESTING_COREDUMP
@@ -13,10 +14,6 @@ struct system_analysis_t {
   __type(value, struct SystemAnalysis);
   __uint(max_entries, 1);
 } system_analysis SEC(".maps");
-
-// tracer_pid is set during load time.
-// The profiler PID value seen from the kernel PID namespace.
-BPF_RODATA_VAR(u32, tracer_pid, 0)
 
 // read_kernel_memory reads data from given kernel address. This is
 // invoked once on entry to bpf() syscall on the given pid context.
@@ -31,21 +28,19 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done) {
+  if (sys->pid != (bpf_get_current_pid_tgid() >> 32)) {
     // Execute the hook only in the context of requesting task.
     return 0;
   }
-
-  DEBUG_PRINT("Reading kernel data from %u context", tracer_pid);
-
-  // Mark request handled
-  sys->done = true;
 
   // Handle the read request
   sys->err = bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address);
   if (sys->err) {
     DEBUG_PRINT("Failed to read code from 0x%lx: %ld", (unsigned long)sys->address, (long)sys->err);
   }
+
+  // Mark request handled once the helper has finished populating the result.
+  sys->pid = 0;
 
   return 0;
 }
@@ -65,18 +60,10 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  if (tracer_pid != (u32)(bpf_get_current_pid_tgid() >> 32) || sys->done) {
+  if (sys->pid != (bpf_get_current_pid_tgid() >> 32)) {
     // Execute the hook only in the context of requesting task.
     return 0;
   }
-
-  DEBUG_PRINT(
-    "Reading task_struct data; Tracer PID: %u, Thread ID: %llu\n",
-    tracer_pid,
-    (bpf_get_current_pid_tgid() >> 32));
-
-  // Mark request handled
-  sys->done = true;
 
   // Request to read current task. Adjust read address, and return
   // also the address of struct pt_regs in the entry stack.
@@ -92,6 +79,9 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   if (sys->err) {
     DEBUG_PRINT("Failed to read task_struct from 0x%lx: %ld", (unsigned long)addr, (long)sys->err);
   }
+
+  // Mark request handled once the helper has finished populating the result.
+  sys->pid = 0;
 
   return 0;
 }

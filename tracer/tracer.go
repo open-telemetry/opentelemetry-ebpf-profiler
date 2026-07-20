@@ -162,9 +162,6 @@ type Tracer struct {
 	done     chan libpf.Void
 	doneOnce sync.Once
 
-	// filterIdleFrames indicates whether idle frames should be filtered.
-	filterIdleFrames bool
-
 	procPath string
 }
 
@@ -391,7 +388,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	}
 
 	// Initialize eBPF variables before loading programs and maps.
-	if err = loadRodataVars(coll, kmod, cfg, major, minor, origins); err != nil {
+	if err = loadRodataVars(coll, kmod, cfg, major, minor, patch, origins); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
@@ -419,21 +416,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// the file descriptors of the loaded maps.
 	if err = rewriteMaps(coll, ebpfMaps); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
-	}
-
-	if cfg.KernelVersionCheck {
-		if hasProbeReadBug(major, minor, patch) {
-			if err = checkForMaccessPatch(coll, ebpfMaps, kmod); err != nil {
-				return nil, nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
-					"affected by a Linux kernel bug that can lead to system "+
-					"freezes, terminating host agent now to avoid "+
-					"triggering this bug.\n"+
-					"If you are certain your kernel is not affected, "+
-					"you can override this check at your own risk "+
-					"with -no-kernel-version-check.\n"+
-					"Error: %v", major, minor, patch, err)
-			}
-		}
 	}
 
 	tailCallProgs := []progLoaderHelper{

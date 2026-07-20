@@ -133,7 +133,7 @@ type StackDeltaPageKey struct {
 }
 type SystemAnalysis struct {
 	Address uint64
-	Done    bool
+	Pid     uint32
 	Err     int32
 	Code    [128]uint8
 }
