@@ -8,7 +8,6 @@ import (
 	"errors"
 
 	"github.com/cilium/ebpf/link"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -20,7 +19,7 @@ func New(_ any) (tracer.Probe, error) {
 	return probe, nil
 }
 
-func (o *noopProbe) Load(originID libpf.Origin, maps tracer.TracerMaps, systemVars *tracer.SysConfigVars) (link.Link, error) {
+func (o *noopProbe) Load(originID uint16, maps tracer.TracerMaps, systemVars *tracer.SysConfigVars) (link.Link, error) {
 	// TODO: depends on https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/1607
 	return nil, errors.New("not yet implemented")
 }

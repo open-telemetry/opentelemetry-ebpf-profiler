@@ -8,7 +8,6 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -20,7 +19,7 @@ type TracerMaps map[string]*cebpf.Map
 type Probe interface {
 	// Load attaches a probe that triggers stack unwinding.
 	// Returns the link and a reference to self to keep the probe alive.
-	Load(libpf.Origin, TracerMaps, *SysConfigVars) (link.Link, error)
+	Load(uint16, TracerMaps, *SysConfigVars) (link.Link, error)
 
 	// ReportMetadata provides the necessary metadata to report
 	// the events of the Probe.
