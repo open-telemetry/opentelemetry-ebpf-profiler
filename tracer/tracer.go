@@ -220,6 +220,14 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	// PIDNamespaceTranslation controls translation of PIDs/TGIDs observed by eBPF
+	// (in the initial PID namespace) into the profiler's own PID namespace. This
+	// is required in nested container setups such as a kind/minikube daemonset,
+	// where the profiler's /proc and process_vm_readv operate in a deeper
+	// namespace than the PIDs eBPF reports. Valid values are "off", "on" and
+	// "auto"; "auto" (the default, also the empty value) enables translation only
+	// when the profiler is detected to run in a nested PID namespace.
+	PIDNamespaceTranslation string
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.

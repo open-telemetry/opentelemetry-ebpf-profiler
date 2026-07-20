@@ -3,6 +3,7 @@
 
 #include "bpfdefs.h"
 #include "extmaps.h"
+#include "tracemgmt.h"
 #include "types.h"
 
 #ifndef TESTING_COREDUMP
@@ -28,8 +29,11 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  if (sys->pid != (bpf_get_current_pid_tgid() >> 32)) {
-    // Execute the hook only in the context of requesting task.
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+    // Execute the hook only in the context of the requesting task, using the
+    // profiler's PID-namespace view so it matches the PID userspace passed in.
     return 0;
   }
 
@@ -60,8 +64,11 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  if (sys->pid != (bpf_get_current_pid_tgid() >> 32)) {
-    // Execute the hook only in the context of requesting task.
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+    // Execute the hook only in the context of the requesting task, using the
+    // profiler's PID-namespace view so it matches the PID userspace passed in.
     return 0;
   }
 

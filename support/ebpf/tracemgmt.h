@@ -56,6 +56,55 @@ extern u32 vma_vm_flags_offset;
 // origin_id_sampling is declared in native_stack_trace.ebpf.c
 extern u16 origin_id_sampling;
 
+// pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
+extern bool pid_ns_translation_enabled;
+
+// target_pid_ns_dev is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_dev;
+
+// target_pid_ns_inode is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_inode;
+
+// Mirrors the kernel's struct bpf_pidns_info for use with
+// bpf_get_ns_current_pid_tgid().
+//   pid:  thread PID as seen within the target PID namespace.
+//   tgid: thread group ID (= process PID in userspace) within that namespace.
+struct bpf_pidns_info {
+  u32 pid;
+  u32 tgid;
+};
+
+// get_pid_tgid resolves the current task's PID and TGID, translating them into
+// the profiler's own PID namespace when pid_ns_translation_enabled is set. This
+// is required in nested container setups (e.g. a kind/minikube daemonset), where
+// eBPF observes init-namespace PIDs but the profiler's /proc and process_vm_readv
+// operate in the (deeper) node namespace. Returns false when the task is not part
+// of the target namespace, in which case the caller must skip the event. When
+// translation is disabled the behavior is identical to the previous
+// bpf_get_current_pid_tgid() path, so flat deployments (EKS/bare-metal) are
+// byte-for-byte unchanged.
+static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
+{
+  if (pid_ns_translation_enabled) {
+    struct bpf_pidns_info ns_info = {0};
+    long ret                      = bpf_get_ns_current_pid_tgid(
+      target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
+    if (ret < 0) {
+      // Task is not in the target namespace; signal the caller to skip it.
+      return false;
+    }
+    // Match the non-namespace convention where *pid holds the TGID.
+    *pid = ns_info.tgid;
+    *tid = ns_info.pid;
+    return true;
+  }
+
+  u64 id = bpf_get_current_pid_tgid();
+  *pid   = id >> 32;
+  *tid   = id & 0xFFFFFFFF;
+  return true;
+}
+
 // Strips the PAC tag from a pointer.
 //
 // While all pointers can contain PAC tags, we only apply this function to code pointers, because

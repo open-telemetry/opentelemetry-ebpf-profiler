@@ -26,6 +26,16 @@ struct sched_process_free_ctx {
 
 static EBPF_INLINE int do_process_free(void *ctx, u32 pid)
 {
+  if (pid_ns_translation_enabled) {
+    // `pid` here is the init-namespace PID copied by the tracepoint from the
+    // exiting task's task_struct; get_pid_tgid() cannot translate it (it reads
+    // the *current* task), so it won't match the translated PIDs in
+    // reported_pids. Skip the fast exit notification and let ProcessManager's
+    // periodic /proc liveness sweep (ENOENT/ESRCH during synchronization)
+    // detect the exit instead.
+    return 0;
+  }
+
   if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(pid)) {
     // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
     // to userspace.

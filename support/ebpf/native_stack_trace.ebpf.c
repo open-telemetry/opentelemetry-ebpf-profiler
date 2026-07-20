@@ -40,6 +40,20 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 // origin_id_sampling is set during load time.
 BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
+// pid_ns_translation_enabled is set during load time. When true, the profiler
+// runs in a nested PID namespace (e.g. a kind/minikube daemonset) and PIDs are
+// translated into the profiler's own namespace via bpf_get_ns_current_pid_tgid.
+// Left false on flat deployments (EKS/bare-metal), where behavior is unchanged.
+BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
+
+// target_pid_ns_dev is the device ID (st_dev) of the profiler's PID-namespace
+// nsfs inode, obtained by stat() on /proc/self/ns/pid. Set during load time.
+BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+
+// target_pid_ns_inode is the inode number of the profiler's PID namespace,
+// obtained by stat() on /proc/self/ns/pid. Set during load time.
+BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -166,10 +180,13 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  // Get the PID and TGID register.
-  u64 id  = bpf_get_current_pid_tgid();
-  u32 pid = id >> 32;
-  u32 tid = id & 0xFFFFFFFF;
+  // Resolve PID/TGID in the profiler's PID namespace (a no-op unless translation
+  // is enabled). A false return means the task is outside the target namespace.
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid)) {
+    return 0;
+  }
 
   if (pid == 0 && filter_idle_frames) {
     return 0;

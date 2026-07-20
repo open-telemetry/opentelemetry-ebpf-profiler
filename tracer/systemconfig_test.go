@@ -14,6 +14,37 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
+func TestResolvePIDNSTranslation(t *testing.T) {
+	t.Run("off disables translation", func(t *testing.T) {
+		enabled, dev, ino, err := resolvePIDNSTranslation("off")
+		require.NoError(t, err)
+		require.False(t, enabled)
+		require.Zero(t, dev)
+		require.Zero(t, ino)
+	})
+
+	t.Run("invalid mode errors", func(t *testing.T) {
+		_, _, _, err := resolvePIDNSTranslation("sometimes")
+		require.Error(t, err)
+	})
+
+	t.Run("on targets our own pid namespace", func(t *testing.T) {
+		enabled, _, ino, err := resolvePIDNSTranslation("on")
+		require.NoError(t, err)
+		require.True(t, enabled)
+		// The inode of a live nsfs namespace is always non-zero.
+		require.NotZero(t, ino)
+	})
+
+	t.Run("auto matches nesting detection", func(t *testing.T) {
+		nested, derr := runningInNestedPIDNamespace()
+		require.NoError(t, derr)
+		enabled, _, _, err := resolvePIDNSTranslation("auto")
+		require.NoError(t, err)
+		require.Equal(t, nested, enabled)
+	})
+}
+
 func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
 

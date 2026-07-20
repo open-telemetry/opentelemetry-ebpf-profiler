@@ -317,8 +317,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
 	new := &cebpf.CollectionSpec{
-		Maps:     make(map[string]*cebpf.MapSpec),
-		Programs: make(map[string]*cebpf.ProgramSpec),
+		Maps:      make(map[string]*cebpf.MapSpec),
+		Programs:  make(map[string]*cebpf.ProgramSpec),
+		Variables: make(map[string]*cebpf.VariableSpec),
 	}
 	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
 	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
@@ -328,6 +329,24 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
 	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+
+	// The analysis probes now consult the PID-namespace-translation rodata (via
+	// get_pid_tgid), so their filter reads pid_ns_translation_enabled /
+	// target_pid_ns_{dev,inode}. cilium/ebpf only folds VariableSpec values into
+	// a data-section map at NewCollection time (via the unexported
+	// MapSpec.updateDataSection); this sub-collection is built with loadAllMaps
+	// so it can share maps by FD, which skips that step. Copy the Variables and
+	// fold their values into the rodata maps here so the analysis probes observe
+	// the same translation config the main collection does.
+	for name, vs := range orig.Variables {
+		new.Variables[name] = vs.Copy()
+	}
+	if err := applyVariablesToMapSpec(new, ".rodata.var"); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply variables to .rodata.var: %v", err)
+	}
+	if err := applyVariablesToMapSpec(new, ".rodata"); err != nil {
+		return nil, nil, fmt.Errorf("failed to apply variables to .rodata: %v", err)
+	}
 
 	maps := make(map[string]*cebpf.Map)
 
@@ -340,6 +359,112 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	}
 
 	return new, maps, nil
+}
+
+// applyVariablesToMapSpec folds the collection's VariableSpec values into the
+// Contents of the given data-section MapSpec (e.g. ".rodata.var"). cilium/ebpf
+// performs this internally at NewCollection time via the unexported
+// MapSpec.updateDataSection, but the system-analysis sub-collection is loaded
+// with loadAllMaps (so it can share maps by FD), which does not. Without this,
+// any rodata the analysis probes read (such as pid_ns_translation_enabled)
+// would remain at its default regardless of what loadRodataVars Set. It is a
+// no-op when the section does not exist or has no variables.
+func applyVariablesToMapSpec(spec *cebpf.CollectionSpec, sectionName string) error {
+	mapSpec, ok := spec.Maps[sectionName]
+	if !ok {
+		return nil
+	}
+	if len(mapSpec.Contents) != 1 {
+		return fmt.Errorf("rodata section %s: expected 1 KV entry, got %d",
+			sectionName, len(mapSpec.Contents))
+	}
+	data, ok := mapSpec.Contents[0].Value.([]byte)
+	if !ok {
+		return fmt.Errorf("rodata section %s: Contents[0].Value is %T, not []byte",
+			sectionName, mapSpec.Contents[0].Value)
+	}
+	// Contents may share backing storage with the original spec; clone first.
+	dataCopy := append([]byte(nil), data...)
+	for _, vs := range spec.Variables {
+		if vs.SectionName != sectionName || len(vs.Value) == 0 {
+			continue
+		}
+		end := int(vs.Offset) + len(vs.Value)
+		if end > len(dataCopy) {
+			return fmt.Errorf("variable %s (offset %d size %d) exceeds rodata size %d",
+				vs.Name, vs.Offset, len(vs.Value), len(dataCopy))
+		}
+		copy(dataCopy[vs.Offset:end], vs.Value)
+	}
+	mapSpec.Contents = []cebpf.MapKV{{Key: uint32(0), Value: dataCopy}}
+	return nil
+}
+
+// getCurrentNS returns the device number and inode of the namespace file at
+// filename (typically /proc/self/ns/pid). Together they uniquely identify a PID
+// namespace and are passed to the bpf_get_ns_current_pid_tgid helper.
+func getCurrentNS(filename string) (dev, ino uint64, err error) {
+	var stat unix.Stat_t
+	if err := unix.Stat(filename, &stat); err != nil {
+		return 0, 0, fmt.Errorf("stat %s: %w", filename, err)
+	}
+	return uint64(stat.Dev), uint64(stat.Ino), nil
+}
+
+// initPIDNamespaceInode is the fixed inode the kernel assigns to the initial PID
+// namespace (PROC_PID_INIT_INO in include/linux/proc_ns.h). Every nested PID
+// namespace gets a dynamically allocated inode different from this value.
+const initPIDNamespaceInode = 0xEFFFFFFC
+
+// runningInNestedPIDNamespace reports whether the current process lives in a PID
+// namespace nested below the initial one (e.g. the profiler daemonset inside a
+// kind/minikube node container). It compares the inode of /proc/self/ns/pid
+// against the kernel's fixed initial-namespace inode. This is independent of
+// which procfs is mounted, unlike the NSpid field of /proc/self/status whose
+// entries vary with the mounting namespace.
+func runningInNestedPIDNamespace() (bool, error) {
+	_, ino, err := getCurrentNS("/proc/self/ns/pid")
+	if err != nil {
+		return false, err
+	}
+	return ino != initPIDNamespaceInode, nil
+}
+
+// resolvePIDNSTranslation decides whether PID-namespace translation should be
+// enabled and, if so, returns the (dev, inode) identifying the profiler's own
+// PID namespace (/proc/self/ns/pid) to target with bpf_get_ns_current_pid_tgid.
+//
+// mode:
+//
+//	"off"     - never translate (flat host, EKS, bare-metal).
+//	"on"      - always translate, targeting the profiler's namespace.
+//	"", "auto"- translate only when the profiler runs in a nested PID namespace
+//	            (e.g. a kind/minikube daemonset), auto-detected from
+//	            /proc/self/status. This is the default and needs no flag.
+func resolvePIDNSTranslation(mode string) (enabled bool, dev, ino uint64, err error) {
+	switch mode {
+	case "off":
+		return false, 0, 0, nil
+	case "on":
+		// Force translation on regardless of detection.
+	case "", "auto":
+		nested, derr := runningInNestedPIDNamespace()
+		if derr != nil {
+			log.Warnf("PID-namespace auto-detection failed, assuming flat namespace: %v", derr)
+			return false, 0, 0, nil
+		}
+		if !nested {
+			return false, 0, 0, nil
+		}
+	default:
+		return false, 0, 0, fmt.Errorf(
+			"invalid pid_namespace_translation mode %q (want off|on|auto)", mode)
+	}
+	dev, ino, err = getCurrentNS("/proc/self/ns/pid")
+	if err != nil {
+		return false, 0, 0, err
+	}
+	return true, dev, ino, nil
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
@@ -552,6 +677,29 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["inverse_pac_mask"].Set(^pacMask); err != nil {
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
+	}
+
+	// Resolve PID-namespace translation and push it as rodata BEFORE
+	// prepareAnalysis: the analysis probes (read_kernel_memory/read_task_struct)
+	// filter on the translated PID via get_pid_tgid, so in a nested namespace the
+	// translation config must already be baked into the analysis sub-collection,
+	// otherwise system analysis itself would never match the requesting task.
+	nsEnabled, nsDev, nsIno, err := resolvePIDNSTranslation(cfg.PIDNamespaceTranslation)
+	if err != nil {
+		return fmt.Errorf("failed to resolve PID-namespace translation: %v", err)
+	}
+	if nsEnabled {
+		if err := coll.Variables["pid_ns_translation_enabled"].Set(uint8(1)); err != nil {
+			return fmt.Errorf("failed to set pid_ns_translation_enabled: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_dev"].Set(nsDev); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_dev: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_inode"].Set(nsIno); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
+		}
+		log.Infof("PID-namespace translation enabled (dev=%d, ino=%d); only traces "+
+			"within the profiler's PID namespace are collected", nsDev, nsIno)
 	}
 
 	rodataVars := sysConfigVars{}

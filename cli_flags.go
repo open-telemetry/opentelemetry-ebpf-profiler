@@ -34,6 +34,9 @@ const (
 	defaultEnvVarsValue           = ""
 	defaultArgFrameCacheSize      = pm.DefaultFrameCacheSize
 	defaultBPFFSRoot              = "/sys/fs/bpf/"
+	// defaultPIDNamespaceTranslation auto-detects nested PID namespaces (e.g. a
+	// kind/minikube daemonset) and translates only when needed.
+	defaultPIDNamespaceTranslation = "auto"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -91,6 +94,11 @@ var (
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
+
+	pidNamespaceTranslationHelp = "Translate PIDs from the initial PID namespace into the " +
+		"profiler's own namespace for nested container setups (kind/minikube). One of " +
+		"'off', 'on' or 'auto'. 'auto' (default) enables translation only when a nested " +
+		"PID namespace is detected."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -164,6 +172,9 @@ func parseArgs() (*controller.Config, error) {
 	})
 
 	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
+
+	fs.StringVar(&args.PIDNamespaceTranslation, "pid-namespace-translation",
+		defaultPIDNamespaceTranslation, pidNamespaceTranslationHelp)
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
