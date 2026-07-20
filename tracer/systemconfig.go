@@ -32,6 +32,7 @@ import (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
+	inverse_pac_mask    uint64
 	tpbase_offset       uint64
 	task_stack_offset   uint32
 	stack_ptregs_offset uint32
@@ -501,7 +502,7 @@ func stripProgramExtInfos(insns asm.Instructions) {
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
-	major, minor uint32, origins *originRegistry,
+	major, minor uint32, origins *originRegistry, out *SysConfigVars,
 ) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
@@ -554,7 +555,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
 	}
 
-	rodataVars := SysConfigVars{}
+	rodataVars := SysConfigVars{inverse_pac_mask: ^pacMask}
 	configureVMALookup(coll, cfg, &rodataVars)
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
@@ -584,6 +585,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
 	}
 
+	*out = rodataVars
 	return nil
 }
 
@@ -621,7 +623,11 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		}
 	}
 
-	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+	// ProbeLinks use the generic eBPF program loaded at startup and need their
+	// origin ID baked into RODATA here. Custom probes (the Enable path) skip
+	// this block: they register their own origin IDs dynamically in Tracer.Enable
+	// before calling Probe.Load, so LoadProbe alone does not require a static ID.
+	if len(cfg.ProbeLinks) > 0 {
 		probe, err := origins.register(&samples.TypeMetadata{
 			SampleType: "events",
 			SampleUnit: "count",

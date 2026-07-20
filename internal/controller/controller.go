@@ -8,9 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/probes/noop"
+	"go.opentelemetry.io/ebpf-profiler/probes/generic"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -102,7 +104,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
 		ProbeLinks:             c.config.ProbeLinks,
-		LoadProbe:              c.config.LoadProbe,
+		LoadProbe:              c.config.LoadProbe || len(c.config.CustomProbes) > 0,
 		ExecutableReporter:     c.config.ExecutableReporter,
 		BPFFSRoot:              c.config.BPFFSRoot,
 		OBIProcessCtx:          c.config.OBIProcessCtx,
@@ -191,8 +193,12 @@ func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
 
 func createCustomProbe(name string, cfg any) (tracer.Probe, error) {
 	switch name {
-	case "noop":
-		return noop.New(cfg)
+	case "generic":
+		var gcfg generic.GenericConfig
+		if err := mapstructure.Decode(cfg, &gcfg); err != nil {
+			return nil, fmt.Errorf("decoding generic probe config: %w", err)
+		}
+		return generic.New(gcfg)
 	default:
 		return nil, fmt.Errorf("unknown custom probe: %q", name)
 	}
