@@ -38,19 +38,20 @@ func NewFactory() receiver.Factory {
 
 func defaultConfig() component.Config {
 	return &config.Config{
-		ReporterInterval:       5 * time.Second,
-		ReporterJitter:         0.2,
-		MonitorInterval:        5 * time.Second,
-		SamplesPerSecond:       20,
-		FrameCacheSize:         uint(pm.DefaultFrameCacheSize),
-		ProbabilisticInterval:  1 * time.Minute,
-		ProbabilisticThreshold: 100,
-		Interpreters:           interpreterconfig.AllInterpreters(),
-		ClockSyncInterval:      3 * time.Minute,
-		MaxGRPCRetries:         5,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
-		BPFFSRoot:              "/sys/fs/bpf/",
-		ErrorMode:              config.PropagateError,
+		ReporterInterval:        5 * time.Second,
+		ReporterJitter:          0.2,
+		MonitorInterval:         5 * time.Second,
+		SamplesPerSecond:        20,
+		FrameCacheSize:          uint(pm.DefaultFrameCacheSize),
+		ProbabilisticInterval:   1 * time.Minute,
+		ProbabilisticThreshold:  100,
+		Interpreters:            interpreterconfig.AllInterpreters(),
+		ClockSyncInterval:       3 * time.Minute,
+		MaxGRPCRetries:          5,
+		MaxRPCMsgSize:           32 << 20, // 32 MiB
+		BPFFSRoot:               "/sys/fs/bpf/",
+		ErrorMode:               config.PropagateError,
+		PIDNamespaceTranslation: "auto",
 	}
 }
 

@@ -5,6 +5,7 @@ package tracer
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	"github.com/cilium/ebpf/btf"
@@ -13,6 +14,21 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
+
+func TestParsePidStructLayout(t *testing.T) {
+	if _, err := os.Stat("/sys/kernel/btf/vmlinux"); err != nil {
+		t.Skip("no BTF available on this host")
+	}
+	var vars sysConfigVars
+	if !parsePidStructLayout(&vars) {
+		t.Skip("task_struct/pid layout not discoverable (kernel < 4.19?)")
+	}
+	// On a BTF-enabled kernel >= 4.19 these must be populated. Note upid.nr is
+	// the first field of struct upid, so upid_nr_offset is legitimately 0.
+	require.NotZero(t, vars.task_thread_pid_offset)
+	require.NotZero(t, vars.task_group_leader_offset)
+	require.NotZero(t, vars.upid_size)
+}
 
 func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
