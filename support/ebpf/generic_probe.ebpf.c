@@ -2,6 +2,9 @@
 #include "tracemgmt.h"
 #include "types.h"
 
+// origin_id_probe is set during load time.
+BPF_RODATA_VAR(u16, origin_id_probe, 0)
+
 static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
 {
   u32 pid = 0;
@@ -16,7 +19,7 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace(ctx, TRACE_PROBE, pid, tid, ts, 0);
+  return collect_trace(ctx, origin_id_probe, pid, tid, ts, 0);
 }
 
 // kprobe__generic serves as entry point for kprobe based profiling.

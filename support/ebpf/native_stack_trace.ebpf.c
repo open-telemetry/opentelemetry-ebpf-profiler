@@ -51,6 +51,8 @@ BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
 // Required by the bpf_get_ns_current_pid_tgid helper to uniquely
 // identify the namespace filesystem (nsfs) instance.
 BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+// origin_id_sampling is set during load time.
+BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
@@ -189,6 +191,6 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   }
 
   u64 ts = bpf_ktime_get_ns();
-  return collect_trace((struct pt_regs *)&ctx->regs, TRACE_SAMPLING, pid, tid, ts, 0);
+  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
 }
 MULTI_USE_FUNC(unwind_native)
