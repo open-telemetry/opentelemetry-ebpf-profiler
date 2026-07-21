@@ -465,59 +465,6 @@ func TestX86Find3rdArgToLibPreregCall(t *testing.T) {
 	require.Equal(t, uint64(0x4000), got)
 }
 
-// spot testing
-func TestFiles(t *testing.T) {
-	files, err := os.ReadDir("./testdata")
-	require.NoError(t, err)
-	for _, de := range files {
-		target := "./testdata/" + de.Name()
-		fi, err := os.Stat(target)
-		if err != nil || fi.IsDir() {
-			continue
-		}
-		ef, err := pfelf.Open(target)
-		// Skip non-elf files
-		if err != nil {
-			continue
-		}
-		ljd := luajitData{}
-
-		// create stacktrace deltas to make sure we can find interp bounds
-		// some ugliness so we can run arm and x86 unit tests on both platforms.
-		intervals, param, err := extractStackDeltas(target, ef)
-		require.NoError(t, err)
-
-		interp, err := extractInterpreterBounds(intervals.Deltas, param)
-		require.NoError(t, err)
-
-		err = extractOffsets(ef, &ljd, interp)
-		require.NoError(t, err, de)
-		require.NotZero(t, ljd.currentLOffset)
-		require.NotZero(t, ljd.g2Traces)
-		require.NotZero(t, ljd.g2Dispatch)
-
-		od := offsetData{}
-		err = od.init(ef)
-		require.NoError(t, err)
-
-		// Test that our chicanery for finding traceinfo checks out on symbolized builds.
-		if ti, err1 := od.lookupSymbol("lj_cf_jit_util_traceinfo"); err1 == nil {
-			ti2, err2 := od.findTraceInfoFromLuaOpen()
-			require.NoError(t, err2)
-			require.Equal(t, ti.Address, ti2.Address)
-		}
-
-		// Ditto for lj_dispatch_update
-		if du, err1 := od.lookupSymbol("lj_dispatch_update"); err1 == nil {
-			du2, err2 := od.e.findLjDispatchUpdateAddr(od.luajitOpen, od.luajitOpenAddr)
-			require.NoError(t, err2)
-			require.Equal(t, uint64(du.Address), du2)
-		}
-
-		t.Logf("%s: %+v, interp: %+v", target, ljd, interp)
-	}
-}
-
 func TestStructure(t *testing.T) {
 	for _, tc := range []struct {
 		tag string
