@@ -207,8 +207,16 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	if perfProgs == nil {
 		return fmt.Errorf("perf_progs map not available")
 	}
+	perCPURecords := c.maps["per_cpu_records"]
+	if perCPURecords == nil {
+		return fmt.Errorf("per_cpu_records map not available")
+	}
+	perCPURecordsKp := c.maps["per_cpu_records_kp"]
+	if perCPURecordsKp == nil {
+		return fmt.Errorf("per_cpu_records_kp map not available")
+	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD())
+		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
