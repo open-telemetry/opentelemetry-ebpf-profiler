@@ -53,12 +53,15 @@ int tracepoint__sched_switch(UNUSED void *ctx)
   return 0;
 }
 
-// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs is
-// referenced and make the compiler and linker happy.
+// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs and
+// per_cpu_records_kp are referenced (both are only used via load-time map rewriting),
+// keeping rewriteMaps and the linker happy.
 SEC("kprobe/dummy")
 int kprobe__dummy(struct pt_regs *ctx)
 {
-  bpf_tail_call(ctx, &kprobe_progs, 0);
+  int key = 0;
+  if (bpf_map_lookup_elem(&per_cpu_records_kp, &key))
+    bpf_tail_call(ctx, &kprobe_progs, 0);
   return 0;
 }
 
