@@ -1,17 +1,11 @@
 #include "bpfdefs.h"
 
-struct tracer_pid_t {
-  __uint(type, BPF_MAP_TYPE_ARRAY);
-  __type(key, u32);
-  __type(value, u32);
-  __uint(max_entries, 1);
-} tracer_pid_m SEC(".maps");
-
 SEC("socket") int store_tracer_pid(UNUSED void *ctx)
 {
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = pid_tgid >> 32;
-  u32 key      = 0;
-  bpf_map_update_elem(&tracer_pid_m, &key, &pid, BPF_ANY);
-  return 0;
+  /*
+     * bpf_get_current_pid_tgid() stores the TGID in the upper 32 bits.
+     * Linux TGIDs are positive pid_t values, and pid_t is a signed int,
+     * so every valid TGID is representable by this return type.
+     */
+  return (int)(u32)(bpf_get_current_pid_tgid() >> 32);
 }

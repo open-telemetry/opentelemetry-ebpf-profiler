@@ -321,35 +321,12 @@ func determineStackLayout(execFn executeSystemAnalysisFn,
 }
 
 // loadSelfHostNamespacePID returns the host PID namespace TGID of the current
-// process by attaching a BPF uprobe to a local no-op function and reading
-// bpf_get_current_pid_tgid() from within the kernel. This is necessary when the
-// profiler runs inside a container with its own PID namespace, where os.Getpid()
-// returns the container-namespace PID while BPF helpers always report the
-// host-namespace TGID.
+// process by running a test BPF program and reading bpf_get_current_pid_tgid()
+// from within the kernel. This is necessary when the profiler runs inside a
+// container with its own PID namespace, where os.Getpid() returns the namespace
+// PID.
 func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
-	restoreRlimit, err := rlimit.MaximizeMemlock()
-	if err != nil {
-		return 0, fmt.Errorf("failed to adjust rlimit: %v", err)
-	}
-	defer restoreRlimit()
-
-	new := &cebpf.CollectionSpec{
-		Maps:     make(map[string]*cebpf.MapSpec),
-		Programs: make(map[string]*cebpf.ProgramSpec),
-	}
-	new.Maps["tracer_pid_m"] = orig.Maps["tracer_pid_m"].Copy()
-	new.Programs["store_tracer_pid"] = orig.Programs["store_tracer_pid"].Copy()
-	maps := make(map[string]*cebpf.Map)
-
-	if err := loadAllMaps(new, &Config{}, maps); err != nil {
-		return 0, err
-	}
-
-	if err := rewriteMaps(new, maps); err != nil {
-		return 0, fmt.Errorf("failed to rewrite maps: %v", err)
-	}
-
-	testProg, err := cebpf.NewProgram(new.Programs["store_tracer_pid"])
+	testProg, err := cebpf.NewProgram(orig.Programs["store_tracer_pid"])
 	if err != nil {
 		return 0, err
 	}
@@ -357,18 +334,8 @@ func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 
 	// Socket-filter test runs require packet data containing at least
 	// an Ethernet-header-sized input. Using 64 bytes avoids edge cases.
-	_, _, err = testProg.Test(make([]byte, 64))
-	if err != nil {
-		return 0, err
-	}
-
-	key0 := uint32(0)
-	var tracerPid uint32
-	if err = maps["tracer_pid_m"].Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&tracerPid)); err != nil {
-		return 0, err
-	}
-
-	return tracerPid, nil
+	tracerPid, _, err := testProg.Test(make([]byte, 64))
+	return tracerPid, err
 }
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
