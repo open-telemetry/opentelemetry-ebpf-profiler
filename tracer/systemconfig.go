@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -17,8 +16,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
@@ -323,11 +320,6 @@ func determineStackLayout(execFn executeSystemAnalysisFn,
 	return errors.New("unable to find task stack offset")
 }
 
-func retrievePkgName(val any) string {
-	pc := reflect.ValueOf(val).Pointer()
-	return runtime.FuncForPC(pc).Name()
-}
-
 // loadSelfHostNamespacePID returns the host PID namespace TGID of the current
 // process by attaching a BPF uprobe to a local no-op function and reading
 // bpf_get_current_pid_tgid() from within the kernel. This is necessary when the
@@ -341,27 +333,6 @@ func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 	}
 	defer restoreRlimit()
 
-	selfFilePath, err := os.Executable()
-	if err != nil {
-		return 0, err
-	}
-	file, err := pfelf.Open(selfFilePath)
-	if err != nil {
-		return 0, err
-	}
-	goPclntab, err := elfunwindinfo.NewGopclntab(file)
-	if err != nil {
-		return 0, err
-	}
-	symbolName := retrievePkgName(storePid)
-	sym, err := goPclntab.LookupSymbol(libpf.SymbolName(symbolName))
-	if err != nil {
-		return 0, err
-	}
-	addr, err := file.VirtAddrToFileOffset(uint64(sym.Address))
-	if err != nil {
-		return 0, err
-	}
 	new := &cebpf.CollectionSpec{
 		Maps:     make(map[string]*cebpf.MapSpec),
 		Programs: make(map[string]*cebpf.ProgramSpec),
@@ -378,24 +349,18 @@ func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 		return 0, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	uprobeProg, err := cebpf.NewProgram(new.Programs["store_tracer_pid"])
+	testProg, err := cebpf.NewProgram(new.Programs["store_tracer_pid"])
 	if err != nil {
 		return 0, err
 	}
-	defer uprobeProg.Close()
+	defer testProg.Close()
 
-	ex, err := link.OpenExecutable(selfFilePath)
+	// Socket-filter test runs require packet data containing at least
+	// an Ethernet-header-sized input. Using 64 bytes avoids edge cases.
+	_, _, err = testProg.Test(make([]byte, 64))
 	if err != nil {
 		return 0, err
 	}
-
-	uprobeLink, err := ex.Uprobe(symbolName, uprobeProg, &link.UprobeOptions{Address: addr})
-	if err != nil {
-		return 0, err
-	}
-	defer uprobeLink.Close()
-	// trigger uprobe
-	storePid()
 
 	key0 := uint32(0)
 	var tracerPid uint32
@@ -405,9 +370,6 @@ func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 
 	return tracerPid, nil
 }
-
-//go:noinline
-func storePid() {}
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(cfg *Config, orig *cebpf.CollectionSpec) (executeSystemAnalysisFn, error) {
@@ -423,7 +385,8 @@ func prepareAnalysis(cfg *Config, orig *cebpf.CollectionSpec) (executeSystemAnal
 		// host-namespace PID instead.
 		tracerPid, err = loadSelfHostNamespacePID(orig)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to load host PID: %v", err)
+
 		}
 	} else {
 		// RootFs == "/" implies the profiler shares the host PID namespace

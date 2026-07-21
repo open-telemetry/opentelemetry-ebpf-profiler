@@ -7,8 +7,7 @@ struct tracer_pid_t {
   __uint(max_entries, 1);
 } tracer_pid_m SEC(".maps");
 
-SEC("uprobe")
-int store_tracer_pid(UNUSED void *ctx)
+SEC("socket") int store_tracer_pid(UNUSED void *ctx)
 {
   u64 pid_tgid = bpf_get_current_pid_tgid();
   u32 pid      = pid_tgid >> 32;
