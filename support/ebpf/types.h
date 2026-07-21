@@ -340,6 +340,12 @@ enum {
   // number of times the current PC was found in a non-executable VMA
   metricID_UnwindNativeErrNonExecutableVMA,
 
+  // number of attempts to unwind LuaJIT
+  metricID_UnwindLuaJITAttempts,
+
+  // number of failures to read LuaJIT proc info
+  metricID_UnwindLuaJITErrNoProcInfo,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -373,15 +379,6 @@ typedef enum TracePrograms {
   PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
 } TracePrograms;
-
-// TraceOrigin describes the source of the trace. This enables
-// origin specific handling of traces in user space.
-typedef enum TraceOrigin {
-  TRACE_UNKNOWN,
-  TRACE_SAMPLING,
-  TRACE_OFF_CPU,
-  TRACE_PROBE,
-} TraceOrigin;
 
 // Maximum number of unique stack deltas needed on a system. This is based on
 // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
@@ -557,6 +554,11 @@ typedef struct BEAMProcInfo {
   u8 ranges_sizeof;
 } BEAMProcInfo;
 
+// Stub until we land the full LuaJIT interpreter.
+typedef struct LuaJITProcInfo {
+  u8 dummy;
+} LuaJITProcInfo;
+
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
@@ -640,8 +642,9 @@ typedef struct Trace {
   // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
   u16 num_kernel_frames;
 
-  // origin indicates the source of the trace.
-  TraceOrigin origin;
+  // origin indicates the source of the trace and it is set as
+  // RODATA variable at load time.
+  u16 origin;
 
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces

@@ -50,6 +50,7 @@ type ebpfMapsImpl struct {
 	RubyProcs          *cebpf.Map `name:"ruby_procs"`
 	V8Procs            *cebpf.Map `name:"v8_procs"`
 	BeamProcs          *cebpf.Map `name:"beam_procs"`
+	LuaJitProcs        *cebpf.Map `name:"luajit_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoProcs            *cebpf.Map `name:"go_procs"`
 
@@ -168,6 +169,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.ApmIntProcs, nil
 	case libpf.Go:
 		return impl.GoProcs, nil
+	case libpf.LuaJIT:
+		return impl.LuaJitProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}

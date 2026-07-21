@@ -1,0 +1,105 @@
+{
+  "coredump-ref": "3d23f2b363ed1fa404fba59ff4a7e3376c8eb4de2c39006886d61478a6fe6024",
+  "threads": [
+    {
+      "lwp": 3153,
+      "frames": [
+        "libc.so.6+0x9eb2c",
+        "libc.so.6+0x4527d",
+        "libruby.so.4.0.6+0x43da4",
+        "libruby.so.4.0.6+0x224835",
+        "libc.so.6+0x4532f",
+        "libc.so.6+0x125d7b",
+        "libruby.so.4.0.6+0x11ab57",
+        "libruby.so.4.0.6+0x11e114",
+        "libruby.so.4.0.6+0x11edfb",
+        "libruby.so.4.0.6+0x11fb27",
+        "libruby.so.4.0.6+0x2ac8c6",
+        "libruby.so.4.0.6+0x2b1993",
+        "Object#is_prime+0 in /tmp/loop.rb:15",
+        "libruby.so.4.0.6+0x2b6993",
+        "libruby.so.4.0.6+0x2bb51f",
+        "libruby.so.4.0.6+0x1dfa3d",
+        "libruby.so.4.0.6+0x29dae1",
+        "libruby.so.4.0.6+0x2acb94",
+        "libruby.so.4.0.6+0x2b2755",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /tmp/loop.rb:14",
+        "Object#sum_of_primes+0 in /tmp/loop.rb:24",
+        "block (2 levels) in <main>+0 in /tmp/loop.rb:34",
+        "libruby.so.4.0.6+0x2b6a62",
+        "libruby.so.4.0.6+0x2bb51f",
+        "libruby.so.4.0.6+0x1df8ed",
+        "libruby.so.4.0.6+0x29dae1",
+        "libruby.so.4.0.6+0x2acb94",
+        "libruby.so.4.0.6+0x2b2755",
+        "Range#each+0 in <cfunc>:0",
+        "block in <main>+0 in /tmp/loop.rb:33",
+        "Kernel#loop+0 in <internal:kernel>:169",
+        "<main>+0 in /tmp/loop.rb:32",
+        "libruby.so.4.0.6+0x2b6993",
+        "libruby.so.4.0.6+0xfbb04",
+        "libruby.so.4.0.6+0x10000a",
+        "ruby+0x1185",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "ruby+0x11d4"
+      ]
+    },
+    {
+      "lwp": 3155,
+      "frames": [
+        "libc.so.6+0x12a072",
+        "libruby.so.4.0.6+0x2646dc",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "f4b4dfbd9783ceb973d3a0a2f7ed86a588f065760e2dc520a74dd3c995a4781c",
+      "local-path": "/root/ruby-check/install-shared/lib/ruby/4.0.0/x86_64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "1502636e3be8232c9cf801dfb533694aea985d449904f3e1295db26d7b348946",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3"
+    },
+    {
+      "ref": "32d4f7da410e83a981ea4f5b8b3f00b30c17fc3a6d349c88f6eec48899a50358",
+      "local-path": "/root/ruby-check/install-shared/lib/ruby/4.0.0/x86_64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "1f11812a3e5d0daf20bc6387823e1c2cc02991c2b3a7581232160e15f7262846",
+      "local-path": "/root/ruby-check/install-shared/bin/ruby"
+    },
+    {
+      "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "d065a621708fa9f506c1dafcc572bd8359bb9221746d799f3a9814e53babbfff",
+      "local-path": "/root/ruby-check/install-shared/lib/libruby.so.4.0.6"
+    },
+    {
+      "ref": "1b87a1a50b496cfead2b0ad134c2ff536705c82608db240c7e8aa48d6c0e4217",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "1cd555ac46b7887edeaf3c42aac5408c8135e52f6b37870da2cf82d5fe14e829",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "4bded688253066068b3da252c8d8927f2e9cb1099746d0ed4e6b2d1203bdd164",
+      "local-path": "/root/ruby-check/install-shared/lib/ruby/4.0.0/x86_64-linux/monitor.so"
+    }
+  ]
+}

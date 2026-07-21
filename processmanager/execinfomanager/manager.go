@@ -20,6 +20,7 @@ import (
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -126,6 +127,9 @@ func NewExecutableInfoManager(
 	}
 	if !interpretersConfig.BEAM.IsDisabled() {
 		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))
+	}
+	if !interpretersConfig.LuaJIT.IsDisabled() {
+		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
 	}
 
 	loaders = append(loaders, apmint.Loader)

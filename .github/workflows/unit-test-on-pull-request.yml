@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -39,7 +39,7 @@ jobs:
           - { target_arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: linter
@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: formatter
@@ -61,6 +61,22 @@ jobs:
         run: |
           make format
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
+
+  otel-col-goos:
+    name: Crosscompile OTel Collector component on (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        goos: ['linux', 'windows']
+        goarch: ['amd64', 'arm64', '386']
+    steps:
+      - name: Clone code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Cross compile
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./collector/...
+
 
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
@@ -74,7 +90,7 @@ jobs:
           - { target_arch: arm64, runner: ubuntu-24.04-arm, go_flags: "-race" }
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Cache coredump modules
@@ -99,7 +115,7 @@ jobs:
           - { target_arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
@@ -115,9 +131,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -170,7 +186,7 @@ jobs:
           echo "set man-db/auto-update false" | sudo debconf-communicate
           sudo dpkg-reconfigure man-db
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies
         run: |
           sudo apt-get update -y
