@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -42,21 +43,35 @@ import (
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
 func (pm *ProcessManager) isPIDLive(pid libpf.PID) (bool, error) {
-	// We intentionally skip kill(pid, 0) as a liveness check and rely solely on
-	// the procfs stat below. kill(pid, 0) resolves PIDs in the caller's PID
-	// namespace: when the profiler runs in a container without hostPID:true but
-	// with the host /proc bind-mounted, the PIDs reported by eBPF are
-	// host-namespace PIDs that are invisible to kill, which would return ESRCH
-	// for every live process and cause CleanupPIDs to tear down all interpreter
-	// state on every tick. The procfs check works correctly in both cases
-	// (with or without hostPID:true) as long as procFsPath points to the host
-	// /proc filesystem.
-	path := path.Join(pm.procFsPath, fmt.Sprintf("/%d/maps", pid))
-	_, err := os.Stat(path)
+	if pm.procFsPath == "/" || len(pm.procFsPath) == 0 {
+		// Fast path: kill(pid, 0) works correctly when the profiler shares the
+		// host PID namespace (procFsPath == "/"), since the PIDs reported by eBPF
+		// are in the same namespace as the caller.
+		err := unix.Kill(int(pid), 0)
+		if err == nil {
+			return true, nil
+		}
+		var errno unix.Errno
+		if errors.As(err, &errno) {
+			switch errno {
+			case unix.ESRCH:
+				return false, nil
+			case unix.EPERM:
+				// Fall through to the procfs check.
+			default:
+				return true, err
+			}
+		}
+	}
+	// When procFsPath points to a host /proc mounted inside a container,
+	// kill(pid, 0) would resolve PIDs in the container's namespace and return
+	// ESRCH for every live host-namespace PID. Use a procfs stat instead,
+	// which works across namespace boundaries as long as the host /proc is mounted.
+	p := path.Join(pm.procFsPath, fmt.Sprintf("/%d/maps", pid))
+	_, err := os.Stat(p)
 	if err != nil && os.IsNotExist(err) {
 		return false, nil
 	}
-
 	return true, err
 }
 
