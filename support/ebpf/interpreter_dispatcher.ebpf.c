@@ -18,6 +18,17 @@ struct per_cpu_records_t {
   __uint(max_entries, 1);
 } per_cpu_records SEC(".maps");
 
+// per_cpu_records_kp is a second per-CPU record used by the probe unwinder.
+// At load time loadProbeUnwinders repoints its get_per_cpu_record() from
+// per_cpu_records to this map, so a perf sampler interrupting an in-flight uprobe
+// unwind (uprobes are not covered by bpf_prog_active) cannot clobber its record.
+struct per_cpu_records_kp_t {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __type(key, int);
+  __type(value, PerCPURecord);
+  __uint(max_entries, 1);
+} per_cpu_records_kp SEC(".maps");
+
 // metrics maps metric ID to a value
 struct metrics_t {
   __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
