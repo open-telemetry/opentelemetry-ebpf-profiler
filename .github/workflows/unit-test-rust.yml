@@ -28,7 +28,7 @@ jobs:
           - { target_arch: arm64, runner: ubuntu-24.04-arm, rust_target: aarch64-unknown-linux-musl }
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
