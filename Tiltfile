@@ -2,6 +2,7 @@
 APP_NAME = 'opentelemetry-ebpf-profiler'
 IMAGE = 'opentelemetry-ebpf-profiler:dev'
 BIN_PATH = 'otelcol-ebpf-profiler'
+OTEL_CONFIG_PATH = './cmd/otelcol-ebpf-profiler/local.example.yaml'
 
 # -----------------------------------------------------------------------------
 # Build the Go binary locally
@@ -21,6 +22,24 @@ docker_build(
     dockerfile='k8s/Dockerfile',
     only=[BIN_PATH],
 )
+
+# -----------------------------------------------------------------------------
+# Generate ConfigMap from the local configuration file
+# -----------------------------------------------------------------------------
+otel_config_map = {
+    'apiVersion': 'v1',
+    'kind': 'ConfigMap',
+    'metadata': {
+        'name': 'otel-collector-config',
+    },
+    'data': {
+        'otel-collector-config.yaml': str(
+            read_file(OTEL_CONFIG_PATH)
+        ),
+    },
+}
+
+k8s_yaml(encode_yaml(otel_config_map))
 
 # -----------------------------------------------------------------------------
 # Kubernetes deploy

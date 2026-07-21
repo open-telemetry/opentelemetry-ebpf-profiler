@@ -62,7 +62,7 @@ func NewPtrace(pid libpf.PID) (Process, error) {
 }
 
 func (sp *ptraceProcess) GetThreads() ([]ThreadInfo, error) {
-	tidFiles, err := os.ReadDir(path.Join(sp.rootFs, fmt.Sprintf("/%d/task", sp.pid)))
+	tidFiles, err := os.ReadDir(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/task", sp.pid)))
 	if err != nil {
 		return nil, err
 	}

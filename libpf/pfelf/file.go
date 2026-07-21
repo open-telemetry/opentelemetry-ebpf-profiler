@@ -1309,14 +1309,3 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 func (f *File) IsGolang() bool {
 	return f.Section(".go.buildinfo") != nil || f.Section(".gopclntab") != nil
 }
-
-// VirtAddrToFileOffset translates a virtual memory address (Vaddr)
-// into a physical file offset.
-func (f *File) VirtAddrToFileOffset(vaddr uint64) (uint64, error) {
-	prog := f.ProgByVirtualAddress(vaddr)
-	if prog == nil {
-		return 0, fmt.Errorf("address 0x%x not found in any executable segment", vaddr)
-	}
-
-	return (vaddr - prog.Vaddr) + prog.Off, nil
-}

@@ -14,6 +14,13 @@ spec:
       hostPID: false
       containers:
         - name: opentelemetry-ebpf-profiler
+          env:
+            - name: EBPF_PROFILER_ROOT_FS
+              value: /host_fs
+              # Change the endpoint for your local docker/podman gateway if
+              # exporting the profiles to the host: $docker network inspect kind 2>/dev/null | grep -i gateway
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://172.18.0.1:4317
           securityContext:
             capabilities:
               add:
@@ -57,35 +64,3 @@ spec:
         - name: config
           configMap:
             name: otel-collector-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: otel-collector-config
-data:
-  otel-collector-config.yaml: |
-    receivers:
-      # [Profiling receiver](https://github.com/open-telemetry/opentelemetry-ebpf-profiler)
-      profiling:
-        root_fs: /host_fs
-
-    exporters:
-      debug: {}
-      otlp/local:
-        # equivalent to -collection-agent deprecated cli flag
-        endpoint: http://172.18.0.1:4317
-        # equivalent to -disable-tls deprecated cli flag
-        tls:
-          insecure: true
-          insecure_skip_verify: true
-
-    service:
-      telemetry:
-        logs:
-          level: info
-      pipelines:
-        profiles:
-          receivers: [profiling]
-          processors: []
-          exporters:
-            - otlp/local

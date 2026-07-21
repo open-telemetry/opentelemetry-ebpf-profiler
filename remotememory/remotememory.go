@@ -119,7 +119,8 @@ func (rm RemoteMemory) StringPtr(addr libpf.Address) string {
 	return rm.String(addr)
 }
 
-// ProcessVirtualMemory implements ReaderAt by reading /proc/<pid>/mem.
+// ProcessVirtualMemory implements ReaderAt by reading /proc/<pid>/mem or using
+// the process_vm_readv syscall.
 type ProcessVirtualMemory struct {
 	pid        libpf.PID
 	remoteRead func([]byte, int64) (int, error)
