@@ -95,12 +95,7 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 	if err != nil {
 		return nil, err
 	}
-	goVersion, err := file.GoVersion()
-	if err != nil {
-		return nil, err
-	}
-	if goVersion == "" {
-		log.Debugf("file %s is not a Go binary", info.FileName())
+	if !file.IsGolang() {
 		return nil, nil
 	}
 
@@ -123,11 +118,18 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		}
 	}
 
+	goVersion := file.GoVersion()
+	if goVersion == "" {
+		// unable to extract, usually limited to old coredump tests
+		goVersion = "go1.16"
+		log.Debugf("file %s go version failed, assuming: %v", info.FileName(), goVersion)
+	} else {
+		log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
+	}
+
 	if version.Compare(goVersion, "go1.28") >= 0 {
 		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.27)", goVersion)
 	}
-
-	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
 
 	offsets := getOffsets(goVersion)
 	tlsOffset, err := extractTLSGOffset(file)
