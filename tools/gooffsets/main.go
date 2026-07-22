@@ -136,7 +136,7 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 			mGsignal:   uint32(gsignalOffset),
 			curg:       uint32(curgOffset),
 			labels:     uint32(labelsOffset),
-			schedBpOff: uint8(schedBpOff - schedSpOff),
+			schedBpOff: uint32(schedBpOff - schedSpOff),
 		}, nil
 	}
 
@@ -171,7 +171,7 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 		hmapCount:           uint32(countOffset),
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
-		schedBpOff:          uint8(schedBpOff - schedSpOff),
+		schedBpOff:          uint32(schedBpOff - schedSpOff),
 	}, nil
 }
 
