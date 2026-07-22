@@ -6,6 +6,7 @@
 // References to map definitions in *.ebpf.c.
 extern struct perf_progs_t perf_progs;
 extern struct per_cpu_records_t per_cpu_records;
+extern struct per_cpu_records_kp_t per_cpu_records_kp;
 extern struct pid_page_to_mapping_info_t pid_page_to_mapping_info;
 extern struct metrics_t metrics;
 extern struct report_events_t report_events;
@@ -43,6 +44,7 @@ extern struct apm_int_procs_t apm_int_procs;
 extern struct beam_procs_t beam_procs;
 extern struct hotspot_procs_t hotspot_procs;
 extern struct dotnet_procs_t dotnet_procs;
+extern struct luajit_procs_t luajit_procs;
 extern struct perl_procs_t perl_procs;
 extern struct php_procs_t php_procs;
 extern struct py_procs_t py_procs;

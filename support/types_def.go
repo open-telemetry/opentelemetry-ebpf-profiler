@@ -97,13 +97,6 @@ const (
 	HSTSIDSegMapMask      = C.HS_TSID_SEG_MAP_MASK
 )
 
-const (
-	TraceOriginUnknown  = C.TRACE_UNKNOWN
-	TraceOriginSampling = C.TRACE_SAMPLING
-	TraceOriginOffCPU   = C.TRACE_OFF_CPU
-	TraceOriginProbe    = C.TRACE_PROBE
-)
-
 type ApmSpanID C.ApmSpanID
 type ApmTraceID C.ApmTraceID
 type CustomLabel C.CustomLabel
@@ -313,6 +306,8 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNativeErrNoVMA:                       metrics.IDUnwindNativeErrNoVMA,
 	C.metricID_UnwindNativeErrUnsupportedAnonymousMapping: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
 	C.metricID_UnwindNativeErrNonExecutableVMA:            metrics.IDUnwindNativeErrNonExecutableVMA,
+	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
+	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 	C.metricID_UnwindGoAsmcgocallAttempts:                 metrics.IDUnwindGoAsmcgocallAttempts,
 	C.metricID_UnwindGoAsmcgocallSuccess:                  metrics.IDUnwindGoAsmcgocallSuccess,
 	C.metricID_UnwindGoAsmcgocallUnwindFailure:            metrics.IDUnwindGoAsmcgocallUnwindFailure,

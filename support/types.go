@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x70
+	MetricIDBeginCumulative = 0x72
 )
 
 const (
@@ -86,13 +86,6 @@ const (
 	HSTSIDStackDeltaScale = 0x8
 	HSTSIDSegMapBit       = 0x0
 	HSTSIDSegMapMask      = 0xffffffffffffff
-)
-
-const (
-	TraceOriginUnknown  = 0x0
-	TraceOriginSampling = 0x1
-	TraceOriginOffCPU   = 0x2
-	TraceOriginProbe    = 0x3
 )
 
 type ApmSpanID [8]byte
@@ -165,7 +158,7 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
-	Origin             uint32
+	Origin             uint16
 	Value              uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
@@ -506,7 +499,9 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6a: metrics.IDUnwindNativeErrNoVMA,
 	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
 	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
-	0x6d: metrics.IDUnwindGoAsmcgocallAttempts,
-	0x6e: metrics.IDUnwindGoAsmcgocallSuccess,
-	0x6f: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x6d: metrics.IDUnwindLuaJITAttempts,
+	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x6f: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x70: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x71: metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

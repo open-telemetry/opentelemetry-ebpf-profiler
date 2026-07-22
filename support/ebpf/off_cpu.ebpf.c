@@ -21,6 +21,9 @@ struct sched_times_t {
 // off_cpu_threshold is set during load time.
 BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 
+// origin_id_off_cpu is set during load time.
+BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
+
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(UNUSED void *ctx)
@@ -47,12 +50,15 @@ int tracepoint__sched_switch(UNUSED void *ctx)
   return 0;
 }
 
-// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs is
-// referenced and make the compiler and linker happy.
+// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs and
+// per_cpu_records_kp are referenced (both are only used via load-time map rewriting),
+// keeping rewriteMaps and the linker happy.
 SEC("kprobe/dummy")
 int kprobe__dummy(struct pt_regs *ctx)
 {
-  bpf_tail_call(ctx, &kprobe_progs, 0);
+  int key = 0;
+  if (bpf_map_lookup_elem(&per_cpu_records_kp, &key))
+    bpf_tail_call(ctx, &kprobe_progs, 0);
   return 0;
 }
 
@@ -86,5 +92,5 @@ int finish_task_switch(struct pt_regs *ctx)
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
-  return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, ts, diff);
+  return collect_trace(ctx, origin_id_off_cpu, pid, tid, ts, diff);
 }

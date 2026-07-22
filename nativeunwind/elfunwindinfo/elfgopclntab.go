@@ -841,8 +841,8 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		case go1_20:
 			// Ambiguous regarding if frame pointer is kept correctly.
 			// Take the slow path of resolving Go version.
-			goVer, err := ee.file.GoVersion()
-			if err != nil || version.Compare(goVer, "go1.21rc1") < 0 {
+			goVer := ee.file.GoVersion()
+			if goVer == "" || version.Compare(goVer, "go1.21rc1") < 0 {
 				defaultStrategy = strategyDeltasWithFrame
 				useFP = false
 			}
