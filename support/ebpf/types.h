@@ -847,7 +847,7 @@ typedef struct CustomLabelsState {
 // Container for additional scratch space needed by the Go unwinder.
 typedef struct GoUnwindScratchSpace {
   // Max size for a single bpf_probe_read of runtime.m[0:offs->curg+8) (200).
-  u8 buf[200];
+  u64 buf[25];
 } GoUnwindScratchSpace;
 
 // Per-CPU info for the stack being built. This contains the stack as well as

@@ -178,7 +178,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
     return err;
   }
 
-  u8 *scratch      = record->goUnwindScratch.buf;
+  u8 *scratch      = (u8 *)record->goUnwindScratch.buf;
   GoRuntimeCtx ctx = {};
 
   err = go_runtime_load_ctx(offs, state, scratch, &ctx);

@@ -19,6 +19,8 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 		M_offset: 48,
 		// https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L536
 		// m.gsignal at offset 80 while morebuf gobuf still has the ret field (go <= 1.24).
+		// In go1.25 and later, it is at offset 72 because of ret field removal.
+		// see https://go-review.googlesource.com/c/go/+/652276
 		M_gsignal: 80,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L541
 		Curg: 192,

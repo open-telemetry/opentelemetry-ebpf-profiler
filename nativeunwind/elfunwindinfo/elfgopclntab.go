@@ -652,6 +652,13 @@ func getSourceFileStrategyX86(sourceFile string) strategy {
 
 // getFunctionDelta determines the special unwind opcode if needed
 func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdtypes.UnwindInfo {
+	unwindInfoFramePointerOrStop := &sdtypes.UnwindInfoStop
+	unwindInfoGoAsmcgocallOrStop := &sdtypes.UnwindInfoStop
+	if useFP {
+		unwindInfoFramePointerOrStop = &sdtypes.UnwindInfoFramePointer
+		unwindInfoGoAsmcgocallOrStop = &sdtypes.UnwindInfoGoAsmcgocall
+	}
+
 	switch sourceFile {
 	case "runtime.goexit", "runtime.mstart":
 		// goexit - return address in all goroutine stacks
@@ -660,25 +667,18 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdt
 	case "runtime.mcall": // unsupported at this time
 		return &sdtypes.UnwindInfoStop
 	case "runtime.asmcgocall":
-		if arch != elf.EM_X86_64 {
+		if arch == elf.EM_AARCH64 {
 			// On arm64 r29 is overwritten with g0's frame pointer, so the FP chain
 			// is broken across the stack switch. Recover the user goroutine's saved
 			// context and continue FP unwinding there.
-			// Stops when frame pointers are not reliable.
-			if useFP {
-				return &sdtypes.UnwindInfoGoAsmcgocall
-			}
-			return &sdtypes.UnwindInfoStop
+			return unwindInfoGoAsmcgocallOrStop
 		}
 		// asmcgocall FP is valid only on x86-64
-		fallthrough
+		return unwindInfoFramePointerOrStop
 	case "runtime.systemstack", "runtime.nanotime1", "time.now", "runtime.walltime":
 		// functions which preserve the frame pointer chain across the g0/user stack boundary
 		// so that the standard FP unwinding traverses it naturally.
-		if useFP {
-			return &sdtypes.UnwindInfoFramePointer
-		}
-		return &sdtypes.UnwindInfoStop
+		return unwindInfoFramePointerOrStop
 	case "runtime.sigreturn", "runtime.sigreturn__sigaction":
 		// signal frame restorers
 		return &sdtypes.UnwindInfoSignal
