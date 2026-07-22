@@ -6,6 +6,8 @@
 package kallsyms
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -153,28 +155,50 @@ func TestBPFSymbolizerDynamic(t *testing.T) {
 
 // TestBPFSymbolizerPreexisting verifies that programs loaded before the
 // monitor starts are discovered via the initial /proc/kallsyms parse.
+// It runs once with the host root ("/") and once with a custom rootFs that
+// mirrors /proc/kallsyms via a symlink, exercising the path.Join routing in
+// loadKallsyms.
 func TestBPFSymbolizerPreexisting(t *testing.T) {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	// Load the program before starting the monitor.
-	prog := loadSocketFilter(t, preexistingProgName)
+	// Prepare a temp dir whose proc/kallsyms symlinks to the real one so the
+	// custom-rootFs case reads the same content without duplicating it.
+	tmpDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "proc"), 0o755))
+	require.NoError(t, os.Symlink("/proc/kallsyms", filepath.Join(tmpDir, "proc", "kallsyms")))
 
-	s, err := NewSymbolizer("/")
-	require.NoError(t, err)
+	tests := []struct {
+		name     string
+		rootFs   string
+		progName string
+	}{
+		{"host_root", "/", preexistingProgName},
+		// Distinct program name so findBPFSymbol can only match the symbol
+		// loaded by this case, not a leftover from the host_root case.
+		{"custom_procfs", tmpDir, "otel_pre_cst"},
+	}
 
-	err = s.bpf.startMonitor(t.Context(), linearCPUs())
-	require.NoError(t, err)
-	defer s.bpf.close()
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Load the program before NewSymbolizer so it appears in /proc/kallsyms
+			// at the time of the initial loadKallsyms call.
+			prog := loadSocketFilter(t, tc.progName)
 
-	// The program was loaded before the monitor started, so it must be
-	// discovered from /proc/kallsyms during the initial load.
-	fullName, _ := assertBPFSymbolFound(t, s, preexistingProgName)
-	t.Logf("Preexisting program %q found from initial kallsyms load", fullName)
+			s, err := NewSymbolizer(tc.rootFs)
+			require.NoError(t, err)
 
-	// Close the program and verify the symbol is removed via perf event.
-	prog.Close()
-	assertBPFSymbolRemoved(t, s, preexistingProgName)
-	t.Logf("Preexisting program %q successfully removed", fullName)
+			err = s.bpf.startMonitor(t.Context(), linearCPUs())
+			require.NoError(t, err)
+			defer s.bpf.close()
+
+			fullName, _ := assertBPFSymbolFound(t, s, preexistingProgName)
+			t.Logf("Preexisting program %q found from initial kallsyms load", fullName)
+
+			prog.Close()
+			assertBPFSymbolRemoved(t, s, preexistingProgName)
+			t.Logf("Preexisting program %q successfully removed", fullName)
+		})
+	}
 }

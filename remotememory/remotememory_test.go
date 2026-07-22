@@ -6,8 +6,11 @@ package remotememory
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -38,9 +41,34 @@ func RemoteMemTests(t *testing.T, rm RemoteMemory) {
 	assert.Equal(t, string(longStr[:len(longStr)-1]), rm.String(longStrPtr))
 }
 
-func TestProcessVirtualMemory(t *testing.T) {
+func TestProcessVirtualMemoryPaths(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skipf("unsupported os %s", runtime.GOOS)
 	}
-	RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(os.Getpid()), "/"))
+
+	pid := os.Getpid()
+
+	// Symlink /proc/<pid>/mem into a temp dir so the procfs code path reads
+	// the same process memory as the syscall path, letting us compare results.
+	tmpDir := t.TempDir()
+	procDir := filepath.Join(tmpDir, "proc", strconv.Itoa(pid))
+	require.NoError(t, os.MkdirAll(procDir, 0o755))
+	require.NoError(t, os.Symlink(
+		fmt.Sprintf("/proc/%d/mem", pid),
+		filepath.Join(procDir, "mem"),
+	))
+
+	tests := []struct {
+		name       string
+		rootFsPath string
+	}{
+		{"host_syscall", "/"},
+		{"custom_procfs", tmpDir},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(pid), tc.rootFsPath))
+		})
+	}
 }
