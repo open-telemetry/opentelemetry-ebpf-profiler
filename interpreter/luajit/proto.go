@@ -5,7 +5,7 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-// GCproto minus first 8 bytes
+// GCproto minus first 8 bytes.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_obj.h#L372
 // All the pointers (except chunkname) are pointers to extra space at the end of the GCproto object
 // so we could try to be clever and read the whole thing at once if we needed to reduce remotememory

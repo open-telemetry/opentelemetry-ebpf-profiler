@@ -111,17 +111,17 @@ func isZeroOperand(arg x86asm.Arg, regs *amd.Registers) bool {
 }
 
 // This is different in most builds and we need to get it from stripped binaries.
-// The public symbol luaopen_jit gives is the best way in.  The first or second
-// thing it calls is lj_dispatch_update.  We can determine which because the first
+// The public symbol luaopen_jit is the best way in. The first or second
+// thing it calls is lj_dispatch_update. We can determine which because the first
 // arg is G which will come from the glref offset from L.  Ie:
 //
 //	0x000000000006a737 <+119>:   mov    0x10(%rbx),%rdi
 //	0x000000000006a73b <+123>:   call   0x16cf0
 //
 // Then we load the function 0x16cf0 and look at how it fills the per-G dispatch
-// table.  lj_dispatch_update emits an init loop bounded by two `lea OFS(%greg), %reg`
+// table. lj_dispatch_update emits an init loop bounded by two `lea OFS(%greg), %reg`
 // instructions whose displacements are the start and end of the dispatch table.
-// The smaller of the two displacements is normally the value we want.  The
+// The smaller of the two displacements is normally the value we want. The
 // compiler is free to emit the bounds in either order, and in some builds the
 // very first slot of the dispatch table is peeled off into a pre-loop
 // `mov %X, OFS(%greg)` store - in that case OFS sits a slot below the loop iter
