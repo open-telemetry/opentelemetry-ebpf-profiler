@@ -20,7 +20,7 @@ type goRuntimeOffsets struct {
 	hmapCount           uint32
 	hmapLog2BucketCount uint32
 	hmapBuckets         uint32
-	schedBpOff          uint8
+	schedBpOff          uint32
 }
 
 func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {

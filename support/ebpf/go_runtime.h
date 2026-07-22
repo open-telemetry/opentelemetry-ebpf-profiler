@@ -131,7 +131,7 @@ static inline EBPF_INLINE ErrorCode go_runtime_load_ctx(
 // https://github.com/golang/go/blob/339c903a75c3fe936fb4ed6c355d15e6081d6af3/src/runtime/asm_arm64.s#L960
 //
 // The FP chain is valid on the nosave path.
-// Returns true if the caller should goto fp_unwind_fallback.
+// Returns true if the caller should unwind with a frame pointer.
 static inline EBPF_INLINE bool go_asmcgocall_is_nosave(const GoRuntimeCtx *ctx)
 {
   // CBZ g, nosave
