@@ -193,11 +193,11 @@ func TestBPFSymbolizerPreexisting(t *testing.T) {
 			require.NoError(t, err)
 			defer s.bpf.close()
 
-			fullName, _ := assertBPFSymbolFound(t, s, preexistingProgName)
+			fullName, _ := assertBPFSymbolFound(t, s, tc.progName)
 			t.Logf("Preexisting program %q found from initial kallsyms load", fullName)
 
 			prog.Close()
-			assertBPFSymbolRemoved(t, s, preexistingProgName)
+			assertBPFSymbolRemoved(t, s, tc.progName)
 			t.Logf("Preexisting program %q successfully removed", fullName)
 		})
 	}
