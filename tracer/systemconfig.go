@@ -321,10 +321,16 @@ func determineStackLayout(execFn executeSystemAnalysisFn,
 }
 
 // loadSelfHostNamespacePID returns the host PID namespace TGID of the current
-// process by running a test BPF program and reading bpf_get_current_pid_tgid()
-// from within the kernel. This is necessary when the profiler runs inside a
+// process by running a BPF_PROG_TEST_RUN on a raw_tracepoint program that calls
+// bpf_get_current_pid_tgid(). This is necessary when the profiler runs inside a
 // container with its own PID namespace, where os.Getpid() returns the namespace
 // PID.
+//
+// The ctx_in semantics differ by kernel version:
+//   - Kernels 6.18+: ctx_in must be NULL (non-NULL is rejected with EINVAL).
+//   - Older kernels: ctx_in must be non-NULL with ctx_size_in >= sizeof(bpf_raw_tp_regs).
+//
+// We try without ctx first, then fall back with a zeroed ctx buffer on EINVAL.
 func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 	testProg, err := cebpf.NewProgram(orig.Programs["store_tracer_pid"])
 	if err != nil {
@@ -332,10 +338,23 @@ func loadSelfHostNamespacePID(orig *cebpf.CollectionSpec) (uint32, error) {
 	}
 	defer testProg.Close()
 
-	// Socket-filter test runs require packet data containing at least
-	// an Ethernet-header-sized input. Using 64 bytes avoids edge cases.
-	tracerPid, _, err := testProg.Test(make([]byte, 64))
-	return tracerPid, err
+	// First attempt: no ctx (kernel 6.18+ rejects non-NULL ctx_in).
+	retval, err := testProg.Run(&cebpf.RunOptions{})
+	if err == nil {
+		return retval, nil
+	}
+	if !errors.Is(err, unix.EINVAL) {
+		return 0, err
+	}
+
+	// Fallback for older kernels that require ctx_in != NULL with
+	// ctx_size_in >= sizeof(bpf_raw_tp_regs) = 3×sizeof(struct pt_regs).
+	ctx := make([]byte, 3*int(unsafe.Sizeof(unix.PtraceRegs{})))
+	retval, err = testProg.Run(&cebpf.RunOptions{Context: ctx})
+	if err != nil {
+		return 0, err
+	}
+	return retval, nil
 }
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
