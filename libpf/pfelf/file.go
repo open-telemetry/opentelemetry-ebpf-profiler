@@ -1305,15 +1305,8 @@ func (f *File) IsGolang() bool {
 }
 
 func decodeString(rdr *pfbufio.Reader) (string, error) {
-	b, err := rdr.Peek(binary.MaxVarintLen64)
+	size, err := binary.ReadUvarint(rdr)
 	if err != nil {
-		return "", err
-	}
-	size, n := binary.Uvarint(b)
-	if n <= 0 || size >= maxBytesSmallSection {
-		return "", errNoGoBuildinfo
-	}
-	if _, err = rdr.Discard(int(n)); err != nil {
 		return "", err
 	}
 	return rdr.ReadStringN(int(size))
