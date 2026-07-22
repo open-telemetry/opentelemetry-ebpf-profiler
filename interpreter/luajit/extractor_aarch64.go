@@ -40,7 +40,7 @@ func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 }
 
 // This function gets the glref offset from the first load and the
-// the cur_L offset from the last store instruction.  Its not resilient
+// cur_L offset from the last store instruction. It's not resilient
 // to arbitrary register movement/spilling but seems to work.
 //
 // (lldb) dis -n lua_close
@@ -87,7 +87,7 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 // ...
 // libluajit-5.1.so[0x14660] <+128>: add    x3, x19, #0xf38
 func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
-	greg := arm64asm.X0
+	greg := 0 // X0 as returned by Xreg2num
 	for ; len(b) > 0; b = b[4:] {
 		i, err := arm64asm.Decode(b)
 		if err != nil {
@@ -95,18 +95,17 @@ func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint6
 		}
 		// Update greg if it moves
 		if i.Op == arm64asm.MOV {
-			a0, ok0 := i.Args[0].(arm64asm.Reg)
-			a1, ok1 := i.Args[1].(arm64asm.Reg)
-			if ok0 && ok1 && a1 == arm64asm.X0 {
+			a0, ok0 := arm.Xreg2num(i.Args[0])
+			a1, ok1 := arm.Xreg2num(i.Args[1])
+			// a1 == X0
+			if ok0 && ok1 && a1 == 0 {
 				greg = a0
 			}
 		}
-		if i.Op == arm64asm.ADD && greg != 0 {
-			a1, ok := i.Args[1].(arm64asm.RegSP)
-			if ok && arm64asm.Reg(a1) == greg {
-				a2, ok := i.Args[2].(arm64asm.ImmShift)
-				if ok {
-					return getImmU(a2), nil
+		if i.Op == arm64asm.ADD {
+			if a1, ok := arm.Xreg2num(i.Args[1]); ok && a1 == greg {
+				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
+					return uint64(imm), nil
 				}
 			}
 		}
@@ -152,8 +151,8 @@ func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, 
 // libluajit-5.1.so[0x67a78] <+52>:  ldr    x2, [x2, #0x168]   ;; This is J->trace
 // So for this version we want 0x2e0 + 0x168
 func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error) {
-	var reg arm64asm.Reg
-	var G2JOffset uint64
+	var g2JOffset uint64
+	reg := -1
 	sawSZTraceLoad := false
 	for len(b) > 0 {
 		i, err := arm64asm.Decode(b)
@@ -163,24 +162,25 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 		if i.Op == arm64asm.LDR {
 			a1, ok := i.Args[1].(arm64asm.MemImmediate)
 			if ok {
-				imm := getImm(a1)
-				if imm == 0x10 {
-					reg = i.Args[0].(arm64asm.Reg)
-				} else if arm64asm.Reg(a1.Base) == reg {
-					// Skip over load of sztraces
-					if sawSZTraceLoad {
-						return G2JOffset + imm, nil
+				if imm, immOk := arm.DecodeImmediate(a1); immOk {
+					if imm == 0x10 {
+						if dst, dstOk := arm.Xreg2num(i.Args[0]); dstOk {
+							reg = dst
+						}
+					} else if base, baseOk := arm.Xreg2num(a1.Base); baseOk && base == reg {	
+						// Skip over load of sztraces
+						if sawSZTraceLoad {
+							return g2JOffset + uint64(imm), nil
+						}
+						sawSZTraceLoad = true
 					}
-					sawSZTraceLoad = true
 				}
 			}
 		}
 		if i.Op == arm64asm.ADD {
-			a1, ok := i.Args[1].(arm64asm.RegSP)
-			if ok && arm64asm.Reg(a1) == reg {
-				a2, ok := i.Args[2].(arm64asm.ImmShift)
-				if ok {
-					G2JOffset = getImmU(a2)
+			if a1, ok := arm.Xreg2num(i.Args[1]); ok && a1 == reg {
+				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
+					g2JOffset = uint64(imm)
 				}
 			}
 		}
@@ -210,21 +210,22 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 			}
 		}
 		if i.Op == arm64asm.ADRP {
-			a0, ok1 := i.Args[0].(arm64asm.Reg)
-			a1, ok2 := i.Args[1].(arm64asm.PCRel)
-			if ok1 && ok2 && a0 == arm64asm.X1 {
-				// zero lower 12 bits of addr+ip
-				x1 = (baseAddr + ip) & ^0xfff
-				x1 += int64(a1)
+			a1, ok := i.Args[1].(arm64asm.PCRel)
+			if ok {
+				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 1 // X1 {
+					// zero lower 12 bits of addr+ip
+					x1 = (baseAddr + ip) & ^0xfff
+					x1 += int64(a1)
+				}
 			}
 		}
 		if i.Op == arm64asm.ADD {
-			a0, ok1 := i.Args[0].(arm64asm.RegSP)
-			a1, ok2 := i.Args[1].(arm64asm.RegSP)
-			if ok1 && ok2 && arm64asm.Reg(a1) == arm64asm.X1 && a0 == a1 {
-				a2, ok := i.Args[2].(arm64asm.ImmShift)
-				if ok {
-					x1 += int64(getImmU(a2))
+			a0, ok1 := arm.Xreg2num(i.Args[0])
+			a1, ok2 := arm.Xreg2num(i.Args[1])
+			// a1 == X1 && a0 == a1
+			if ok1 && ok2 && a1 == 1 && a0 == a1 {
+				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
+					x1 += imm
 				}
 			}
 		}
@@ -267,8 +268,8 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 // libluajit-5.1.so[0x64de8] <+264>: add    x1, x1, #0xa50
 // libluajit-5.1.so[0x64dec] <+268>: bl     0x57e50        ; ___lldb_unnamed_symbol1370
 //
-// So we track adrp and add instructions touching x2 and return that value when we see the
-// a repeat BL call.   In this case:
+// So we track adrp and add instructions touching x2 and return that value when we see
+// a repeat BL call. In this case:
 // [0x64dc4] <+228>: adrp   x2, -1           --> x2 becomes 0x63000
 // [0x64dcc] <+236>: add    x2, x2, #0x310   --> x2 becomes 0x63310
 func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, error) {
@@ -282,7 +283,7 @@ func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, 
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
 				result := addr + ip + int64(a0)
-				// There's also two back to back calls to lua_copy ignore those
+				// There's also two back-to-back calls to lua_copy, ignore those
 				// by requiring x2 to have been set.
 				if result == prevCall && x2 != 0 {
 					return uint64(x2), nil
@@ -291,21 +292,22 @@ func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, 
 			}
 		}
 		if i.Op == arm64asm.ADRP {
-			a0, ok1 := i.Args[0].(arm64asm.Reg)
-			a1, ok2 := i.Args[1].(arm64asm.PCRel)
-			if ok1 && ok2 && a0 == arm64asm.X2 {
-				// zero lower 12 bits of addr+ip
-				x2 = (addr + ip) & ^0xfff
-				x2 += int64(a1)
+			a1, ok := i.Args[1].(arm64asm.PCRel)
+			if ok {
+				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 2 { // X2
+					// zero lower 12 bits of addr+ip
+					x2 = (addr + ip) & ^0xfff
+					x2 += int64(a1)
+				}
 			}
 		}
 		if i.Op == arm64asm.ADD {
-			a0, ok1 := i.Args[0].(arm64asm.RegSP)
-			a1, ok2 := i.Args[1].(arm64asm.RegSP)
-			if ok1 && ok2 && arm64asm.Reg(a1) == arm64asm.X2 && a0 == a1 {
-				a2, ok := i.Args[2].(arm64asm.ImmShift)
-				if ok {
-					x2 += int64(getImmU(a2))
+			a0, ok1 := arm.Xreg2num(i.Args[0])
+			a1, ok2 := arm.Xreg2num(i.Args[1])
+			// a1 == X2 && a0 == a1
+			if ok1 && ok2 && a1 == 2 && a0 == a1 {
+				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
+					x2 += imm
 				}
 			}
 		}
@@ -339,24 +341,25 @@ func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr int64) (int64, erro
 			return 0, err
 		}
 		if i.Op == arm64asm.ADRP {
-			a0, ok1 := i.Args[0].(arm64asm.Reg)
-			a1, ok2 := i.Args[1].(arm64asm.PCRel)
-			if ok1 && ok2 && a0 == arm64asm.X3 {
-				// zero lower 12 bits of addr+ip
-				x3 = (addr + ip) & ^0xfff
-				x3 += int64(a1)
+			a1, ok := i.Args[1].(arm64asm.PCRel)
+			if ok {
+				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 3 { // X3
+					// zero lower 12 bits of addr+ip
+					x3 = (addr + ip) & ^0xfff
+					x3 += int64(a1)
+				}
 			}
 		}
 		if i.Op == arm64asm.ADD {
-			a0, ok1 := i.Args[0].(arm64asm.RegSP)
-			a1, ok2 := i.Args[1].(arm64asm.RegSP)
-			if ok1 && ok2 && arm64asm.Reg(a1) == arm64asm.X3 && a0 == a1 {
-				a2, ok := i.Args[2].(arm64asm.ImmShift)
-				if ok {
+			a0, ok1 := arm.Xreg2num(i.Args[0])
+			a1, ok2 := arm.Xreg2num(i.Args[1])
+			// a1 == X3 && a0 == a1
+			if ok1 && ok2 && a1 == 3 && a0 == a1 {
+				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
 					// Note: don't return yet, since sometimes there's actually
 					// multiple add instructions affecting the register before we finally get
 					// to the `bl`.
-					x3 += int64(getImmU(a2))
+					x3 += imm
 				}
 			}
 		}
@@ -389,14 +392,3 @@ func (a *armExtractor) findFirstCall(b []byte, addr int64) (uint64, error) {
 	return 0, errors.New("no calls found")
 }
 
-func getImm(m any) uint64 {
-	//https://github.com/golang/go/issues/57684
-	imm := reflect.ValueOf(m).FieldByName("imm")
-	return uint64(imm.Int())
-}
-
-func getImmU(m any) uint64 {
-	//https://github.com/golang/go/issues/57684
-	imm := reflect.ValueOf(m).FieldByName("imm")
-	return imm.Uint()
-}

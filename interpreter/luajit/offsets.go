@@ -327,7 +327,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	}
 
 	// libJitFunctionAddresses should be this static array:
-	// No permalinks for generated code, its in lj_libdef.h
+	// No permalinks for generated code, it's in lj_libdef.h
 	// static const lua_CFunction lj_lib_cf_jit_util[] = {
 	// 	lj_cf_jit_util_funcinfo,
 	// 	lj_cf_jit_util_funcbc,
@@ -350,10 +350,10 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 
 	traceInfoAddr := funcAddrs[traceInfoIndex]
 
-	// Derive size by sorting and seeing offset to next function, swag if its last (it won't be).
+	// Derive size by sorting and seeing offset to next function, swag if it's last (it won't be).
 	slices.Sort(funcAddrs)
 
-	// Its a tiny function, give it reasonable default.
+	// It's a tiny function, give it reasonable default.
 	traceInfoSize := uint64(100)
 	for i, addr := range funcAddrs {
 		if addr == traceInfoAddr && i != len(funcAddrs)-1 {
