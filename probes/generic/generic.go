@@ -21,13 +21,11 @@ const progName = "kprobe__generic"
 // GenericConfig holds the YAML configuration for the generic probe.
 //
 //	custom_probes:
-//	  generic:
-//	    type: kprobe          # kprobe | kretprobe | uprobe | uretprobe
-//	    symbol: vfs_open
-//	    target: ""            # executable path; required for uprobe/uretprobe
-//
-// Because custom_probes is keyed by probe type name, only one generic probe can
-// be configured at a time.
+//	  - kind: generic
+//	    config:
+//	      type: kprobe        # kprobe | kretprobe | uprobe | uretprobe
+//	      symbol: vfs_open
+//	      target: ""          # executable path; required for uprobe/uretprobe
 type GenericConfig struct {
 	Type   string `mapstructure:"type"`
 	Symbol string `mapstructure:"symbol"`

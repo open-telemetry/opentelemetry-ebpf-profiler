@@ -171,28 +171,24 @@ func (c *Controller) Start(ctx context.Context) error {
 }
 
 func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
-	if len(c.config.CustomProbes) == 0 {
-		return nil
-	}
-
-	for probeName, probeConfig := range c.config.CustomProbes {
-		probe, err := createCustomProbe(probeName, probeConfig)
+	for i, p := range c.config.CustomProbes {
+		probe, err := createCustomProbe(p.Kind, p.Config)
 		if err != nil {
-			return fmt.Errorf("failed to create custom probe %q: %w", probeName, err)
+			return fmt.Errorf("custom probe %d: %w", i, err)
 		}
 
 		if err := trc.Enable(probe); err != nil {
-			return fmt.Errorf("failed to enable custom probe %q: %w", probeName, err)
+			return fmt.Errorf("custom probe %d (%s): %w", i, p.Kind, err)
 		}
 
-		log.Infof("Enabled custom probe %q", probeName)
+		log.Infof("Enabled custom probe %d (%s)", i, p.Kind)
 	}
 
 	return nil
 }
 
-func createCustomProbe(name string, cfg any) (tracer.Probe, error) {
-	switch name {
+func createCustomProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
+	switch kind {
 	case "generic":
 		var gcfg generic.GenericConfig
 		if err := mapstructure.Decode(cfg, &gcfg); err != nil {
@@ -200,7 +196,7 @@ func createCustomProbe(name string, cfg any) (tracer.Probe, error) {
 		}
 		return generic.New(gcfg)
 	default:
-		return nil, fmt.Errorf("unknown custom probe: %q", name)
+		return nil, fmt.Errorf("unknown probe kind %q", kind)
 	}
 }
 

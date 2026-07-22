@@ -45,6 +45,12 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
+// CustomProbe holds the kind and configuration for a single custom probe entry.
+type CustomProbe struct {
+	Kind   string         `mapstructure:"kind"`
+	Config map[string]any `mapstructure:"config"`
+}
+
 // Config is the configuration for the collector.
 type Config struct {
 	ReporterInterval       time.Duration            `mapstructure:"reporter_interval"`
@@ -71,7 +77,7 @@ type Config struct {
 	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
 	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
-	CustomProbes           map[string]any           `mapstructure:"custom_probes"`
+	CustomProbes           []CustomProbe            `mapstructure:"custom_probes"`
 }
 
 // Validate validates the config.
