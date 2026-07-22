@@ -5,8 +5,8 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
 	"errors"
-	"reflect"
 
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"golang.org/x/arch/arm64/arm64asm"
 )
@@ -58,25 +58,29 @@ func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 // libluajit-5.1.so[0x15c48] <+40>:  ldr    x1, [x19, #0x38]
 // libluajit-5.1.so[0x15c4c] <+44>:  str    xzr, [x20, #0x170]  ; 0x170 is curLOffset
 func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
-	var greg arm64asm.Reg
+	greg := -1
 	for ; len(b) > 0; b = b[4:] {
 		i, err := arm64asm.Decode(b)
 		if err != nil {
 			return 0, 0, err
 		}
 		// ldr    x20, [x0, #0x10] ; 0x10 is glrefOffset
-		if i.Op == arm64asm.LDR && greg == 0 {
+		if i.Op == arm64asm.LDR && greg == -1 {
 			a1, ok := i.Args[1].(arm64asm.MemImmediate)
-			if ok {
-				glref = getImm(a1)
-				greg = i.Args[0].(arm64asm.Reg)
+			if imm, ok2 := arm.DecodeImmediate(a1); ok && ok2 {
+				if a0, ok3 := arm.Xreg2num(i.Args[0]); ok3 {
+					greg = a0
+					glref = uint64(imm)
+				}
 			}
 		}
 		if i.Op == arm64asm.STR {
 			a1, ok := i.Args[1].(arm64asm.MemImmediate)
-			if ok && arm64asm.Reg(a1.Base) == greg && i.Args[0] == arm64asm.XZR {
-				curL = getImm(a1)
-				break
+			if regnum, ok2 := arm.Xreg2num(a1.Base); ok && ok2 && regnum == greg && i.Args[0] == arm64asm.XZR {
+				if imm, ok3 := arm.DecodeImmediate(a1); ok3 {
+					curL = uint64(imm)
+					break
+				}
 			}
 		}
 	}
@@ -167,7 +171,7 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 						if dst, dstOk := arm.Xreg2num(i.Args[0]); dstOk {
 							reg = dst
 						}
-					} else if base, baseOk := arm.Xreg2num(a1.Base); baseOk && base == reg {	
+					} else if base, baseOk := arm.Xreg2num(a1.Base); baseOk && base == reg {
 						// Skip over load of sztraces
 						if sawSZTraceLoad {
 							return g2JOffset + uint64(imm), nil
@@ -212,7 +216,7 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 		if i.Op == arm64asm.ADRP {
 			a1, ok := i.Args[1].(arm64asm.PCRel)
 			if ok {
-				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 1 // X1 {
+				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 1 /* X1 */ {
 					// zero lower 12 bits of addr+ip
 					x1 = (baseAddr + ip) & ^0xfff
 					x1 += int64(a1)
@@ -391,4 +395,3 @@ func (a *armExtractor) findFirstCall(b []byte, addr int64) (uint64, error) {
 	}
 	return 0, errors.New("no calls found")
 }
-

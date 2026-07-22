@@ -53,11 +53,13 @@ func GetLoader(_ Config) interpreter.Loader {
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	return nil, nil
 }
+
 const (
 	// minInterpreterSize is the lower bound for the size of the stack delta
 	// corresponding to the interpreter.
 	minInterpreterSize = 10_000
 )
+
 // LuaJIT's interpreter isn't a function, it's a raw chunk of assembly code with direct threaded
 // jumps at end of each opcode. The public entrypoints (lua_pcall/lua_resume) call the lj_vm_pcall
 // function at the end of this blob which set up the interpreter and starts executing.
@@ -72,13 +74,12 @@ func extractInterpreterBounds(deltas sdtypes.StackDeltaArray, param int32) (util
 		if next.Address-d.Address <= minInterpreterSize {
 			continue
 		}
-		
+
 		// The first case covers x86 w/ dwarf and old versions of luajit ARM that used dwarf and
 		// the second covers more recent arm versions that use frame pointers.
 		if (d.Info.BaseReg == support.UnwindRegSp && d.Info.Param == param) ||
 			(d.Info.BaseReg == support.UnwindRegFp && d.Info.Param == 16) {
-				return util.Range{Start: d.Address, End: next.Address}, nil
-			}
+			return util.Range{Start: d.Address, End: next.Address}, nil
 		}
 	}
 
