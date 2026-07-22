@@ -192,9 +192,9 @@ func (sp *systemProcess) extractContainerID() (libpf.String, error) {
 
 // CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
-func CgroupRootInode(pid libpf.PID) (uint64, error) {
+func CgroupRootInode(pid libpf.PID, rootFs string) (uint64, error) {
 	var st unix.Stat_t
-	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
+	if err := unix.Stat(path.Join(rootFs, fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid)), &st); err != nil {
 		return 0, err
 	}
 	return st.Ino, nil
@@ -470,8 +470,8 @@ func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
 }
 
 // openInProcRoot opens a file within a process's filesystem namespace.
-func openInProcRoot(pid libpf.PID, filePath string) (*os.File, error) {
-	return openInRoot(fmt.Sprintf("/proc/%d/root", pid), filePath)
+func (sp *systemProcess) openInProcRoot(filePath string) (*os.File, error) {
+	return openInRoot(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/root", sp.pid)), filePath)
 }
 
 // getMappingFile opens the backing file for a mapping and returns an open file descriptor.
@@ -484,7 +484,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
-		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
+		rootPath := path.Join(sp.rootFs, fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid))
 		f, err := openInRoot(rootPath, m.Path)
 		if err != nil {
 			return nil, err
@@ -546,7 +546,7 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	// RawMapping should use OpenELFMapping instead, which can open deleted
 	// or replaced files via /proc/<pid>/map_files.
 	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
-	f, err := openInProcRoot(sp.pid, file)
+	f, err := sp.openInProcRoot(file)
 	if err != nil {
 		return nil, err
 	}

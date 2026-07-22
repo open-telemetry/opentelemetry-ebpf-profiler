@@ -94,6 +94,7 @@ func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
 	interpretersConfig interpreterconfig.Config,
+	procFsPath string,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	loaders := make([]interpreter.Loader, 0)
@@ -132,7 +133,7 @@ func NewExecutableInfoManager(
 		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
 	}
 
-	loaders = append(loaders, apmint.Loader)
+	loaders = append(loaders, apmint.GetLoader(procFsPath))
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })

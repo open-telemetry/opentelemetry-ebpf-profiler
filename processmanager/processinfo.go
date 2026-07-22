@@ -149,7 +149,7 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
 		return
 	}
-	ino, err := process.CgroupRootInode(pid)
+	ino, err := process.CgroupRootInode(pid, pm.procFsPath)
 	if err != nil {
 		return
 	}

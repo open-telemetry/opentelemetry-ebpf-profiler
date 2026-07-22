@@ -93,7 +93,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
 
-	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
+	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig, cfg.ProcFsPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
