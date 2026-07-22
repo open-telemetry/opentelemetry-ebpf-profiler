@@ -62,7 +62,7 @@ var (
 type systemProcess struct {
 	pid      libpf.PID
 	tid      libpf.PID
-	procBase string // "/proc/<pid>"
+	procBase string // "/proc/<pid>/"
 
 	mainThreadExit bool
 	remoteMemory   remotememory.RemoteMemory
@@ -91,7 +91,7 @@ func New(pid, tid libpf.PID) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
-		procBase:     "/proc/" + strconv.Itoa(int(pid)),
+		procBase:     "/proc/" + strconv.Itoa(int(pid)) + "/",
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
 	}
 }
@@ -105,7 +105,7 @@ func (sp *systemProcess) GetMachineData() MachineData {
 }
 
 func (sp *systemProcess) GetExe() (libpf.String, error) {
-	str, err := os.Readlink(sp.procBase + "/exe")
+	str, err := os.Readlink(sp.procBase + "exe")
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -115,13 +115,13 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	var processName libpf.String
 	exePath, _ := sp.GetExe()
-	if name, err := os.ReadFile(sp.procBase + "/comm"); err == nil {
+	if name, err := os.ReadFile(sp.procBase + "comm"); err == nil {
 		processName = libpf.Intern(pfunsafe.ToString(name))
 	}
 
 	var envVarMap map[libpf.String]libpf.String
 	if len(cfg.IncludeEnvVars) > 0 {
-		if envVars, err := os.ReadFile(sp.procBase + "/environ"); err == nil {
+		if envVars, err := os.ReadFile(sp.procBase + "environ"); err == nil {
 			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
 			// environ has environment variables separated by a null byte (hex: 00)
 			for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
@@ -393,7 +393,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 }
 
 func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
-	mapsFile, err := os.Open(sp.procBase + "/maps")
+	mapsFile, err := os.Open(sp.procBase + "maps")
 	if err != nil {
 		return 0, err
 	}
@@ -424,7 +424,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 		}
 
 		log.Debugf("TID: %v extracting mappings", sp.tid)
-		mapsFileAlt, err := os.Open(fmt.Sprintf("%s/task/%d/maps", sp.procBase, sp.tid))
+		mapsFileAlt, err := os.Open(fmt.Sprintf("%stask/%d/maps", sp.procBase, sp.tid))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
 		// allow for a future iteration to try extracting mappings from a different thread.
@@ -482,7 +482,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
-		rootPath := fmt.Sprintf("%s/task/%d/root", sp.procBase, sp.tid)
+		rootPath := fmt.Sprintf("%stask/%d/root", sp.procBase, sp.tid)
 		f, err := openInRoot(rootPath, m.Path)
 		if err != nil {
 			return nil, err
@@ -494,7 +494,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		}
 		return f, nil
 	}
-	filename := fmt.Sprintf("%s/map_files/%x-%x", sp.procBase, m.Vaddr, m.Vaddr+m.Length)
+	filename := fmt.Sprintf("%smap_files/%x-%x", sp.procBase, m.Vaddr, m.Vaddr+m.Length)
 	return os.Open(filename)
 }
 

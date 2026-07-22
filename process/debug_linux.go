@@ -52,7 +52,7 @@ func NewPtrace(pid libpf.PID) (Process, error) {
 
 	sp := &ptraceProcess{}
 	sp.pid = pid
-	sp.procBase = "/proc/" + strconv.Itoa(int(pid))
+	sp.procBase = "/proc/" + strconv.Itoa(int(pid)) + "/"
 	sp.remoteMemory = remotememory.RemoteMemory{ReaderAt: sp}
 	if err := sp.attach(); err != nil {
 		runtime.UnlockOSThread()
@@ -62,7 +62,7 @@ func NewPtrace(pid libpf.PID) (Process, error) {
 }
 
 func (sp *ptraceProcess) GetThreads() ([]ThreadInfo, error) {
-	tidFiles, err := os.ReadDir(sp.procBase + "/task")
+	tidFiles, err := os.ReadDir(sp.procBase + "task")
 	if err != nil {
 		return nil, err
 	}
