@@ -46,13 +46,14 @@ func ptraceGetRegset(tid, regset int, data []byte) error {
 // from one goroutine. If this is not sufficient in future, the implementation
 // should be refactored to pass all requests via a proxy goroutine through
 // channels so that the kernel requirements are fulfilled.
-func NewPtrace(pid libpf.PID) (Process, error) {
+func NewPtrace(pid libpf.PID, rootFsPath string) (Process, error) {
 	// Lock this goroutine to the OS thread. It is ptrace API requirement
 	// that all ptrace calls must come from same thread.
 	runtime.LockOSThread()
 
 	sp := &ptraceProcess{}
 	sp.pid = pid
+	sp.procBase = path.Join(rootFsPath, "/proc", strconv.Itoa(int(pid))) + "/"
 	sp.remoteMemory = remotememory.RemoteMemory{ReaderAt: sp}
 	if err := sp.attach(); err != nil {
 		runtime.UnlockOSThread()
@@ -62,7 +63,7 @@ func NewPtrace(pid libpf.PID) (Process, error) {
 }
 
 func (sp *ptraceProcess) GetThreads() ([]ThreadInfo, error) {
-	tidFiles, err := os.ReadDir(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/task", sp.pid)))
+	tidFiles, err := os.ReadDir(sp.procBase + "task")
 	if err != nil {
 		return nil, err
 	}
