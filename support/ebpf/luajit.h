@@ -1,3 +1,5 @@
+#pragma once
+
 // This is CFRAME_SIZE in src/lj_frame.h
 // We could dynamically get this from lj_vm_ffi_callback disassembly and look for:
 // lea rax, [rsp+CFRAME_SIZE]
