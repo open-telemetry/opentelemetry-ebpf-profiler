@@ -41,9 +41,9 @@ type ehframeHooks interface {
 	// fdeUnsorted is called if FDE entries from unsorted area are found.
 	fdeUnsorted()
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
-	fdeHook(cie *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool
+	fdeHook(cie *cieInfo, fde *fdeInfo, intervals *sdtypes.IntervalData) bool
 	// deltaHook is called for each stack delta found
-	deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
+	deltaHook(ip uintptr, regs *vmRegs, info sdtypes.UnwindInfo)
 	// golangHook is called if .gopclntab is found to report its coverage
 	golangHook(start, end uintptr)
 }
@@ -983,7 +983,7 @@ func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
 func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
-	cieCache *lru.LRU[uint64, *cieInfo], sorted bool,
+	cieCache *lru.LRU[uint64, *cieInfo],
 ) (size uintptr, err error) {
 	// Parse FDE header
 	fdeID := r.pos
@@ -994,55 +994,35 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 	st := state{cie: cie, cur: cie.initialState}
 
 	// Process the FDE opcodes
-	if !ee.hooks.fdeHook(st.cie, &fde, ee.deltas) {
+	if !ee.hooks.fdeHook(st.cie, &fde, ee.intervals) {
 		return uintptr(fdeLen), nil
 	}
-	st.loc = fde.ipStart
+
+	bb := sdtypes.BasicBlock{
+		Start: uint64(fde.ipStart),
+		End:   uint64(fde.ipStart + fde.ipLen),
+	}
+
 	if st.cie.isSignalHandler || isSignalTrampoline(ee.file, &fde) {
-		delta := sdtypes.StackDelta{
-			Address: uint64(st.loc),
-			Hints:   sdtypes.UnwindHintKeep,
-			Info:    sdtypes.UnwindInfoSignal,
-		}
-		ee.hooks.deltaHook(st.loc, &st.cur, delta)
-		ee.deltas.AddEx(delta, sorted)
+		info := sdtypes.UnwindInfoSignal
+		ee.hooks.deltaHook(st.loc, &st.cur, info)
+		bb.Deltas.Add(0, info)
 	} else {
-		hint := sdtypes.UnwindHintKeep
 		for r.hasData() {
-			ip := st.loc
+			loc := st.loc
 			if err := st.step(r); err != nil {
 				return 0, err
 			}
-			delta := sdtypes.StackDelta{
-				Address: uint64(ip),
-				Hints:   hint,
-				Info:    st.cur.getUnwindInfo(ee.allowGenericRegs),
-			}
-			ee.hooks.deltaHook(ip, &st.cur, delta)
-			ee.deltas.AddEx(delta, sorted)
-			sorted = true
-			hint = sdtypes.UnwindHintNone
+			info := st.cur.getUnwindInfo(ee.allowGenericRegs)
+			ee.hooks.deltaHook(fde.ipStart+loc, &st.cur, info)
+			bb.Deltas.Add(uint32(loc), info)
 		}
-
-		delta := sdtypes.StackDelta{
-			Address: uint64(st.loc),
-			Hints:   hint,
-			Info:    st.cur.getUnwindInfo(ee.allowGenericRegs),
-		}
-		ee.deltas.AddEx(delta, sorted)
 
 		if !r.isValid() {
 			return 0, fmt.Errorf("FDE %x parsing failed", fdeID)
 		}
 	}
-
-	// Add end-of-function stop delta. This might later get removed if there is
-	// another function starting on this address.
-	ee.deltas.AddEx(sdtypes.StackDelta{
-		Address: uint64(fde.ipStart + fde.ipLen),
-		Hints:   sdtypes.UnwindHintEnd,
-		Info:    sdtypes.UnwindInfoInvalid,
-	}, sorted)
+	ee.intervals.Add(bb)
 
 	return uintptr(fdeLen), nil
 }
@@ -1196,7 +1176,7 @@ func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfReg
 		if entryErr != nil {
 			return entryErr
 		}
-		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, f > 0)
+		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache)
 		if err != nil && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE: %v", err)
 		}
@@ -1219,7 +1199,7 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 	var entryLen uintptr
 	for f := uintptr(0); f < uintptr(len(ehFrameSec.data)); f += entryLen {
 		fr := ehFrameSec.reader(f, debugFrame)
-		entryLen, err = ee.parseFDE(&fr, ef, 0, cieCache, false)
+		entryLen, err = ee.parseFDE(&fr, ef, 0, cieCache)
 		if err != nil && !errors.Is(err, errUnexpectedType) && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE %#x: %v", f, err)
 		}

@@ -166,10 +166,8 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		return ExecutableInfo{}, ErrDeferredFileID
 	}
 	var (
-		intervalData sdtypes.IntervalData
-		libcInfo     *libc.LibcInfo
-		ref          mapRef
-		err          error
+		libcInfo *libc.LibcInfo
+		ref      mapRef
 	)
 
 	// Fast path for executable info that is already present.
@@ -188,13 +186,14 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// so we release the lock before doing this.
 	mgr.state.WUnlock(&state)
 
-	if err = mgr.sdp.GetIntervalStructuresForFile(elfRef, &intervalData); err != nil {
+	intervalData, err := mgr.sdp.GetIntervalDataForFile(elfRef)
+	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			mgr.deferredFileIDs.Add(fileID, libpf.Void{})
 		}
 		return ExecutableInfo{}, fmt.Errorf("failed to extract interval data: %w", err)
 	}
-	if len(intervalData.Deltas) == 0 {
+	if len(intervalData.Blocks) == 0 {
 		ef, errx := elfRef.GetELF()
 		if errx != nil {
 			return ExecutableInfo{}, errx
@@ -222,14 +221,14 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	}
 
 	// Load the data into BPF maps.
-	ref, err = state.loadDeltas(fileID, intervalData.Deltas)
+	ref, err = state.loadDeltas(fileID, intervalData)
 	if err != nil {
 		mgr.deferredFileIDs.Add(fileID, libpf.Void{})
 		return ExecutableInfo{}, fmt.Errorf("failed to load deltas: %w", err)
 	}
 
 	// Create the LoaderInfo for interpreter detection
-	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef, intervalData)
 
 	// Detect and load interpreter data
 	interpData := state.detectAndLoadInterpData(loaderInfo)
@@ -408,46 +407,78 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 // also creates a list of all large gaps in the executable.
 func (state *executableInfoManagerState) loadDeltas(
 	fileID host.FileID,
-	deltas []sdtypes.StackDelta,
+	intervals *sdtypes.IntervalData,
 ) (mapRef, error) {
-	numDeltas := len(deltas)
+	numDeltas := intervals.NumDeltas
 	if numDeltas == 0 {
 		// If no deltas are extracted, cache the result but don't reserve memory in BPF maps.
 		return mapRef{MapID: 0}, nil
 	}
 
-	firstPage := deltas[0].Address >> support.StackDeltaPageBits
-	firstPageAddr := deltas[0].Address &^ support.StackDeltaPageMask
-	lastPage := deltas[numDeltas-1].Address >> support.StackDeltaPageBits
+	firstBlock := intervals.Blocks[0]
+	lastBlock := intervals.Blocks[len(intervals.Blocks)-1]
+
+	firstPage := firstBlock.Start >> support.StackDeltaPageBits
+	firstPageAddr := firstBlock.Start &^ support.StackDeltaPageMask
+	lastPage := lastBlock.End >> support.StackDeltaPageBits
 	numPages := lastPage - firstPage + 1
 	numDeltasPerPage := make([]uint16, numPages)
 
 	// Index the unwind-info.
 	var unwindInfo sdtypes.UnwindInfo
 	ebpfDeltas := make([]pmebpf.StackDeltaEBPF, 0, numDeltas)
-	for index, delta := range deltas {
-		if unwindInfo.MergeOpcode != 0 {
-			// This delta was merged in the previous iteration.
-			unwindInfo.MergeOpcode = 0
-			continue
-		}
-		unwindInfo = delta.Info
-		if index+1 < len(deltas) {
-			unwindInfo.MergeOpcode = calculateMergeOpcode(delta, deltas[index+1])
-		}
-		// Uses the new 'unwindInfo' with potentially updated MergeOpcode
-		// here. In the end, it's only the unwindInfoIndex being different for
-		// merged deltas.
-		var unwindInfoIndex uint16
-		unwindInfoIndex, err := state.getUnwindInfoIndex(unwindInfo)
+	addDelta := func(addr uint64, info support.UnwindInfo) error {
+		unwindInfoIndex, err := state.getUnwindInfoIndex(info)
 		if err != nil {
-			return mapRef{}, err
+			return err
 		}
-		ebpfDeltas = append(ebpfDeltas, pmebpf.StackDeltaEBPF{
-			AddressLow: uint16(delta.Address),
-			UnwindInfo: unwindInfoIndex,
-		})
-		numDeltasPerPage[(delta.Address>>support.StackDeltaPageBits)-firstPage]++
+		numDeltas := len(ebpfDeltas)
+		if numDeltas == 0 || ebpfDeltas[numDeltas-1].UnwindInfo != unwindInfoIndex {
+			ebpfDeltas = append(ebpfDeltas, pmebpf.StackDeltaEBPF{
+				AddressLow: uint16(addr),
+				UnwindInfo: unwindInfoIndex,
+			})
+			numDeltasPerPage[(addr>>support.StackDeltaPageBits)-firstPage]++
+		}
+		return nil
+	}
+
+	for blockIndex, block := range intervals.Blocks {
+		for deltaIndex, delta := range block.Deltas {
+			if unwindInfo.MergeOpcode != 0 {
+				// This delta was merged in the previous iteration.
+				unwindInfo.MergeOpcode = 0
+				continue
+			}
+			unwindInfo = delta.Info
+			if deltaIndex+1 < len(block.Deltas) {
+				unwindInfo.MergeOpcode = calculateMergeOpcode(delta, block.Deltas[deltaIndex+1])
+			}
+
+			addr := block.Start + uint64(delta.Offset)
+			if unwindInfo.Flags&support.UnwindFlagCommand != 0 && unwindInfo.Param == support.UnwindCommandSignal {
+				// EBPF code does a -1 fixup for return addresses.
+				// To match the signal handler function injected into
+				// stack, the signal handler stack delta must start one
+				// byte earlier to accommodate for the ebpf fixup.
+				// C-libraries will have a 'nop' inserted to make sure
+				// nothing conflicts.
+				addr--
+			}
+
+			// Uses the new 'unwindInfo' with potentially updated MergeOpcode
+			// here. In the end, it's only the unwindInfoIndex being different for
+			// merged deltas.
+			if err := addDelta(addr, unwindInfo); err != nil {
+				return mapRef{}, err
+			}
+		}
+		// Check if blocks are far apart or last block
+		if blockIndex+1 == len(intervals.Blocks) || block.End+15 < intervals.Blocks[blockIndex+1].Start {
+			if err := addDelta(block.End, sdtypes.UnwindInfoInvalid); err != nil {
+				return mapRef{}, err
+			}
+		}
 	}
 
 	// Update data to eBPF
@@ -480,7 +511,7 @@ func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
 	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
 		return 0
 	}
-	addrDiff := nextDelta.Address - delta.Address
+	addrDiff := nextDelta.Offset - delta.Offset
 	if addrDiff < 1 || addrDiff > 2 {
 		return 0
 	}

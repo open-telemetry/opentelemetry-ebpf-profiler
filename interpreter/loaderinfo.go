@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -19,13 +20,16 @@ type LoaderInfo struct {
 	fileID host.FileID
 	// elfRef provides a cached access to the ELF file.
 	elfRef *pfelf.Reference
+	// intervals provides a cached access to interval data.
+	intervals *sdtypes.IntervalData
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference) *LoaderInfo {
+func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, intervals *sdtypes.IntervalData) *LoaderInfo {
 	return &LoaderInfo{
-		fileID: fileID,
-		elfRef: elfRef,
+		fileID:    fileID,
+		elfRef:    elfRef,
+		intervals: intervals,
 	}
 }
 
@@ -59,4 +63,9 @@ func (i *LoaderInfo) FileID() host.FileID {
 // FileName returns the fileName  element of the LoaderInfo struct.
 func (i *LoaderInfo) FileName() string {
 	return i.elfRef.FileName()
+}
+
+// Intervals returns the intervals element of the LoaderInfo struct.
+func (i *LoaderInfo) Intervals() *sdtypes.IntervalData {
+	return i.intervals
 }

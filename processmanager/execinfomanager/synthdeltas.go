@@ -23,14 +23,14 @@ const regLR = 30
 
 // synthesizeIntervalData creates synthetic stack deltas if possible.
 // Currently supported for ARM64 vDSO only.
-func synthesizeIntervalData(ef *pfelf.File) sdtypes.IntervalData {
+func synthesizeIntervalData(ef *pfelf.File) *sdtypes.IntervalData {
 	if ef.Machine == elf.EM_AARCH64 {
 		soname, err := ef.DynString(elf.DT_SONAME)
 		if err == nil && soname[0] == "linux-vdso.so.1" {
 			return createVDSOSyntheticRecordArm64(ef)
 		}
 	}
-	return sdtypes.IntervalData{}
+	return &sdtypes.IntervalData{}
 }
 
 // createVDSOSyntheticRecordArm64 creates generated stack-delta records for ARM64 vDSO.
@@ -40,17 +40,23 @@ func synthesizeIntervalData(ef *pfelf.File) sdtypes.IntervalData {
 //   - if matching STP/LDP is found within a dynamic symbol, an unwind rule with
 //     is created and the frame size is extracted
 //   - the sigreturn helper is detected and signal unwind info is associated for it
-func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
-	deltas := sdtypes.StackDeltaArray{}
-	deltas = append(deltas, sdtypes.StackDelta{Address: 0, Info: sdtypes.UnwindInfoLR})
+func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
+	intervals := &sdtypes.IntervalData{}
+	firstAddress := ^uint64(0)
 	_ = ef.VisitDynamicSymbols(func(sym libpf.Symbol) bool {
-		addr := uint64(sym.Address)
+		if sym.Address == 0 || sym.Size == 0 {
+			return true
+		}
+		if uint64(sym.Address) < firstAddress {
+			firstAddress = uint64(sym.Address)
+		}
+		bb := sdtypes.BasicBlock{
+			Start: uint64(sym.Address),
+			End:   uint64(sym.Address) + sym.Size,
+		}
 		if sym.Name == "__kernel_rt_sigreturn" {
-			deltas = append(
-				deltas,
-				sdtypes.StackDelta{Address: addr - 1, Info: sdtypes.UnwindInfoSignal},
-				sdtypes.StackDelta{Address: addr + sym.Size, Info: sdtypes.UnwindInfoLR},
-			)
+			bb.Deltas.Add(0, sdtypes.UnwindInfoSignal)
+			intervals.Add(bb)
 			return true
 		}
 		// Determine if LR is on stack
@@ -59,15 +65,17 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 			return true
 		}
 
-		var frameStart uint64
+		var frameStart uint32
 		var frameSize int
-		for offs := uint64(0); offs < sym.Size; offs += 4 {
+		bb.Deltas.Add(0, sdtypes.UnwindInfoLR)
+		for offs := uint32(0); offs < uint32(sym.Size); offs += 4 {
 			inst, err := aa.Decode(code[offs:])
 			if err != nil {
 				continue
 			}
 			switch inst.Op {
 			case aa.RET:
+				intervals.Add(bb)
 				return true
 			case aa.STP:
 				if reg, ok := arm.Xreg2num(inst.Args[0]); !ok || reg != regFP {
@@ -95,25 +103,25 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 				if frameStart == 0 {
 					return true
 				}
-				deltas = append(
-					deltas,
-					sdtypes.StackDelta{
-						Address: addr + frameStart,
-						Info: sdtypes.UnwindInfo{
-							BaseReg:    support.UnwindRegFp,
-							Param:      int32(frameSize),
-							AuxBaseReg: support.UnwindRegFp,
-							AuxParam:   8,
-						},
-					},
-					sdtypes.StackDelta{Address: addr + offs + 4, Info: sdtypes.UnwindInfoLR},
-				)
+				bb.Deltas.Add(frameStart, sdtypes.UnwindInfo{
+					BaseReg:    support.UnwindRegFp,
+					Param:      int32(frameSize),
+					AuxBaseReg: support.UnwindRegFp,
+					AuxParam:   8,
+				})
+				bb.Deltas.Add(offs+4, sdtypes.UnwindInfoLR)
 				frameStart = 0
 			}
 		}
 		return true
 	})
-	deltas.Sort()
+	bb := sdtypes.BasicBlock{
+		Start: 0,
+		End:   firstAddress,
+	}
+	bb.Deltas.Add(0, sdtypes.UnwindInfoLR)
+	intervals.Add(bb)
+	intervals.Sort()
 
-	return sdtypes.IntervalData{Deltas: deltas}
+	return intervals
 }

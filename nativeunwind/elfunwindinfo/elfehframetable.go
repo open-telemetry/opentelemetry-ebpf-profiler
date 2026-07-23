@@ -12,7 +12,6 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 type FDE struct {
@@ -32,22 +31,6 @@ type EhFrameTable struct {
 	// cieCache holds the CIEs decoded so far. This is the only piece that is
 	// not concurrent safe, and could be made into a sync lru if needed.
 	cieCache *lru.LRU[uint64, *cieInfo]
-}
-
-// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File.
-// The returned EhFrameTable is not concurrent safe.
-func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
-	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get EH sections: %w", err)
-	}
-	if ehFrameSec == nil {
-		return nil, errors.New(".eh_frame not found")
-	}
-	if ehFrameHdrSec == nil {
-		return nil, errors.New(".eh_frame_hdr not found")
-	}
-	return newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
 }
 
 // LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
