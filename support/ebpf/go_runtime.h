@@ -184,7 +184,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
   err = go_runtime_load_ctx(offs, state, scratch, &ctx);
   // ctx.g == 0 is a valid nosave path handled in go_asmcgocall_is_nosave.
   if (err != ERR_OK && ctx.g) {
-    goto unwind_failure;
+    goto unwind_failure_err;
   }
 
   if (go_asmcgocall_is_nosave(&ctx)) {
@@ -245,16 +245,14 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
 unwind_fp:
   if (!unwinder_unwind_frame_pointer(state)) {
     DEBUG_PRINT("asmcgocall: fp unwind failed");
-    err = ERR_GO_ASMCGOCALL_UNWIND_FAILURE;
     goto unwind_failure;
   }
   increment_metric(metricID_UnwindGoAsmcgocallSuccess);
   return ERR_OK;
 unwind_failure:
+  err = ERR_GO_ASMCGOCALL_UNWIND_FAILURE;
+unwind_failure_err:
   increment_metric(metricID_UnwindGoAsmcgocallUnwindFailure);
-  if (err == ERR_OK) {
-    err = ERR_GO_ASMCGOCALL_UNWIND_FAILURE;
-  }
   return err;
 }
 #endif // __aarch64__
