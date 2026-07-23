@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -80,6 +82,17 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
+	// Always collect the env vars used to derive process context resource
+	// attributes, independently of the user-configured set. Clone first to avoid
+	// mutating the caller's set.
+	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
+	if includeEnvVars == nil {
+		includeEnvVars = make(libpf.Set[string])
+	}
+	for _, env := range processcontext.EnvVars() {
+		includeEnvVars[env] = libpf.Void{}
+	}
+
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
@@ -124,7 +137,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		exeReporter:              cfg.ExecutableReporter,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		includeEnvVars:           cfg.IncludeEnvVars,
+		includeEnvVars:           includeEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
 	}
@@ -341,6 +354,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        bpfTrace.EnvVars,
+		Resource:       bpfTrace.Resource,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 	}
