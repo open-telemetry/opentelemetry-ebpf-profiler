@@ -12,7 +12,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/probes/generic"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -190,12 +190,12 @@ func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
 
 func createCustomProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
 	switch kind {
-	case "generic":
-		var gcfg generic.GenericConfig
-		if err := mapstructure.Decode(cfg, &gcfg); err != nil {
-			return nil, fmt.Errorf("decoding generic probe config: %w", err)
+	case "kprobe":
+		var kcfg kprobe.Config
+		if err := mapstructure.Decode(cfg, &kcfg); err != nil {
+			return nil, fmt.Errorf("decoding kprobe config: %w", err)
 		}
-		return generic.New(gcfg)
+		return kprobe.New(kcfg)
 	default:
 		return nil, fmt.Errorf("unknown probe kind %q", kind)
 	}

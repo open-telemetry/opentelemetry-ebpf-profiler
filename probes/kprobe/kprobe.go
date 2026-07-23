@@ -1,9 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package generic implements a custom probe that loads the generic unwinder program
+// Package kprobe implements a custom probe that loads the generic unwinder program
 // and optionally attaches it to a kernel or user-space symbol.
-package generic // import "go.opentelemetry.io/ebpf-profiler/probes/generic"
+package kprobe // import "go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 import (
 	"fmt"
@@ -18,33 +18,33 @@ import (
 
 const progName = "kprobe__generic"
 
-// GenericConfig holds the YAML configuration for the generic probe.
+// Config holds the YAML configuration for the kprobe probe.
 //
 //	custom_probes:
-//	  - kind: generic
+//	  - kind: kprobe
 //	    config:
 //	      type: kprobe        # kprobe | kretprobe | uprobe | uretprobe
 //	      symbol: vfs_open
 //	      target: ""          # executable path; required for uprobe/uretprobe
-type GenericConfig struct {
+type Config struct {
 	Type   string `mapstructure:"type"`
 	Symbol string `mapstructure:"symbol"`
 	Target string `mapstructure:"target"`
 }
 
-type genericProbe struct {
+type probe struct {
 	spec *tracer.ProbeSpec
 }
 
 // New validates cfg and returns a Probe backed by the generic unwinder program.
 // Type and Symbol are always required. Target is required for uprobe/uretprobe.
-// The caller is responsible for decoding the raw YAML value into GenericConfig.
-func New(cfg GenericConfig) (tracer.Probe, error) {
+// The caller is responsible for decoding the raw YAML value into Config.
+func New(cfg Config) (tracer.Probe, error) {
 	if cfg.Type == "" {
-		return nil, fmt.Errorf("generic probe: type is required")
+		return nil, fmt.Errorf("kprobe: type is required")
 	}
 	if cfg.Symbol == "" {
-		return nil, fmt.Errorf("generic probe: symbol is required")
+		return nil, fmt.Errorf("kprobe: symbol is required")
 	}
 
 	probeType, err := parseProbeType(cfg.Type)
@@ -53,7 +53,7 @@ func New(cfg GenericConfig) (tracer.Probe, error) {
 	}
 
 	if (probeType == tracer.ProbeTypeUprobe || probeType == tracer.ProbeTypeUretprobe) && cfg.Target == "" {
-		return nil, fmt.Errorf("generic probe: target is required for %s", cfg.Type)
+		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Type)
 	}
 
 	spec := &tracer.ProbeSpec{
@@ -61,7 +61,7 @@ func New(cfg GenericConfig) (tracer.Probe, error) {
 		Symbol: cfg.Symbol,
 		Target: cfg.Target,
 	}
-	return &genericProbe{spec: spec}, nil
+	return &probe{spec: spec}, nil
 }
 
 func parseProbeType(s string) (tracer.ProbeType, error) {
@@ -79,7 +79,7 @@ func parseProbeType(s string) (tracer.ProbeType, error) {
 	}
 }
 
-func (g *genericProbe) Load(originID uint16, ctx *tracer.ProbeContext) (link.Link, error) {
+func (g *probe) Load(originID uint16, ctx *tracer.ProbeContext) (link.Link, error) {
 	coll, err := ctx.CollectionSpecWith(
 		nil,
 		[]string{progName},
@@ -119,7 +119,7 @@ func (g *genericProbe) Load(originID uint16, ctx *tracer.ProbeContext) (link.Lin
 	return tracer.AttachProbe(prog, g.spec)
 }
 
-func (g *genericProbe) ReportMetadata() *samples.TypeMetadata {
+func (g *probe) ReportMetadata() *samples.TypeMetadata {
 	return &samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
