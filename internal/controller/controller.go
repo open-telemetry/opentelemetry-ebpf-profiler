@@ -8,8 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-viper/mapstructure/v2"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -101,7 +104,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:          envVars,
 		ProbeLinks:              c.config.ProbeLinks,
-		LoadProbe:               c.config.LoadProbe,
+		LoadProbe:               c.config.LoadProbe || len(c.config.Probes) > 0,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
@@ -161,7 +164,41 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
+	if err := c.enableProbes(ctx, trc); err != nil {
+		return fmt.Errorf("failed to enable probes: %w", err)
+	}
+
 	return nil
+}
+
+func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
+	for i, p := range c.config.Probes {
+		probe, err := createProbe(p.Kind, p.Config)
+		if err != nil {
+			return fmt.Errorf("probe %d: %w", i, err)
+		}
+
+		if err := trc.Enable(ctx, probe); err != nil {
+			return fmt.Errorf("probe %d (%s): %w", i, p.Kind, err)
+		}
+
+		log.Infof("Enabled probe %d (%s)", i, p.Kind)
+	}
+
+	return nil
+}
+
+func createProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
+	switch kind {
+	case "kprobe":
+		var kcfg kprobe.Config
+		if err := mapstructure.Decode(cfg, &kcfg); err != nil {
+			return nil, fmt.Errorf("decoding kprobe config: %w", err)
+		}
+		return kprobe.New(kcfg)
+	default:
+		return nil, fmt.Errorf("unknown probe kind %q", kind)
+	}
 }
 
 // Shutdown stops the controller
