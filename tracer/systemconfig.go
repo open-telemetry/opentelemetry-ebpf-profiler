@@ -631,7 +631,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 // TODO: this is a temporary helper and will be removed once tracer manages
 // custom probes.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
-	sampling, err := origins.register(&samples.TypeMetadata{
+	sampling, err := origins.Register(&samples.TypeMetadata{
 		PeriodType: "cpu",
 		PeriodUnit: "nanoseconds",
 		SampleType: "samples",
@@ -645,7 +645,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 	}
 
 	if cfg.OffCPUThreshold > 0 {
-		offCPU, err := origins.register(&samples.TypeMetadata{
+		offCPU, err := origins.Register(&samples.TypeMetadata{
 			SampleType:   "off_cpu",
 			SampleUnit:   "nanoseconds",
 			ReportValues: true,
@@ -663,7 +663,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 	// this block: they register their own origin IDs dynamically in Tracer.Enable
 	// before calling Probe.Load, so LoadProbe alone does not require a static ID.
 	if len(cfg.ProbeLinks) > 0 {
-		probe, err := origins.register(&samples.TypeMetadata{
+		probe, err := origins.Register(&samples.TypeMetadata{
 			SampleType: "events",
 			SampleUnit: "count",
 		})

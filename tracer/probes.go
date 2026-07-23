@@ -219,20 +219,24 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
 }
 
+// ProbeRegistrar lets a Probe register one or more origin IDs during Load.
+// Each call to Register allocates a unique ID backed by the supplied metadata;
+type ProbeRegistrar interface {
+	Register(meta *samples.TypeMetadata) (uint16, error)
+}
+
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
 	// Load attaches a probe that triggers stack unwinding.
+	// The probe calls reg.Register for each origin ID it needs, then uses
+	// those IDs when configuring its eBPF programs.
 	// Returns the link that keeps the probe attached; the caller owns its lifetime.
-	Load(originID uint16, ctx *ProbeContext) (link.Link, error)
-
-	// ReportMetadata provides the necessary metadata to report
-	// the events of the Probe.
-	ReportMetadata() *samples.TypeMetadata
+	Load(reg ProbeRegistrar, ctx *ProbeContext) (link.Link, error)
 }
 
-// Enable registers the probe's type metadata with the origin registry, builds a
-// ProbeContext from the tracer's current state, and calls p.Load. The returned
-// link is stored and closed when the tracer shuts down.
+// Enable builds a ProbeContext from the tracer's current state and calls p.Load,
+// which is responsible for registering its own origin IDs via the supplied
+// ProbeRegistrar. The returned links are stored and closed when the tracer shuts down.
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
 // startup. Set LoadProbe: true in the Config passed to NewTracer (or enable
@@ -240,9 +244,8 @@ type Probe interface {
 // Without the chain the probe attaches successfully but its tail calls into
 // kprobe_progs silently miss, producing no stack samples.
 //
-// The origin ID is registered before p.Load is called, so the reporter will always
-// know about the probe's type metadata before any sample from it can arrive.
-// If p.Load fails, the origin ID is permanently consumed and cannot be reclaimed.
+// Origin IDs registered inside p.Load are permanently consumed even if Load
+// subsequently fails; they cannot be reclaimed.
 // Enable must not be called concurrently with Close.
 func (t *Tracer) Enable(p Probe) error {
 	if !t.kprobeChainLoaded {
@@ -250,23 +253,18 @@ func (t *Tracer) Enable(p Probe) error {
 			"set LoadProbe: true in the tracer Config")
 	}
 
-	originID, err := t.origins.register(p.ReportMetadata())
-	if err != nil {
-		return fmt.Errorf("failed to register probe origin: %w", err)
-	}
-
 	ctx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
 	}
 
-	lnk, err := p.Load(originID, ctx)
+	lnk, err := p.Load(t.origins, ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
 	if lnk != nil {
-		t.hooks[hookPoint{group: "probe", name: fmt.Sprintf("%d", originID)}] = lnk
+		t.hooks[hookPoint{group: "probe", name: fmt.Sprintf("%p", p)}] = lnk
 	}
 	return nil
 }

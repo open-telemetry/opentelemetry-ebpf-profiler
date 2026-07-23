@@ -80,7 +80,15 @@ func parseProbeType(s string) (tracer.ProbeType, error) {
 	}
 }
 
-func (g *probe) Load(originID uint16, ctx *tracer.ProbeContext) (link.Link, error) {
+func (g *probe) Load(reg tracer.ProbeRegistrar, ctx *tracer.ProbeContext) (link.Link, error) {
+	originID, err := reg.Register(&samples.TypeMetadata{
+		SampleType: "events",
+		SampleUnit: "count",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("registering probe origin: %w", err)
+	}
+
 	coll, err := ctx.CollectionSpecWith(
 		nil,
 		[]string{progName},
@@ -117,12 +125,6 @@ func (g *probe) Load(originID uint16, ctx *tracer.ProbeContext) (link.Link, erro
 	if !ok {
 		return nil, fmt.Errorf("program %q not found after loading", progName)
 	}
-	return tracer.AttachProbe(prog, g.spec)
-}
 
-func (g *probe) ReportMetadata() *samples.TypeMetadata {
-	return &samples.TypeMetadata{
-		SampleType: "events",
-		SampleUnit: "count",
-	}
+	return tracer.AttachProbe(prog, g.spec)
 }

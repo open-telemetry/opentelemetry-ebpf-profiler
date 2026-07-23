@@ -63,8 +63,8 @@ func TestNew(t *testing.T) {
 			cfg:  Config{Type: "uretprobe", Symbol: "main", Target: "/usr/bin/myapp"},
 		},
 		{
-			name:    "default to type kprobe",
-			cfg:     Config{Symbol: "vfs_open"},
+			name: "default to type kprobe",
+			cfg:  Config{Symbol: "vfs_open"},
 		},
 		{
 			name:    "missing symbol",

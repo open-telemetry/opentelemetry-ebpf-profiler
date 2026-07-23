@@ -1441,7 +1441,7 @@ type originRegistry struct {
 
 // register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
-func (r *originRegistry) register(metadata *samples.TypeMetadata) (uint16, error) {
+func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}
