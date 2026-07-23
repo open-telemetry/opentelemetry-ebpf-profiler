@@ -118,6 +118,10 @@ type ProcessMeta struct {
 	ContainerID libpf.String
 	// process context
 	ProcessContextInfo processcontext.Info
+
+	// ExtraMeta holds arbitrary key-value pairs populated by a ProcessMetaEnricher.
+	// It is nil unless an enricher is configured and explicitly sets values.
+	ExtraMeta map[string]string
 }
 
 // Process is the interface to inspect ELF coredump/process.
