@@ -240,6 +240,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		TID:            3001,
 		CPU:            0,
 		ExtraMeta:      map[string]string{"process.name": "myapp"},
+		ProfileType:    profileTypeSampling,
 	}
 
 	err := reporter.ReportTraceEvent(trace, meta)
