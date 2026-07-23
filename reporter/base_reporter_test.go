@@ -107,7 +107,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	now := time.Now()
 	meta1 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.UnixNano()),
-		Comm:           libpf.Intern("app1"),
+		Comm:           libpf.NewCommFromString("app1"),
 		ExecutablePath: libpf.Intern("/usr/bin/app1"),
 		APMServiceName: "service1",
 		ContainerID:    libpf.Intern("container-1"),
@@ -119,7 +119,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 
 	meta2 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.Add(time.Second).UnixNano()),
-		Comm:           libpf.Intern("app2"),
+		Comm:           libpf.NewCommFromString("app2"),
 		ExecutablePath: libpf.Intern("/usr/bin/app2"),
 		APMServiceName: "service2",
 		ContainerID:    libpf.Intern("container-2"),
@@ -233,7 +233,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	// process discovery time, which then flows into TraceEventMeta.ExtraMeta.
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.UnixNano()),
-		Comm:           libpf.Intern("myapp"),
+		Comm:           libpf.NewCommFromString("myapp"),
 		ExecutablePath: libpf.Intern("/usr/bin/myapp"),
 		ContainerID:    libpf.Intern("container-x"),
 		PID:            3000,
