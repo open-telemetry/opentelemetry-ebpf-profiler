@@ -20,7 +20,7 @@ const progName = "kprobe__generic"
 
 // Config holds the YAML configuration for the kprobe probe.
 //
-//	custom_probes:
+//	probes:
 //	  - kind: kprobe
 //	    config:
 //	      type: kprobe        # kprobe | kretprobe | uprobe | uretprobe

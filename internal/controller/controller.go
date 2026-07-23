@@ -104,7 +104,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:          envVars,
 		ProbeLinks:              c.config.ProbeLinks,
-		LoadProbe:               c.config.LoadProbe || len(c.config.CustomProbes) > 0,
+		LoadProbe:               c.config.LoadProbe || len(c.config.Probes) > 0,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
@@ -164,31 +164,31 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
-	if err := c.enableCustomProbes(trc); err != nil {
-		return fmt.Errorf("failed to enable custom probes: %w", err)
+	if err := c.enableProbes(trc); err != nil {
+		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
-	for i, p := range c.config.CustomProbes {
-		probe, err := createCustomProbe(p.Kind, p.Config)
+func (c *Controller) enableProbes(trc *tracer.Tracer) error {
+	for i, p := range c.config.Probes {
+		probe, err := createProbe(p.Kind, p.Config)
 		if err != nil {
-			return fmt.Errorf("custom probe %d: %w", i, err)
+			return fmt.Errorf("probe %d: %w", i, err)
 		}
 
 		if err := trc.Enable(probe); err != nil {
-			return fmt.Errorf("custom probe %d (%s): %w", i, p.Kind, err)
+			return fmt.Errorf("probe %d (%s): %w", i, p.Kind, err)
 		}
 
-		log.Infof("Enabled custom probe %d (%s)", i, p.Kind)
+		log.Infof("Enabled probe %d (%s)", i, p.Kind)
 	}
 
 	return nil
 }
 
-func createCustomProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
+func createProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
 	switch kind {
 	case "kprobe":
 		var kcfg kprobe.Config

@@ -45,8 +45,8 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
-// CustomProbe holds the kind and configuration for a single custom probe entry.
-type CustomProbe struct {
+// Probe holds the kind and configuration for a single probe entry.
+type Probe struct {
 	Kind   string         `mapstructure:"kind"`
 	Config map[string]any `mapstructure:"config"`
 }
@@ -79,7 +79,7 @@ type Config struct {
 	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
 	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
-	CustomProbes            []CustomProbe            `mapstructure:"custom_probes"`
+	Probes                  []Probe                  `mapstructure:"probes"`
 
 	// Configuration options that users can not set directly:
 	//
