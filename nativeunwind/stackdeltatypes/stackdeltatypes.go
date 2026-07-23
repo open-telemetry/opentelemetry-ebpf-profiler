@@ -46,6 +46,11 @@ var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandFramePointer,
 }
 
+// UnwindInfoGoAsmcgocall is the stack delta info for runtime.asmcgocall on arm64.
+var UnwindInfoGoAsmcgocall = UnwindInfo{Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandGoAsmcgocall,
+}
+
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	BaseReg:    support.UnwindRegSp,

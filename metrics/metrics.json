@@ -2188,5 +2188,26 @@
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
     "id": 299
+  },
+  {
+    "description": "Number of attempted Go asmcgocall stack-switch unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallAttempts",
+    "field": "bpf.go.asmcgocall_attempts",
+    "id": 300
+  },
+  {
+    "description": "Number of successful Go asmcgocall unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallSuccess",
+    "field": "bpf.go.asmcgocall_success",
+    "id": 301
+  },
+  {
+    "description": "Number of Go asmcgocall unwind failures",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallUnwindFailure",
+    "field": "bpf.go.errors.asmcgocall_unwind_failure",
+    "id": 302
   }
 ]

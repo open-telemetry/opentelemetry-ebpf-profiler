@@ -346,6 +346,15 @@ enum {
   // number of failures to read LuaJIT proc info
   metricID_UnwindLuaJITErrNoProcInfo,
 
+  // number of attempted Go asmcgocall stack-switch unwinds
+  metricID_UnwindGoAsmcgocallAttempts,
+
+  // number of successful Go asmcgocall unwinds
+  metricID_UnwindGoAsmcgocallSuccess,
+
+  // number of Go asmcgocall unwind failures
+  metricID_UnwindGoAsmcgocallUnwindFailure,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -821,17 +830,25 @@ typedef struct GoMapBucket {
 
 typedef struct GoRuntimeOffsets {
   u32 m_offset;
+  u32 m_gsignal;
   u32 curg;
   u32 labels;
   u32 hmap_count;
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  u32 sched_bp_off;
 } GoRuntimeOffsets;
 
 typedef struct CustomLabelsState {
   void *go_m_ptr;
 } CustomLabelsState;
+
+// Container for additional scratch space needed by the Go unwinder.
+typedef struct GoUnwindScratchSpace {
+  // Max size for a single bpf_probe_read of runtime.m[0:offs->curg+8) (200).
+  u64 buf[25];
+} GoUnwindScratchSpace;
 
 // Per-CPU info for the stack being built. This contains the stack as well as
 // meta-data on the number of eBPF tail-calls used so far to construct it.
@@ -862,6 +879,8 @@ typedef struct PerCPURecord {
     V8UnwindScratchSpace v8UnwindScratch;
     // Scratch space for the Python unwinder
     PythonUnwindScratchSpace pythonUnwindScratch;
+    // Scratch space for the Go unwinder
+    GoUnwindScratchSpace goUnwindScratch;
     // Go labels scratch
     GoMapBucket goMapBucket;
     // Scratch for Go 1.24 labels
@@ -964,6 +983,9 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_SIGNAL        3
 // Unwind using standard frame pointer
 #define UNWIND_COMMAND_FRAME_POINTER 4
+// Cross the Go runtime.asmcgocall stack-switch boundary (arm64) by reading the
+// goroutine saved context from gobuf
+#define UNWIND_COMMAND_GO_ASMCGOCALL 5
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {

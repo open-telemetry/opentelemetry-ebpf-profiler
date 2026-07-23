@@ -3,6 +3,7 @@
 
 #include "bpfdefs.h"
 #include "extmaps.h"
+#include "go_runtime.h"
 #include "tracemgmt.h"
 
 // Unwind info value for invalid stack delta
@@ -391,6 +392,15 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
+    case UNWIND_COMMAND_GO_ASMCGOCALL: {
+      error = go_unwind_asmcgocall(record, state);
+      if (error == ERR_OK) {
+        goto frame_ok;
+      }
+      DEBUG_PRINT("go asmcgocall unwind failed: %d", error);
+      *stop = true;
+      return ERR_OK;
+    }
     default: return ERR_UNREACHABLE;
     }
   }
