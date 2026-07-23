@@ -121,7 +121,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(); err != nil {
+	if err := trc.AttachTracer(c.config.PinnedCPUIDs); err != nil {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
