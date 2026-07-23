@@ -164,21 +164,21 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
-	if err := c.enableProbes(trc); err != nil {
+	if err := c.enableProbes(ctx, trc); err != nil {
 		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
 	return nil
 }
 
-func (c *Controller) enableProbes(trc *tracer.Tracer) error {
+func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
 	for i, p := range c.config.Probes {
 		probe, err := createProbe(p.Kind, p.Config)
 		if err != nil {
 			return fmt.Errorf("probe %d: %w", i, err)
 		}
 
-		if err := trc.Enable(probe); err != nil {
+		if err := trc.Enable(ctx, probe); err != nil {
 			return fmt.Errorf("probe %d (%s): %w", i, p.Kind, err)
 		}
 

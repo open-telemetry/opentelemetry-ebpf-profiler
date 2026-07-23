@@ -4,6 +4,7 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"context"
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
@@ -231,7 +232,7 @@ type Probe interface {
 	// The probe calls reg.Register for each origin ID it needs, then uses
 	// those IDs when configuring its eBPF programs.
 	// Returns the link that keeps the probe attached; the caller owns its lifetime.
-	Load(reg ProbeRegistrar, ctx *ProbeContext) (link.Link, error)
+	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) (link.Link, error)
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load,
@@ -247,18 +248,18 @@ type Probe interface {
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
 // Enable must not be called concurrently with Close.
-func (t *Tracer) Enable(p Probe) error {
+func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	if !t.kprobeChainLoaded {
 		return fmt.Errorf("Enable requires the kprobe unwinder chain to be loaded at startup: " +
 			"set LoadProbe: true in the tracer Config")
 	}
 
-	ctx := &ProbeContext{
+	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
 	}
 
-	lnk, err := p.Load(t.origins, ctx)
+	lnk, err := p.Load(ctx, t.origins, probeCtx)
 	if err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}

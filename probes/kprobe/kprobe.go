@@ -6,6 +6,7 @@
 package kprobe // import "go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -80,7 +81,7 @@ func parseProbeType(s string) (tracer.ProbeType, error) {
 	}
 }
 
-func (g *probe) Load(reg tracer.ProbeRegistrar, ctx *tracer.ProbeContext) (link.Link, error) {
+func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, ctx *tracer.ProbeContext) (link.Link, error) {
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
