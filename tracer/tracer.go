@@ -19,14 +19,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unique"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
-	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -56,9 +54,6 @@ const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
 	// threshold.
 	ProbabilisticThresholdMax = 100
-
-	// Maximum size of the LRU cache for symbolized kernel frames.
-	kernelFrameCacheSize = 16384
 )
 
 // Constants that define the status of probabilistic profiling.
@@ -91,11 +86,6 @@ type Intervals interface {
 // onlineCPUs once resolves and caches the list of online CPUs.
 var onlineCPUsOnce = sync.OnceValues(getOnlineCPUIDs)
 
-type kernelFrameCacheValue struct {
-	generation kallsyms.Generation
-	frame      unique.Handle[libpf.Frame]
-}
-
 // Tracer provides an interface for loading and initializing the eBPF components as
 // well as for monitoring the output maps for new traces and count updates.
 type Tracer struct {
@@ -106,10 +96,6 @@ type Tracer struct {
 
 	// kernelSymbolizer does kernel fallback symbolization
 	kernelSymbolizer *kallsyms.Symbolizer
-
-	// kernelFrameCache stores kernel address to symbolized frame mappings.
-	// Values carry the symbol source generation used to produce the frame.
-	kernelFrameCache *lru.LRU[libpf.Address, kernelFrameCacheValue]
 
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
@@ -220,6 +206,10 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
+	// their container-namespace equivalents. Useful for sidecar deployments where
+	// the profiler and the target application share a PID namespace but not host PIDs.
+	PIDNamespaceTranslation bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -289,6 +279,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		TraceReporter:         cfg.TraceReporter,
 		ExecutableReporter:    cfg.ExecutableReporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
+		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
@@ -297,17 +288,10 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
-	kernelFrameCache, err := lru.New[libpf.Address, kernelFrameCacheValue](
-		kernelFrameCacheSize, libpf.Address.Hash32)
-	if err != nil {
-		return nil, fmt.Errorf("unable to create kernelFrameCache: %v", err)
-	}
-
 	perfEventList := []*perf.Event{}
 
 	tracer := &Tracer{
 		kernelSymbolizer:       kernelSymbolizer,
-		kernelFrameCache:       kernelFrameCache,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
@@ -970,72 +954,6 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
-func symbolizeBPFFrame(name string, offset uint) unique.Handle[libpf.Frame] {
-	return unique.Make(libpf.Frame{
-		Type:            libpf.KernelFrame,
-		AddressOrLineno: libpf.AddressOrLineno(offset),
-		FunctionName:    libpf.Intern(name),
-	})
-}
-
-func symbolizeKernelFrame(
-	address libpf.Address,
-	resolution kallsyms.AddressResolution,
-) unique.Handle[libpf.Frame] {
-	if resolution.Source == kallsyms.SymbolSourceBPF {
-		return symbolizeBPFFrame(resolution.BPFName, resolution.BPFOffset)
-	}
-
-	frame := libpf.Frame{
-		Type:            libpf.KernelFrame,
-		AddressOrLineno: libpf.AddressOrLineno(address - 1),
-	}
-
-	if kmod := resolution.Module; kmod != nil {
-		frame.Mapping = kmod.Mapping()
-		frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
-		if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
-			frame.FunctionName = libpf.Intern(funcName)
-		}
-	}
-
-	return unique.Make(frame)
-}
-
-// symbolizeKernelFrames converts raw kernel addresses into symbolized frames.
-func (t *Tracer) symbolizeKernelFrames(addrs []uint64, oldFrames libpf.Frames) libpf.Frames {
-	frames := oldFrames[:0]
-	if len(addrs) > cap(frames) {
-		frames = make(libpf.Frames, 0, len(addrs))
-	}
-
-	snapshot := t.kernelSymbolizer.Snapshot()
-
-	for _, addr := range addrs {
-		address := libpf.Address(addr)
-
-		if cached, ok := t.kernelFrameCache.Get(address); ok &&
-			snapshot.IsGenerationValid(cached.generation) {
-			frames = append(frames, cached.frame)
-			continue
-		}
-
-		resolution, resolved := snapshot.ResolveAddress(address)
-		frame := symbolizeKernelFrame(address, resolution)
-		if resolved && (resolution.Source == kallsyms.SymbolSourceBPF ||
-			frame.Value().Mapping.Valid()) {
-			t.kernelFrameCache.Add(address, kernelFrameCacheValue{
-				generation: resolution.Generation,
-				frame:      frame,
-			})
-		}
-
-		frames = append(frames, frame)
-	}
-
-	return frames
-}
-
 // enableEvent removes the entry of given eventType from the inhibitEvents map
 // so that the eBPF code will send the event again.
 func (t *Tracer) enableEvent(eventType int) {
@@ -1198,18 +1116,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		}
 	}
 
-	trace.NumFrames = ptr.Num_frames
-
-	// Symbolize kernel frames directly from the raw BPF data before copying
-	// userspace frame data, so we only copy what's needed.
 	numKernelFrames := int(ptr.Num_kernel_frames)
-	if numKernelFrames > 0 {
-		trace.KernelFrames = t.symbolizeKernelFrames(
-			ptr.Frame_data[:numKernelFrames], trace.KernelFrames)
+	if numKernelFrames > int(ptr.Frame_data_len) {
+		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, ptr.Frame_data_len,
+			errRecordUnexpectedSize)
 	}
-	userFrameLen := int(ptr.Frame_data_len) - numKernelFrames
-	trace.FrameData = trace.FrameDataBuf[:userFrameLen]
-	copy(trace.FrameData, ptr.Frame_data[numKernelFrames:ptr.Frame_data_len])
+
+	trace.NumFrames = ptr.Num_frames
+	trace.NumKernelFrames = ptr.Num_kernel_frames
+	frameDataWords := int(ptr.Frame_data_len)
+	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
+	// Kernel frames are raw addresses at the front of FrameData. The process
+	// manager splits and symbolizes them so all frame processing shares one cache.
+	copy(trace.FrameData, ptr.Frame_data[:frameDataWords])
 
 	return trace, nil
 }
@@ -1288,7 +1207,7 @@ func terminatePerfEvents(events []*perf.Event) {
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
-func (t *Tracer) AttachTracer() error {
+func (t *Tracer) AttachTracer(targetCPUs []int) error {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
 		return errors.New("entry program is not available")
@@ -1305,9 +1224,18 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to get online cpus: %w", err)
 	}
 
+	if len(targetCPUs) == 0 {
+		targetCPUs = onlineCPUs
+	} else {
+		targetCPUs, err = intersectCPURanges(onlineCPUs, targetCPUs)
+		if err != nil {
+			return err
+		}
+	}
+
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	for _, id := range onlineCPUs {
+	for _, id := range targetCPUs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
 			terminatePerfEvents(*events)
@@ -1472,7 +1400,6 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
 	// Reclaim the EbpfTrace
-	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }
 
