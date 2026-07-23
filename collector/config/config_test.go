@@ -119,6 +119,43 @@ func TestUnmarshalText(t *testing.T) {
 	}
 }
 
+func TestValidateTargetCPUIDs(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		targetCPUIDs string
+		wantPinned   []int
+		wantErr      bool
+	}{
+		{
+			name:         "empty leaves PinnedCPUIDs unset",
+			targetCPUIDs: "",
+			wantPinned:   nil,
+		},
+		{
+			name:         "range and single values are parsed into PinnedCPUIDs",
+			targetCPUIDs: "0-2,6",
+			wantPinned:   []int{0, 1, 2, 6},
+		},
+		{
+			name:         "invalid range is rejected",
+			targetCPUIDs: "not-a-range",
+			wantErr:      true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.TargetCPUIDs = tt.targetCPUIDs
+			err := xconfmap.Validate(cfg)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantPinned, cfg.PinnedCPUIDs)
+		})
+	}
+}
+
 func TestValidateErrorMode(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
