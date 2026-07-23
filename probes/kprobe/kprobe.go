@@ -23,7 +23,7 @@ const progName = "kprobe__generic"
 //	probes:
 //	  - kind: kprobe
 //	    config:
-//	      type: kprobe        # kprobe | kretprobe | uprobe | uretprobe
+//	      type: kprobe        # kprobe (default) | kretprobe | uprobe | uretprobe
 //	      symbol: vfs_open
 //	      target: ""          # executable path; required for uprobe/uretprobe
 type Config struct {
@@ -37,11 +37,12 @@ type probe struct {
 }
 
 // New validates cfg and returns a Probe backed by the generic unwinder program.
-// Type and Symbol are always required. Target is required for uprobe/uretprobe.
-// The caller is responsible for decoding the raw YAML value into Config.
+// Type defaults to "kprobe" when omitted. Symbol is always required. Target is
+// required for uprobe/uretprobe. The caller is responsible for decoding the raw
+// YAML value into Config.
 func New(cfg Config) (tracer.Probe, error) {
 	if cfg.Type == "" {
-		return nil, fmt.Errorf("kprobe: type is required")
+		cfg.Type = "kprobe"
 	}
 	if cfg.Symbol == "" {
 		return nil, fmt.Errorf("kprobe: symbol is required")
