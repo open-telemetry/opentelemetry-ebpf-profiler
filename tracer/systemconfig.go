@@ -13,10 +13,12 @@ import (
 	"syscall"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 
@@ -25,7 +27,6 @@ import (
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 )
 
@@ -316,8 +317,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
 	new := &cebpf.CollectionSpec{
-		Maps:     make(map[string]*cebpf.MapSpec),
-		Programs: make(map[string]*cebpf.ProgramSpec),
+		Maps:      make(map[string]*cebpf.MapSpec),
+		Programs:  make(map[string]*cebpf.ProgramSpec),
+		Variables: make(map[string]*cebpf.VariableSpec),
 	}
 	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
 	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
@@ -327,6 +329,12 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
 	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+	for name, variable := range orig.Variables {
+		new.Variables[name] = variable.Copy()
+	}
+	if err := syncVariablesToMapSpecs(new); err != nil {
+		return nil, nil, fmt.Errorf("failed to sync variables to map specs: %v", err)
+	}
 
 	maps := make(map[string]*cebpf.Map)
 
@@ -339,6 +347,17 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	}
 
 	return new, maps, nil
+}
+
+// getCurrentNS returns the device number and inode of the namespace file at filename
+// (typically /proc/self/ns/pid). These values uniquely identify a PID namespace and
+// are passed to the bpf_get_ns_current_pid_tgid helper.
+func getCurrentNS(filename string) (dev, ino uint64, err error) {
+	var stat unix.Stat_t
+	if err := unix.Stat(filename, &stat); err != nil {
+		return 0, 0, fmt.Errorf("stat %s: %w", filename, err)
+	}
+	return uint64(stat.Dev), uint64(stat.Ino), nil
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
@@ -500,12 +519,29 @@ func stripProgramExtInfos(insns asm.Instructions) {
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
-	major, minor uint32,
+	major, minor uint32, origins *originRegistry,
 ) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
+	}
+
+	if cfg.PIDNamespaceTranslation {
+		dev, ino, err := getCurrentNS("/proc/self/ns/pid")
+		if err != nil {
+			return fmt.Errorf("failed to read PID namespace info: %v", err)
+		}
+		if err := coll.Variables["pid_ns_translation_enabled"].Set(uint8(1)); err != nil {
+			return fmt.Errorf("failed to set pid_ns_translation_enabled: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_dev"].Set(dev); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_dev: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
+		}
+		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
@@ -516,6 +552,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["python_frames_per_program"].Set(uint32(15)); err != nil {
 			return fmt.Errorf("failed to set python_frames_per_program: %v", err)
 		}
+	}
+
+	if err := setOriginIDs(coll, cfg, origins); err != nil {
+		return err
 	}
 
 	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
@@ -577,6 +617,56 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["vma_vm_flags_offset"].Set(rodataVars.vma_vm_flags_offset); err != nil {
 		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
+	}
+
+	return nil
+}
+
+// setOriginIDs assigns an origin ID to every kind of sample the tracer's
+// eBPF programs can produce and writes each ID into the corresponding
+// RODATA variable. Sampling is always active. Off-CPU and probe profiling
+// only get one if enabled.
+// TODO: this is a temporary helper and will be removed once tracer manages
+// custom probes.
+func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
+	sampling, err := origins.register(&samples.TypeMetadata{
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	})
+	if err != nil {
+		return err
+	}
+	if err := coll.Variables["origin_id_sampling"].Set(sampling); err != nil {
+		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
+	}
+
+	if cfg.OffCPUThreshold > 0 {
+		offCPU, err := origins.register(&samples.TypeMetadata{
+			SampleType:   "off_cpu",
+			SampleUnit:   "nanoseconds",
+			ReportValues: true,
+		})
+		if err != nil {
+			return err
+		}
+		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
+			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
+		}
+	}
+
+	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+		probe, err := origins.register(&samples.TypeMetadata{
+			SampleType: "events",
+			SampleUnit: "count",
+		})
+		if err != nil {
+			return err
+		}
+		if err := coll.Variables["origin_id_probe"].Set(uint16(probe)); err != nil {
+			return fmt.Errorf("failed to set origin_id_probe: %v", err)
+		}
 	}
 
 	return nil

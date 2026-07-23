@@ -3,4 +3,6 @@ fixed-address
 kernel-image
 ubuntu-kernel-image
 go-binary
+go-binary-no-buildinfo-section
+go-binary-no-sections
 separate-debug-file

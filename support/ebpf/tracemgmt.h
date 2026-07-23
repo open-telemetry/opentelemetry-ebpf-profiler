@@ -53,6 +53,55 @@ extern u32 vma_vm_file_offset;
 // vma_vm_flags_offset is declared in native_stack_trace.ebpf.c
 extern u32 vma_vm_flags_offset;
 
+// origin_id_sampling is declared in native_stack_trace.ebpf.c
+extern u16 origin_id_sampling;
+
+// pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
+extern bool pid_ns_translation_enabled;
+
+// target_pid_ns_inode is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_inode;
+
+// target_pid_ns_dev is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_dev;
+
+// Mirrors the kernel's struct bpf_pidns_info for use with bpf_get_ns_current_pid_tgid().
+// pid:  thread PID as seen within the target PID namespace.
+// tgid: thread group ID (= process PID in userspace) within the target PID namespace.
+struct bpf_pidns_info {
+  u32 pid;
+  u32 tgid;
+};
+
+// get_pid_tgid resolves the current task's PID and TGID, translating them into the
+// configured target PID namespace if pid_ns_translation_enabled is set. Returns false if
+// the task could not be resolved (e.g. it is not part of the target namespace), in which
+// case the caller should skip the current event.
+static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
+{
+  if (pid_ns_translation_enabled) {
+    struct bpf_pidns_info ns_info = {0};
+    long ret                      = bpf_get_ns_current_pid_tgid(
+      target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
+    if (ret < 0) {
+      // Task is not in the target namespace, signal caller to skip it.
+      return false;
+    }
+    // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
+    // ns_info.pid is the thread PID in the namespace.
+    // Match the convention of the non-namespace path where pid holds the TGID.
+    *pid = ns_info.tgid;
+    *tid = ns_info.pid;
+    return true;
+  }
+
+  // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
+  u64 id = bpf_get_current_pid_tgid();
+  *pid   = id >> 32;
+  *tid   = id & 0xFFFFFFFF;
+  return true;
+}
+
 // Strips the PAC tag from a pointer.
 //
 // While all pointers can contain PAC tags, we only apply this function to code pointers, because
@@ -917,9 +966,14 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #endif // TESTING_COREDUMP
 
-static inline EBPF_INLINE int collect_trace(
-  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
+static inline EBPF_INLINE int
+collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
 {
+  // Only continue processing the trace with a valid origin.
+  if (origin == 0) {
+    return -1;
+  }
+
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
   DEBUG_PRINT("Resetting CPU record");

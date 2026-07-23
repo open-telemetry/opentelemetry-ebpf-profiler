@@ -137,7 +137,6 @@ type EbpfTrace struct {
 	CustomLabels     map[String]String
 	Comm             Comm
 	FrameData        []uint64
-	KernelFrames     Frames
 	FrameDataBuf     [3072]uint64
 	Value            int64
 	KTime            int64
@@ -145,7 +144,8 @@ type EbpfTrace struct {
 	TID              PID
 	PID              PID
 	NumFrames        uint16
-	Origin           Origin
+	NumKernelFrames  uint16
+	Origin           uint16
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
 }
@@ -154,14 +154,20 @@ type EbpfFrame []uint64
 
 // The below code must match ebpf tracemgmt.h frame_header() layout.
 
-// NewEbpfFrame creates a new EbpfFrame slice with given header information.
-// Typically used for testing only.
-func NewEbpfFrame(ty FrameType, ff FrameFlags, l uint8, data uint64) []uint64 {
+// NewEbpfFrameHeader creates the first word of an eBPF frame.
+// Typically used for testing and synthetic cache keys only.
+func NewEbpfFrameHeader(ty FrameType, ff FrameFlags, l uint8, data uint64) uint64 {
 	val := uint64(ty) << 60
 	val |= uint64(ff) << 56
 	val |= uint64(l) << 52
+	return val | data
+}
+
+// NewEbpfFrame creates a new EbpfFrame slice with given header information.
+// Typically used for testing only.
+func NewEbpfFrame(ty FrameType, ff FrameFlags, l uint8, data uint64) []uint64 {
 	ef := make([]uint64, l)
-	ef[0] = val | data
+	ef[0] = NewEbpfFrameHeader(ty, ff, l, data)
 	return ef
 }
 
