@@ -206,6 +206,10 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
+	// their container-namespace equivalents. Useful for sidecar deployments where
+	// the profiler and the target application share a PID namespace but not host PIDs.
+	PIDNamespaceTranslation bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
