@@ -91,6 +91,11 @@ var (
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
+	pinnedCPUIDsHelp  = "Range of CPUs to profile in the format like \"0-15,20,31\". Only for on-CPU sampling. " +
+		"WARNING: This filter is effective only if your target workloads (processes, IRQ handlers, etc.) " +
+		"are explicitly pinned to provided CPUs. " +
+		"In non-pinned environments, profiling a subset of CPUs will produce biased or incomplete results. " +
+		"For profiling specific applications, consider using sidecar deployments or custom probes instead."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -124,6 +129,15 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.BoolVar(&args.NoKernelVersionCheck, "no-kernel-version-check", false,
 		noKernelVersionCheckHelp)
+
+	fs.Func("pin-cpu-ids", pinnedCPUIDsHelp, func(cpuRange string) error {
+		CPUIDs, err := tracer.ReadCPURange(cpuRange)
+		if err != nil {
+			return fmt.Errorf("failed to parse pinned CPUs range '%s': %v", cpuRange, err)
+		}
+		args.PinnedCPUIDs = CPUIDs
+		return nil
+	})
 
 	fs.StringVar(&args.PprofAddr, "pprof", "", pprofHelp)
 

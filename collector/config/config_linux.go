@@ -71,6 +71,12 @@ type Config struct {
 	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
 	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
+	TargetCPUIDs           string                   `mapstructure:"pin_cpu_ids"`
+
+	// Configuration options that users can not set directly:
+	//
+	// PinnedCPUIDs is derived from TargetCPUIDs during Validate
+	PinnedCPUIDs []int `mapstructure:"-"`
 }
 
 // Validate validates the config.
@@ -117,6 +123,14 @@ func (cfg *Config) Validate() error {
 		return errors.New(
 			"invalid argument for reporter-jitter. The value " +
 				"should be in the range [0..1]. 0 disables jitter")
+	}
+
+	if cfg.TargetCPUIDs != "" {
+		cpus, err := tracer.ReadCPURange(cfg.TargetCPUIDs)
+		if err != nil {
+			return fmt.Errorf("invalid argument for target-cpu-ids: %v", err)
+		}
+		cfg.PinnedCPUIDs = cpus
 	}
 
 	if cfg.ProbabilisticThreshold < 1 ||
