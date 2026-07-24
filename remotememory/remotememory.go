@@ -16,14 +16,14 @@ import (
 
 // RemoteMemory implements a set of convenience functions to access the remote memory
 type RemoteMemory struct {
-	io.ReaderAt
+	libpf.ReadAtCloser
 	// Bias is the adjustment for pointers (used to unrelocate pointers in coredump)
 	Bias libpf.Address
 }
 
 // Valid determines if this RemoteMemory instance contains a valid reference to target process
 func (rm RemoteMemory) Valid() bool {
-	return rm.ReaderAt != nil
+	return rm.ReadAtCloser != nil
 }
 
 // Read fills slice p[] with data from remote memory at address addr

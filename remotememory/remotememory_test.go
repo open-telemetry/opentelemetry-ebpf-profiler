@@ -68,7 +68,9 @@ func TestProcessVirtualMemoryPaths(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(pid), tc.rootFsPath))
+			rm, err := NewProcessVirtualMemory(libpf.PID(pid), tc.rootFsPath)
+			require.NoError(t, err)
+			RemoteMemTests(t, rm)
 		})
 	}
 }

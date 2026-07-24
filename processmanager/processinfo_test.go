@@ -177,8 +177,8 @@ func (tp *testProcess) GetThreads() ([]process.ThreadInfo, error) {
 	return nil, nil
 }
 
-func (tp *testProcess) GetRemoteMemory() remotememory.RemoteMemory {
-	return remotememory.RemoteMemory{}
+func (tp *testProcess) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	return remotememory.RemoteMemory{}, nil
 }
 
 func (tp *testProcess) OpenMappingFile(*process.RawMapping) (process.ReadAtCloser, error) {

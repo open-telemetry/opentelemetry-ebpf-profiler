@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
 // CoredumpProcess implements Process interface to ELF coredumps.
@@ -191,6 +192,11 @@ func (cd *CoredumpProcess) MainExecutable() string {
 	}
 
 	return ""
+}
+
+// GetRemoteMemory returns a remote memory reader accessing the target process.
+func (cd *CoredumpProcess) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	return cd.RemoteMemory, nil
 }
 
 // PID implements the Process interface.

@@ -41,7 +41,10 @@ func BenchmarkGolang(b *testing.B) {
 		b.Fatalf("Failed to create hostID: %v", err)
 	}
 	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
-	rm := remotememory.NewProcessVirtualMemory(libpfPID, "/")
+	rm, err := remotememory.NewProcessVirtualMemory(libpfPID, "/")
+	if err != nil {
+		b.Fatalf("Failed to create remote memory: %v", err)
+	}
 
 	b.ReportAllocs()
 	for b.Loop() {

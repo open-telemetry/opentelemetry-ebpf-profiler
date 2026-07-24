@@ -61,12 +61,12 @@ var (
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
-	pid      libpf.PID
-	tid      libpf.PID
-	procBase string // "/proc/<pid>/"
+	pid        libpf.PID
+	tid        libpf.PID
+	procBase   string // "/proc/<pid>/"
+	rootFsPath string
 
 	mainThreadExit bool
-	remoteMemory   remotememory.RemoteMemory
 }
 
 var _ Process = &systemProcess{}
@@ -90,10 +90,10 @@ func init() {
 // New returns an object with Process interface accessing it
 func New(pid, tid libpf.PID, rootFsPath string) Process {
 	return &systemProcess{
-		pid:          pid,
-		tid:          tid,
-		remoteMemory: remotememory.NewProcessVirtualMemory(pid, rootFsPath),
-		procBase:     path.Join(rootFsPath, "/proc", strconv.Itoa(int(pid))) + "/",
+		pid:        pid,
+		tid:        tid,
+		rootFsPath: rootFsPath,
+		procBase:   path.Join(rootFsPath, "/proc", strconv.Itoa(int(pid))) + "/",
 	}
 }
 
@@ -453,15 +453,20 @@ func (sp *systemProcess) Close() error {
 	return nil
 }
 
-func (sp *systemProcess) GetRemoteMemory() remotememory.RemoteMemory {
-	return sp.remoteMemory
+func (sp *systemProcess) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	return remotememory.NewProcessVirtualMemory(sp.pid, sp.rootFsPath)
 }
 
 // extractMapping reads the mapping's memory into an in-memory reader.
 // Used to access mappings that have no usable backing file (e.g. VDSO).
 func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get remote memory for PID %d: %w", pr.PID(), err)
+	}
+	defer rm.Close()
 	data := make([]byte, m.Length)
-	if _, err := pr.GetRemoteMemory().ReadAt(data, int64(m.Vaddr)); err != nil {
+	if _, err := rm.ReadAt(data, int64(m.Vaddr)); err != nil {
 		return nil, fmt.Errorf("unable to extract mapping at %#x from PID %d",
 			m.Vaddr, pr.PID())
 	}

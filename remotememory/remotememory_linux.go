@@ -19,11 +19,15 @@ import (
 // the process_vm_readv(2) syscall. For any other non-empty path it reads from
 // <rootFsPath>/proc/<pid>/mem, which is used when the host procfs is mounted at
 // a non-standard location inside a container.
-func NewProcessVirtualMemory(pid libpf.PID, rootFsPath string) RemoteMemory {
+func NewProcessVirtualMemory(pid libpf.PID, rootFsPath string) (RemoteMemory, error) {
 	if rootFsPath == "/" || len(rootFsPath) == 0 {
-		return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid: pid}}
+		return RemoteMemory{ReadAtCloser: ProcessVirtualMemory{pid: pid}}, nil
 	}
-	return RemoteMemory{ReaderAt: ProcVirtualMemory{pid: pid, rootFsPath: rootFsPath}}
+	f, err := os.Open(path.Join(rootFsPath, fmt.Sprintf("proc/%d/mem", pid)))
+	if err != nil {
+		return RemoteMemory{}, fmt.Errorf("failed to open %s/proc/%v/mem: %w", rootFsPath, pid, err)
+	}
+	return RemoteMemory{ReadAtCloser: ProcVirtualMemory{pid: pid, file: f}}, nil
 }
 
 // ProcessVirtualMemory implements ReaderAt by reading /proc/<pid>/mem or using
@@ -49,28 +53,27 @@ func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
 	return numBytesRead, err
 }
 
+func (vm ProcessVirtualMemory) Close() error {
+	return nil
+}
+
 // ProcVirtualMemory implements ReaderAt by reading /proc/<pid>/mem
 type ProcVirtualMemory struct {
-	pid        libpf.PID
-	rootFsPath string
+	pid  libpf.PID
+	file *os.File
 }
 
 func (vm ProcVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
-	// Use /proc/<pid>/mem instead of process_vm_readv. process_vm_readv resolves
-	// the target PID in the caller's PID namespace, so it fails with ESRCH when
-	// the profiler runs in a container without hostPID:true even though the host
-	// /proc is mounted. /proc/<pid>/mem is looked up by inode and works across
-	// PID namespace boundaries as long as the host procfs is mounted and the
-	// caller has ptrace permission (CAP_SYS_PTRACE).
-	f, err := os.Open(path.Join(vm.rootFsPath, fmt.Sprintf("proc/%d/mem", vm.pid)))
-	if err != nil {
-		return 0, fmt.Errorf("failed to open %s/proc/%v/mem: %w", vm.rootFsPath, vm.pid, err)
-	}
-	defer f.Close()
-
-	n, err := f.ReadAt(p, off)
+	n, err := vm.file.ReadAt(p, off)
 	if err != nil {
 		return n, fmt.Errorf("failed to read PID %v at 0x%x: %w", vm.pid, off, err)
 	}
 	return n, nil
+}
+
+func (vm ProcVirtualMemory) Close() error {
+	if vm.file != nil {
+		return vm.file.Close()
+	}
+	return nil
 }

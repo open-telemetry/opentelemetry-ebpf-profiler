@@ -9,6 +9,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-func NewProcessVirtualMemory(pid libpf.PID, rootFsPath string) RemoteMemory {
-	return RemoteMemory{}
+func NewProcessVirtualMemory(pid libpf.PID, rootFsPath string) (RemoteMemory, error) {
+	return RemoteMemory{}, nil
 }

@@ -98,7 +98,7 @@ type MachineData struct {
 }
 
 // ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
-type ReadAtCloser = pfelf.ReadAtCloser
+type ReadAtCloser = libpf.ReadAtCloser
 
 // MetaConfig provides options that influences gathering ProcessMeta.
 type MetaConfig struct {
@@ -149,7 +149,8 @@ type Process interface {
 	GetThreads() ([]ThreadInfo, error)
 
 	// GetRemoteMemory returns a remote memory reader accessing the target process.
-	GetRemoteMemory() remotememory.RemoteMemory
+	// The caller is responsible for closing the returned RemoteMemory.
+	GetRemoteMemory() (remotememory.RemoteMemory, error)
 
 	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
 	OpenMappingFile(*RawMapping) (ReadAtCloser, error)

@@ -208,7 +208,11 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 		}
 	}
 	// Slow path: Interpreter detection or attachment needed
-	instance, err := data.Attach(pm.ebpf, pid, bias, pr.GetRemoteMemory())
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return anonymousMappingsWanted, fmt.Errorf("failed to get remote memory for PID %v: %w", pid, err)
+	}
+	instance, err := data.Attach(pm.ebpf, pid, bias, rm)
 	if err != nil {
 		return anonymousMappingsWanted, fmt.Errorf("failed to attach to %v in PID %v: %w",
 			data, pid, err)
@@ -926,7 +930,12 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
 	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
 	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return oldProcessContextInfo
+	}
+	defer rm.Close()
+	ctxInfo, err := processcontext.Read(addr, rm, oldProcessContextInfo.PublishedAtNs, 0)
 	if err == nil {
 		return ctxInfo
 	}
