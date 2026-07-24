@@ -42,7 +42,11 @@ int tracepoint__sched_switch(UNUSED void *ctx)
     return 0;
   }
 
-  u64 ts       = bpf_ktime_get_ns();
+  u64 ts = bpf_ktime_get_ns();
+  if (process_is_too_new(ts)) {
+    return 0;
+  }
+
   u64 pid_tgid = ((u64)pid << 32) | tid;
 
   if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
