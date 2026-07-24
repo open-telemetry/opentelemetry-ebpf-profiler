@@ -2188,5 +2188,12 @@
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
     "id": 299
+  },
+  {
+    "description": "Number of PID resynchronizations triggered by the prctl monitor",
+    "type": "counter",
+    "name": "NumSyncsFromPrctl",
+    "field": "bpf.num_syncs_from_prctl",
+    "id": 300
   }
 ]

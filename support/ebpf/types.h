@@ -346,6 +346,9 @@ enum {
   // number of failures to read LuaJIT proc info
   metricID_UnwindLuaJITErrNoProcInfo,
 
+  // number of PID resynchronizations triggered by the prctl monitor
+  metricID_NumSyncsFromPrctl,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

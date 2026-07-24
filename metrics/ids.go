@@ -686,6 +686,9 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 299
 
+	// Number of PID resynchronizations triggered by the prctl monitor
+	IDNumSyncsFromPrctl = 300
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 300
+	IDMax = 301
 )
