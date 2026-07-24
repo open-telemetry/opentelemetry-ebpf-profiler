@@ -9,6 +9,9 @@ BPF_RODATA_VAR(u32, with_debug_output, 0)
 // filter_idle_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_idle_frames, false)
 
+// filter_min_process_age_ns is set during load time.
+BPF_RODATA_VAR(u64, filter_min_process_age_ns, 0)
+
 // inverse_pac_mask is set during load time.
 BPF_RODATA_VAR(u64, inverse_pac_mask, 0)
 
@@ -29,9 +32,17 @@ BPF_RODATA_VAR(u32, vma_vm_flags_offset, 0)
 // populated by the host agent based on kernel code analysis.
 BPF_RODATA_VAR(u64, tpbase_offset, 0)
 
+// task_group_leader_offset is set during load time.
+// The offset of group_leader within `task_struct`.
+BPF_RODATA_VAR(u32, task_group_leader_offset, 0)
+
 // task_stack_offset is set during load time.
 // The offset of stack base within `task_struct`.
 BPF_RODATA_VAR(u32, task_stack_offset, 0)
+
+// task_start_time_offset is set during load time.
+// The offset of start_time within `task_struct`.
+BPF_RODATA_VAR(u32, task_start_time_offset, 0)
 
 // stack_ptregs_offset is set during load time.
 // The offset of struct pt_regs within the kernel entry stack.
@@ -191,6 +202,7 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   }
 
   u64 ts = bpf_ktime_get_ns();
+
   return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
 }
 MULTI_USE_FUNC(unwind_native)

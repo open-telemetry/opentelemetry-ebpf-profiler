@@ -2190,10 +2190,17 @@
     "id": 299
   },
   {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 300
+  },
+  {
     "description": "Number of PID resynchronizations triggered by the prctl monitor",
     "type": "counter",
     "name": "NumSyncsFromPrctl",
     "field": "bpf.num_syncs_from_prctl",
-    "id": 300
+    "id": 301
   }
 ]

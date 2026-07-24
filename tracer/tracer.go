@@ -181,6 +181,9 @@ type Config struct {
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
 	FilterIdleFrames bool
+	// FilterMinProcessAge filters samples from processes younger than this duration.
+	// A zero duration disables the filter.
+	FilterMinProcessAge time.Duration
 	// KernelVersionCheck indicates whether the kernel version should be checked.
 	KernelVersionCheck bool
 	// VerboseMode indicates whether to enable verbose output of eBPF tracers.

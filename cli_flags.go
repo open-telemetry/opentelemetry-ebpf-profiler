@@ -74,8 +74,10 @@ var (
 	clockSyncIntervalHelp = "Set the sync interval with the realtime clock. " +
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
-	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
-	sendIdleFramesHelp  = "Unwind and report idle states of the Linux kernel."
+	sendErrorFramesHelp     = "Send error frames (devfiler only, breaks Kibana)"
+	sendIdleFramesHelp      = "Unwind and report idle states of the Linux kernel."
+	filterMinProcessAgeHelp = "Skip samples from processes younger than this minimum age. " +
+		"Set to 0 to disable minimum process age filtering."
 	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
 		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
 		"Default is %d.",
@@ -114,6 +116,8 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)
 
 	fs.BoolVar(&args.DisableTLS, "disable-tls", false, disableTLSHelp)
+
+	fs.DurationVar(&args.FilterMinProcessAge, "filter-min-process-age", 0, filterMinProcessAgeHelp)
 
 	fs.UintVar(&args.FrameCacheSize, "frame-cache-size",
 		uint(defaultArgFrameCacheSize), frameCacheSizeHelp)
