@@ -691,8 +691,8 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	case elf.EM_X86_64:
 		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
 	default:
-		return 0, fmt.Errorf("unsupported architecture for assembly analysis: %v",
-			ef.Machine)
+		return 0, log.Expected(fmt.Errorf("unsupported architecture for assembly analysis: %v",
+			ef.Machine))
 	}
 
 	if err != nil {
@@ -720,7 +720,8 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	case elf.EM_X86_64:
 		value, err = decodeStubArgumentAMD64(code, uint64(sym.Address), uint64(memoryBase))
 	default:
-		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+		return libpf.SymbolValueInvalid,
+			log.Expected(fmt.Errorf("unsupported arch %s", ef.Machine.String()))
 	}
 
 	// Sanity check the value range and alignment
@@ -796,10 +797,11 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	minVer := pythonVer(3, 6)
 	maxVer := pythonVer(3, 14)
 	if version < minVer || version > maxVer {
-		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
-			major, minor,
-			(minVer>>8)&0xff, minVer&0xff,
-			(maxVer>>8)&0xff, maxVer&0xff)
+		return nil, log.Expected(
+			fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
+				major, minor,
+				(minVer>>8)&0xff, minVer&0xff,
+				(maxVer>>8)&0xff, maxVer&0xff))
 	}
 
 	if version >= pythonVer(3, 7) {

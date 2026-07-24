@@ -179,10 +179,11 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	minVer := perlVersion(5, 28, 0)
 	maxVer := perlVersion(5, 43, 0)
 	if version < minVer || version >= maxVer {
-		return nil, fmt.Errorf("unsupported Perl %d.%d.%d (need >= %d.%d and < %d.%d)",
-			verBytes[0], verBytes[1], verBytes[2],
-			(minVer>>16)&0xff, (minVer>>8)&0xff,
-			(maxVer>>16)&0xff, (maxVer>>8)&0xff)
+		return nil, log.Expected(
+			fmt.Errorf("unsupported Perl %d.%d.%d (need >= %d.%d and < %d.%d)",
+				verBytes[0], verBytes[1], verBytes[2],
+				(minVer>>16)&0xff, (minVer>>8)&0xff,
+				(maxVer>>16)&0xff, (maxVer>>8)&0xff))
 	}
 
 	// "PL_thr_key" contains the TSD key since Perl 5.15.2

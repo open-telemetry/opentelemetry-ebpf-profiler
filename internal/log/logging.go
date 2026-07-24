@@ -2,6 +2,7 @@ package log // import "go.opentelemetry.io/ebpf-profiler/internal/log"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -109,5 +110,67 @@ func Warnf(msg string, keysAndValues ...any) {
 func Warn(msg string) {
 	if getLogger().Enabled(context.Background(), slog.LevelWarn) {
 		getLogger().Warn(msg)
+	}
+}
+
+// leveledError wraps an error with the level it should be logged at.
+type leveledError struct {
+	level slog.Level
+	err   error
+}
+
+func (e *leveledError) Error() string { return e.err.Error() }
+func (e *leveledError) Unwrap() error { return e.err }
+
+// WithLevel annotates err with the level it should be logged at when passed to Errore.
+// Use it only for expected, non-actionable conditions where the operation safely
+// degrades; leave a genuine failure unannotated so it logs at Error.
+func WithLevel(err error, level slog.Level) error {
+	if err == nil {
+		return nil
+	}
+	return &leveledError{level: level, err: err}
+}
+
+// Expected is a convenience wrapper for WithLevel(err, slog.LevelWarn).
+func Expected(err error) error {
+	return WithLevel(err, slog.LevelWarn)
+}
+
+// LevelOf reports the level err should be logged at: the level from WithLevel if present,
+// the maximum level among a joined error's parts, Debug for os.ErrNotExist, else Error.
+func LevelOf(err error) slog.Level {
+	if err == nil {
+		return slog.LevelError
+	}
+	if le, ok := err.(*leveledError); ok {
+		return le.level
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		children := joined.Unwrap()
+		if len(children) > 0 {
+			level := slog.LevelDebug
+			for _, child := range children {
+				if l := LevelOf(child); l > level {
+					level = l
+				}
+			}
+			return level
+		}
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return LevelOf(wrapped.Unwrap())
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return slog.LevelDebug
+	}
+	return slog.LevelError
+}
+
+// Errore logs err at LevelOf(err), formatting a context message the same way Errorf does.
+func Errore(err error, format string, args ...any) {
+	level := LevelOf(err)
+	if getLogger().Enabled(context.Background(), level) {
+		getLogger().Log(context.Background(), level, fmt.Sprintf(format, args...))
 	}
 }

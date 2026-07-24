@@ -416,7 +416,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 		if updatedAnonymousMappingsWanted, err := pm.handleNewInterpreter(
 			pr, bias, m.GetOnDiskFileIdentifier(), ei.Data, anonymousMappingsWanted,
 		); err != nil {
-			log.Errorf("Failed to handle new interpreter for PID %d file %v: %v",
+			log.Errore(err, "Failed to handle new interpreter for PID %d file %v: %v",
 				pr.PID(), m.Path, err)
 		} else {
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted

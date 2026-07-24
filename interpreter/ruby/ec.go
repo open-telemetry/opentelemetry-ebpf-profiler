@@ -59,7 +59,7 @@ func extractEcTLSOffset(ef *pfelf.File) (int64, error) {
 	case elf.EM_AARCH64:
 		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
 	default:
-		return 0, fmt.Errorf("unsupported architecture: %s", ef.Machine)
+		return 0, log.Expected(fmt.Errorf("unsupported architecture: %s", ef.Machine))
 	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to extract TLS offset from %s: %w", symbolName, err)

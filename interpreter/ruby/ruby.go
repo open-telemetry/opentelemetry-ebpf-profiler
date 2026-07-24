@@ -1326,10 +1326,11 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// - Ruby 4.0 was released December 2025 with ZJIT and redesigned Ractor Port API
 	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(4, 1, 0)
 	if version < minVer || version >= maxVer {
-		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
-			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
-			(minVer>>16)&0xff, (minVer>>8)&0xff, minVer&0xff,
-			(maxVer>>16)&0xff, (maxVer>>8)&0xff, maxVer&0xff)
+		return nil, log.Expected(
+			fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
+				(version>>16)&0xff, (version>>8)&0xff, version&0xff,
+				(minVer>>16)&0xff, (minVer>>8)&0xff, minVer&0xff,
+				(maxVer>>16)&0xff, (maxVer>>8)&0xff, maxVer&0xff))
 	}
 
 	log.Debugf("Ruby %d.%d.%d detected", (version>>16)&0xff, (version>>8)&0xff, version&0xff)

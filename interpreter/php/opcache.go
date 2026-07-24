@@ -342,7 +342,7 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	case elf.EM_X86_64:
 		dasmBufPtr, dasmSizePtr, err = retrieveJITBufferPtrx86(code, sym.Address)
 	default:
-		return 0, 0, fmt.Errorf("unsupported machine type: %s", ef.Machine)
+		return 0, 0, log.Expected(fmt.Errorf("unsupported machine type: %s", ef.Machine))
 	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to extract DASM pointers: %w", err)

@@ -271,7 +271,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.beamCodeHeader.functions = 152
 		vms.atom.u.bin = 32
 	default:
-		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %d", d.otpRelease)
+		return d, log.Expected(
+			fmt.Errorf("unsupported OTP version for BEAM interpreter: %d", d.otpRelease))
 	}
 
 	return d, nil

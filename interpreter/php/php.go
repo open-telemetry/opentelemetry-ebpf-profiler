@@ -213,7 +213,7 @@ func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error)
 	case elf.EM_X86_64:
 		returnAddress, err = retrieveExecuteExJumpLabelAddressX86(code, sym.Address)
 	default:
-		return returnAddress, fmt.Errorf("unsupported architecture: %s", ef.Machine)
+		return returnAddress, log.Expected(fmt.Errorf("unsupported architecture: %s", ef.Machine))
 	}
 	if err != nil {
 		return libpf.SymbolValueInvalid,
@@ -245,7 +245,7 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	case elf.EM_X86_64:
 		vmKind, err = retrieveZendVMKindX86(code)
 	default:
-		return 0, fmt.Errorf("unsupported architecture: %s", ef.Machine)
+		return 0, log.Expected(fmt.Errorf("unsupported architecture: %s", ef.Machine))
 	}
 	if err != nil {
 		return 0, fmt.Errorf("an error occurred decoding zend_vm_kind: %w", err)
@@ -276,10 +276,11 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// tweaking the offsets.
 	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 6, 0)
 	if version < minVer || version >= maxVer {
-		return nil, fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
-			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
-			(minVer>>16)&0xff, (minVer>>8)&0xff,
-			(maxVer>>16)&0xff, (maxVer>>8)&0xff)
+		return nil, log.Expected(
+			fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
+				(version>>16)&0xff, (version>>8)&0xff, version&0xff,
+				(minVer>>16)&0xff, (minVer>>8)&0xff,
+				(maxVer>>16)&0xff, (maxVer>>8)&0xff))
 	}
 
 	egAddr, err := ef.LookupSymbolAddress("executor_globals")
