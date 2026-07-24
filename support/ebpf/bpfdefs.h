@@ -82,6 +82,11 @@ static inline long bpf_get_ns_current_pid_tgid(u64 dev, u64 ino, void *info, u32
   return -1;
 }
 
+static inline unsigned long long bpf_get_current_task(void)
+{
+  return 0;
+}
+
 static inline void *bpf_map_lookup_elem(void *map, const void *key)
 {
   void *__bpf_map_lookup_elem(u64, void *, const void *);
