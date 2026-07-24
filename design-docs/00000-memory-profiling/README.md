@@ -10,20 +10,15 @@ Memory Profiling
 
 # Abstract
 
-The OTel eBPF profiler today provides on-CPU and [off-CPU profiling](http://design-docs/00001-off-cpu-profiling). One remaining axis for understanding application performance is memory: what drives memory growth, and which call stacks are responsible for it? This document proposes adding **memory profiling** to the profiler as an opt-in feature, attached via USDT (User Statically-Defined Tracepoints) probes that target processes emit on sampled allocations (and, optionally, on the matching frees).
-
-Memory use is contributed to by various mechanisms - code segments, memory mapped files, the stack, and the heap. This proposal focuses on tracking heap allocations, but should provide a robust foundation on which additional memory profiling capabilities can later be built. It is made up of two complementary mechanisms:
-
-1. Allocation profiling - sampling a statistically representative subset of all allocations made in a program
-2. Live heap profiling - extends allocation profiling by tracking the corresponding `free`s of all the allocations, allowing the profiler to emit a representation of live memory over time
-
-Efficient memory profiling requires cooperation from the target process. Unlike CPU profiling, where the profiler can sample execution from outside the process, allocation profiling needs a cheap in-process decision about which allocations are worth reporting. The target process therefore provides a small sampling mechanism that emits [USDT](https://www.polarsignals.com/blog/posts/2025/12/10/usdt-deep-dive) events only for a statistically representative subset of allocations, and optionally for the matching frees. The eBPF profiler treats that mechanism as an implementation detail behind a stable, discoverable USDT contract: it discovers the probes at runtime, attaches eBPF uprobes, reuses the existing stack unwinding pipeline, and exports the resulting samples as OTLP profiles while keeping memory telemetry within the profiler's overall export budget.
+This document proposes adding memory profiling to the OTel eBPF profiler as an opt-in feature. Target processes emit USDT probes on sampled heap allocations (and optionally on the matching frees); the profiler discovers these probes, attaches per-PID uprobes, reuses the existing native unwinder, and exports the results as standard OTLP profiles. Two complementary modes are proposed: allocation profiling (which call stacks are allocating) and live heap profiling (which allocations are still alive), gated by separate flags.
 
 # Introduction
 
 ## Problem
 
 The eBPF profiler already covers two axes of application performance: when threads are on CPU and when they are blocked off CPU, but does not yet give us insight into how memory is being allocated and used (or even leaked!).
+
+Process memory is driven by many mechanisms - code segments, memory-mapped files, the stack, and the heap - but heap allocations are both the most dynamic and the least visible today, so they are the focus of this proposal.
 
 Existing per-runtime memory profilers (the JVM, the Go runtime, CPython's `tracemalloc`) only cover *managed* heap. They miss native allocations made directly by the application or, more importantly, by libraries called over the FFI - which for languages like Python is often where a lot of memory cost actually lives. Coarse OS metrics like RSS tell you *that* memory grew, never *who* grew it.
 
@@ -39,6 +34,7 @@ The remaining problems are:
 2. It has no eBPF entry points for allocation events, no map for correlating sampled allocations to their frees, and no OTLP output shape for memory data.
 3. Allocation events fire at much higher rates than perf samples, so back-pressure must be designed in from the start, and simply hooking 'malloc' and 'free' presents an unreasonably high performance cost for profiled applications.
 4. Further to (3), we must ensure that we constrain memory telemetry production in a way that does not allow one process to starve others, and fits within the operational cost model of the full-host profiler (that is, with output telemetry proportional to vCPU on host)
+5. There is no stable, allocator-independent symbol to hook against. Allocators may be statically linked, inlined, or have their internal function names change across versions. This rules out attaching uprobes to allocator internals and motivates a contract-based approach where the target process explicitly provides the probes.
 
 Although our initial focus with this proposal is on *native* heap, this mechanism can be trivially extended to capture managed heap by inserting the USDT probes within the allocation path within the targeted runtime. This would require no additional change on the profiler side.
 
@@ -72,8 +68,7 @@ This document focuses on the changes inside `opentelemetry-ebpf-profiler` needed
 
 Everything on the in-process side of the USDT contract:
 
-- How USDTs get into a target process (compile-time wrappers, `LD_PRELOAD`, runtime GOT rewriting).
-- Per-architecture deallocation tracking (ARM64 TBI, x86-64 prefix, side-tables).
+- How USDTs get into a target process (compile-time wrappers, `LD_PRELOAD`, runtime GOT rewriting). We provide a brief appendix discussing options, but ultimately want to focus on providing a _uniform_ mechanism for tracking allocations, regardless of how and where the probes are fired.
 - Allocator-specific quirks (size classes, alignment).
 
 And from the profiler side, the following are deferred:
@@ -85,7 +80,7 @@ And from the profiler side, the following are deferred:
 
 # Proposed Solution
 
-## In-process sampler shape
+## In-process sampler design
 
 The in-process sampler is out of scope to *design* here, but the profiler's design only makes sense against a rough sketch of what it consumes. The in-process sampler should follow the existing model converged upon by allocators such as [**jemalloc**](https://github.com/jemalloc/jemalloc/blob/dev/doc_internal/PROFILING_INTERNALS.md) and [**tcmalloc**](https://github.com/google/tcmalloc/blob/master/docs/sampling.md):
 
@@ -96,7 +91,17 @@ The in-process sampler is out of scope to *design* here, but the profiler's desi
 
 We provide an [example implementation for the above contract](https://github.com/DataDog/libdatadog/tree/main/libdd-profiling-heap-sampler), with the intention of validating the eBPF profiler-side implementation.
 
-The profiler does not care which allocator is wrapped, which language the process is written in, or how the USDTs were injected; only that the contract below holds and that allocations are sampled according to the description above.
+### Producing the USDTs in userspace
+
+The profiler is not prescriptive about how the USDTs end up in a target process. We anticipate three delivery models, all sharing a common core sampling library:
+
+1. **Compile-time allocator wrapping.** A language-specific shim wraps the allocator at compile time (e.g. a Rust `GlobalAlloc` implementation). This is the simplest model and works well when compile time instrumentation is available, and all allocations pass through the single allocator.
+2. **Existing allocator observability hooks.** Allocators like jemalloc and tcmalloc expose sampling hooks. A thin adapter registers with these at startup and emits USDTs from the callback. This can also be delivered via `LD_PRELOAD`, where a user preloads e.g. `LD_PRELOAD=jemalloc_with_hooks.so`. 
+3. **GOT table rewriting.** For already-running processes, a shared library is injected and rewrites allocator symbols in the GOT. Most flexible, but only works for dynamically linked allocators.
+
+For live heap profiling, the free side must recognise which pointers were previously sampled. When using allocator hooks (model 2), this comes from the allocator's built-in book-keeping. When wrapping externally (models 1 and 3), the reference implementation uses hardware pointer tagging (ARM64 TBI) or a per-allocation magic prefix (x86-64) to flag sampled pointers for near-zero-cost detection on every free. See the [reference implementation's tagging documentation](https://github.com/DataDog/libdatadog/blob/main/libdd-profiling-heap-sampler/docs/tagging.md) for details.
+
+The profiler does not care which of these models is used, which allocator is wrapped, or which language the process is written in; only that the contract below holds and that allocations are sampled according to the description above.
 
 ## USDT contract
 
@@ -137,7 +142,7 @@ Uprobes are attached **per-PID** using cilium/ebpf's `UprobeOptions.PID`, not gl
 
 A new `usdt.Manager` owns the global parse cache and the BPF programs; a per-PID `usdt.Instance` owns that PID's live `link.Link` attachments, keyed by `(PID, FileID, Kind, Offset)`.
 
-Reconciliation runs on **every** `ProcessManager.SynchronizeProcess` call (not only on first sight of a PID), diffing the set of expected probes against the set currently attached for the PID. This is what catches `.so`s that were `dlopen`'d after the process started — the most important case in practice for Python workloads.
+Reconciliation runs on **every** `ProcessManager.SynchronizeProcess` call (not only on first sight of a PID), diffing the set of expected probes against the set currently attached for the PID. This is what catches `.so`s that were `dlopen`'d after the process started - the most important case in practice for Python workloads.
 
 Detach happens in `processPIDExit` alongside the existing interpreter teardown.
 
@@ -151,7 +156,7 @@ Two new eBPF programs, `uprobe_heap_alloc` and `uprobe_heap_free`, live in `supp
 
 The `uprobe_heap_free` program is loaded into the kernel only when `-live-heap-profiling` is enabled. When only `-heap-profiling` is on, the program isn't loaded and the `free` USDT isn't attached, so plain allocation profiling pays only the alloc-side cost.
 
-## Reporting / OTLP shape
+## Reporting / OTLP structure
 
 Two sibling profiles share the alloc call stacks and timestamps:
 
@@ -188,7 +193,7 @@ It is foreseeable that more advanced allocator implementations may choose to use
 
 - Attach to kernel tracepoints **`sys_enter_brk`** / **`sys_enter_mmap`** /etc. Too far from application allocation patterns: modern allocators go to great lengths to avoid kernel calls, so most allocations are invisible at this layer. Down the road, this might be useful to help us catch `mmap`s that do not go through libc.
 - **Upstream USDTs into common allocators (`jemalloc`, `tcmalloc`, `glibc`) so that users do not need to change their applications** - ultimately it would be convenient for upstream allocators to contain the USDTs directly and we hope in the long run we can use adoption by the OpenTelemetry community to incentivise this. In the meantime, we have begun looking at using the upstream sampling APIs directly, for instance [extending the Rust jemalloc crate](https://github.com/tikv/jemallocator/pull/172) so we can build on top of it.
-- **Attach uprobes to allocator-specific internal sampling paths (`jemalloc`, `tcmalloc`)** - we discount this approach as it is fragile against the internals of the allocators, the allocators do not by default have sampling turned on (or if it is turned on, it may do more work than we want - for instance, with jemalloc and its optional stack-collection behaviour in the sampling path), and does not generalise to all allocators.
+- **Attach uprobes to allocator-specific internal sampling paths (`jemalloc`, `tcmalloc`)** - we discount this approach as it is fragile against the internals of the allocators, the allocators do not by default have sampling turned on (or if it is turned on, it may do more work than we want - for instance, with jemalloc and its optional stack-collection behaviour in the sampling path), and does not generalise to all allocators. Additionally, allocators are frequently statically linked, meaning there is no predictable symbol to attach to - internal names and inlining decisions vary across versions and build configurations.
 - **Sample every alloc/free.** Prohibitive overhead; allocators are on the critical path for most workloads.
 - **Global (per-binary) uprobe attachment** rather than per-PID. Loses the ability to opt processes in/out individually and complicates cleanup; doesn't fit the profiler's existing lifecycle model.
 - **Hand-rolled `.note.stapsdt` parsing.** Pointless given the `parca-dev/usdt` parser already exists, is small, and is permissively licensed.
