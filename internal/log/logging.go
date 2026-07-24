@@ -2,6 +2,7 @@ package log // import "go.opentelemetry.io/ebpf-profiler/internal/log"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -109,5 +110,83 @@ func Warnf(msg string, keysAndValues ...any) {
 func Warn(msg string) {
 	if getLogger().Enabled(context.Background(), slog.LevelWarn) {
 		getLogger().Warn(msg)
+	}
+}
+
+// leveledError wraps an error with the level it should be logged at. Producers use this
+// to annotate an expected, non-actionable condition under which the operation safely
+// degrades, so that log sites emit it below Error without each site re-deriving severity
+// from the error's text.
+type leveledError struct {
+	level slog.Level
+	err   error
+}
+
+func (e *leveledError) Error() string { return e.err.Error() }
+func (e *leveledError) Unwrap() error { return e.err }
+
+// WithLevel annotates err with the level it should be logged at when passed to Errore.
+// Returns nil if err is nil.
+//
+// Use it only for expected, non-actionable conditions where the operation safely
+// degrades — e.g. a recognized interpreter whose runtime version or architecture is not
+// supported, where native unwinding is unaffected and only interpreter-level frames are
+// missing. Do not use it to quiet a genuine failure (a read error, corrupt data, an eBPF
+// map error); when in doubt, leave the error unannotated so it logs at Error.
+func WithLevel(err error, level slog.Level) error {
+	if err == nil {
+		return nil
+	}
+	return &leveledError{level: level, err: err}
+}
+
+// Expected marks err as an expected, non-actionable condition, logged at Warn instead of
+// Error. It is a convenience wrapper for WithLevel(err, slog.LevelWarn).
+func Expected(err error) error {
+	return WithLevel(err, slog.LevelWarn)
+}
+
+// LevelOf reports the level err should be logged at.
+//
+// An error annotated via WithLevel reports its annotated level. For a joined error
+// (errors.Join), the maximum (most severe) level among its parts is reported, so a benign
+// error joined with a genuine, unannotated one is never hidden. os.ErrNotExist defaults to
+// Debug — very common if a process exited while it was being analyzed. Everything else
+// defaults to Error, the safe default for an error nobody has classified.
+func LevelOf(err error) slog.Level {
+	if err == nil {
+		return slog.LevelError
+	}
+	if le, ok := err.(*leveledError); ok { //nolint:errorlint
+		return le.level
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok { //nolint:errorlint
+		children := joined.Unwrap()
+		if len(children) > 0 {
+			level := slog.LevelDebug
+			for _, child := range children {
+				if l := LevelOf(child); l > level {
+					level = l
+				}
+			}
+			return level
+		}
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok { //nolint:errorlint
+		return LevelOf(wrapped.Unwrap())
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return slog.LevelDebug
+	}
+	return slog.LevelError
+}
+
+// Errore logs err at LevelOf(err), formatting a context message the same way Errorf does.
+// Use it at any log site that might receive an error annotated via WithLevel, so its
+// requested severity is honored instead of always logging at Error.
+func Errore(err error, format string, args ...any) {
+	level := LevelOf(err)
+	if getLogger().Enabled(context.Background(), level) {
+		getLogger().Log(context.Background(), level, fmt.Sprintf(format, args...))
 	}
 }

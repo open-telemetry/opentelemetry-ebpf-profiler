@@ -2273,8 +2273,9 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	version := vers[0]*0x1000000 + vers[1]*0x10000 + vers[2]
 	log.Debugf("V8 version %v.%v.%v", vers[0], vers[1], vers[2])
 	if vers[0] > 0xff || vers[1] > 0xff || vers[2] > 0xffff || version < 0x080100 {
-		return nil, fmt.Errorf("version %v.%v.%v of V8 is not supported (minimum is 8.1.0)",
-			vers[0], vers[1], vers[2])
+		return nil, log.Expected(
+			fmt.Errorf("version %v.%v.%v of V8 is not supported (minimum is 8.1.0)",
+				vers[0], vers[1], vers[2]))
 	}
 
 	syms, err := lookupRelevantSymbols(ef)
