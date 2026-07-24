@@ -35,6 +35,11 @@
 #define FRAME_MARKER_BEAM    0xC
 // Indicates a LuaJIT frame
 #define FRAME_MARKER_LUAJIT  0xD
+// Indicates a Last Branch Record (LBR) frame. Each LBR frame carries a single
+// branch entry captured via bpf_read_branch_records() on hardware that
+// supports it (Intel LBR, AMD BRS/LbrExtV2). LBR frames are only emitted by
+// entry points that configure PERF_SAMPLE_BRANCH_STACK.
+#define FRAME_MARKER_LBR     0xE
 
 // Frame flags
 // Indicates that this frame is an error frame.

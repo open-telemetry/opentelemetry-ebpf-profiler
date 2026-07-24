@@ -7,6 +7,7 @@ import (
 	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const commLen = 16
@@ -138,6 +139,10 @@ type EbpfTrace struct {
 	Comm             Comm
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64
+	// LBR holds the branch records (Intel LBR / AMD LbrExtV2 / AMD BRS) captured
+	// for this trace, backed by LBRBuf. Empty for samples without branch sampling.
+	LBR              []support.LBREntry
+	LBRBuf           [support.MaxBranchRecords]support.LBREntry
 	Value            int64
 	KTime            int64
 	CpuID            uint32

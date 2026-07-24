@@ -51,8 +51,14 @@ BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
 // Required by the bpf_get_ns_current_pid_tgid helper to uniquely
 // identify the namespace filesystem (nsfs) instance.
 BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
-// origin_id_sampling is set during load time.
+// origin_id_sampling is set during load time. It backs software cpu-clock samples.
 BPF_RODATA_VAR(u16, origin_id_sampling, 0)
+// origin_id_hw_cpu_cycles backs hardware cpu-cycles samples. Set during load time
+// only when hardware cpu-cycles sampling is enabled.
+BPF_RODATA_VAR(u16, origin_id_hw_cpu_cycles, 0)
+// origin_id_amd_brs backs AMD BRS LBR-only samples. Set during load time only when
+// branch sampling falls back to AMD BRS.
+BPF_RODATA_VAR(u16, origin_id_amd_brs, 0)
 
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
@@ -177,8 +183,8 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   return -1;
 }
 
-SEC("perf_event/native_tracer_entry")
-int native_tracer_entry(struct bpf_perf_event_data *ctx)
+static inline int
+native_tracer_entry_impl(struct bpf_perf_event_data *ctx, u16 origin, bool is_amd_brs)
 {
   u32 pid = 0;
   u32 tid = 0;
@@ -191,6 +197,29 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   }
 
   u64 ts = bpf_ktime_get_ns();
-  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
+  if (is_amd_brs) {
+    return collect_lbr_only_trace((struct pt_regs *)&ctx->regs, origin, pid, tid, ts);
+  }
+
+  return collect_trace((struct pt_regs *)&ctx->regs, origin, pid, tid, ts, 0);
 }
+
+SEC("perf_event/native_tracer_entry_sw_cpu_clock")
+int native_tracer_entry_sw_cpu_clock(struct bpf_perf_event_data *ctx)
+{
+  return native_tracer_entry_impl(ctx, origin_id_sampling, false);
+}
+
+SEC("perf_event/native_tracer_entry_hw_cpu_cycles")
+int native_tracer_entry_hw_cpu_cycles(struct bpf_perf_event_data *ctx)
+{
+  return native_tracer_entry_impl(ctx, origin_id_hw_cpu_cycles, false);
+}
+
+SEC("perf_event/native_tracer_entry_amd_brs")
+int native_tracer_entry_amd_brs(struct bpf_perf_event_data *ctx)
+{
+  return native_tracer_entry_impl(ctx, origin_id_amd_brs, true);
+}
+
 MULTI_USE_FUNC(unwind_native)

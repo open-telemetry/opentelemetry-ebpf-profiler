@@ -67,7 +67,7 @@ int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
   cgoctx.tp_base = tp_base;
   __cgo_ctx      = &cgoctx;
   if (setjmp(cgoctx.jmpbuf) == 0) {
-    cgoctx.ret = native_tracer_entry(ctx);
+    cgoctx.ret = native_tracer_entry_sw_cpu_clock(ctx);
   }
   __cgo_ctx = 0;
   return cgoctx.ret;
@@ -92,7 +92,7 @@ int bpf_tail_call(void *ctx, UNUSED void *map, int index)
 {
   int rc = 0;
   switch (index) {
-  case PROG_UNWIND_STOP: rc = unwind_stop(ctx); break;
+  case PROG_UNWIND_STOP: rc = unwind_stop(ctx, false); break;
   case PROG_UNWIND_NATIVE: rc = unwind_native(ctx); break;
   case PROG_UNWIND_PERL: rc = unwind_perl(ctx); break;
   case PROG_UNWIND_PHP: rc = unwind_php(ctx); break;
