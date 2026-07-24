@@ -174,7 +174,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -2146,38 +2145,33 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	return nil
 }
 
-func locateSnapshotArea(ef *pfelf.File, syms relevantSymbols) util.Range {
+func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util.Range {
+	intervals := info.Intervals()
 	sym := syms.DefaultSnapshotBlob
-	if sym == nil {
+	if sym == nil || intervals == nil {
 		return util.Range{}
 	}
-	addr := sym.Address
+	addr := uint64(sym.Address)
 
 	// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
 	// assume it is the V8 snapshot data.
-	eft, err := elfunwindinfo.NewEhFrameTable(ef)
-	if err != nil {
+	ndx := intervals.FindIndex(addr)
+	if ndx < 0 {
 		return util.Range{}
 	}
-	ndx, err := eft.LookupIndex(libpf.Address(addr))
-	if err != nil {
-		return util.Range{}
-	}
+	ndx++
 
-	for prevEnd := uintptr(addr); prevEnd-uintptr(addr) < 1024; ndx++ {
-		fde, err := eft.DecodeIndex(ndx)
-		if err != nil {
-			return util.Range{}
-		}
+	for prevEnd := uint64(addr); ndx < len(intervals.Blocks) && prevEnd-addr < 1024; ndx++ {
 		// Check that there is a large gap.
-		if fde.PCBegin-prevEnd > 512*1024 {
-			log.Debugf("located snapshot area: %#x - %#x", prevEnd, fde.PCBegin)
+		bb := intervals.Blocks[ndx]
+		if bb.Start-prevEnd > 512*1024 {
+			log.Debugf("located snapshot area: %#x - %#x", prevEnd, bb.Start)
 			return util.Range{
-				Start: uint64(prevEnd),
-				End:   uint64(fde.PCBegin),
+				Start: prevEnd,
+				End:   bb.Start,
 			}
 		}
-		prevEnd = fde.PCBegin + fde.PCRange
+		prevEnd = bb.End
 	}
 	return util.Range{}
 }
@@ -2283,7 +2277,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	d := &v8Data{
 		version:       version,
-		snapshotRange: locateSnapshotArea(ef, syms),
+		snapshotRange: locateSnapshotArea(info, syms),
 	}
 
 	sym := syms.BytecodeSizes

@@ -7,23 +7,10 @@
 package stackdeltatypes // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
 import (
+	"cmp"
 	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/support"
-)
-
-const (
-	// MinimumGap determines the minimum number of alignment bytes needed
-	// in order to keep the created STOP stack delta between functions
-	MinimumGap = 15
-
-	// UnwindHintNone indicates that no flags are set.
-	UnwindHintNone uint8 = 0
-	// UnwindHintKeep flags important intervals that should not be removed
-	// (e.g. has CALL/SYSCALL assembly opcode, or is part of function prologue)
-	UnwindHintKeep uint8 = 1
-	// UnwindHintEnd indicates end-of-function delta.
-	UnwindHintEnd uint8 = 2
 )
 
 // UnwindInfo contains the data needed to unwind PC, SP and FP
@@ -52,109 +39,99 @@ var UnwindInfoLR = UnwindInfo{
 	AuxBaseReg: support.UnwindRegLr,
 }
 
-// StackDelta defines the start address for the delta interval, along with
-// the unwind information.
+// StackDelta defines the delta from a basic block start, along with the unwind information.
 type StackDelta struct {
-	Address uint64
-	Hints   uint8
-	Info    UnwindInfo
+	Offset uint32
+	Info   UnwindInfo
 }
 
 // StackDeltaArray defines an address space where consecutive entries establish
 // intervals for the stack deltas
 type StackDeltaArray []StackDelta
 
-// IntervalData contains everything that a userspace agent needs to have
-// to populate eBPF maps for the kernel-space native unwinder to do its job:
-type IntervalData struct {
-	// Deltas contains all stack deltas for a single binary.
-	// Two consecutive entries describe an interval.
+// BasicBlock defines a code area with its start deltas (e.g. ELF FDE or Golang function).
+type BasicBlock struct {
+	Start  uint64
+	End    uint64
 	Deltas StackDeltaArray
 }
 
+// IntervalData contains everything that a userspace agent needs to have
+// to populate eBPF maps for the kernel-space native unwinder to do its job:
+type IntervalData struct {
+	// NumDeltas is the number of all deltas in all basic blocks.
+	NumDeltas uint32
+	// Blocks contains all basic blocks of an executable.
+	Blocks []*BasicBlock
+}
+
 // AddEx adds a new stack delta to the array.
-func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
-	num := len(*deltas)
-	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
-		if delta.Info.Param == support.UnwindCommandSignal {
-			// EBPF code does a -1 fixup for return addresses.
-			// To match the signal handler function injected into
-			// stack, the signal handler stack delta must start one
-			// byte earlier to accommodate for the ebpf fixup.
-			// C-libraries will have a 'nop' inserted to make sure
-			// nothing conflicts.
-			delta.Address--
-		}
+func (deltas *StackDeltaArray) Add(offset uint32, info UnwindInfo) {
+	if info.Flags&support.UnwindFlagCommand != 0 {
 		// FP information is invalid/unused for command opcodes.
 		// But DWARF info often leaves bogus data there, so resetting it
 		// reduces the number of unique Info contents generated.
-		delta.Info = UnwindInfo{
+		info = UnwindInfo{
 			Flags: support.UnwindFlagCommand,
-			Param: delta.Info.Param,
+			Param: info.Param,
 		}
 	}
-	if num > 0 && sorted {
-		prev := &(*deltas)[num-1]
-		if prev.Hints&UnwindHintEnd != 0 && prev.Address+MinimumGap >= delta.Address {
-			// The previous opcode is end-of-function marker, and
-			// the gap is not large. Reduce deltas by overwriting it.
-			if num <= 1 || (*deltas)[num-2].Info != delta.Info {
-				*prev = delta
-				return
-			}
-			// The delta before end-of-function marker is same as
-			// what is being inserted now. Overwrite that.
-			prev = &(*deltas)[num-2]
-			*deltas = (*deltas)[:num-1]
-		}
-		if prev.Info == delta.Info {
-			prev.Hints |= delta.Hints & UnwindHintKeep
-			return
-		}
-		if prev.Address == delta.Address {
-			*prev = delta
+	if num := len(*deltas); num > 0 {
+		// Remove duplicates
+		if (*deltas)[num-1].Info == info {
 			return
 		}
 	}
-	*deltas = append(*deltas, delta)
+
+	*deltas = append(*deltas, StackDelta{Offset: offset, Info: info})
 }
 
-// Add adds a new stack delta from a sorted source.
-func (deltas *StackDeltaArray) Add(delta StackDelta) {
-	deltas.AddEx(delta, true)
+// Add inserts a new basic block to the interval data
+func (intervals *IntervalData) Add(bb BasicBlock) {
+	if len(intervals.Blocks) > 0 && len(bb.Deltas) == 1 {
+		lastBlock := intervals.Blocks[len(intervals.Blocks)-1]
+		if len(lastBlock.Deltas) == 1 && bb.Deltas[0] == lastBlock.Deltas[0] &&
+			bb.Start-lastBlock.End < 16 {
+			// Merge consecutive identical single delta basic blocks
+			lastBlock.End = bb.End
+			return
+		}
+	}
+	intervals.NumDeltas += uint32(len(bb.Deltas))
+	intervals.Blocks = append(intervals.Blocks, &bb)
 }
 
-// compareStackDelta implements the comparison logic for slices.SortFunc.
-// It must return:
-// -1 if a should come before b (a < b)
-// 0 if a and b are considered equal
-// 1 if a should come after b (a > b)
-func compareStackDelta(a, b StackDelta) int {
-	// 1. Primary Key: Address (uint64)
-	if a.Address < b.Address {
-		return -1
+// Find searches the matching basic block index from the interval data
+func (intervals *IntervalData) FindIndex(addr uint64) int {
+	idx, ok := slices.BinarySearchFunc(intervals.Blocks, addr, func(bb *BasicBlock, addr uint64) int {
+		return cmp.Compare(bb.Start, addr)
+	})
+	if !ok {
+		if idx == 0 {
+			return -1
+		}
+		idx--
 	}
-	if a.Address > b.Address {
-		return 1
+	bb := intervals.Blocks[idx]
+	if addr >= bb.Start && addr < bb.End {
+		return idx
 	}
-	if a.Info.BaseReg < b.Info.BaseReg {
-		return -1
+	return -1
+}
+
+// Find searches the matching basic block from the interval data
+func (intervals *IntervalData) Find(addr uint64) *BasicBlock {
+	if idx := intervals.FindIndex(addr); idx >= 0 {
+		return intervals.Blocks[idx]
 	}
-	if a.Info.AuxBaseReg > b.Info.AuxBaseReg {
-		return 1
-	}
-	if a.Info.Param < b.Info.Param {
-		return -1
-	}
-	if a.Info.Param > b.Info.Param {
-		return 1
-	}
-	return 0
+	return nil
 }
 
 // Sort sorts the stack deltas.
-func (deltas *StackDeltaArray) Sort() {
-	slices.SortFunc(*deltas, compareStackDelta)
+func (intervals *IntervalData) Sort() {
+	slices.SortFunc(intervals.Blocks, func(a, b *BasicBlock) int {
+		return cmp.Compare(a.Start, b.Start)
+	})
 }
 
 // PackDerefParam compresses pre- and post-dereference parameters to single value

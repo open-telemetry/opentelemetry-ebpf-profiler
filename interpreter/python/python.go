@@ -29,7 +29,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -977,7 +976,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 		Start: uint64(interp.Address),
 		End:   uint64(interp.Address) + interp.Size,
 	})
-	coldRange, err := findColdRange(ef, code, interp)
+	coldRange, err := findColdRange(info, ef, code, interp)
 	if err != nil {
 		log.Debugf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
@@ -992,7 +991,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 // symbol using an instance of elfunwindinfo.EhFrameTable.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
+func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
 	if ef.Machine != elf.EM_X86_64 {
 		return util.Range{}, nil
 	}
@@ -1000,16 +999,11 @@ func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Rang
 	if err != nil || dst == 0 {
 		return util.Range{}, err
 	}
-	t, err := elfunwindinfo.NewEhFrameTable(ef)
-	if err != nil {
-		return util.Range{}, err
+	if bb := info.Intervals().Find(uint64(dst)); bb != nil {
+		return util.Range{
+			Start: bb.Start,
+			End:   bb.End,
+		}, nil
 	}
-	fde, err := t.LookupFDE(dst)
-	if err != nil {
-		return util.Range{}, err
-	}
-	return util.Range{
-		Start: uint64(fde.PCBegin),
-		End:   uint64(fde.PCBegin + fde.PCRange),
-	}, nil
+	return util.Range{}, errors.New("cold range not found")
 }

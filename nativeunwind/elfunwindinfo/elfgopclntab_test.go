@@ -88,13 +88,13 @@ func TestParseGoPclntab(t *testing.T) {
 			require.NoError(t, err)
 
 			ee := elfExtractor{
-				file:   ef,
-				hooks:  &extractionFilter{},
-				deltas: &sdtypes.StackDeltaArray{},
+				file:      ef,
+				hooks:     &extractionFilter{},
+				intervals: &sdtypes.IntervalData{},
 			}
 			err = ee.parseGoPclntab()
 			require.NoError(t, err)
-			assert.NotEmpty(t, *ee.deltas)
+			assert.NotEmpty(t, ee.intervals.Blocks)
 		})
 	}
 }
