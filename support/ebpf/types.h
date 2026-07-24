@@ -352,6 +352,9 @@ enum {
   // number of PID resynchronizations triggered by the prctl monitor
   metricID_NumSyncsFromPrctl,
 
+  // number of priority PID events deferred (recorded but not signalled) due to rate limiting
+  metricID_NumPriorityEventDeferred,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

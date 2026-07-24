@@ -309,4 +309,5 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 	C.metricID_SamplesSkippedProcessTooNew:                metrics.IDSamplesSkippedProcessTooNew,
 	C.metricID_NumSyncsFromPrctl:                          metrics.IDNumSyncsFromPrctl,
+	C.metricID_NumPriorityEventDeferred:                   metrics.IDNumPriorityEventDeferred,
 }

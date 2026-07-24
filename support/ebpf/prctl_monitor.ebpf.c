@@ -78,7 +78,7 @@ int tracepoint__sys_exit_prctl(void *ctx)
     goto exit;
   }
 
-  if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_DEFAULT)) {
+  if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_PRIORITY)) {
     increment_metric(metricID_NumSyncsFromPrctl);
   }
 

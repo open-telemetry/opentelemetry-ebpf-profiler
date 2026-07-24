@@ -692,6 +692,9 @@ const (
 	// Number of PID resynchronizations triggered by the prctl monitor
 	IDNumSyncsFromPrctl = 301
 
+	// Number of priority PID events deferred (recorded but not signalled) due to rate limiting
+	IDNumPriorityEventDeferred = 302
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 302
+	IDMax = 303
 )

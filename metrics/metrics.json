@@ -2202,5 +2202,12 @@
     "name": "NumSyncsFromPrctl",
     "field": "bpf.num_syncs_from_prctl",
     "id": 301
+  },
+  {
+    "description": "Number of priority PID events deferred (recorded but not signalled) due to rate limiting",
+    "type": "counter",
+    "name": "NumPriorityEventDeferred",
+    "field": "bpf.num_priority_event_deferred",
+    "id": 302
   }
 ]
