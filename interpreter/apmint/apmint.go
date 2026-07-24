@@ -51,57 +51,62 @@ type apmProcessStorage struct {
 	TraceSocketPath string
 }
 
-// Loader implements interpreter.Loader.
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
-	if !isPotentialAgentLib(info.FileName()) {
-		return nil, nil
-	}
-
-	ef, err := info.GetELF()
-	if err != nil {
-		return nil, err
-	}
-
-	// Resolve process storage symbol.
-	procStorageSym, err := ef.LookupSymbol(procStorageExport)
-	if err != nil {
-		if errors.Is(err, libpf.ErrSymbolNotFound) {
-			// APM<->profiling integration not supported by agent.
+// GetLoader returns an interpreter.Loader for the APM integration that uses the given
+// procFsPath to locate procfs entries when reading process state.
+func GetLoader(procFsPath string) interpreter.Loader {
+	return func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+		if !isPotentialAgentLib(info.FileName()) {
 			return nil, nil
 		}
 
-		return nil, err
-	}
-	if procStorageSym.Size != 8 {
-		return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
-	}
-
-	var tlsDescElfAddr libpf.Address
-	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
-		if symName == tlsExport {
-			tlsDescElfAddr = libpf.Address(r.Off)
-			return false
+		ef, err := info.GetELF()
+		if err != nil {
+			return nil, err
 		}
-		return true
-	}); err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
+
+		// Resolve process storage symbol.
+		procStorageSym, err := ef.LookupSymbol(procStorageExport)
+		if err != nil {
+			if errors.Is(err, libpf.ErrSymbolNotFound) {
+				// APM<->profiling integration not supported by agent.
+				return nil, nil
+			}
+
+			return nil, err
+		}
+		if procStorageSym.Size != 8 {
+			return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
+		}
+
+		var tlsDescElfAddr libpf.Address
+		if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
+			if symName == tlsExport {
+				tlsDescElfAddr = libpf.Address(r.Off)
+				return false
+			}
+			return true
+		}); err != nil {
+			return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
+		}
+
+		if tlsDescElfAddr == 0 {
+			return nil, errors.New("failed to locate TLS descriptor")
+		}
+
+		log.Debugf("APM integration TLS descriptor offset: 0x%08X", tlsDescElfAddr)
+
+		return &data{
+			tlsDescElfAddr:   tlsDescElfAddr,
+			procStorageElfVA: libpf.Address(procStorageSym.Address),
+			procFsPath:       procFsPath,
+		}, nil
 	}
-
-	if tlsDescElfAddr == 0 {
-		return nil, errors.New("failed to locate TLS descriptor")
-	}
-
-	log.Debugf("APM integration TLS descriptor offset: 0x%08X", tlsDescElfAddr)
-
-	return &data{
-		tlsDescElfAddr:   tlsDescElfAddr,
-		procStorageElfVA: libpf.Address(procStorageSym.Address),
-	}, nil
 }
 
 type data struct {
 	tlsDescElfAddr   libpf.Address
 	procStorageElfVA libpf.Address
+	procFsPath       string
 }
 
 var _ interpreter.Data = &data{}
@@ -126,7 +131,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	}
 
 	// Establish socket connection with the agent.
-	socket, err := openAPMAgentSocket(pid, procStorage.TraceSocketPath)
+	socket, err := openAPMAgentSocket(pid, procStorage.TraceSocketPath, d.procFsPath)
 	if err != nil {
 		if err2 := ebpf.DeleteProcData(libpf.APMInt, pid); err2 != nil {
 			log.Errorf("Failed to remove APM information for PID %d: %v", pid, err2)

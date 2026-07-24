@@ -72,7 +72,8 @@ const (
 // Shared map name according to
 // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 const (
-	obiSpanTracesMap = "traces_ctx_v1"
+	obiSpanTracesMap  = "traces_ctx_v1"
+	defaultRootFsPath = "/"
 )
 
 // Intervals is a subset of config.IntervalsAndTimers.
@@ -146,6 +147,8 @@ type Tracer struct {
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
 	doneOnce sync.Once
+
+	procPath string
 }
 
 // Done returns a channel that is closed when the tracer encounters an
@@ -209,6 +212,7 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	RootFs        string
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.
@@ -252,7 +256,11 @@ func newTracePool() sync.Pool {
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
-	kernelSymbolizer, err := kallsyms.NewSymbolizer()
+	if cfg.RootFs == "" {
+		cfg.RootFs = defaultRootFsPath
+	}
+
+	kernelSymbolizer, err := kallsyms.NewSymbolizer(cfg.RootFs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
@@ -286,6 +294,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
+		ProcFsPath:            cfg.RootFs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -308,6 +317,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
+		procPath:               cfg.RootFs,
 		origins:                origins,
 	}
 
@@ -365,7 +375,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	}
 
 	// Initialize eBPF variables before loading programs and maps.
-	if err = loadRodataVars(coll, kmod, cfg, major, minor, origins); err != nil {
+	if err = loadRodataVars(coll, kmod, cfg, major, minor, patch, origins); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
@@ -393,21 +403,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// the file descriptors of the loaded maps.
 	if err = rewriteMaps(coll, ebpfMaps); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
-	}
-
-	if cfg.KernelVersionCheck {
-		if hasProbeReadBug(major, minor, patch) {
-			if err = checkForMaccessPatch(coll, ebpfMaps, kmod); err != nil {
-				return nil, nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
-					"affected by a Linux kernel bug that can lead to system "+
-					"freezes, terminating host agent now to avoid "+
-					"triggering this bug.\n"+
-					"If you are certain your kernel is not affected, "+
-					"you can override this check at your own risk "+
-					"with -no-kernel-version-check.\n"+
-					"Error: %v", major, minor, patch, err)
-			}
-		}
 	}
 
 	tailCallProgs := []progLoaderHelper{

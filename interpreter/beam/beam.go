@@ -389,7 +389,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 }
 
 func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
-	return nil
+	return i.rm.Close()
 }
 
 func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {

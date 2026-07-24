@@ -142,6 +142,8 @@ type ProcessManager struct {
 	// Used as a fallback when /proc/<pid>/cgroup yields no container ID for processes
 	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
 	selfContainerID libpf.String
+
+	procFsPath string
 }
 
 // Mapping represents an executable memory mapping of a process.

@@ -14,11 +14,15 @@
 #   - mounting kernel-related filesystems (e.g. /sys, /proc) as needed
 receivers:
   profiling:
+    # "/" behaves like the normal local filesystem root.
+    # Kubernetes can override this with /host_fs.
+    root_fs: "${env:EBPF_PROFILER_ROOT_FS:-/}"
+
 
 exporters:
   otlp/local:
     # equivalent to -collection-agent deprecated cli flag
-    endpoint: http://127.0.0.1:11000
+    endpoint: "${env:OTEL_EXPORTER_OTLP_ENDPOINT:-http://127.0.0.1:11000}"
     # equivalent to -disable-tls deprecated cli flag
     tls:
       insecure: true

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -77,11 +78,15 @@ var ebpfContextMap = map[C.u64]*ebpfContext{}
 // faultAddresses map, if non-empty, instructs bpf_probe_read_user_with_test_fault
 // to return -1 for those addresses; the int value of each entry is incremented
 // each time the helper visits the address.
-func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfContext {
+func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) (*ebpfContext, error) {
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get remote memory for PID %d: %w", pr.PID(), err)
+	}
 	pid := pr.PID()
 	ctx := &ebpfContext{
 		trace:                 libpf.EbpfTrace{PID: pid},
-		remoteMemory:          pr.GetRemoteMemory(),
+		remoteMemory:          rm,
 		PIDandTGID:            C.u64(pid) << 32,
 		pidToPageMapping:      make(map[C.PIDPage]unsafe.Pointer),
 		stackDeltaPageToInfo:  make(map[C.StackDeltaPageKey]unsafe.Pointer),
@@ -92,7 +97,7 @@ func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfCon
 		faultAddresses:        faultAddresses,
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
-	return ctx
+	return ctx, nil
 }
 
 func (ec *ebpfContext) addMap(mapPtr unsafe.Pointer, key any, value []byte) {
@@ -120,6 +125,7 @@ func (ec *ebpfContext) resetTrace() {
 }
 
 func (ec *ebpfContext) release() {
+	ec.remoteMemory.Close()
 	C.free(ec.perCPURecord)
 	C.free(ec.unwindInfoArray)
 

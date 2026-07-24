@@ -75,6 +75,8 @@ func newMockReader() *mockReader {
 	return &mockReader{}
 }
 
+func (m *mockReader) Close() error { return nil }
+
 func (m *mockReader) setError(err error) {
 	m.err = err
 }
@@ -245,7 +247,7 @@ func TestProcessContext_Read(t *testing.T) {
 			mock := newMockReader()
 			tt.setupMock(mock)
 
-			rm := remotememory.RemoteMemory{ReaderAt: mock}
+			rm := remotememory.RemoteMemory{ReadAtCloser: mock}
 
 			ctx, err := processcontext.Read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
 
@@ -347,7 +349,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			// Get current process mappings
 			pid := libpf.PID(os.Getpid())
-			proc := process.New(pid, pid)
+			proc := process.New(pid, pid, "/")
 			defer proc.Close()
 
 			var contextMappingAddr uint64
@@ -363,7 +365,10 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			rm, err := proc.GetRemoteMemory()
+			require.NoError(t, err)
+			defer rm.Close()
+			result, err := processcontext.Read(libpf.Address(contextMappingAddr), rm, 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},

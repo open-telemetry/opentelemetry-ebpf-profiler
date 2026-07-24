@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	cebpf "github.com/cilium/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/maccess"
@@ -15,13 +14,13 @@ import (
 
 // checkForMmaccessPatch validates if a Linux kernel function is patched by
 // extracting the kernel code of the function and analyzing it.
-func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func checkForMaccessPatch(setup executeSystemAnalysisFn,
 	kmod *kallsyms.Module) error {
 	faultyFunc, err := kmod.LookupSymbol("copy_from_user_nofault")
 	if err != nil {
 		return fmt.Errorf("failed to lookup 'copy_from_user_nofault': %v", err)
 	}
-	code, err := loadKernelCode(coll, maps, libpf.SymbolValue(faultyFunc))
+	code, err := loadKernelCode(setup, libpf.SymbolValue(faultyFunc))
 	if err != nil {
 		return fmt.Errorf("failed to load kernel code for 'copy_from_user_nofault': %v", err)
 	}

@@ -79,6 +79,8 @@ type remoteReaderWithModuleFallback struct {
 	scd *StoreCoredump
 }
 
+func (r *remoteReaderWithModuleFallback) Close() error { return nil }
+
 func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, error) {
 	n, err := r.scd.CoredumpProcess.ReadAt(p, addr)
 	if err == nil {
@@ -107,12 +109,15 @@ func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, erro
 	return file.ReadAt(p, int64(fileOff))
 }
 
-func (scd *StoreCoredump) GetRemoteMemory() remotememory.RemoteMemory {
-	base := scd.CoredumpProcess.GetRemoteMemory()
-	return remotememory.RemoteMemory{
-		ReaderAt: &remoteReaderWithModuleFallback{scd: scd},
-		Bias:     base.Bias,
+func (scd *StoreCoredump) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	base, err := scd.CoredumpProcess.GetRemoteMemory()
+	if err != nil {
+		return remotememory.RemoteMemory{}, err
 	}
+	return remotememory.RemoteMemory{
+		ReadAtCloser: &remoteReaderWithModuleFallback{scd: scd},
+		Bias:         base.Bias,
+	}, nil
 }
 
 func (scd *StoreCoredump) Close() error {

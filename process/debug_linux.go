@@ -7,7 +7,9 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"unsafe"
@@ -45,15 +47,14 @@ func ptraceGetRegset(tid, regset int, data []byte) error {
 // from one goroutine. If this is not sufficient in future, the implementation
 // should be refactored to pass all requests via a proxy goroutine through
 // channels so that the kernel requirements are fulfilled.
-func NewPtrace(pid libpf.PID) (Process, error) {
+func NewPtrace(pid libpf.PID, rootFsPath string) (Process, error) {
 	// Lock this goroutine to the OS thread. It is ptrace API requirement
 	// that all ptrace calls must come from same thread.
 	runtime.LockOSThread()
 
 	sp := &ptraceProcess{}
 	sp.pid = pid
-	sp.procBase = "/proc/" + strconv.Itoa(int(pid)) + "/"
-	sp.remoteMemory = remotememory.RemoteMemory{ReaderAt: sp}
+	sp.procBase = path.Join(rootFsPath, "/proc", strconv.Itoa(int(pid))) + "/"
 	if err := sp.attach(); err != nil {
 		runtime.UnlockOSThread()
 		return nil, err
@@ -122,6 +123,14 @@ func (sp *ptraceProcess) attach() error {
 
 func (sp *ptraceProcess) ReadAt(p []byte, off int64) (n int, err error) {
 	return unix.PtracePeekText(int(sp.pid), uintptr(off), p)
+}
+
+type readerNopCloser struct{ io.ReaderAt }
+
+func (readerNopCloser) Close() error { return nil }
+
+func (sp *ptraceProcess) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	return remotememory.RemoteMemory{ReadAtCloser: readerNopCloser{sp}}, nil
 }
 
 func (sp *ptraceProcess) Close() error {

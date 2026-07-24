@@ -16,14 +16,14 @@ import (
 
 // RemoteMemory implements a set of convenience functions to access the remote memory
 type RemoteMemory struct {
-	io.ReaderAt
+	libpf.ReadAtCloser
 	// Bias is the adjustment for pointers (used to unrelocate pointers in coredump)
 	Bias libpf.Address
 }
 
 // Valid determines if this RemoteMemory instance contains a valid reference to target process
 func (rm RemoteMemory) Valid() bool {
-	return rm.ReaderAt != nil
+	return rm.ReadAtCloser != nil
 }
 
 // Read fills slice p[] with data from remote memory at address addr
@@ -117,15 +117,4 @@ func (rm RemoteMemory) StringPtr(addr libpf.Address) string {
 		return ""
 	}
 	return rm.String(addr)
-}
-
-// ProcessVirtualMemory implements ReaderAt by using process_vm_readv syscalls
-// to read the remote memory.
-type ProcessVirtualMemory struct {
-	pid libpf.PID
-}
-
-// NewProcessVirtualMemory returns RemoteMemory with ProcessVirtualMemory as the underlying reader
-func NewProcessVirtualMemory(pid libpf.PID) RemoteMemory {
-	return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid}}
 }

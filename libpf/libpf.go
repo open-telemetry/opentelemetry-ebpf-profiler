@@ -3,7 +3,7 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-// UnixTime64 represents nanoseconds since epoch.
+import "io" // UnixTime64 represents nanoseconds since epoch.
 type UnixTime64 uint64
 
 // AddressOrLineno represents a line number in an interpreted file or an offset into
@@ -28,3 +28,9 @@ type SourceLineno uint64
 // SourceColumn represents a column number within a source file line. It is intended to be used
 // for the source column numbers in interpreted code.
 type SourceColumn uint64
+
+// ReadAtCloser combines io.ReaderAt and io.Closer.
+type ReadAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}

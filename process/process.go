@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -60,12 +61,12 @@ var (
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
-	pid      libpf.PID
-	tid      libpf.PID
-	procBase string // "/proc/<pid>/"
+	pid        libpf.PID
+	tid        libpf.PID
+	procBase   string // "/proc/<pid>/"
+	rootFsPath string
 
 	mainThreadExit bool
-	remoteMemory   remotememory.RemoteMemory
 }
 
 var _ Process = &systemProcess{}
@@ -87,12 +88,12 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid, tid libpf.PID) Process {
+func New(pid, tid libpf.PID, rootFsPath string) Process {
 	return &systemProcess{
-		pid:          pid,
-		tid:          tid,
-		procBase:     "/proc/" + strconv.Itoa(int(pid)) + "/",
-		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
+		pid:        pid,
+		tid:        tid,
+		rootFsPath: rootFsPath,
+		procBase:   path.Join(rootFsPath, "/proc", strconv.Itoa(int(pid))) + "/",
 	}
 }
 
@@ -136,7 +137,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		}
 	}
 
-	containerID, err := extractContainerID(sp.pid)
+	containerID, err := sp.extractContainerID()
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
@@ -178,8 +179,8 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 }
 
 // extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
-func extractContainerID(pid libpf.PID) (libpf.String, error) {
-	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+func (sp *systemProcess) extractContainerID() (libpf.String, error) {
+	cgroupFile, err := os.Open(path.Join(sp.procBase, "cgroup"))
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -190,9 +191,9 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 
 // CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
-func CgroupRootInode(pid libpf.PID) (uint64, error) {
+func CgroupRootInode(pid libpf.PID, rootFs string) (uint64, error) {
 	var st unix.Stat_t
-	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
+	if err := unix.Stat(path.Join(rootFs, fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid)), &st); err != nil {
 		return 0, err
 	}
 	return st.Ino, nil
@@ -452,15 +453,20 @@ func (sp *systemProcess) Close() error {
 	return nil
 }
 
-func (sp *systemProcess) GetRemoteMemory() remotememory.RemoteMemory {
-	return sp.remoteMemory
+func (sp *systemProcess) GetRemoteMemory() (remotememory.RemoteMemory, error) {
+	return remotememory.NewProcessVirtualMemory(sp.pid, sp.rootFsPath)
 }
 
 // extractMapping reads the mapping's memory into an in-memory reader.
 // Used to access mappings that have no usable backing file (e.g. VDSO).
 func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get remote memory for PID %d: %w", pr.PID(), err)
+	}
+	defer rm.Close()
 	data := make([]byte, m.Length)
-	if _, err := pr.GetRemoteMemory().ReadAt(data, int64(m.Vaddr)); err != nil {
+	if _, err := rm.ReadAt(data, int64(m.Vaddr)); err != nil {
 		return nil, fmt.Errorf("unable to extract mapping at %#x from PID %d",
 			m.Vaddr, pr.PID())
 	}
@@ -468,8 +474,8 @@ func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
 }
 
 // openInProcRoot opens a file within a process's filesystem namespace.
-func openInProcRoot(pid libpf.PID, filePath string) (*os.File, error) {
-	return openInRoot(fmt.Sprintf("/proc/%d/root", pid), filePath)
+func (sp *systemProcess) openInProcRoot(filePath string) (*os.File, error) {
+	return openInRoot(path.Join(sp.procBase, "root"), filePath)
 }
 
 // getMappingFile opens the backing file for a mapping and returns an open file descriptor.
@@ -544,7 +550,7 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	// RawMapping should use OpenELFMapping instead, which can open deleted
 	// or replaced files via /proc/<pid>/map_files.
 	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
-	f, err := openInProcRoot(sp.pid, file)
+	f, err := sp.openInProcRoot(file)
 	if err != nil {
 		return nil, err
 	}

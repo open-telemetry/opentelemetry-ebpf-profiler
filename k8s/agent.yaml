@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: opentelemetry-ebpf-profiler
+spec:
+  selector:
+    matchLabels:
+      app: opentelemetry-ebpf-profiler
+  template:
+    metadata:
+      labels:
+        app: opentelemetry-ebpf-profiler
+    spec:
+      hostPID: false
+      containers:
+        - name: opentelemetry-ebpf-profiler
+          env:
+            - name: EBPF_PROFILER_ROOT_FS
+              value: /host_fs
+              # Change the endpoint for your local docker/podman gateway if
+              # exporting the profiles to the host: $docker network inspect kind 2>/dev/null | grep -i gateway
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://172.18.0.1:4317
+          securityContext:
+            capabilities:
+              add:
+                - BPF
+                - SYS_ADMIN
+                - PERFMON
+                - SYSLOG
+                - SYS_PTRACE
+                - SYS_RESOURCE
+            seccompProfile:
+              type: Unconfined  # kubernetes default seccomp blocks the bpf() syscall
+          image: opentelemetry-ebpf-profiler:dev
+          args:
+            - "--config=/etc/otel-collector-config.yaml"
+            - "--feature-gates=+service.profilesSupport"
+          ports:
+            - containerPort: 8888 # OTLP HTTP
+          resources:
+            requests:
+              cpu: "50m" # Minimal CPU request
+              memory: "64Mi" # Minimal memory request
+            limits:
+              cpu: "100m" # Minimal CPU limit
+              memory: "800Mi" # Minimal memory limit
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel-collector-config.yaml
+              subPath: otel-collector-config.yaml
+            - name: tracefs
+              mountPath: /sys/kernel/tracing
+              readOnly: true
+            - name: procfs
+              mountPath: /host_fs
+      volumes:
+        - name: tracefs
+          hostPath:
+            path: /sys/kernel/tracing
+        - name: procfs
+          hostPath:
+            path: /host_fs
+        - name: config
+          configMap:
+            name: otel-collector-config

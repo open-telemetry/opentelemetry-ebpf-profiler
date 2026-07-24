@@ -540,6 +540,7 @@ type v8SFI struct {
 }
 
 func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer i.rm.Close()
 	err := ebpf.DeleteProcData(libpf.V8, pid)
 	for prefix := range i.prefixes {
 		if err2 := ebpf.DeletePidInterpreterMapping(pid, prefix); err2 != nil {
@@ -1895,7 +1896,6 @@ func (i *v8Instance) UsesAnonymousMappings() bool {
 func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	// Read the variables from the pfelf.File so we avoid failures if the process
 	// exists during extraction of the introspection data.
-	rm := ef.GetRemoteMemory()
 
 	// Enumerate all symbols we are interested in
 	vms := &d.vmStructs
@@ -1941,7 +1941,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 					log.Debugf("V8: %s exists", s)
 					memberVal.SetBool(true)
 				} else {
-					val := rm.Uint32(libpf.Address(addr))
+					val := ef.Uint32(libpf.Address(addr))
 					log.Debugf("V8: %s = %#x", s, val)
 					memberVal.SetUint(uint64(val))
 				}

@@ -63,6 +63,7 @@ type phpInstance struct {
 }
 
 func (i *phpInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer i.rm.Close()
 	return ebpf.DeleteProcData(libpf.PHP, pid)
 }
 

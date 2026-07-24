@@ -37,7 +37,7 @@ type apmAgentSocket struct {
 // openAPMAgentSocket opens the APM unix socket in the given PID's root filesystem.
 //
 // This method never blocks.
-func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, error) {
+func openAPMAgentSocket(pid libpf.PID, socketPath string, procFsPath string) (*apmAgentSocket, error) {
 	// Ensure that the socket path can't escape our root.
 	socketPath = filepath.Clean(socketPath)
 	for part := range strings.SplitSeq(socketPath, "/") {
@@ -47,10 +47,10 @@ func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, erro
 	}
 
 	// Prepend root system to ensure that this also works with containerized apps.
-	socketPath = path.Join("/proc", strconv.Itoa(int(pid)), "root", socketPath)
+	socketPath = path.Join(procFsPath, "/proc", strconv.Itoa(int(pid)), "root", socketPath)
 
 	// Read effective UID/GID of the APM agent process.
-	euid, egid, err := readProcessOwner(pid)
+	euid, egid, err := readProcessOwner(pid, procFsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine owner of APM process: %v", err)
 	}
@@ -120,8 +120,8 @@ func (m *traceCorrMsg) Serialize() []byte {
 }
 
 // readProcessOwner reads the effective UID and GID of the target process.
-func readProcessOwner(pid libpf.PID) (euid, egid uint32, err error) {
-	statusFd, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
+func readProcessOwner(pid libpf.PID, procFsPath string) (euid, egid uint32, err error) {
+	statusFd, err := os.Open(path.Join(procFsPath, fmt.Sprintf("/proc/%d/status", pid)))
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open process status: %v", err)
 	}
