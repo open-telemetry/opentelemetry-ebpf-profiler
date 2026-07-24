@@ -375,10 +375,6 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 				log.Debugf("Failed to load %v (%#016x): file not found",
 					loaderInfo.FileName(), loaderInfo.FileID())
 			} else {
-				// A loader that recognized the executable but can't unwind it (e.g. an
-				// unsupported runtime version or architecture) uses log.Expected, so this
-				// logs at Warn instead of Error for that case; genuine failures still log
-				// at Error.
 				log.Errore(err, "Failed to load %v (%#016x): %v",
 					loaderInfo.FileName(), loaderInfo.FileID(), err)
 			}
