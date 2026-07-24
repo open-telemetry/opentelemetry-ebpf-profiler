@@ -37,6 +37,20 @@ BPF_RODATA_VAR(u32, task_stack_offset, 0)
 // The offset of struct pt_regs within the kernel entry stack.
 BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 
+// If enabled, the profiler translates host-level PIDs/TGIDs into the
+// corresponding IDs within a specific PID namespace. This is essential
+// for sidecar deployments to report PIDs consistent with the container's
+// internal view (e.g., reporting PID 1 instead of the host PID).
+BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
+
+// The inode number of the target PID namespace.
+// Obtained by calling stat() on /proc/self/ns/pid.
+BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
+
+// The device ID (st_dev) of the target PID namespace inode.
+// Required by the bpf_get_ns_current_pid_tgid helper to uniquely
+// identify the namespace filesystem (nsfs) instance.
+BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
 // origin_id_sampling is set during load time.
 BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
@@ -166,10 +180,11 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  // Get the PID and TGID register.
-  u64 id  = bpf_get_current_pid_tgid();
-  u32 pid = id >> 32;
-  u32 tid = id & 0xFFFFFFFF;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid)) {
+    return 0;
+  }
 
   if (pid == 0 && filter_idle_frames) {
     return 0;

@@ -85,27 +85,28 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		TraceReporter:          c.reporter,
-		Intervals:              intervals,
-		InterpretersConfig:     c.config.Interpreters,
-		FilterErrorFrames:      !c.config.SendErrorFrames,
-		FilterIdleFrames:       !c.config.SendIdleFrames,
-		SamplesPerSecond:       c.config.SamplesPerSecond,
-		MapScaleFactor:         int(c.config.MapScaleFactor),
-		FrameCacheSize:         uint32(c.config.FrameCacheSize),
-		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
-		VerboseMode:            c.config.VerboseMode,
-		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
-		ProbabilisticInterval:  c.config.ProbabilisticInterval,
-		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
-		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
-		IncludeEnvVars:         envVars,
-		ProbeLinks:             c.config.ProbeLinks,
-		LoadProbe:              c.config.LoadProbe,
-		ExecutableReporter:     c.config.ExecutableReporter,
-		BPFFSRoot:              c.config.BPFFSRoot,
-		OBIProcessCtx:          c.config.OBIProcessCtx,
-		RootFs:                 c.config.RootFs,
+		TraceReporter:           c.reporter,
+		Intervals:               intervals,
+		InterpretersConfig:      c.config.Interpreters,
+		FilterErrorFrames:       !c.config.SendErrorFrames,
+		FilterIdleFrames:        !c.config.SendIdleFrames,
+		SamplesPerSecond:        c.config.SamplesPerSecond,
+		MapScaleFactor:          int(c.config.MapScaleFactor),
+		FrameCacheSize:          uint32(c.config.FrameCacheSize),
+		KernelVersionCheck:      !c.config.NoKernelVersionCheck,
+		VerboseMode:             c.config.VerboseMode,
+		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
+		ProbabilisticInterval:   c.config.ProbabilisticInterval,
+		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
+		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
+		IncludeEnvVars:          envVars,
+		ProbeLinks:              c.config.ProbeLinks,
+		LoadProbe:               c.config.LoadProbe,
+		ExecutableReporter:      c.config.ExecutableReporter,
+		BPFFSRoot:               c.config.BPFFSRoot,
+		OBIProcessCtx:           c.config.OBIProcessCtx,
+		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
+		RootFs:                  c.config.RootFs,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -121,7 +122,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(); err != nil {
+	if err := trc.AttachTracer(c.config.PinnedCPUIDs); err != nil {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")

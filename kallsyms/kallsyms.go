@@ -138,6 +138,13 @@ type AddressResolution struct {
 	Module     *Module
 }
 
+// Resolver is a live kernel/BPF symbol resolver. Its symbol tables can change
+// as modules and BPF programs are loaded or unloaded, so callers should take
+// a Snapshot before resolving a batch of related frames.
+type Resolver interface {
+	Snapshot() Snapshot
+}
+
 func compareModule(a, b Module) int {
 	if a.start > b.start {
 		return -1
@@ -749,6 +756,16 @@ func (s Snapshot) IsGenerationValid(generation Generation) bool {
 		return s.bpf != nil && s.bpf.generation == generation
 	}
 	return s.modules != nil && s.modules.symbolGeneration() == generation
+}
+
+// BPFGeneration returns the current BPF symbol table generation.
+func (s Snapshot) BPFGeneration() Generation {
+	return s.bpf.symbolGeneration()
+}
+
+// KernelGeneration returns the current kernel module symbol table generation.
+func (s Snapshot) KernelGeneration() Generation {
+	return s.modules.symbolGeneration()
 }
 
 // ResolveAddress finds the symbol source containing addr. BPF symbols are

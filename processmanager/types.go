@@ -10,6 +10,7 @@ import (
 	lru "github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -38,6 +39,21 @@ type frameCacheKey struct {
 	pid libpf.PID
 	// data is the frame data: frame header and the two first variable fields
 	data [3]uint64
+}
+
+const kernelFrameCacheKeyLength = 3
+
+// kernelFrameCacheKey creates a synthetic eBPF-shaped cache key for raw kernel
+// frame addresses. The first word is the standard eBPF frame header and the
+// remaining words are the raw address and kallsyms generation.
+func kernelFrameCacheKey(address libpf.Address, generation kallsyms.Generation) frameCacheKey {
+	return frameCacheKey{
+		data: [kernelFrameCacheKeyLength]uint64{
+			libpf.NewEbpfFrameHeader(libpf.KernelFrame, 0, kernelFrameCacheKeyLength, 0),
+			uint64(address),
+			uint64(generation),
+		},
+	}
 }
 
 // ProcessManager is responsible for managing the events happening throughout the lifespan of a
@@ -90,10 +106,13 @@ type ProcessManager struct {
 	// executable. It caches results based on iNode number and device ID. Locked LRU.
 	elfInfoCache *lru.LRU[util.OnDiskFileIdentifier, elfInfo]
 
-	// frameCache stores mappings from BPF frame to the symbolized frames.
-	// This allows avoiding the overhead of re-doing user-mode symbolization
-	// of frames that we have recently seen already.
+	// frameCache stores mappings from BPF frames or raw kernel frame addresses to
+	// the symbolized frames. This avoids re-doing symbolization of frames that we
+	// have recently seen already.
 	frameCache *lru.LRU[frameCacheKey, libpf.Frames]
+
+	// kernelSymbols resolves raw kernel frame addresses.
+	kernelSymbols kallsyms.Resolver
 
 	// traceReporter is the interface to report traces
 	traceReporter reporter.TraceReporter

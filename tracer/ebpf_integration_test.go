@@ -206,8 +206,8 @@ Loop:
 			require.GreaterOrEqual(t, len(comm), 4)
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
-				numKernelFrames: len(ebpfTrace.KernelFrames),
-				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData)),
+				numKernelFrames: int(ebpfTrace.NumKernelFrames),
+				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
 			}
 		}
 	}
@@ -263,16 +263,29 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
-		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreterconfig.AllInterpreters(),
-		SamplesPerSecond:       20,
-		ProbabilisticInterval:  100,
-		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
-		VerboseMode:            true,
-		LoadProbe:              true,
-	})
-	require.NoError(t, err)
-	defer tr.Close()
+	testcases := []struct {
+		name                          string
+		enablePIDNamespaceTranslation bool
+	}{
+		{name: "host PIDs", enablePIDNamespaceTranslation: false},
+		{name: "namespace PIDs", enablePIDNamespaceTranslation: true},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
+				Intervals:               &mockIntervals{},
+				InterpretersConfig:      interpreterconfig.AllInterpreters(),
+				SamplesPerSecond:        20,
+				ProbabilisticInterval:   100,
+				ProbabilisticThreshold:  100,
+				OffCPUThreshold:         uint32(math.MaxUint32 / 100),
+				VerboseMode:             true,
+				LoadProbe:               true,
+				PIDNamespaceTranslation: tc.enablePIDNamespaceTranslation,
+			})
+			require.NoError(t, err)
+			defer tr.Close()
+		})
+	}
 }

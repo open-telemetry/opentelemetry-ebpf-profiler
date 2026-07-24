@@ -15,15 +15,6 @@ func (s Set[T]) ToSlice() []T {
 	return slice
 }
 
-// MapKeysToSlice creates a slice from a map's keys.
-func MapKeysToSlice[K comparable, V any](m map[K]V) []K {
-	slice := make([]K, 0, len(m))
-	for key := range m {
-		slice = append(slice, key)
-	}
-	return slice
-}
-
 // MapKeysToSet creates a set from a map's keys.
 func MapKeysToSet[K comparable, V any](m map[K]V) Set[K] {
 	set := make(Set[K], len(m))
