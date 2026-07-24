@@ -118,29 +118,3 @@ func (rm RemoteMemory) StringPtr(addr libpf.Address) string {
 	}
 	return rm.String(addr)
 }
-
-// ProcessVirtualMemory implements ReaderAt by reading /proc/<pid>/mem or using
-// the process_vm_readv syscall.
-type ProcessVirtualMemory struct {
-	pid        libpf.PID
-	remoteRead func([]byte, int64) (int, error)
-}
-
-func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	return vm.remoteRead(p, off)
-}
-
-// NewProcessVirtualMemory returns RemoteMemory for reading another process's
-// virtual memory. When procFsPath is "/" or empty (host-native case), it uses
-// the process_vm_readv(2) syscall. For any other non-empty path it reads from
-// <procFsPath>/proc/<pid>/mem, which is used when the host procfs is mounted at
-// a non-standard location inside a container.
-func NewProcessVirtualMemory(pid libpf.PID, procFsPath string) RemoteMemory {
-	if procFsPath == "/" || len(procFsPath) == 0 {
-		return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid: pid, remoteRead: processVMRemoteMemory(pid)}}
-	}
-	return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid: pid, remoteRead: procMemRemoteMemory(procFsPath, pid)}}
-}
