@@ -121,8 +121,14 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
+	// Collect additional profiles from probes (e.g. live heap inuse).
+	var sourceProfiles []samples.SourceProfile
+	if r.cfg.SampleSources != nil {
+		sourceProfiles = r.cfg.SampleSources()
+	}
+
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
-		collectionStartTime, collectionEndTime)
+		collectionStartTime, collectionEndTime, sourceProfiles, r.cfg.ProcessMetaForPID)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil
