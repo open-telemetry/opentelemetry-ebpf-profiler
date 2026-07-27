@@ -42,6 +42,16 @@ type baseReporter struct {
 
 var errUnknownProfileType = errors.New("unknown trace profile type")
 
+// SetSampleSources sets the callback for collecting probe-produced profiles.
+func (b *baseReporter) SetSampleSources(fn func() []samples.SourceProfile) {
+	b.cfg.SampleSources = fn
+}
+
+// SetProcessMetaForPID sets the process metadata resolver for profile resource attributes.
+func (b *baseReporter) SetProcessMetaForPID(fn func(libpf.PID) samples.ProcessMeta) {
+	b.cfg.ProcessMetaForPID = fn
+}
+
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
