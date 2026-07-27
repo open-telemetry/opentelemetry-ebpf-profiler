@@ -68,6 +68,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 		var frameStart uint32
 		var frameSize int
 		bb.Deltas.Add(0, sdtypes.UnwindInfoLR)
+	unwindLoop:
 		for offs := uint32(0); offs < uint32(sym.Size); offs += 4 {
 			inst, err := aa.Decode(code[offs:])
 			if err != nil {
@@ -75,8 +76,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 			}
 			switch inst.Op {
 			case aa.RET:
-				intervals.Add(bb)
-				return true
+				break unwindLoop
 			case aa.STP:
 				if reg, ok := arm.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
@@ -101,7 +101,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 					continue
 				}
 				if frameStart == 0 {
-					return true
+					break unwindLoop
 				}
 				bb.Deltas.Add(frameStart, sdtypes.UnwindInfo{
 					BaseReg:    support.UnwindRegFp,
@@ -113,6 +113,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 				frameStart = 0
 			}
 		}
+		intervals.Add(bb)
 		return true
 	})
 	bb := sdtypes.BasicBlock{

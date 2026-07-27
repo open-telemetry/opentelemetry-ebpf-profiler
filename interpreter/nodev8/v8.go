@@ -2146,22 +2146,18 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 }
 
 func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util.Range {
-	intervals := info.Intervals()
 	sym := syms.DefaultSnapshotBlob
-	if sym == nil || intervals == nil {
+	if sym == nil {
 		return util.Range{}
 	}
-	addr := uint64(sym.Address)
 
 	// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
 	// assume it is the V8 snapshot data.
-	ndx := intervals.FindIndex(addr)
-	if ndx < 0 {
-		return util.Range{}
-	}
-	ndx++
+	intervals := info.Intervals()
+	addr := uint64(sym.Address)
+	ndx := intervals.FindIndex(addr) + 1
 
-	for prevEnd := uint64(addr); ndx < len(intervals.Blocks) && prevEnd-addr < 1024; ndx++ {
+	for prevEnd := addr; ndx < len(intervals.Blocks) && prevEnd-addr < 1024; ndx++ {
 		// Check that there is a large gap.
 		bb := intervals.Blocks[ndx]
 		if bb.Start-prevEnd > 512*1024 {

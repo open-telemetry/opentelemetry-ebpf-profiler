@@ -474,7 +474,7 @@ func (state *executableInfoManagerState) loadDeltas(
 			}
 		}
 		// Check if blocks are far apart or last block
-		if blockIndex+1 == len(intervals.Blocks) || block.End+15 < intervals.Blocks[blockIndex+1].Start {
+		if blockIndex+1 == len(intervals.Blocks) || block.End+sdtypes.MinimumGap < intervals.Blocks[blockIndex+1].Start {
 			if err := addDelta(block.End, sdtypes.UnwindInfoInvalid); err != nil {
 				return mapRef{}, err
 			}

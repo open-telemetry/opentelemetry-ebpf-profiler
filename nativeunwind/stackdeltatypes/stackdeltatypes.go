@@ -13,6 +13,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
+// MinimumGap determines the minimum number of alignment bytes needed
+// in order not merge basic blocks and synthesize INVALID opcode
+const MinimumGap = 15
+
 // UnwindInfo contains the data needed to unwind PC, SP and FP
 type UnwindInfo = support.UnwindInfo
 
@@ -91,7 +95,7 @@ func (intervals *IntervalData) Add(bb BasicBlock) {
 	if len(intervals.Blocks) > 0 && len(bb.Deltas) == 1 {
 		lastBlock := intervals.Blocks[len(intervals.Blocks)-1]
 		if len(lastBlock.Deltas) == 1 && bb.Deltas[0] == lastBlock.Deltas[0] &&
-			bb.Start-lastBlock.End < 16 {
+			bb.Start-lastBlock.End <= MinimumGap {
 			// Merge consecutive identical single delta basic blocks
 			lastBlock.End = bb.End
 			return

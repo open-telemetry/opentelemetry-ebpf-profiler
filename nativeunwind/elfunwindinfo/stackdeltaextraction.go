@@ -15,8 +15,8 @@ import (
 const (
 	// Some DSOs have few limited .eh_frame FDEs (e.g. PLT), and additional
 	// FDEs are in .debug_frame or external debug file. This controls how many
-	// intervals are needed to not follow .gnu_debuglink.
-	numIntervalsToOmitDebugLink = 20
+	// basic blocks are needed to not follow .gnu_debuglink.
+	numBlocksToOmitDebugLink = 8
 )
 
 // extractionFilter is used to filter in .eh_frame data when a better source
@@ -186,7 +186,6 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference) (*sdtypes.Interva
 	// Parse the stack deltas from the ELF
 	intervals := &sdtypes.IntervalData{}
 	filter := extractionFilter{}
-	deltas := sdtypes.StackDeltaArray{}
 	ee := elfExtractor{
 		ref:              elfRef,
 		file:             elfFile,
@@ -210,7 +209,7 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference) (*sdtypes.Interva
 	if err := ee.parseDebugFrame(elfFile); err != nil {
 		return nil, fmt.Errorf("failure to parse debug_frame stack deltas: %v", err)
 	}
-	if ee.ref != nil && len(deltas) < numIntervalsToOmitDebugLink {
+	if ee.ref != nil && len(intervals.Blocks) < numBlocksToOmitDebugLink {
 		// There is only few stack deltas. See if we find the .gnu_debuglink
 		// debug information for additional .debug_frame stack deltas.
 		if err := ee.extractDebugDeltas(); err != nil {

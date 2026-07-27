@@ -67,5 +67,8 @@ func (i *LoaderInfo) FileName() string {
 
 // Intervals returns the intervals element of the LoaderInfo struct.
 func (i *LoaderInfo) Intervals() *sdtypes.IntervalData {
+	if i.intervals == nil {
+		i.intervals = &sdtypes.IntervalData{}
+	}
 	return i.intervals
 }
