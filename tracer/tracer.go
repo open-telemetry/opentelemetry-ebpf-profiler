@@ -330,6 +330,30 @@ func (t *Tracer) Close() {
 		delete(t.hooks, hookPoint)
 	}
 
+	// Close the eBPF maps and programs still referenced by this Tracer.
+	// processManager.Close() does not do this today, and without it every
+	// exe_id_to_N_stack_deltas / stack_delta_page_to_info / pid_page_to_mapping_info
+	// map (plus any per-executable inner map the outer map-of-maps is the sole
+	// kernel-side reference-holder for) stays memlocked for the life of the
+	// process -- even after this Tracer is torn down and a new one is created in
+	// its place, as happens when this package is embedded as an OTel Collector
+	// receiver (see collector/) that gets disabled/re-enabled via a config
+	// reload rather than a process restart. Only killing the process released
+	// this memory previously, since that is the only thing that reliably closes
+	// every file descriptor a process holds.
+	for name, m := range t.ebpfMaps {
+		if err := m.Close(); err != nil {
+			log.Errorf("Failed to close map %q: %v", name, err)
+		}
+		delete(t.ebpfMaps, name)
+	}
+	for name, p := range t.ebpfProgs {
+		if err := p.Close(); err != nil {
+			log.Errorf("Failed to close program %q: %v", name, err)
+		}
+		delete(t.ebpfProgs, name)
+	}
+
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
 	t.signalDone()
