@@ -142,6 +142,15 @@ type ProcessManager struct {
 	// Used as a fallback when /proc/<pid>/cgroup yields no container ID for processes
 	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
 	selfContainerID libpf.String
+
+	// probeAttachers is the list of per-process probe attachers registered via
+	// RegisterProbeAttacher. Protected by mu.
+	probeAttachers []ProbeAttacher
+
+	// attachedProbes maps each PID to the set of ProbeAttachers that have successfully
+	// attached to it. Used to guarantee at-most-once Attach per PID and to drive
+	// Detach on exit. Protected by mu.
+	attachedProbes map[libpf.PID][]ProbeAttacher
 }
 
 // Mapping represents an executable memory mapping of a process.

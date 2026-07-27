@@ -134,6 +134,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		includeEnvVars:           cfg.IncludeEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
+		attachedProbes:           make(map[libpf.PID][]ProbeAttacher),
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
