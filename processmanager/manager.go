@@ -70,6 +70,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
+
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -368,7 +369,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
 // strategy needs to be updated accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) (libpf.TraceHash, libpf.Frames) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -457,4 +458,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
+
+	return traceutil.HashTrace(trace), trace.Frames
 }

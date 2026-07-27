@@ -31,6 +31,8 @@ const (
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	agentName, agentVersion string,
 	collectionStartTime, collectionEndTime time.Time,
+	sourceProfiles []samples.SourceProfile,
+	processMeta func(libpf.PID) samples.ProcessMeta,
 ) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.Dictionary()
@@ -126,6 +128,13 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 		}
 
+	}
+
+	// Append source profiles from probes (e.g. live heap inuse).
+	for _, sp := range sourceProfiles {
+		appendSourceProfile(profiles, dic, attrMgr, stringSet, funcSet, locationSet, mappingSet, stackSet,
+			agentName, agentVersion, collectionStartTime, collectionEndTime,
+			sp, processMeta)
 	}
 
 	// Populate the ProfilesDictionary tables.
