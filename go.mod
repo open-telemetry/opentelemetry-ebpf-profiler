@@ -22,7 +22,7 @@ require (
 	github.com/klauspost/compress v1.19.1
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260722140410-0d9cb60d8019
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260724053022-fe8b4888c743
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
@@ -39,6 +39,7 @@ require (
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/metric v1.44.0
 	go.opentelemetry.io/proto/otlp v1.11.0
+	go.opentelemetry.io/proto/otlp/processcontext/v1development v0.4.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.29.0

@@ -14,8 +14,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	processcontextpb "go.opentelemetry.io/ebpf-profiler/processcontext/v1development"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 )
 
 const (
@@ -203,8 +203,8 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
 
-func (p *Info) ClearExtraAttributes() {
+func (p *Info) ClearAttributes() {
 	if p.Context != nil {
-		p.Context.ExtraAttributes = nil
+		p.Context.Attributes = nil
 	}
 }
