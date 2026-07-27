@@ -166,6 +166,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 
 	if err := c.enableProbes(ctx, trc); err != nil {
+		c.cancelFunc() // stop the startTraceHandling goroutine
 		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
