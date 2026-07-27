@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
+	"go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -198,6 +199,12 @@ func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 			return nil, fmt.Errorf("decoding kprobe config: %w", err)
 		}
 		return kprobe.New(kcfg)
+	case "uprobe":
+		var ucfg uprobe.Config
+		if err := mapstructure.Decode(cfg, &ucfg); err != nil {
+			return nil, fmt.Errorf("decoding uprobe config: %w", err)
+		}
+		return uprobe.New(ucfg)
 	default:
 		return nil, fmt.Errorf("unknown probe type %q", probeType)
 	}

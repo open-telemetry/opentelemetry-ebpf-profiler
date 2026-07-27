@@ -11,13 +11,26 @@ import (
 	"github.com/cilium/ebpf/link"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
+
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 )
 
 // ProbeContext bundles the tracer's shared state and provides helpers for building eBPF
 // collections inside Probe.Load() implementations.
 type ProbeContext struct {
-	maps    map[string]*cebpf.Map
-	sysVars SysConfigVars
+	maps             map[string]*cebpf.Map
+	sysVars          SysConfigVars
+	registerAttacher func(pm.ProbeAttacher)
+}
+
+// RegisterProbeAttacher registers a per-process probe attacher with the process manager.
+// Called from within Probe.Load to opt into per-process lifecycle callbacks:
+// SynchronizeProcess drives Match/Attach when new mappings appear; processPIDExit
+// drives Detach when the process exits.
+func (c *ProbeContext) RegisterProbeAttacher(a pm.ProbeAttacher) {
+	if c.registerAttacher != nil {
+		c.registerAttacher(a)
+	}
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -259,6 +272,9 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
+		registerAttacher: func(a pm.ProbeAttacher) {
+			t.processManager.RegisterProbeAttacher(a)
+		},
 	}
 
 	lnk, err := p.Load(ctx, t.origins, probeCtx)
