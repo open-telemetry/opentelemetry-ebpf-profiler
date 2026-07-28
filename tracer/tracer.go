@@ -336,15 +336,15 @@ func (t *Tracer) Close() {
 		delete(t.hooks, hookPoint)
 	}
 
-	// Wait for the map-monitor goroutines started in StartMapMonitors() to
-	// fully exit before touching the maps/programs they use: the caller's ctx
-	// has already been canceled by this point, but that only stops the
-	// tickers from firing again -- it does not guarantee an in-flight
-	// callback (e.g. eBPFMetricsCollector, called by the periodiccaller
-	// started below) has returned. Closing the maps out from under it would
-	// race with e.g. Map.Lookup and can crash. See periodiccaller.Start's doc
-	// comment for why calling these stop functions is only safe once ctx is
-	// already canceled.
+	// Stop the map-monitor goroutines started in StartMapMonitors() and wait
+	// for them to fully exit before touching the maps/programs they use.
+	// These stop functions are unconditional (they don't depend on the
+	// StartMapMonitors ctx being canceled, or ever becoming canceled -- see
+	// periodiccaller.Start's doc comment), which matters here: Close() can be
+	// reached via a monitor's own error path (e.g. monitorPIDEventsMap
+	// failing) before that ctx has been canceled by anything else. Without
+	// this, closing the maps out from under a still-running callback (e.g.
+	// eBPFMetricsCollector) would race with e.g. Map.Lookup and can crash.
 	for _, stop := range t.monitorsStop {
 		stop()
 	}

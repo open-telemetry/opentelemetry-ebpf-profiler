@@ -11,14 +11,15 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-// Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
+// Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled
+// or the returned function is called.
 //
-// The returned function stops the ticker and blocks until the goroutine has
-// exited. Since the goroutine itself only exits once <ctx> is canceled (a
-// bare ticker.Stop does not stop the loop), the returned function must only
-// be called after <ctx> has already been (or is concurrently being) canceled
-// -- otherwise it blocks forever.
+// The returned function unconditionally stops the goroutine (it does not
+// depend on <ctx> being, or ever becoming, canceled) and blocks until it has
+// actually exited -- so it is always safe to call, but must not be called
+// from within <callback> itself.
 func Start(ctx context.Context, interval time.Duration, callback func()) func() {
+	ctx, cancel := context.WithCancel(ctx)
 	ticker := time.NewTicker(interval)
 	done := make(chan struct{})
 	go func() {
@@ -36,7 +37,7 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 	}()
 
 	return func() {
-		ticker.Stop()
+		cancel()
 		<-done
 	}
 }
@@ -48,16 +49,17 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 type CallbackFunc func(manualTrigger bool) bool
 
 // StartWithManualTrigger starts a timer goroutine that calls <callback> every
-// <interval> until the <ctx> is canceled or <callback> returns false.
+// <interval> until the <ctx> is canceled, <callback> returns false, or the
+// returned function is called.
 // The 'trigger' channel can be used to trigger callback immediately.
 //
-// The returned function stops the ticker and blocks until the goroutine has
-// exited. If the goroutine is going to exit only because <ctx> is canceled
-// (rather than <callback> returning false), the returned function must only
-// be called once that cancellation has already happened -- otherwise it
-// blocks forever.
+// The returned function unconditionally stops the goroutine (it does not
+// depend on <ctx> being, or ever becoming, canceled, or on <callback> ever
+// returning false) and blocks until it has actually exited -- so it is
+// always safe to call, but must not be called from within <callback> itself.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 	trigger chan bool, callback CallbackFunc) func() {
+	ctx, cancel := context.WithCancel(ctx)
 	ticker := time.NewTicker(interval)
 	done := make(chan struct{})
 	go func() {
@@ -81,7 +83,7 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 	}()
 
 	return func() {
-		ticker.Stop()
+		cancel()
 		<-done
 	}
 }
