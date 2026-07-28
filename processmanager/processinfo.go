@@ -226,11 +226,12 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 }
 
 // attachProbesForMapping iterates the registered ProbeAttachers and, for each one
-// whose Match returns true for mappingPath, calls Attach(pid) if not already attached.
+// whose Match returns true for the given mapping, calls Attach if not already attached.
 // The caller must hold pm.mu for writing.
-func (pm *ProcessManager) attachProbesForMapping(pid libpf.PID, mappingPath string) {
+func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
+	pid := pr.PID()
 	for _, a := range pm.probeAttachers {
-		if !a.Match(mappingPath) {
+		if !a.Match(pr, m) {
 			continue
 		}
 		alreadyAttached := false
@@ -243,8 +244,8 @@ func (pm *ProcessManager) attachProbesForMapping(pid libpf.PID, mappingPath stri
 		if alreadyAttached {
 			continue
 		}
-		if err := a.Attach(pid); err != nil {
-			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, mappingPath, err)
+		if err := a.Attach(pr); err != nil {
+			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
 			continue
 		}
 		pm.attachedProbes[pid] = append(pm.attachedProbes[pid], a)
@@ -448,7 +449,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
-	pm.attachProbesForMapping(pr.PID(), m.Path)
+	pm.attachProbesForMapping(pr, m)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{

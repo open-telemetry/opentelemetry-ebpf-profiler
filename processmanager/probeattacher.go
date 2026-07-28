@@ -3,7 +3,10 @@
 
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
-import "go.opentelemetry.io/ebpf-profiler/libpf"
+import (
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
+)
 
 // ProbeAttacher is implemented by probes that need to attach once per matching process.
 // SynchronizeProcess calls Match for each new executable mapping; when Match returns
@@ -13,14 +16,14 @@ import "go.opentelemetry.io/ebpf-profiler/libpf"
 // Implementations must not call back into ProcessManager during Attach or Detach,
 // as those methods are invoked while the ProcessManager's internal lock is held.
 type ProbeAttacher interface {
-	// Match returns true if this probe wants to attach to a process that has an
-	// executable mapping at mappingPath. Must be cheap and must not block.
-	Match(mappingPath string) bool
+	// Match returns true if this probe wants to attach to a process that has the
+	// given executable mapping. Must be cheap and must not block.
+	Match(pr process.Process, mapping *process.RawMapping) bool
 
 	// Attach is called once for the first matching mapping of a new process.
 	// The implementation is responsible for opening and managing any per-process
 	// kernel resources (e.g. a uprobe link restricted to pid).
-	Attach(pid libpf.PID) error
+	Attach(pr process.Process) error
 
 	// Detach is called when a matched process exits. The implementation must
 	// close all per-process resources opened in Attach.

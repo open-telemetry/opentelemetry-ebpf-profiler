@@ -25,6 +25,7 @@ import (
 	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -117,14 +118,15 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 }
 
 // Match implements processmanager.ProbeAttacher.
-func (p *probe) Match(mappingPath string) bool {
-	return mappingPath == p.target ||
-		filepath.Base(mappingPath) == filepath.Base(p.target)
+func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
+	return mapping.Path == p.target ||
+		filepath.Base(mapping.Path) == filepath.Base(p.target)
 }
 
 // Attach implements processmanager.ProbeAttacher. Opens a PID-restricted uprobe
 // for the given process and stores the link for later cleanup.
-func (p *probe) Attach(pid libpf.PID) error {
+func (p *probe) Attach(pr process.Process) error {
+	pid := pr.PID()
 	ex, err := link.OpenExecutable(p.target)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", p.target, err)
