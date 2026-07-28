@@ -113,11 +113,7 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 }
 
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
-	var processName libpf.String
 	exePath, _ := sp.GetExe()
-	if name, err := os.ReadFile(sp.procBase + "comm"); err == nil {
-		processName = libpf.Intern(pfunsafe.ToString(name))
-	}
 
 	var envVarMap map[libpf.String]libpf.String
 	if len(cfg.IncludeEnvVars) > 0 {
@@ -141,7 +137,6 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
 	return ProcessMeta{
-		Name:         processName,
 		Executable:   exePath,
 		ContainerID:  containerID,
 		EnvVariables: envVarMap,
