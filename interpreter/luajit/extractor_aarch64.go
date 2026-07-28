@@ -5,8 +5,11 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
 	"errors"
+	"fmt"
+	"io"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"golang.org/x/arch/arm64/arm64asm"
 )
@@ -19,24 +22,34 @@ var _ extractor = &armExtractor{}
 
 // Return true if the code in b calls targetCall.
 func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, error) {
-	var ip int64
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return false, err
-		}
+	it := arm.NewInterpreterWithCode(b)
+	// TODO[btv] why is baseAddr signed?
+	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
-			a0, ok := i.Args[0].(arm64asm.PCRel)
-			if ok {
-				result := baseAddr + ip + int64(a0)
-				if result == targetCall {
-					return true, nil
+			if a0, ok := i.Args[0].(arm64asm.PCRel); ok {
+				pcrel := a0
+				if ip, ok := expression.AsConstant(it.Regs.Get(arm.PC)); ok {
+					// TODO[btv] why is targetCall signed?
+					candidate := int64(ip + uint64(pcrel) - uint64(arm.InstSz))
+					if candidate == targetCall {
+						return true
+					}
 				}
+
 			}
 		}
-		ip += 4
+		return false
+	})
+
+	if errors.Is(err, io.EOF) {
+		return false, nil
 	}
-	return false, nil
+	if err != nil {
+		return false, fmt.Errorf("scanning function body to find a call: %w", err)
+	}
+
+	return true, nil
 }
 
 // This function gets the glref offset from the first load and the
@@ -58,84 +71,99 @@ func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 // libluajit-5.1.so[0x15c48] <+40>:  ldr    x1, [x19, #0x38]
 // libluajit-5.1.so[0x15c4c] <+44>:  str    xzr, [x20, #0x170]  ; 0x170 is curLOffset
 func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
-	greg := -1
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, 0, err
-		}
+	gregFound := false
+	it := arm.NewInterpreterWithCode(b)
+
+	_, err = it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		// ldr    x20, [x0, #0x10] ; 0x10 is glrefOffset
-		if i.Op == arm64asm.LDR && greg == -1 {
-			a1, ok := i.Args[1].(arm64asm.MemImmediate)
-			if imm, ok2 := arm.DecodeImmediate(a1); ok && ok2 {
-				if a0, ok3 := arm.Xreg2num(i.Args[0]); ok3 {
-					greg = a0
-					glref = uint64(imm)
+		if i.Op == arm64asm.LDR && !gregFound {
+			if dst, ok := i.Args[0].(arm64asm.Reg); ok {
+				cap := expression.NewImmediateCapture("glrefOffset")
+				pattern := expression.Mem8(expression.Add(expression.Named(arm.X0.String()), cap))
+
+				if it.Regs.GetArm(dst).Match(pattern) {
+					gregFound = true
+					// Rename the register as `g`.
+					// This will cause it to be tracked, even if it later moves to a different register
+					// before being stored.
+					it.Regs.NameRegisterArm(dst, "g")
+					glref = cap.CapturedValue()
 				}
 			}
 		}
 		if i.Op == arm64asm.STR {
-			a1, ok := i.Args[1].(arm64asm.MemImmediate)
-			if regnum, ok2 := arm.Xreg2num(a1.Base); ok && ok2 && regnum == greg && i.Args[0] == arm64asm.XZR {
-				if imm, ok3 := arm.DecodeImmediate(a1); ok3 {
-					curL = uint64(imm)
-					break
+			if a1, ok := i.Args[1].(arm64asm.MemImmediate); ok {
+				name, ok := expression.AsNamed(it.Regs.GetArmSP(a1.Base))
+				// We renamed the register holding a pointer to `g` as "g" above.
+				if name == "g" && ok {
+					if imm, ok := arm.DecodeImmediate(a1); ok {
+						curL = uint64(imm)
+						return true
+					}
 				}
 			}
 		}
-	}
-	return glref, curL, nil
+		return false
+	})
+
+	return glref, curL, err
 }
 
 // libluajit-5.1.so[0x145e4] <+4>:   mov    x19, x0
 // ...
 // libluajit-5.1.so[0x14660] <+128>: add    x3, x19, #0xf38
 func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
-	greg := 0 // X0 as returned by Xreg2num
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
-		// Update greg if it moves
-		if i.Op == arm64asm.MOV {
-			a0, ok0 := arm.Xreg2num(i.Args[0])
-			a1, ok1 := arm.Xreg2num(i.Args[1])
-			// a1 == X0
-			if ok0 && ok1 && a1 == 0 {
-				greg = a0
-			}
-		}
+	var result uint64
+	it := arm.NewInterpreterWithCode(b)
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.ADD {
-			if a1, ok := arm.Xreg2num(i.Args[1]); ok && a1 == greg {
-				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
-					return uint64(imm), nil
+			var e expression.Expression
+			switch dst := i.Args[0].(type) {
+			case arm64asm.Reg:
+				e = it.Regs.GetArm(dst)
+			case arm64asm.RegSP:
+				e = it.Regs.GetArmSP(dst)
+			}
+			if e != nil {
+				cap := expression.NewImmediateCapture("g2Dispatch")
+				pattern := expression.Add(expression.Named("X0"), cap)
+				if e.Match(pattern) {
+					result = cap.CapturedValue()
+					return true
 				}
 			}
 		}
+		return false
+	})
+	if errors.Is(err, io.EOF) {
+		err = errors.New("g to dispatch offset not found")
 	}
-	return 0, errors.New("g to dispatch offset not found")
+	return result, err
 }
 
 func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, error) {
-	var ip int64
-	for len(b) > 0 {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
+	it := arm.NewInterpreterWithCode(b)
+	it.CodeAddress = expression.Imm(addr)
+
+	var result uint64
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
 				offset := int64(a0)
-				result := int64(addr) + ip + offset
-				return uint64(result), nil
+				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
+				result = uint64(ip + uint64(offset) - uint64(arm.InstSz))
+				return true
 			}
 		}
-		ip += 4
-		b = b[4:]
+		return false
+	})
+
+	if errors.Is(err, io.EOF) {
+		err = errors.New("no calls in code")
 	}
-	return 0, errors.New("no calls in code")
+
+	return result, err
 }
 
 // libluajit-5.1.so`lj_cf_jit_util_traceinfo:
@@ -155,87 +183,81 @@ func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, 
 // libluajit-5.1.so[0x67a78] <+52>:  ldr    x2, [x2, #0x168]   ;; This is J->trace
 // So for this version we want 0x2e0 + 0x168
 func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error) {
-	var g2JOffset uint64
-	reg := -1
+	var g2Traces uint64
 	sawSZTraceLoad := false
-	for len(b) > 0 {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
+	it := arm.NewInterpreterWithCode(b)
+	// e.g.: `ldr x2, [x19, #0x10]`, where `x19` came from `mov x19, x0`
+	globalLoad := expression.Mem8(expression.Add(expression.Named("X0"), expression.Imm(0x10)))
+	// e.g.: `ldr w3, [x2, #0x174]` or `ldr x2, [x2, #0x168]`, where `x2` is
+	// ultimately derived from global (usually an offset will have already been applied, e.g. `add x2, x2, #0x2e0`,
+	// which the interpreter handles transparently.)
+	cap := expression.NewImmediateCapture("g2traces")
+	jFieldLoad := expression.Mem8(expression.Add(globalLoad, cap))
+	jShortFieldLoad := expression.ZeroExtend32(jFieldLoad)
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.LDR {
-			a1, ok := i.Args[1].(arm64asm.MemImmediate)
-			if ok {
-				if imm, immOk := arm.DecodeImmediate(a1); immOk {
-					if imm == 0x10 {
-						if dst, dstOk := arm.Xreg2num(i.Args[0]); dstOk {
-							reg = dst
-						}
-					} else if base, baseOk := arm.Xreg2num(a1.Base); baseOk && base == reg {
-						// Skip over load of sztraces
-						if sawSZTraceLoad {
-							return g2JOffset + uint64(imm), nil
-						}
-						sawSZTraceLoad = true
-					}
+			var e expression.Expression
+			switch typed := i.Args[0].(type) {
+			case arm64asm.Reg:
+				e = it.Regs.GetArm(typed)
+			case arm64asm.RegSP:
+				e = it.Regs.GetArmSP(typed)
+			}
+			if e != nil && e.Match(jFieldLoad) ||
+				e.Match(jShortFieldLoad) {
+				if sawSZTraceLoad {
+					g2Traces = cap.CapturedValue()
+					return true
 				}
+				sawSZTraceLoad = true
 			}
 		}
-		if i.Op == arm64asm.ADD {
-			if a1, ok := arm.Xreg2num(i.Args[1]); ok && a1 == reg {
-				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
-					g2JOffset = uint64(imm)
-				}
-			}
-		}
-		b = b[4:]
+		return false
+	})
+	if errors.Is(err, io.EOF) {
+		err = errors.New("offset not found")
 	}
-	return 0, errors.New("offset not found")
+	return g2Traces, err
 }
 
 func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
-	var ip, x1 int64
 	var seenFirst bool
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
+	var retval uint64
+
+	it := arm.NewInterpreterWithCode(b)
+	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	var err error
+
+	_, err2 := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
-				result := baseAddr + ip + int64(a0)
-				if result == targetCall {
+				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
+				result := ip + uint64(a0) - uint64(arm.InstSz)
+				if result == uint64(targetCall) {
 					if seenFirst {
-						return uint64(x1), nil
+						x1, ok := expression.AsConstant(it.Regs.Get(arm.X1))
+						if ok {
+							retval = x1
+							return true
+						} else {
+							err = errors.New("Failed to statically evaluate X1")
+						}
+						return true
 					}
 					seenFirst = true
 				}
 			}
 		}
-		if i.Op == arm64asm.ADRP {
-			a1, ok := i.Args[1].(arm64asm.PCRel)
-			if ok {
-				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 1 /* X1 */ {
-					// zero lower 12 bits of addr+ip
-					x1 = (baseAddr + ip) & ^0xfff
-					x1 += int64(a1)
-				}
-			}
-		}
-		if i.Op == arm64asm.ADD {
-			a0, ok1 := arm.Xreg2num(i.Args[0])
-			a1, ok2 := arm.Xreg2num(i.Args[1])
-			// a1 == X1 && a0 == a1
-			if ok1 && ok2 && a1 == 1 && a0 == a1 {
-				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
-					x1 += imm
-				}
-			}
-		}
-		ip += 4
+		return false
+	})
+
+	err = errors.Join(err, err2)
+	if errors.Is(err, io.EOF) {
+		err = errors.New("failed to find 2nd arg to 2nd lua_pushcclosure call")
 	}
-	return 0, errors.New("failed to find 2nd arg to 2nd lua_pushcclosure call")
+	return retval, err
+
 }
 
 // luaopen_jit looks like this.  ___lldb_unnamed_symbol1372 is lj_lib_prereg, the 2nd call to it
@@ -277,47 +299,33 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 // [0x64dc4] <+228>: adrp   x2, -1           --> x2 becomes 0x63000
 // [0x64dcc] <+236>: add    x2, x2, #0x310   --> x2 becomes 0x63310
 func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, error) {
-	var ip, x2, prevCall int64
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
+	it := arm.NewInterpreterWithCode(b)
+	it.CodeAddress = expression.Imm(uint64(addr))
+	var prevCall uint64
+	var retval uint64
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
-			a0, ok := i.Args[0].(arm64asm.PCRel)
-			if ok {
-				result := addr + ip + int64(a0)
-				// There's also two back-to-back calls to lua_copy, ignore those
-				// by requiring x2 to have been set.
-				if result == prevCall && x2 != 0 {
-					return uint64(x2), nil
+			if a0, ok := i.Args[0].(arm64asm.PCRel); ok {
+				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
+				result := ip + uint64(a0)
+				if result == prevCall {
+					// There's also two back-to-back calls to lua_copy, ignore those
+					// by requiring x2 to have been set.
+					x2, ok := expression.AsConstant(it.Regs.Get(arm.X2))
+					if ok {
+						retval = x2
+						return true
+					}
 				}
 				prevCall = result
 			}
 		}
-		if i.Op == arm64asm.ADRP {
-			a1, ok := i.Args[1].(arm64asm.PCRel)
-			if ok {
-				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 2 { // X2
-					// zero lower 12 bits of addr+ip
-					x2 = (addr + ip) & ^0xfff
-					x2 += int64(a1)
-				}
-			}
-		}
-		if i.Op == arm64asm.ADD {
-			a0, ok1 := arm.Xreg2num(i.Args[0])
-			a1, ok2 := arm.Xreg2num(i.Args[1])
-			// a1 == X2 && a0 == a1
-			if ok1 && ok2 && a1 == 2 && a0 == a1 {
-				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
-					x2 += imm
-				}
-			}
-		}
-		ip += 4
+		return false
+	})
+	if errors.Is(err, io.EOF) {
+		err = errors.New("failed to find 3rd arg to lib prereg call")
 	}
-	return 0, errors.New("failed to find 3rd arg to lib prereg call")
+	return retval, err
 }
 
 // The 4th arg to lj_lib_register is lj_lib_cf_jit_util which is a function array.
@@ -338,60 +346,42 @@ func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, 
 // libluajit-5.1.so[0x63330] <+32>: ldr    x30, [sp], #0x10
 // libluajit-5.1.so[0x63334] <+36>: ret
 func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr int64) (int64, error) {
-	var ip, x3 int64
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
-		if i.Op == arm64asm.ADRP {
-			a1, ok := i.Args[1].(arm64asm.PCRel)
-			if ok {
-				if a0, ok2 := arm.Xreg2num(i.Args[0]); ok2 && a0 == 3 { // X3
-					// zero lower 12 bits of addr+ip
-					x3 = (addr + ip) & ^0xfff
-					x3 += int64(a1)
-				}
-			}
-		}
-		if i.Op == arm64asm.ADD {
-			a0, ok1 := arm.Xreg2num(i.Args[0])
-			a1, ok2 := arm.Xreg2num(i.Args[1])
-			// a1 == X3 && a0 == a1
-			if ok1 && ok2 && a1 == 3 && a0 == a1 {
-				if imm, ok := arm.DecodeImmediate(i.Args[2]); ok {
-					// Note: don't return yet, since sometimes there's actually
-					// multiple add instructions affecting the register before we finally get
-					// to the `bl`.
-					x3 += imm
-				}
-			}
-		}
+	it := arm.NewInterpreterWithCode(b)
+	it.CodeAddress = expression.Imm(uint64(addr))
+	var retval uint64
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
-			if x3 != 0 {
-				return x3, nil
+			if x3, ok := expression.AsConstant(it.Regs.Get(arm.X3)); ok {
+				retval = x3
+				return true
 			}
 		}
-		ip += 4
+		return false
+	})
+	if errors.Is(err, io.EOF) {
+		err = errors.New("failed to find 4th arg to lj_lib_register call")
 	}
-	return 0, errors.New("failed to find 4th arg to lj_lib_register call")
+	return int64(retval), err
 }
 
 func (a *armExtractor) findFirstCall(b []byte, addr int64) (uint64, error) {
-	var ip int64
-	for ; len(b) > 0; b = b[4:] {
-		i, err := arm64asm.Decode(b)
-		if err != nil {
-			return 0, err
-		}
+	it := arm.NewInterpreterWithCode(b)
+	it.CodeAddress = expression.Imm(uint64(addr))
+	var retval uint64
+
+	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
-				result := addr + ip + int64(a0)
-				return uint64(result), nil
+				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
+				retval = ip + uint64(a0)
+				return true
 			}
 		}
-		ip += 4
+		return false
+	})
+	if errors.Is(err, io.EOF) {
+		err = errors.New("no calls found")
 	}
-	return 0, errors.New("no calls found")
+	return retval, err
 }
