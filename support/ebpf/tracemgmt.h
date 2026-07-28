@@ -38,8 +38,17 @@
 // inverse_pac_mask is declared in native_stack_trace.ebpf.c
 extern u64 inverse_pac_mask;
 
+// filter_min_process_age_ns is declared in native_stack_trace.ebpf.c
+extern u64 filter_min_process_age_ns;
+
+// task_group_leader_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_group_leader_offset;
+
 // task_stack_offset is declared in native_stack_trace.ebpf.c
 extern u32 task_stack_offset;
+
+// task_start_time_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_start_time_offset;
 
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
@@ -55,6 +64,52 @@ extern u32 vma_vm_flags_offset;
 
 // origin_id_sampling is declared in native_stack_trace.ebpf.c
 extern u16 origin_id_sampling;
+
+// pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
+extern bool pid_ns_translation_enabled;
+
+// target_pid_ns_inode is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_inode;
+
+// target_pid_ns_dev is declared in native_stack_trace.ebpf.c
+extern u64 target_pid_ns_dev;
+
+// Mirrors the kernel's struct bpf_pidns_info for use with bpf_get_ns_current_pid_tgid().
+// pid:  thread PID as seen within the target PID namespace.
+// tgid: thread group ID (= process PID in userspace) within the target PID namespace.
+struct bpf_pidns_info {
+  u32 pid;
+  u32 tgid;
+};
+
+// get_pid_tgid resolves the current task's PID and TGID, translating them into the
+// configured target PID namespace if pid_ns_translation_enabled is set. Returns false if
+// the task could not be resolved (e.g. it is not part of the target namespace), in which
+// case the caller should skip the current event.
+static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
+{
+  if (pid_ns_translation_enabled) {
+    struct bpf_pidns_info ns_info = {0};
+    long ret                      = bpf_get_ns_current_pid_tgid(
+      target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
+    if (ret < 0) {
+      // Task is not in the target namespace, signal caller to skip it.
+      return false;
+    }
+    // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
+    // ns_info.pid is the thread PID in the namespace.
+    // Match the convention of the non-namespace path where pid holds the TGID.
+    *pid = ns_info.tgid;
+    *tid = ns_info.pid;
+    return true;
+  }
+
+  // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
+  u64 id = bpf_get_current_pid_tgid();
+  *pid   = id >> 32;
+  *tid   = id & 0xFFFFFFFF;
+  return true;
+}
 
 // Strips the PAC tag from a pointer.
 //
@@ -83,6 +138,39 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
   } else {
     DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
   }
+}
+
+// process_is_too_new returns true when a trace should be skipped because a process is too new.
+static inline EBPF_INLINE bool process_is_too_new(u64 ts)
+{
+  if (!filter_min_process_age_ns) {
+    return false;
+  }
+
+  struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+  struct task_struct *group_leader;
+  u64 group_leader_ptr = (u64)task + task_group_leader_offset;
+  // task_struct::group_leader is a pointer to the thread-group leader task, whose PID
+  // is the PID from userspace's perspective. Follow it so process age filtering uses
+  // the initial thread's start_time instead of the current thread's start_time.
+  if (bpf_probe_read_kernel(&group_leader, sizeof(group_leader), (void *)group_leader_ptr)) {
+    DEBUG_PRINT("Failed to read group_leader");
+    return false;
+  }
+
+  u64 start_time_ptr = (u64)group_leader + task_start_time_offset;
+  u64 start_time;
+  if (bpf_probe_read_kernel(&start_time, sizeof(start_time), (void *)start_time_ptr)) {
+    DEBUG_PRINT("Failed to read start_time");
+    return false;
+  }
+
+  if (ts >= start_time && ts - start_time < filter_min_process_age_ns) {
+    increment_metric(metricID_SamplesSkippedProcessTooNew);
+    return true;
+  }
+
+  return false;
 }
 
 // Send immediate notifications for event triggers to Go.
@@ -926,6 +1014,10 @@ collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_times
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
     return -1;
+  }
+
+  if (process_is_too_new(trace_timestamp)) {
+    return 0;
   }
 
   // The trace is reused on each call to this function so we have to reset the

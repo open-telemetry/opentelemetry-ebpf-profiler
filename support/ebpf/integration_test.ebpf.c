@@ -52,10 +52,13 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
 SEC("tracepoint/integration/sched_switch")
 int tracepoint_integration__sched_switch(void *ctx)
 {
-  u64 id  = bpf_get_current_pid_tgid();
-  u64 pid = id >> 32;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid)) {
+    return 0;
+  }
 
-  printt("pid %lld in integration test", pid);
+  printt("pid %d in integration test", pid);
 
   send_sample_traces(ctx, pid);
 
