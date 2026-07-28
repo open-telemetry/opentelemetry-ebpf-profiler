@@ -74,6 +74,8 @@ func cmpOrder(u Expression) int {
 		return 4
 	case *immediate:
 		return 5
+	case *clear:
+		return 6
 	default:
 		return 0
 	}
