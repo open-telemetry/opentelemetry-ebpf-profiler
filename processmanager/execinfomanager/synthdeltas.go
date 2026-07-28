@@ -47,9 +47,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 		if sym.Address == 0 || sym.Size == 0 {
 			return true
 		}
-		if uint64(sym.Address) < firstAddress {
-			firstAddress = uint64(sym.Address)
-		}
+		firstAddress = min(firstAddress, uint64(sym.Address))
 		bb := sdtypes.BasicBlock{
 			Start: uint64(sym.Address),
 			End:   uint64(sym.Address) + sym.Size,
@@ -116,13 +114,14 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) *sdtypes.IntervalData {
 		intervals.Add(bb)
 		return true
 	})
-	bb := sdtypes.BasicBlock{
-		Start: 0,
-		End:   firstAddress,
+	if len(intervals.Blocks) > 0 {
+		bb := sdtypes.BasicBlock{
+			Start: 0,
+			End:   firstAddress,
+		}
+		bb.Deltas.Add(0, sdtypes.UnwindInfoLR)
+		intervals.Add(bb)
+		intervals.Sort()
 	}
-	bb.Deltas.Add(0, sdtypes.UnwindInfoLR)
-	intervals.Add(bb)
-	intervals.Sort()
-
 	return intervals
 }

@@ -2156,6 +2156,9 @@ func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util
 	intervals := info.Intervals()
 	addr := uint64(sym.Address)
 	ndx := intervals.FindIndex(addr) + 1
+	if ndx == 0 {
+		return util.Range{}
+	}
 
 	for prevEnd := addr; ndx < len(intervals.Blocks) && prevEnd-addr < 1024; ndx++ {
 		// Check that there is a large gap.
