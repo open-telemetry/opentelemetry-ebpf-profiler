@@ -12,9 +12,17 @@ import (
 )
 
 // Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
+//
+// The returned function stops the ticker and blocks until the goroutine has
+// exited. Since the goroutine itself only exits once <ctx> is canceled (a
+// bare ticker.Stop does not stop the loop), the returned function must only
+// be called after <ctx> has already been (or is concurrently being) canceled
+// -- otherwise it blocks forever.
 func Start(ctx context.Context, interval time.Duration, callback func()) func() {
 	ticker := time.NewTicker(interval)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -27,7 +35,10 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		ticker.Stop()
+		<-done
+	}
 }
 
 // CallbackFunc is a function that can be triggered periodically or manually.
@@ -39,10 +50,18 @@ type CallbackFunc func(manualTrigger bool) bool
 // StartWithManualTrigger starts a timer goroutine that calls <callback> every
 // <interval> until the <ctx> is canceled or <callback> returns false.
 // The 'trigger' channel can be used to trigger callback immediately.
+//
+// The returned function stops the ticker and blocks until the goroutine has
+// exited. If the goroutine is going to exit only because <ctx> is canceled
+// (rather than <callback> returning false), the returned function must only
+// be called once that cancellation has already happened -- otherwise it
+// blocks forever.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 	trigger chan bool, callback CallbackFunc) func() {
 	ticker := time.NewTicker(interval)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -61,7 +80,10 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		ticker.Stop()
+		<-done
+	}
 }
 
 // StartWithJitter starts a timer that calls <callback> every <baseDuration+jitter>
