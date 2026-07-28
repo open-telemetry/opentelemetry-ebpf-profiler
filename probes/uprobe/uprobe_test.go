@@ -9,6 +9,7 @@ import (
 	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
 func TestNew(t *testing.T) {
@@ -66,7 +67,7 @@ func TestMatch(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range tests {
-		got := p.Match(tc.path)
+		got := p.Match(nil, &process.RawMapping{Path: tc.path})
 		if got != tc.want {
 			t.Errorf("Match(%q): want %v, got %v", tc.path, tc.want, got)
 		}
