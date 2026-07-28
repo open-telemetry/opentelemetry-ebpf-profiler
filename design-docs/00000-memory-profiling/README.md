@@ -33,7 +33,7 @@ The remaining problems are:
 1. The profiler does not currently consume USDT probes at all.
 2. It has no eBPF entry points for allocation events, no map for correlating sampled allocations to their frees, and no OTLP output shape for memory data.
 3. Allocation events fire at much higher rates than perf samples, so back-pressure must be designed in from the start, and simply hooking 'malloc' and 'free' presents an unreasonably high performance cost for profiled applications.
-4. Further to (3), we must ensure that we constrain memory telemetry production in a way that does not allow one process to starve others, and fits within the operational cost model of the full-host profiler (that is, with output telemetry proportional to vCPU on host)
+4. Further to the back-pressure problem above, we must ensure that we constrain memory telemetry production in a way that does not allow one process to starve others, and fits within the operational cost model of the full-host profiler (that is, with output telemetry proportional to vCPU on host)
 5. There is no stable, allocator-independent symbol to hook against. Allocators may be statically linked, inlined, or have their internal function names change across versions. This rules out attaching uprobes to allocator internals and motivates a contract-based approach where the target process explicitly provides the probes.
 
 Although our initial focus with this proposal is on *native* heap, this mechanism can be trivially extended to capture managed heap by inserting the USDT probes within the allocation path within the targeted runtime. This would require no additional change on the profiler side.
@@ -86,7 +86,7 @@ The in-process sampler is out of scope to *design* here, but the profiler's desi
 
 - **Random interval sampling over allocated bytes**: the sampler draws the byte distance to the next sample from a geometric distribution, or from an exponential approximation, with mean equal to the configured sampling interval (default ~512 KiB of allocated bytes). Equivalently, this models sampled allocations as a Poisson process over allocation volume.
 - A **per-thread byte counter** decremented on every allocation; the fast path is a thread-local add and a branch-predicted-taken comparison. When the counter reaches zero a sample fires and a new geometric interval is drawn.
-- On a sampled allocation, the sampler emits the `alloc` USDT with a **weight** equal to the unbiased size estimator (`size * interval / (interval - exp(-size/interval) * interval)` in the limit, or more simply `nsamples * interval`). This is what allows the profiler to scale sampled bytes back to true allocation volume without doing the math itself.
+- On a sampled allocation, the sampler emits the `alloc` USDT with a **weight** of `nsamples * interval`, where `nsamples` is the number of sampling-interval boundaries the allocation's byte range crossed (1 for a typical allocation, more for a single allocation large enough to span several intervals). This is the unbiased estimator in expectation: it is what allows the profiler to scale sampled bytes back to true allocation volume without doing the math itself.
 - For live-heap profiling, the sampler also tracks which pointers were sampled (mechanism is its own concern - see Out of Scope) and fires the `free` USDT only for those pointers.
 
 We provide an [example implementation for the above contract](https://github.com/DataDog/libdatadog/tree/main/libdd-profiling-heap-sampler), with the intention of validating the eBPF profiler-side implementation.
@@ -99,7 +99,7 @@ The profiler is not prescriptive about how the USDTs end up in a target process.
 2. **Existing allocator observability hooks.** Allocators like jemalloc and tcmalloc expose sampling hooks. A thin adapter registers with these at startup and emits USDTs from the callback. This can also be delivered via `LD_PRELOAD`, where a user preloads e.g. `LD_PRELOAD=jemalloc_with_hooks.so`. 
 3. **GOT table rewriting.** For already-running processes, a shared library is injected and rewrites allocator symbols in the GOT. Most flexible, but only works for dynamically linked allocators.
 
-For live heap profiling, the free side must recognise which pointers were previously sampled. When using allocator hooks (model 2), this comes from the allocator's built-in book-keeping. When wrapping externally (models 1 and 3), the reference implementation uses hardware pointer tagging (ARM64 TBI) or a per-allocation magic prefix (x86-64) to flag sampled pointers for near-zero-cost detection on every free. See the [reference implementation's tagging documentation](https://github.com/DataDog/libdatadog/blob/main/libdd-profiling-heap-sampler/docs/tagging.md) for details.
+For live heap profiling, the free side must recognise which pointers were previously sampled. When using allocator hooks (model 2), this comes from the allocator's built-in book-keeping. When wrapping externally (models 1 and 3), the reference implementation uses hardware pointer tagging (ARM64 TBI) or a per-allocation magic prefix (x86-64) to flag sampled pointers for near-zero-cost detection on every free. See the [reference implementation's tagging documentation](https://github.com/DataDog/libdatadog/blob/main/libdd-profiling-heap-sampler/docs/tagging.md) for details. This tagging is entirely internal to the in-process sampler: the profiler only ever sees the plain `ptr` argument on the `free` USDT and is unaware of how (or whether) a sampled pointer was flagged.
 
 The profiler does not care which of these models is used, which allocator is wrapped, or which language the process is written in; only that the contract below holds and that allocations are sampled according to the description above.
 
@@ -111,12 +111,14 @@ The profiler expects a target process to emit the following USDTs from a single 
 | :---- | :---- | :---- | :---- |
 | `otel_memory:alloc(user, size, w)` | `user` = user-visible pointer, `size` = bytes, `w` = unbiased weight | On a **sampled** allocation | Initial release |
 | `otel_memory:free(ptr)` | `ptr` = pointer being freed | On free of a previously-sampled allocation | Initial release |
-| `otel_memory:mmap(address, size)` | `addr` = mapped region start pointer, `size` = mapped region size in bytes | On successful `mmap` | Subsequent work; build on top of lessons from the initial release |
-| `otel_memory:munmap(address, size)` | `addr` = unmapped region start pointer, `size` = unmapped region size in bytes | On successful `munmap` | Subsequent work; build on top of lessons from the initial release |
+| `otel_memory:mmap(address, size)` | `address` = mapped region start pointer, `size` = mapped region size in bytes | On successful `mmap` | Subsequent work; build on top of lessons from the initial release |
+| `otel_memory:munmap(address, size)` | `address` = unmapped region start pointer, `size` = unmapped region size in bytes | On successful `munmap` | Subsequent work; build on top of lessons from the initial release |
 
-`weight` is the unbiased size estimator (`nsamples * sampling_interval`) already produced by the in-process sampler. The profiler uses it directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `cmalloc`, `aligned_alloc`, etc.
+`weight` is `nsamples * sampling_interval` (see In-process sampler design), already computed by the in-process sampler. The profiler uses it directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `cmalloc`, `aligned_alloc`, etc.
 
 For the initial support in the profiler we plan to support `alloc` and `free` only and add `mmap` support subsequently as this is more nuanced.
+
+We don't version the contract explicitly (no version field on the provider or probe names). We think it's unlikely the `alloc`/`free` signatures will need to change once fixed, and if they do, we'd introduce new `_v2`-suffixed probe names rather than mutate the existing ones in place - old and new samplers can then coexist against old and new profiler versions without a coordinated flag day.
 
 The profiler does **not** care how these USDTs got into the process. Compile-time wrappers, `LD_PRELOAD`, runtime GOT injection - all are equivalent from this side.
 
@@ -130,7 +132,7 @@ Experimentally the overhead of this on unsampled allocations adds single digit n
 
 ## USDT discovery
 
-USDT notes are emitted into `.note.stapsdt` ELF sections. For each process the profiler tracks, we scan the executable file-backed mappings, parse their `.note.stapsdt` section, filter to our provider, and translate probe names to a small fixed `ProbeKind` enum (`ProbeHeapAlloc`, `ProbeHeapFree`).
+USDT notes are emitted into `.note.stapsdt` ELF sections. For each process the profiler tracks, we scan the executable file-backed mappings, parse their `.note.stapsdt` section, filter to our provider, and translate probe names to a small fixed `ProbeKind` enum (`ProbeHeapAlloc`, `ProbeHeapFree`). This enum is expected to grow (e.g. `ProbeHeapMmap`, `ProbeHeapMunmap`) as the `mmap`/`munmap` probes land in subsequent work.
 
 Parsing is delegated to [`github.com/parca-dev/usdt`](http://github.com/parca-dev/usdt). This avoids hand-rolling SystemTap SDT note parsing while keeping the existing `cilium/ebpf` runtime for attachment - we get the parser without adopting a second eBPF stack. This Polar Signals library is already being used successfully in Polar Signals' downstream fork of the full-host profiler and would benefit the community to be upstreamed to support this work.
 
@@ -154,7 +156,7 @@ Two new eBPF programs, `uprobe_heap_alloc` and `uprobe_heap_free`, live in `supp
 2. Tail-call into the existing native unwinder via `collect_trace`, tagging the trace with a new origin (`TRACE_HEAP_ALLOC`) and passing `weight` through as the trace value. This is the same shape used by the off-CPU entry program.
 3. For free: short-circuit if `(pid, ptr)` is not in our sampled allocation correlation map. This keeps the hot path cheap.
 
-The `uprobe_heap_free` program is loaded into the kernel only when `-live-heap-profiling` is enabled. When only `-heap-profiling` is on, the program isn't loaded and the `free` USDT isn't attached, so plain allocation profiling pays only the alloc-side cost.
+The `uprobe_heap_free` program is loaded into the kernel only when `-live-heap-profiling` is enabled. When only `-allocation-profiling` is on, the program isn't loaded and the `free` USDT isn't attached, so plain allocation profiling pays only the alloc-side cost.
 
 ## Reporting / OTLP structure
 
@@ -183,7 +185,13 @@ Notes on the controller:
 - The setpoint is `target_memory_events_per_sec`, derived from the existing sample budget multiplied by a configurable memory fraction. Memory events cannot starve on-CPU profiling because the budget is apportioned, not shared.
 - Dropped events are still counted (so we can surface drop ratios as a metric and ultimately fold the drop probability back into `weight` for unbiased totals).
 - The controller's tuning constants and the target memory fraction are to be determined empirically; see Plan to Acquire Missing Data.
-- The controller bounds memory-event throughput, but it does not by itself bound the amount of live allocation state retained for `inuse_*` profiles. Live heap tracking therefore also requires explicit global and per-process state limits, described in the live heap state bounds section.
+- The controller bounds memory-event throughput, but it does not by itself bound the amount of live allocation state retained for `inuse_*` profiles. Live heap tracking therefore also requires explicit global and per-process state limits, described below.
+
+### Live heap state bounds
+
+Sampled allocations awaiting a matching free are tracked in a live-heap correlation map, keyed by `(pid, ptr)` (this is the same map `uprobe_heap_free` consults - see eBPF entry programs). This map is bounded by both a global cap and a per-process cap. When either cap is reached, we simply stop accepting new elements into the map: further sampled allocations are not added to live-heap tracking until existing entries are freed and their slots released. This only affects `inuse_*` accounting - the `alloc_space`/`alloc_objects` profiles are unaffected, since those are produced directly from the alloc-side event and don't depend on the correlation map. As an aside, we already emit drop-ratio metrics for the PID controller (above); the live-heap cap gets the same treatment, so operators have visibility into both throttling paths.
+
+Because `uprobe_heap_free` only decrements state for pointers it finds in the correlation map, an allocation dropped for being over-cap is simply never seen by the corresponding free - the same behaviour as an allocation dropped by the PID controller.
 
 In combination: the in-process interval sampler bounds the event rate the application can produce, and the PID controller bounds what actually reaches the profile under load. The two layers do not need to agree - the in-process sampler is unaware of the controller, which is what keeps the hot path branch-prediction-friendly and allocator-agnostic.
 
@@ -212,7 +220,7 @@ The proposal above is the preferred design. The two non-obvious calls are:
 - **Unit tests** for: USDT note parser adapter, provider/probe-name filtering, the reconcile diff (probes added on `dlopen`, removed on `munmap`/exit).
 - **Integration tests** using small Rust and C test binaries that emit the contract USDTs with deterministic allocation/free patterns; assert OTLP output shape, value sums, and sample counts. A PoC of this kind already exists on the `sgg/heap-prof-poc` branch[^1] and can be cleaned up into the upstream test suite.
 - **Lifecycle coverage** for fork, exec, `dlopen`-after-start, exit, short-lived processes.
-- **Negative tests**: process without our USDTs (nothing attaches); process with USDTs but `-heap-profiling` not set (nothing attaches); `-live-heap-profiling` without `-heap-profiling` (rejected at flag parse).
+- **Negative tests**: process without our USDTs (nothing attaches); process with USDTs but `-allocation-profiling` not set (nothing attaches); `-live-heap-profiling` without `-allocation-profiling` (rejected at flag parse).
 
 ## Impact on Testing of Other Systems/Components
 
