@@ -8,10 +8,11 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
-// ProbeAttacher is implemented by probes that need to attach once per matching process.
-// SynchronizeProcess calls Match for each new executable mapping; when Match returns
-// true and the attacher has not yet attached to that PID, Attach is called exactly once.
-// processPIDExit calls Detach when the matched process exits.
+// ProbeAttacher is implemented by probes that need to attach to matching processes.
+// SynchronizeProcess calls Match for each new executable mapping; Attach is called
+// for every mapping where Match returns true, so a single process may trigger multiple
+// Attach calls if it has more than one matching mapping.
+// processPIDExit calls Detach once for each successful Attach when the process exits.
 //
 // Implementations must not call back into ProcessManager during Attach or Detach,
 // as those methods are invoked while the ProcessManager's internal lock is held.
@@ -20,8 +21,9 @@ type ProbeAttacher interface {
 	// given executable mapping. Must be cheap and must not block.
 	Match(pr process.Process, mapping *process.RawMapping) bool
 
-	// Attach is called once for the first matching mapping of a new process.
-	// The implementation is responsible for opening and managing any per-process
+	// Attach is called for each matching mapping of a process. It may therefore be
+	// called more than once for the same process if multiple mappings match.
+	// The implementation is responsible for opening and managing per-mapping
 	// kernel resources (e.g. a uprobe link restricted to pid).
 	Attach(pr process.Process) error
 

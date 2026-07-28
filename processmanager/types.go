@@ -147,9 +147,9 @@ type ProcessManager struct {
 	// RegisterProbeAttacher. Protected by mu.
 	probeAttachers []ProbeAttacher
 
-	// attachedProbes maps each PID to the set of ProbeAttachers that have successfully
-	// attached to it. Used to guarantee at-most-once Attach per PID and to drive
-	// Detach on exit. Protected by mu.
+	// attachedProbes maps each PID to the list of ProbeAttachers that have successfully
+	// attached to it (one entry per successful Attach call). Used to drive the
+	// corresponding Detach calls on process exit. Protected by mu.
 	attachedProbes map[libpf.PID][]ProbeAttacher
 }
 
