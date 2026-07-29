@@ -134,7 +134,7 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 	pm.fillSelfContainerID(pid, &meta)
 
 	if pm.metaEnricher != nil {
-		pm.metaEnricher(&meta)
+		pm.metaEnricher(pr, &meta)
 	}
 
 	info := &processInfo{

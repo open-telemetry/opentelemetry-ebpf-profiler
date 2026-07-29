@@ -70,7 +70,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
-	ProcessMetaFn         ProcessMetaEnricher
+	ProcessMetaFn         process.ProcessMetaEnricher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading

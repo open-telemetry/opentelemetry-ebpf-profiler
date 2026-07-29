@@ -23,12 +23,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// ProcessMetaEnricher is an optional hook called once per process when it is first
-// observed. Implementations may read from /proc or any other source and store
-// arbitrary key-value pairs in meta.ExtraMeta. The callback runs while the process
-// is still alive, so short-lived process data is reliably captured.
-type ProcessMetaEnricher func(*process.ProcessMeta)
-
 // elfInfo contains cached data from an executable needed for processing mappings.
 // A negative cache entry may also be recorded with err set to indicate permanent
 // error. This avoids inspection of non-ELF or corrupted files again and again.
@@ -149,7 +143,7 @@ type ProcessManager struct {
 	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
 	selfContainerID libpf.String
 
-	metaEnricher ProcessMetaEnricher
+	metaEnricher process.ProcessMetaEnricher
 }
 
 // Mapping represents an executable memory mapping of a process.

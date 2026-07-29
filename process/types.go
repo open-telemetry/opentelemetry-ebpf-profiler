@@ -167,3 +167,9 @@ type Process interface {
 
 	pfelf.ELFOpener
 }
+
+// ProcessMetaEnricher is an optional hook called once per process when it is first
+// observed. Implementations may read from /proc or any other source and store
+// arbitrary key-value pairs in meta.ExtraMeta. The callback runs while the process
+// is still alive, so short-lived process data is reliably captured.
+type ProcessMetaEnricher func(Process, *ProcessMeta)

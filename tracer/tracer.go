@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -210,8 +211,8 @@ type Config struct {
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
 	// ProcessMetaEnricher is an optional hook for enriching process metadata at
-	// process discovery time. See processmanager.ProcessMetaEnricher.
-	ProcessMetaEnricher pm.ProcessMetaEnricher
+	// process discovery time.
+	ProcessMetaEnricher process.ProcessMetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.
