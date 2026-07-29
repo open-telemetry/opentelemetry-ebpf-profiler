@@ -100,16 +100,16 @@ func TestOffsets(t *testing.T) {
 				require.NoError(t, err)
 
 				// Test that our chicanery for finding traceinfo checks out on symbolized builds.
-				if ti, err1 := od.lookupSymbol("lj_cf_jit_util_traceinfo"); err1 == nil {
-					ti2, err2 := od.findTraceInfoFromLuaOpen()
-					require.NoError(t, err2)
+				if ti, ok := od.foundSymbols["lj_cf_jit_util_traceinfo"]; ok {
+					ti2, err := od.findTraceInfoFromLuaOpen()
+					require.NoError(t, err)
 					require.Equal(t, ti.Address, ti2.Address)
 				}
 
 				// Ditto for lj_dispatch_update
-				if du, err1 := od.lookupSymbol("lj_dispatch_update"); err1 == nil {
-					du2, err2 := od.e.findLjDispatchUpdateAddr(od.luajitOpen, od.luajitOpenAddr)
-					require.NoError(t, err2)
+				if du, ok := od.foundSymbols["lj_dispatch_update"]; ok {
+					du2, err := od.e.findLjDispatchUpdateAddr(od.luajitOpen, od.luajitOpenAddr)
+					require.NoError(t, err)
 					require.Equal(t, libpf.Address(du.Address), du2)
 				}
 
