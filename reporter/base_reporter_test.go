@@ -186,7 +186,7 @@ func (p *processNameAttrProducer) CollectExtraSampleMeta(_ *libpf.Trace, meta *s
 	if meta.ExtraMeta == nil {
 		return ""
 	}
-	return meta.ExtraMeta["process.name"]
+	return meta.ExtraMeta[libpf.Intern("process.name")]
 }
 
 func (p *processNameAttrProducer) ExtraSampleAttrs(attrMgr *samples.AttrTableManager, extraMeta any) []int32 {

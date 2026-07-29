@@ -15,7 +15,7 @@ type TraceEventMeta struct {
 	// ExtraMeta holds key-value pairs produced by a processmanager.ProcessMetaEnricher.
 	// It is nil when no enricher is configured. Consumers can access this via
 	// SampleAttrProducer.CollectExtraSampleMeta to attach process-level attributes.
-	ExtraMeta      map[string]string
+	ExtraMeta      map[libpf.String]string
 	APMServiceName string
 	Timestamp      libpf.UnixTime64
 	CPU            uint32

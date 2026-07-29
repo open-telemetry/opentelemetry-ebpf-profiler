@@ -119,7 +119,7 @@ type ProcessMeta struct {
 
 	// ExtraMeta holds arbitrary key-value pairs populated by a ProcessMetaEnricher.
 	// It is nil unless an enricher is configured and explicitly sets values.
-	ExtraMeta map[string]string
+	ExtraMeta map[libpf.String]string
 }
 
 // Process is the interface to inspect ELF coredump/process.
