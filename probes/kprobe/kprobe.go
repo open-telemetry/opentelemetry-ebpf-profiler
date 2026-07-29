@@ -23,10 +23,9 @@ const progName = "kprobe__generic"
 //
 //	probes:
 //	  - kind: kprobe
-//	    config:
-//	      type: kprobe        # kprobe (default) | kretprobe | uprobe | uretprobe
-//	      symbol: vfs_open
-//	      target: ""          # executable path; required for uprobe/uretprobe
+//	    type: kprobe        # kprobe (default) | kretprobe | uprobe | uretprobe
+//	    symbol: vfs_open
+//	    target: ""          # executable path; required for uprobe/uretprobe
 type Config struct {
 	Type   string `mapstructure:"type"`
 	Symbol string `mapstructure:"symbol"`
