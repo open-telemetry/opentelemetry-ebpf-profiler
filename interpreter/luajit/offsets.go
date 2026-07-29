@@ -356,7 +356,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	// 	lj_cf_jit_util_ircalladdr
 	//   };
 	const traceInfoIndex = 4
-	funcAddrs := make([]uint64, 12)
+	funcAddrs := make([]uint64, 11)
 	_, err = o.f.ReadAt(pfunsafe.FromSlice(funcAddrs), int64(libJitFunctionAddresses))
 	if err != nil {
 		return nil, err
