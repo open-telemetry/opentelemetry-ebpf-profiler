@@ -18,8 +18,8 @@ import (
 // depend on <ctx> being, or ever becoming, canceled) and blocks until it has
 // actually exited -- so it is always safe to call, but must not be called
 // from within <callback> itself.
-func Start(ctx context.Context, interval time.Duration, callback func()) func() {
-	ctx, cancel := context.WithCancel(ctx)
+func Start(parentCtx context.Context, interval time.Duration, callback func()) func() {
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(interval)
 	done := make(chan struct{})
 	go func() {
@@ -57,9 +57,9 @@ type CallbackFunc func(manualTrigger bool) bool
 // depend on <ctx> being, or ever becoming, canceled, or on <callback> ever
 // returning false) and blocks until it has actually exited -- so it is
 // always safe to call, but must not be called from within <callback> itself.
-func StartWithManualTrigger(ctx context.Context, interval time.Duration,
+func StartWithManualTrigger(parentCtx context.Context, interval time.Duration,
 	trigger chan bool, callback CallbackFunc) func() {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(interval)
 	done := make(chan struct{})
 	go func() {
@@ -89,12 +89,19 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 }
 
 // StartWithJitter starts a timer that calls <callback> every <baseDuration+jitter>
-// until the <ctx> is canceled. <jitter>, [0..1], is used to add +/- jitter
-// to <baseDuration> at every iteration of the timer.
-func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter float64,
+// until the <ctx> is canceled or the returned function is called. <jitter>,
+// [0..1], is used to add +/- jitter to <baseDuration> at every iteration.
+//
+// The returned function unconditionally stops the goroutine and blocks until
+// it has actually exited -- so it is always safe to call, but must not be
+// called from within <callback> itself.
+func StartWithJitter(parentCtx context.Context, baseDuration time.Duration, jitter float64,
 	callback func()) func() {
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(libpf.AddJitter(baseDuration, jitter))
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -108,5 +115,8 @@ func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter flo
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		cancel()
+		<-done
+	}
 }

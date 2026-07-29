@@ -94,10 +94,8 @@ type Tracer struct {
 	// ebpfProgs holds the currently loaded eBPF programs.
 	ebpfProgs map[string]*cebpf.Program
 
-	// monitorsStop holds the stop-and-wait functions for the periodic
-	// goroutines started in StartMapMonitors() that access ebpfMaps on an
-	// ongoing basis. Close() calls these, in order, before closing ebpfMaps /
-	// ebpfProgs, so no goroutine is still using a map while it is being closed.
+	// monitorsStop stops and waits for the StartMapMonitors goroutines that
+	// use ebpfMaps, called by Close() before closing ebpfMaps/ebpfProgs.
 	monitorsStop []func()
 
 	// kernelSymbolizer does kernel fallback symbolization
@@ -336,23 +334,14 @@ func (t *Tracer) Close() {
 		delete(t.hooks, hookPoint)
 	}
 
-	// Stop the map-monitor goroutines started in StartMapMonitors() and wait
-	// for them to fully exit before touching the maps/programs they use.
-	// These stop functions are unconditional (they don't depend on the
-	// StartMapMonitors ctx being canceled, or ever becoming canceled -- see
-	// periodiccaller.Start's doc comment), which matters here: Close() can be
-	// reached via a monitor's own error path (e.g. monitorPIDEventsMap
-	// failing) before that ctx has been canceled by anything else. Without
-	// this, closing the maps out from under a still-running callback (e.g.
-	// eBPFMetricsCollector) would race with e.g. Map.Lookup and can crash.
+	// Stop the StartMapMonitors goroutines and wait for them to exit before
+	// touching the maps/programs they use.
 	for _, stop := range t.monitorsStop {
 		stop()
 	}
 	t.monitorsStop = nil
 
-	// Close the eBPF maps and programs still referenced by this Tracer, so
-	// their memlocked memory is released without needing the whole process to
-	// exit (processManager.Close() does not do this today).
+	// Close the eBPF maps and programs still referenced by this Tracer.
 	for name, m := range t.ebpfMaps {
 		if err := m.Close(); err != nil {
 			log.Errorf("Failed to close map %q: %v", name, err)
@@ -1228,10 +1217,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		metrics.AddSlice(t.customLabels.getAndResetMetrics())
 	})
 
-	// Both goroutines read from t.ebpfMaps on every tick (directly, or via
-	// eventMetricCollector/traceEventMetricCollector which were handed live
-	// map references by startEventMonitor/startTraceEventMonitor above).
-	// Close() must wait for them to fully exit before closing those maps.
+	// Both goroutines read t.ebpfMaps on every tick; Close() must wait for
+	// them to exit before closing those maps.
 	t.monitorsStop = append(t.monitorsStop, stopPIDMonitor, stopMetricsMonitor)
 
 	return nil
