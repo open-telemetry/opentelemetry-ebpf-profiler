@@ -9,17 +9,18 @@ import (
 
 type clear struct {
 	v    Expression
-	bits int
+	bits uint
 }
 
-func mask(bits int) uint64 {
+// int must be nonnegative
+func mask(bits uint) uint64 {
 	return (uint64(1) << bits) - 1
 }
 
 // Clear returns an expression with the least-significant
 // bits cleared; for example, Clear(expr, 16) would model
 // expr & ^0xFFFF
-func Clear(v Expression, bits int) Expression {
+func Clear(v Expression, bits uint) Expression {
 	if bits >= 64 {
 		bits = 64
 	}
