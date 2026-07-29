@@ -67,6 +67,7 @@ func PutReader(r *Reader) {
 	r.off = 0
 	r.limit = 0
 	r.slimit = 0
+	r.sectionEnds = r.sectionEnds[:0]
 	r.flush()
 	readerPool.Put(r)
 }
@@ -222,7 +223,7 @@ func (r *Reader) ReadByte() (byte, error) {
 	return b, nil
 }
 
-// Uint16 reads an unsigned 8-bit number.
+// Uint8 reads an unsigned 8-bit number.
 func (r *Reader) Uint8() uint8 {
 	val, _ := r.ReadByte()
 	return val
@@ -340,8 +341,9 @@ func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
 
 		// If buffer is full and no delim, we must clear it to find the delim
 		if r.nlim != r.nbuf || (r.pos == 0 && r.nbuf == r.bufSize) {
+			pos := r.pos
 			r.pos = r.nlim
-			return r.buf[r.pos:r.nlim], ErrBufferTooSmall
+			return r.buf[pos:r.nlim], ErrBufferTooSmall
 		}
 
 		if err := r.fill(); err != nil {
@@ -409,7 +411,7 @@ func (r *Reader) SearchSlice(pattern []byte) (int64, error) {
 	}
 }
 
-// StartSection modifies reader to process a sectio of the file of length 'n':
+// StartSection modifies reader to process a section of the file of length 'n':
 // further operations do go beyond the section until EndSection is called.
 func (r *Reader) StartSection(n int64) error {
 	if n < 0 {

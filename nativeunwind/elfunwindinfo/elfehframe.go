@@ -849,7 +849,7 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 		vaddr:      r.vaddr,
 	}
 	cr.Seek(ciePos, io.SeekStart)
-	r.SetBufferSize(256) // CIE entry is typically 20-80 bytes
+	cr.SetBufferSize(256) // CIE entry is typically 20-80 bytes
 
 	length, marker, err := cr.parseLengthAndMarker()
 	if err != nil {
