@@ -117,17 +117,17 @@ type extractor interface {
 	// #endif
 	//
 	//	setgcrefnull(g->cur_L);   <---- DING DING DING
-	findOffsetsFromLuaClose(b []byte) (uint64, uint64, error)
+	findOffsetsFromLuaClose(b []byte) (libpf.Address, libpf.Address, error)
 
 	// Find call to lj_dispatch_update in luaopen_jit by looking for
 	// first call being passed G loaded from L->glref.
-	findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, error)
+	findLjDispatchUpdateAddr(b []byte, addr libpf.Address) (libpf.Address, error)
 
 	// luaopen_jit calls jit_init which calls lj_dispatch_update. lj_dispatch_update
 	// has this line near the beginning:
 	//   ASMFunction *disp = G2GG(g)->dispatch;
 	// Use this line to find the g2dispatch offset.
-	findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error)
+	findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (libpf.Address, error)
 
 	// jit_checktrace does this:
 	//
@@ -138,23 +138,23 @@ type extractor interface {
 	// L2J will find J relative to G and traceref will find traces
 	// relative to J so we find both offsets and add them to get
 	// g2traces offset.
-	findG2TracesOffsetFromChecktrace([]byte) (uint64, error)
+	findG2TracesOffsetFromChecktrace([]byte) (libpf.Address, error)
 
 	// Return true if the code in b calls targetCall.
-	callExists(b []byte, baseAddr, targetCall int64) (bool, error)
+	callExists(b []byte, baseAddr, targetCall libpf.Address) (bool, error)
 
-	findFirstCall(b []byte, baseAddr int64) (uint64, error)
+	findFirstCall(b []byte, baseAddr libpf.Address) (libpf.Address, error)
 
-	find3rdArgToLibPreregCall(b []byte, baseAddr int64) (uint64, error)
+	find3rdArgToLibPreregCall(b []byte, baseAddr libpf.Address) (libpf.Address, error)
 
-	find4thArgToLibRegCall(b []byte, baseAddr int64) (int64, error)
+	find4thArgToLibRegCall(b []byte, baseAddr libpf.Address) (libpf.Address, error)
 
 	// find2ndArgTo2ndPushClosureCall finds the address of the
 	// second argument to the second "lua_pushcclosure" call,
 	// whose address appears in `targetCall`.
 	//
 	// This is used to find the address of `luaopen_jit_util` from the code of `luaopen_jit`.
-	find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error)
+	find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall libpf.Address) (libpf.Address, error)
 }
 
 func newExtractor(ef *pfelf.File) extractor {
@@ -171,7 +171,7 @@ func newExtractor(ef *pfelf.File) extractor {
 type offsetData struct {
 	f              *pfelf.File
 	luajitOpen     []byte
-	luajitOpenAddr uint64
+	luajitOpenAddr libpf.Address
 	e              extractor
 	foundSymbols   map[libpf.SymbolName]libpf.Symbol
 }
@@ -188,7 +188,7 @@ func (o *offsetData) init(ef *pfelf.File) error {
 		return err
 	}
 	o.luajitOpen = b
-	o.luajitOpenAddr = uint64(addr)
+	o.luajitOpenAddr = libpf.Address(addr)
 	return nil
 }
 
@@ -210,7 +210,7 @@ func (o *offsetData) findCurLOffset() (uint16, error) {
 	return uint16(curL), nil
 }
 
-func (o *offsetData) findG2DispatchOffset() (uint64, error) {
+func (o *offsetData) findG2DispatchOffset() (libpf.Address, error) {
 	luaDispatchUpdateAddr, err := o.e.findLjDispatchUpdateAddr(o.luajitOpen, o.luajitOpenAddr)
 	if err != nil {
 		return 0, err
@@ -223,7 +223,7 @@ func (o *offsetData) findG2DispatchOffset() (uint64, error) {
 	return o.e.findG2DispatchOffsetFromLjDispatchUpdate(b)
 }
 
-func (o *offsetData) findG2TracesOffset() (uint64, error) {
+func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 	if sym, err := o.lookupSymbol("jit_checktrace"); err == nil {
 		// easiest case
 		b, err := o.readSym(sym)
@@ -262,7 +262,7 @@ func (o *offsetData) findG2TracesOffset() (uint64, error) {
 
 	addr, err := o.e.findG2TracesOffsetFromChecktrace(b)
 	if err != nil {
-		callAddr, err := o.e.findFirstCall(b, int64(sym.Address))
+		callAddr, err := o.e.findFirstCall(b, libpf.Address(sym.Address))
 		if err != nil {
 			return 0, err
 		}
@@ -293,9 +293,9 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	if err != nil {
 		return nil, err
 	}
-	pushClosureAddr := int64(pushCClosure.Address)
-	baseAddr := int64(o.luajitOpenAddr)
-	var luaopenJitUtilAddr uint64
+	pushClosureAddr := libpf.Address(pushCClosure.Address)
+	baseAddr := o.luajitOpenAddr
+	var luaopenJitUtilAddr libpf.Address
 	inlined, err := o.e.callExists(o.luajitOpen, baseAddr, pushClosureAddr)
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	if err != nil {
 		return nil, err
 	}
-	libJitFunctionAddresses, err := o.e.find4thArgToLibRegCall(b, int64(luaopenJitUtilAddr))
+	libJitFunctionAddresses, err := o.e.find4thArgToLibRegCall(b, luaopenJitUtilAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	//   };
 	const traceInfoIndex = 4
 	funcAddrs := make([]uint64, 12)
-	_, err = o.f.ReadAt(pfunsafe.FromSlice(funcAddrs), libJitFunctionAddresses)
+	_, err = o.f.ReadAt(pfunsafe.FromSlice(funcAddrs), int64(libJitFunctionAddresses))
 	if err != nil {
 		return nil, err
 	}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -109,7 +110,7 @@ func TestOffsets(t *testing.T) {
 				if du, err1 := od.lookupSymbol("lj_dispatch_update"); err1 == nil {
 					du2, err2 := od.e.findLjDispatchUpdateAddr(od.luajitOpen, od.luajitOpenAddr)
 					require.NoError(t, err2)
-					require.Equal(t, uint64(du.Address), du2)
+					require.Equal(t, libpf.Address(du.Address), du2)
 				}
 
 				// TODO: strip binary and do it again.
@@ -178,8 +179,8 @@ func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {
 func TestX86LuaClose(t *testing.T) {
 	testdata := []struct {
 		name          string
-		glRefExpected uint64
-		curLExpected  uint64
+		glRefExpected libpf.Address
+		curLExpected  libpf.Address
 		code          []byte
 	}{
 		{
@@ -260,7 +261,7 @@ func TestX86LuaClose(t *testing.T) {
 func TestX86Checktrace(t *testing.T) {
 	testdata := []struct {
 		name     string
-		expected uint64
+		expected libpf.Address
 		code     []byte
 	}{
 		{
@@ -328,8 +329,8 @@ func TestX86Checktrace(t *testing.T) {
 func TestX86LjDispatchUpdateAddr(t *testing.T) {
 	testdata := []struct {
 		name     string
-		baseAddr uint64
-		expected uint64
+		baseAddr libpf.Address
+		expected libpf.Address
 		code     []byte
 	}{
 		{
@@ -396,13 +397,13 @@ func TestX86RipRelativeLea2ndArgTo2ndCall(t *testing.T) {
 	x := x86Extractor{}
 	got, err := x.find2ndArgTo2ndPushClosureCall(code, 0, 0x1000)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0xa00), got)
+	require.Equal(t, libpf.Address(0xa00), got)
 }
 
 func TestX86Find4thArgToLibRegCall(t *testing.T) {
 	testdata := []struct {
 		name     string
-		expected int64
+		expected libpf.Address
 		code     []byte
 	}{
 		{
@@ -462,7 +463,7 @@ func TestX86Find3rdArgToLibPreregCall(t *testing.T) {
 	x := x86Extractor{}
 	got, err := x.find3rdArgToLibPreregCall(code, 0)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0x4000), got)
+	require.Equal(t, libpf.Address(0x4000), got)
 }
 
 func TestStructure(t *testing.T) {

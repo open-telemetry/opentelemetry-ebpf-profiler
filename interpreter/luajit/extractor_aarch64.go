@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/asm/expression"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"golang.org/x/arch/arm64/arm64asm"
 )
@@ -21,17 +22,15 @@ type armExtractor struct {
 var _ extractor = &armExtractor{}
 
 // Return true if the code in b calls targetCall.
-func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, error) {
+func (a *armExtractor) callExists(b []byte, baseAddr, targetCall libpf.Address) (bool, error) {
 	it := arm.NewInterpreterWithCode(b)
-	// TODO[btv] why is baseAddr signed?
 	it.CodeAddress = expression.Imm(uint64(baseAddr))
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			if a0, ok := i.Args[0].(arm64asm.PCRel); ok {
 				pcrel := a0
 				if ip, ok := expression.AsConstant(it.Regs.Get(arm.PC)); ok {
-					// TODO[btv] why is targetCall signed?
-					candidate := int64(ip + uint64(pcrel) - uint64(arm.InstSz))
+					candidate := libpf.Address(ip) + libpf.Address(pcrel) - libpf.Address(arm.InstSz)
 					if candidate == targetCall {
 						return true
 					}
@@ -70,7 +69,7 @@ func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 // libluajit-5.1.so[0x15c44] <+36>:  bl     0x8040         ; symbol stub for: luaJIT_profile_start
 // libluajit-5.1.so[0x15c48] <+40>:  ldr    x1, [x19, #0x38]
 // libluajit-5.1.so[0x15c4c] <+44>:  str    xzr, [x20, #0x170]  ; 0x170 is curLOffset
-func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
+func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL libpf.Address, err error) {
 	gregFound := false
 	it := arm.NewInterpreterWithCode(b)
 
@@ -87,7 +86,7 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 					// This will cause it to be tracked, even if it later moves to a different register
 					// before being stored.
 					it.Regs.NameRegisterArm(dst, "g")
-					glref = cap.CapturedValue()
+					glref = libpf.Address(cap.CapturedValue())
 				}
 			}
 		}
@@ -97,7 +96,7 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 				// We renamed the register holding a pointer to `g` as "g" above.
 				if name == "g" && ok {
 					if imm, ok := arm.DecodeImmediate(a1); ok {
-						curL = uint64(imm)
+						curL = libpf.Address(imm)
 						return true
 					}
 				}
@@ -112,8 +111,8 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 // libluajit-5.1.so[0x145e4] <+4>:   mov    x19, x0
 // ...
 // libluajit-5.1.so[0x14660] <+128>: add    x3, x19, #0xf38
-func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
-	var result uint64
+func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (libpf.Address, error) {
+	var result libpf.Address
 	it := arm.NewInterpreterWithCode(b)
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.ADD {
@@ -128,7 +127,7 @@ func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint6
 				cap := expression.NewImmediateCapture("g2Dispatch")
 				pattern := expression.Add(expression.Named("X0"), cap)
 				if e.Match(pattern) {
-					result = cap.CapturedValue()
+					result = libpf.Address(cap.CapturedValue())
 					return true
 				}
 			}
@@ -141,18 +140,17 @@ func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint6
 	return result, err
 }
 
-func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, error) {
+func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr libpf.Address) (libpf.Address, error) {
 	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(addr)
+	it.CodeAddress = expression.Imm(uint64(addr))
 
-	var result uint64
+	var result libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
-				offset := int64(a0)
 				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
-				result = uint64(ip + uint64(offset) - uint64(arm.InstSz))
+				result = libpf.Address(ip) + libpf.Address(a0) - libpf.Address(arm.InstSz)
 				return true
 			}
 		}
@@ -182,8 +180,8 @@ func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, 
 // libluajit-5.1.so[0x67a74] <+48>:  b.hs   0x67bdc        ; <+408> at lib_jit.c:382:1
 // libluajit-5.1.so[0x67a78] <+52>:  ldr    x2, [x2, #0x168]   ;; This is J->trace
 // So for this version we want 0x2e0 + 0x168
-func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error) {
-	var g2Traces uint64
+func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (libpf.Address, error) {
+	var g2Traces libpf.Address
 	sawSZTraceLoad := false
 	it := arm.NewInterpreterWithCode(b)
 	// e.g.: `ldr x2, [x19, #0x10]`, where `x19` came from `mov x19, x0`
@@ -206,7 +204,7 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 			if e != nil && e.Match(jFieldLoad) ||
 				e.Match(jShortFieldLoad) {
 				if sawSZTraceLoad {
-					g2Traces = cap.CapturedValue()
+					g2Traces = libpf.Address(cap.CapturedValue())
 					return true
 				}
 				sawSZTraceLoad = true
@@ -220,9 +218,9 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 	return g2Traces, err
 }
 
-func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
+func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall libpf.Address) (libpf.Address, error) {
 	var seenFirst bool
-	var retval uint64
+	var retval libpf.Address
 
 	it := arm.NewInterpreterWithCode(b)
 	it.CodeAddress = expression.Imm(uint64(baseAddr))
@@ -238,7 +236,7 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 					if seenFirst {
 						x1, ok := expression.AsConstant(it.Regs.Get(arm.X1))
 						if ok {
-							retval = x1
+							retval = libpf.Address(x1)
 							return true
 						} else {
 							err = errors.New("Failed to statically evaluate X1")
@@ -298,22 +296,22 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 // a repeat BL call. In this case:
 // [0x64dc4] <+228>: adrp   x2, -1           --> x2 becomes 0x63000
 // [0x64dcc] <+236>: add    x2, x2, #0x310   --> x2 becomes 0x63310
-func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, error) {
+func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr libpf.Address) (libpf.Address, error) {
 	it := arm.NewInterpreterWithCode(b)
 	it.CodeAddress = expression.Imm(uint64(addr))
-	var prevCall uint64
-	var retval uint64
+	var prevCall libpf.Address
+	var retval libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			if a0, ok := i.Args[0].(arm64asm.PCRel); ok {
 				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
-				result := ip + uint64(a0)
+				result := libpf.Address(ip) + libpf.Address(a0)
 				if result == prevCall {
 					// There's also two back-to-back calls to lua_copy, ignore those
 					// by requiring x2 to have been set.
 					x2, ok := expression.AsConstant(it.Regs.Get(arm.X2))
 					if ok {
-						retval = x2
+						retval = libpf.Address(x2)
 						return true
 					}
 				}
@@ -345,14 +343,14 @@ func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr int64) (uint64, 
 // libluajit-5.1.so[0x6332c] <+28>: mov    w0, #0x1 ; =1
 // libluajit-5.1.so[0x63330] <+32>: ldr    x30, [sp], #0x10
 // libluajit-5.1.so[0x63334] <+36>: ret
-func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr int64) (int64, error) {
+func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr libpf.Address) (libpf.Address, error) {
 	it := arm.NewInterpreterWithCode(b)
 	it.CodeAddress = expression.Imm(uint64(addr))
-	var retval uint64
+	var retval libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			if x3, ok := expression.AsConstant(it.Regs.Get(arm.X3)); ok {
-				retval = x3
+				retval = libpf.Address(x3)
 				return true
 			}
 		}
@@ -361,20 +359,20 @@ func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr int64) (int64, erro
 	if errors.Is(err, io.EOF) {
 		err = errors.New("failed to find 4th arg to lj_lib_register call")
 	}
-	return int64(retval), err
+	return retval, err
 }
 
-func (a *armExtractor) findFirstCall(b []byte, addr int64) (uint64, error) {
+func (a *armExtractor) findFirstCall(b []byte, addr libpf.Address) (libpf.Address, error) {
 	it := arm.NewInterpreterWithCode(b)
 	it.CodeAddress = expression.Imm(uint64(addr))
-	var retval uint64
+	var retval libpf.Address
 
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
 				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
-				retval = ip + uint64(a0)
+				retval = libpf.Address(ip) + libpf.Address(a0)
 				return true
 			}
 		}
