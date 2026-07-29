@@ -60,8 +60,8 @@ func TestLuaOffsets(t *testing.T) {
 	// where `x2` is ultimately derived from L->g (usually an
 	// offset will have already been applied, e.g. `add x2, x2,
 	// #0x2e0`, which the interpreter handles transparently.)
-	cap := expression.NewImmediateCapture("g2traces")
-	jFieldLoad := expression.Mem8(expression.Add(gLoad, cap))
+	g2traces := expression.NewImmediateCapture("g2traces")
+	jFieldLoad := expression.Mem8(expression.Add(gLoad, g2traces))
 	jShortFieldLoad := expression.ZeroExtend32(jFieldLoad)
 	var result int
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
@@ -73,14 +73,14 @@ func TestLuaOffsets(t *testing.T) {
 			case arm64asm.RegSP:
 				e = it.Regs.GetArmSP(typed)
 			}
-			if e != nil && e.Match(jFieldLoad) ||
-				e.Match(jShortFieldLoad) {
-				result = int(cap.CapturedValue())
+			if e != nil && (e.Match(jFieldLoad) ||
+				e.Match(jShortFieldLoad)) {
+				result = int(g2traces.CapturedValue())
 				return true
 			}
 		}
 		return false
 	})
 	require.NoError(t, err)
-	require.Equal(t, result, 0x41C)
+	require.Equal(t, 0x41C, result)
 }
