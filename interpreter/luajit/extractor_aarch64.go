@@ -201,8 +201,8 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (libpf.Address
 			case arm64asm.RegSP:
 				e = it.Regs.GetArmSP(typed)
 			}
-			if e != nil && e.Match(jFieldLoad) ||
-				e.Match(jShortFieldLoad) {
+			if e != nil && (e.Match(jFieldLoad) ||
+				e.Match(jShortFieldLoad)) {
 				if sawSZTraceLoad {
 					g2Traces = libpf.Address(cap.CapturedValue())
 					return true
