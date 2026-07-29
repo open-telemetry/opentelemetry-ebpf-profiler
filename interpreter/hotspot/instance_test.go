@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -17,6 +18,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
+
+type nopCloserAt struct{ io.ReaderAt }
+
+func (nopCloserAt) Close() error { return nil }
 
 func TestJavaSymbolExtraction(t *testing.T) {
 	id := hotspotData{}
@@ -30,7 +35,7 @@ func TestJavaSymbolExtraction(t *testing.T) {
 	maxLength := 1024
 	sym := make([]byte, vmd.vmStructs.Symbol.Body+uint(maxLength))
 	rd := bytes.NewReader(sym)
-	rm := remotememory.RemoteMemory{ReaderAt: rd}
+	rm := remotememory.RemoteMemory{ReadAtCloser: nopCloserAt{rd}}
 
 	instance, err := id.Attach(nil, 0, 0, rm)
 	require.NoError(t, err, "symbol cache failed")
@@ -86,7 +91,7 @@ func TestStubsMapRace(t *testing.T) {
 	}
 
 	rd := bytes.NewReader(buf)
-	rm := remotememory.RemoteMemory{ReaderAt: rd}
+	rm := remotememory.RemoteMemory{ReadAtCloser: nopCloserAt{rd}}
 
 	id := hotspotData{}
 	vmd, _ := id.GetOrInit(func() (hotspotVMData, error) {

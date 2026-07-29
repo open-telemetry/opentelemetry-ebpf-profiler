@@ -566,6 +566,7 @@ func (i *dotnetInstance) getMethod(codeHeaderPtr libpf.Address) (*dotnetMethod, 
 }
 
 func (i *dotnetInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer i.rm.Close()
 	return ebpf.DeleteProcData(libpf.Dotnet, pid)
 }
 

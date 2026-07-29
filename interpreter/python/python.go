@@ -56,8 +56,7 @@ func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	rm := ef.GetRemoteMemory()
-	versionHex := rm.Uint32(libpf.Address(addr))
+	versionHex := ef.Uint32(libpf.Address(addr))
 	major = uint8((versionHex >> 24) & 0xff)
 	minor = uint8((versionHex >> 16) & 0xff)
 	if major == 0 {
@@ -453,6 +452,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 }
 
 func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer p.rm.Close()
 	if !p.procInfoInserted {
 		return nil
 	}
@@ -647,27 +647,26 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	if err != nil {
 		return fmt.Errorf("symbol '%s' not found", symbol)
 	}
-	rm := ef.GetRemoteMemory()
 	vms := &d.vmStructs
 	typedataAddress := libpf.Address(typeData)
 	reflection := reflect.ValueOf(vmObj).Elem()
 	if f := reflection.FieldByName("Sizeof"); f.IsValid() {
-		size := rm.Uint64(typedataAddress + vms.PyTypeObject.BasicSize)
+		size := ef.Uint64(typedataAddress + vms.PyTypeObject.BasicSize)
 		f.SetUint(size)
 	}
 
-	membersPtr := rm.Ptr(typedataAddress + vms.PyTypeObject.Members)
+	membersPtr := ef.Ptr(typedataAddress + vms.PyTypeObject.Members)
 	if membersPtr == 0 {
 		return nil
 	}
 
 	for addr := membersPtr; true; addr += vms.PyMemberDef.Sizeof {
-		memberName := rm.StringPtr(addr + libpf.Address(vms.PyMemberDef.Name))
+		memberName := ef.StringPtr(addr + libpf.Address(vms.PyMemberDef.Name))
 		if memberName == "" {
 			break
 		}
 		if f := fieldByPythonName(reflection, memberName); f.IsValid() {
-			offset := rm.Uint32(addr + libpf.Address(vms.PyMemberDef.Offset))
+			offset := ef.Uint32(addr + libpf.Address(vms.PyMemberDef.Offset))
 			f.SetUint(uint64(offset))
 		}
 	}

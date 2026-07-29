@@ -42,34 +42,36 @@ import (
 // isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
-func isPIDLive(pid libpf.PID) (bool, error) {
-	// Check first with the kill syscall which is the fastest route.
-	// A kill syscall with a 0 signal is documented to still do the check
-	// whether the process exists: https://linux.die.net/man/2/kill
-	err := unix.Kill(int(pid), 0)
-	if err == nil {
-		return true, nil
-	}
-
-	var errno unix.Errno
-	if errors.As(err, &errno) {
-		switch errno {
-		case unix.ESRCH:
-			return false, nil
-		case unix.EPERM:
-			// It seems that in some rare cases this check can fail with
-			// a permission error. Fallback to a procfs check.
-		default:
-			return true, err
+func (pm *ProcessManager) isPIDLive(pid libpf.PID) (bool, error) {
+	if pm.procFsPath == "/" || len(pm.procFsPath) == 0 {
+		// Fast path: kill(pid, 0) works correctly when the profiler shares the
+		// host PID namespace (procFsPath == "/"), since the PIDs reported by eBPF
+		// are in the same namespace as the caller.
+		err := unix.Kill(int(pid), 0)
+		if err == nil {
+			return true, nil
+		}
+		var errno unix.Errno
+		if errors.As(err, &errno) {
+			switch errno {
+			case unix.ESRCH:
+				return false, nil
+			case unix.EPERM:
+				// Fall through to the procfs check.
+			default:
+				return true, err
+			}
 		}
 	}
-
-	path := fmt.Sprintf("/proc/%d/maps", pid)
-	_, err = os.Stat(path)
+	// When procFsPath points to a host /proc mounted inside a container,
+	// kill(pid, 0) would resolve PIDs in the container's namespace and return
+	// ESRCH for every live host-namespace PID. Use a procfs stat instead,
+	// which works across namespace boundaries as long as the host /proc is mounted.
+	p := path.Join(pm.procFsPath, fmt.Sprintf("/%d/maps", pid))
+	_, err := os.Stat(p)
 	if err != nil && os.IsNotExist(err) {
 		return false, nil
 	}
-
 	return true, err
 }
 
@@ -147,7 +149,7 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
 		return
 	}
-	ino, err := process.CgroupRootInode(pid)
+	ino, err := process.CgroupRootInode(pid, pm.procFsPath)
 	if err != nil {
 		return
 	}
@@ -206,7 +208,11 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 		}
 	}
 	// Slow path: Interpreter detection or attachment needed
-	instance, err := data.Attach(pm.ebpf, pid, bias, pr.GetRemoteMemory())
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return anonymousMappingsWanted, fmt.Errorf("failed to get remote memory for PID %v: %w", pid, err)
+	}
+	instance, err := data.Attach(pm.ebpf, pid, bias, rm)
 	if err != nil {
 		return anonymousMappingsWanted, fmt.Errorf("failed to attach to %v in PID %v: %w",
 			data, pid, err)
@@ -781,7 +787,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, instance := range interpreters {
 		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
 		if err != nil {
-			if alive, _ := isPIDLive(pid); alive {
+			if alive, _ := pm.isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
 			} else {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
@@ -819,7 +825,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 
 	pm.mu.RLock()
 	for pid := range pm.pidToProcessInfo {
-		if live, _ := isPIDLive(pid); !live {
+		if live, _ := pm.isPIDLive(pid); !live {
 			deadPids = append(deadPids, pid)
 		}
 	}
@@ -924,7 +930,12 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
 	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
 	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
+	rm, err := pr.GetRemoteMemory()
+	if err != nil {
+		return oldProcessContextInfo
+	}
+	defer rm.Close()
+	ctxInfo, err := processcontext.Read(addr, rm, oldProcessContextInfo.PublishedAtNs, 0)
 	if err == nil {
 		return ctxInfo
 	}

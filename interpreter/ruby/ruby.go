@@ -440,6 +440,7 @@ type rubyInstance struct {
 }
 
 func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer r.rm.Close()
 	return ebpf.DeleteProcData(libpf.Ruby, pid)
 }
 

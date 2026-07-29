@@ -74,6 +74,7 @@ type Config struct {
 	ErrorMode               ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
+	RootFs                  string                   `mapstructure:"root_fs"`
 
 	// Configuration options that users can not set directly:
 	//
@@ -148,6 +149,12 @@ func (cfg *Config) Validate() error {
 				"should be between 1 and %d",
 			tracer.ProbabilisticThresholdMax,
 		)
+	}
+
+	if cfg.PIDNamespaceTranslation && (len(cfg.RootFs) != 0 && cfg.RootFs != "/") {
+		return fmt.Errorf("pid_namespace_translation and a mounted /proc file system are " +
+			"incompatible arguments due working on different PID namespace levels")
+
 	}
 
 	if cfg.NoKernelVersionCheck {

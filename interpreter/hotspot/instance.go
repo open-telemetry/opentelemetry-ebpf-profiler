@@ -589,6 +589,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 
 // Detach removes all information regarding a given process from the eBPF maps.
 func (d *hotspotInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer d.rm.Close()
 	var err error
 	if d.mainMappingsInserted {
 		err = ebpf.DeleteProcData(libpf.HotSpot, pid)

@@ -51,7 +51,7 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 			codeBaseAddr = baseAddr
 		} else {
 			targetCode := make([]byte, 256)
-			err := ef.GetRemoteMemory().Read(libpf.Address(current.addr), targetCode)
+			err := ef.Read(libpf.Address(current.addr), targetCode)
 			if err != nil {
 				continue
 			}

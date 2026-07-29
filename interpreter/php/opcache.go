@@ -173,6 +173,7 @@ type opcacheInstance struct {
 }
 
 func (i *opcacheInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer i.rm.Close()
 	// Here we just remove the entries relating to the mappings for the
 	// JIT's memory
 	var err error
@@ -303,8 +304,7 @@ func determineOPCacheVersion(ef *pfelf.File) (uint32, error) {
 	}
 
 	// The version string is the second pointer of this structure
-	rm := ef.GetRemoteMemory()
-	versionString := rm.StringPtr(libpf.Address(moduleExtension + 8))
+	versionString := ef.StringPtr(libpf.Address(moduleExtension + 8))
 	if versionString == "" || !util.IsValidString(versionString) {
 		return 0, fmt.Errorf("extension entry PHP version invalid at 0x%x",
 			moduleExtension)

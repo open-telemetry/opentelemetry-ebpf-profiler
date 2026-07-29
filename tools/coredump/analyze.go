@@ -88,7 +88,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	var proc process.Process
 	switch {
 	case cmd.pid != 0:
-		proc, err = process.NewPtrace(libpf.PID(cmd.pid))
+		proc, err = process.NewPtrace(libpf.PID(cmd.pid), "/")
 		if err != nil {
 			return fmt.Errorf("failed to open pid `%d`: %w", cmd.pid, err)
 		}

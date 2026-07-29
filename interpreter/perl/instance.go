@@ -132,6 +132,7 @@ func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 }
 
 func (i *perlInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	defer i.rm.Close()
 	if !i.procInfoInserted {
 		return nil
 	}

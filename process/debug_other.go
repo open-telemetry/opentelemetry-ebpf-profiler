@@ -14,6 +14,6 @@ import (
 
 // NewPtrace is the stub implementation, allowing to compile the process
 // package on non linux systems, always failing at runtime with an error if used.
-func NewPtrace(_ libpf.PID) (Process, error) {
+func NewPtrace(_ libpf.PID, _ string) (Process, error) {
 	return nil, fmt.Errorf("unsupported os %s", runtime.GOOS)
 }

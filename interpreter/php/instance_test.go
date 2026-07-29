@@ -17,11 +17,13 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
-// mockMemory implements io.ReaderAt for testing PHP remote memory reads.
+// mockMemory implements remotememory.ReadAtCloser for testing PHP remote memory reads.
 // It stores data as a set of (address, bytes) regions.
 type mockMemory struct {
 	regions []memRegion
 }
+
+func (m *mockMemory) Close() error { return nil }
 
 type memRegion struct {
 	addr uint64
@@ -179,7 +181,7 @@ func TestGetFunction_ClassName(t *testing.T) {
 
 			instance := &phpInstance{
 				d:              d,
-				rm:             remotememory.RemoteMemory{ReaderAt: mem},
+				rm:             remotememory.RemoteMemory{ReadAtCloser: mem},
 				addrToFunction: addrToFunction,
 			}
 
@@ -203,7 +205,7 @@ func TestGetFunction_NullPointer(t *testing.T) {
 
 	instance := &phpInstance{
 		d:              d,
-		rm:             remotememory.RemoteMemory{ReaderAt: mem},
+		rm:             remotememory.RemoteMemory{ReadAtCloser: mem},
 		addrToFunction: addrToFunction,
 	}
 
@@ -231,7 +233,7 @@ func TestGetFunction_TopLevelCode(t *testing.T) {
 
 	instance := &phpInstance{
 		d:              d,
-		rm:             remotememory.RemoteMemory{ReaderAt: mem},
+		rm:             remotememory.RemoteMemory{ReadAtCloser: mem},
 		addrToFunction: addrToFunction,
 	}
 

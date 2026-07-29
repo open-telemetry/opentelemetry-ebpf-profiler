@@ -167,7 +167,7 @@ func TestNewPIDOfSelf(t *testing.T) {
 		t.Skipf("unsupported os %s", runtime.GOOS)
 	}
 	pid := libpf.PID(os.Getpid())
-	pr := New(pid, pid)
+	pr := New(pid, pid, "/")
 	assert.NotNil(t, pr)
 
 	mappings, numParseErrors, err := getTestMappingsFromProcess(t, pr)

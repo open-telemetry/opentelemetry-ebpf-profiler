@@ -138,7 +138,7 @@ type File struct {
 	symbolsAddr int64
 
 	// bias is the load bias for ELF files inside core dump
-	bias libpf.Address
+	remotememory.RemoteMemory
 
 	// InsideCore indicates that this ELF is mapped from a coredump ELF
 	InsideCore bool
@@ -223,16 +223,10 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 	return newFile(r, nil, loadAddress, hasMusl)
 }
 
-// ReadAtCloser combines io.ReaderAt and io.Closer.
-type ReadAtCloser interface {
-	io.ReaderAt
-	io.Closer
-}
-
 // NewFileOwned is like NewFile but takes ownership of rc: rc is used as the
 // ELF reader and is closed by the returned File's Close, or before returning
 // on error.
-func NewFileOwned(rc ReadAtCloser) (*File, error) {
+func NewFileOwned(rc libpf.ReadAtCloser) (*File, error) {
 	return newFile(rc, rc, 0, false)
 }
 
@@ -249,6 +243,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		notesError:    errNotProcessed,
 		golangVersion: strNotProcessed,
 	}
+	f.RemoteMemory.ReadAtCloser = f
 	success := false
 	defer func() {
 		if !success {
@@ -332,7 +327,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 
 	if loadAddress != 0 {
 		// Calculate the bias for coredump files
-		f.bias = libpf.Address(loadAddress - virtualBase)
+		f.RemoteMemory.Bias = libpf.Address(loadAddress - virtualBase)
 	}
 
 	// We sort the ROData so that we preferentially access those that are marked
@@ -357,7 +352,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 				// glibc adjusts the PT_DYNAMIC table to contain
 				// the mapped virtual addresses. Convert them back
 				// to file virtual addresses.
-				bias = int64(f.bias)
+				bias = int64(f.RemoteMemory.Bias)
 			}
 			for {
 				if _, err := rdr.Read(pfunsafe.FromPointer(&dyn)); err != nil {
@@ -1060,14 +1055,6 @@ func (f *File) ReadAt(p []byte, addr int64) (int, error) {
 	return 0, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
 }
 
-// GetRemoteMemory returns RemoteMemory interface for the core dump
-func (f *File) GetRemoteMemory() remotememory.RemoteMemory {
-	return remotememory.RemoteMemory{
-		ReaderAt: f,
-		Bias:     f.bias,
-	}
-}
-
 // readAndMatchSymbol reads symbol table data expecting given symbol
 func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol, bool) {
 	var sym elf.Sym64
@@ -1287,11 +1274,10 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 		return nil, fmt.Errorf("non-string-valued tag %v", tag)
 	}
 
-	rm := f.GetRemoteMemory()
 	dynStrings := make([]string, 0, len(indexes))
 	for _, ndx := range indexes {
 		strAddr := libpf.Address(f.stringsAddr + ndx)
-		dynStrings = append(dynStrings, rm.String(strAddr))
+		dynStrings = append(dynStrings, f.String(strAddr))
 	}
 	return dynStrings, nil
 }

@@ -70,6 +70,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
+	ProcFsPath            string
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -94,7 +95,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
 
-	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
+	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig, cfg.ProcFsPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
@@ -134,6 +135,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		includeEnvVars:           cfg.IncludeEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
+		procFsPath:               cfg.ProcFsPath,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)

@@ -166,7 +166,10 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 	}
 
 	// Interfaces for the managers
-	ebpfCtx := newEBPFContext(pr, faultAddresses)
+	ebpfCtx, err := newEBPFContext(pr, faultAddresses)
+	if err != nil {
+		return nil, err
+	}
 	defer ebpfCtx.release()
 
 	inverse_pac_mask := ^(pr.GetMachineData().CodePACMask)

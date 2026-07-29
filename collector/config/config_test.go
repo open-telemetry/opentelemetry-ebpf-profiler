@@ -33,6 +33,14 @@ func TestValidate(t *testing.T) {
 	err := xconfmap.Validate(cfg)
 	require.Error(t, err)
 	require.Equal(t, "invalid sampling frequency: 0", err.Error())
+
+	// test incompatible config
+	invalidCfg := validConfig()
+	invalidCfg.PIDNamespaceTranslation = true
+	invalidCfg.RootFs = "/host_fs"
+	err = xconfmap.Validate(invalidCfg)
+	require.Error(t, err)
+	require.Equal(t, "pid_namespace_translation and a mounted /proc file system are incompatible arguments due working on different PID namespace levels", err.Error())
 }
 
 func TestValidateFrameCacheSize(t *testing.T) {

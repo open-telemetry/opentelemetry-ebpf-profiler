@@ -5,6 +5,8 @@ package kallsyms
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,6 +26,28 @@ func assertSymbol(t *testing.T, s *Symbolizer, pc libpf.Address,
 			assert.Equal(t, eOffset, offset)
 		}
 	}
+}
+
+// TestNewSymbolizerCustomRootFs verifies that NewSymbolizer reads kallsyms
+// from path.Join(rootFs, "proc", "kallsyms") rather than the hardcoded path.
+func TestNewSymbolizerCustomRootFs(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "proc"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "proc", "kallsyms"),
+		[]byte(`ffffffffb5000000 T _stext
+ffffffffb5000000 T _text
+ffffffffb5000123 T startup_64
+ffffffffb6000000 T _etext
+`),
+		0o644,
+	))
+
+	s, err := NewSymbolizer(dir)
+	require.NoError(t, err)
+	require.NotNil(t, s)
+
+	assertSymbol(t, s, 0xffffffffb5000123, Kernel, "startup_64", 0)
 }
 
 func TestKallSyms(t *testing.T) {
