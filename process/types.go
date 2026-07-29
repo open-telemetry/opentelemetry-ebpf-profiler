@@ -104,6 +104,8 @@ type ReadAtCloser = pfelf.ReadAtCloser
 type MetaConfig struct {
 	// IncludeEnvVars holds a list of env vars that should be captured from the process.
 	IncludeEnvVars libpf.Set[string]
+
+	MetaEnricher ProcessMetaEnricher
 }
 
 // ProcessMeta contains metadata about a tracked process.
@@ -172,4 +174,4 @@ type Process interface {
 // observed. Implementations may read from /proc or any other source and store
 // arbitrary key-value pairs in meta.ExtraMeta. The callback runs while the process
 // is still alive, so short-lived process data is reliably captured.
-type ProcessMetaEnricher func(Process, *ProcessMeta)
+type ProcessMetaEnricher func(libpf.PID, *ProcessMeta)

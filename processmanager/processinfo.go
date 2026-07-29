@@ -115,52 +115,21 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 	return nil
 }
 
-// getPidInformation gets or creates the Pid information for given PID.
+// getPidInformation returns existing process info for a known PID. For a new PID it
+// registers a dummy entry in the eBPF pid_page_to_mapping_info map and returns nil;
+// the caller is then responsible for building and storing a processInfo.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
-) *processInfo {
+func (pm *ProcessManager) getPidInformation(pid libpf.PID) *processInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info
 	}
 
-	// Insert a dummy page into the eBPF map pid_page_to_mapping_info that provides the eBPF
-	// a quick way to check if we know something about this particular process.
 	if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
 		return nil
 	}
-
-	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	pm.fillSelfContainerID(pid, &meta)
-
-	if pm.metaEnricher != nil {
-		pm.metaEnricher(pr, &meta)
-	}
-
-	info := &processInfo{
-		meta:     meta,
-		libcInfo: nil,
-	}
-	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
-	return info
-}
-
-// fillSelfContainerID sets the container ID on meta if the process has the same cgroup
-// directory root as the profiler and the standard cgroup-based detection returned no result.
-func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.ProcessMeta) {
-	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
-		return
-	}
-	ino, err := process.CgroupRootInode(pid)
-	if err != nil {
-		return
-	}
-	if ino == pm.selfCgroupIno {
-		meta.ContainerID = pm.selfContainerID
-	} else {
-		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, pm.selfCgroupIno)
-	}
+	return nil
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
@@ -580,10 +549,19 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	pm.mu.Lock()
-	info := pm.getPidInformation(pid, pr)
+	info := pm.getPidInformation(pid)
 	if info == nil {
 		pm.mu.Unlock()
-		return
+
+		meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnricher: pm.metaEnricher})
+		info = &processInfo{
+			meta:     meta,
+			libcInfo: nil,
+		}
+
+		// Two goroutines may race here for the same new PID; the second write silently wins.
+		pm.mu.Lock()
+		pm.pidToProcessInfo[pid] = info
 	}
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
@@ -764,14 +742,13 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// Update metadata of the process.
 	var meta process.ProcessMeta
 	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-		pm.fillSelfContainerID(pid, &meta)
+		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnricher: pm.metaEnricher})
 	}
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
 	pm.mu.Lock()
-	info = pm.getPidInformation(pid, pr)
+	info = pm.getPidInformation(pid)
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {

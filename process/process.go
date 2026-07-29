@@ -136,11 +136,18 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
-	return ProcessMeta{
+
+	pMeta := ProcessMeta{
 		Executable:   exePath,
 		ContainerID:  containerID,
 		EnvVariables: envVarMap,
 	}
+
+	if cfg.MetaEnricher != nil {
+		cfg.MetaEnricher(sp.pid, &pMeta)
+	}
+
+	return pMeta
 }
 
 // parseContainerID parses cgroup v1 and v2 container IDs

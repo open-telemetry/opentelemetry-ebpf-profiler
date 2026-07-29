@@ -290,7 +290,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
-		ProcessMetaFn:         cfg.ProcessMetaEnricher,
+		ProcessMetaEnricher:   cfg.ProcessMetaEnricher,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
