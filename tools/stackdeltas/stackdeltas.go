@@ -79,9 +79,8 @@ func getOpcode(baseReg uint8, param int32, deref bool) string {
 	return str
 }
 
-func dumpDelta(delta sdtypes.StackDelta, merged bool) {
+func dumpDelta(addr uint64, info sdtypes.UnwindInfo, first, merged bool) {
 	var cfa, aux string
-	info := &delta.Info
 	if info.Flags&support.UnwindFlagCommand != 0 {
 		cfa = getCommand(info.Param)
 	} else {
@@ -89,26 +88,23 @@ func dumpDelta(delta sdtypes.StackDelta, merged bool) {
 		aux = getOpcode(info.AuxBaseReg, info.AuxParam, false)
 	}
 	comment := ""
+	if first {
+		comment += " bb"
+	}
 	if info.Flags&support.UnwindFlagRegisterRA != 0 {
 		comment += " ra-reg"
 	}
 	if info.Flags&support.UnwindFlagLeafOnly != 0 {
 		comment += " leaf-only"
 	}
-	if delta.Hints&sdtypes.UnwindHintKeep != 0 {
-		comment += " keep"
-	}
-	if delta.Hints&sdtypes.UnwindHintEnd != 0 {
-		comment += " end"
-	}
 	if merged {
 		comment += " merged"
 	}
-	fmt.Printf("%016x %-16s%-16s%s\n", delta.Address, cfa, aux, comment)
+	fmt.Printf("%016x %-16s%-16s%s\n", addr, cfa, aux, comment)
 }
 
 func canMerge(delta, nextDelta sdtypes.StackDelta) bool {
-	if nextDelta.Address-delta.Address > uint64(*mergeDistance) {
+	if nextDelta.Offset-delta.Offset > uint32(*mergeDistance) {
 		return false
 	}
 	if nextDelta.Info.BaseReg != delta.Info.BaseReg ||
@@ -121,15 +117,14 @@ func canMerge(delta, nextDelta sdtypes.StackDelta) bool {
 }
 
 func analyzeFile(filename string, s *stats, dump bool) error {
-	var data sdtypes.IntervalData
-
 	absPath, err := filepath.Abs(filename)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path for %v: %v",
 			filename, err)
 	}
 
-	if err := elfunwindinfo.Extract(absPath, &data); err != nil {
+	intervals, err := elfunwindinfo.Extract(absPath)
+	if err != nil {
 		return fmt.Errorf("failed to extract stack deltas: %v", err)
 	}
 
@@ -139,27 +134,29 @@ func analyzeFile(filename string, s *stats, dump bool) error {
 
 	var merged bool
 	var numMerged uint
-	for index, delta := range data.Deltas {
-		if dump {
-			dumpDelta(delta, merged)
-		}
-		if merged {
-			merged = false
-			continue
-		}
-		info := delta.Info
-		if index+1 < len(data.Deltas) && canMerge(delta, data.Deltas[index+1]) {
-			nextDelta := data.Deltas[index+1]
-			merged = true
-			numMerged++
-			info.MergeOpcode = uint8(nextDelta.Address - delta.Address)
-			if nextDelta.Info.Param-delta.Info.Param < 0 {
-				info.MergeOpcode |= support.MergeOpcodeNegative
+	for _, bb := range intervals.Blocks {
+		for index, delta := range bb.Deltas {
+			if dump {
+				dumpDelta(bb.Start+uint64(delta.Offset), delta.Info, index == 0, merged)
 			}
+			if merged {
+				merged = false
+				continue
+			}
+			info := delta.Info
+			if index+1 < len(bb.Deltas) && canMerge(delta, bb.Deltas[index+1]) {
+				nextDelta := bb.Deltas[index+1]
+				merged = true
+				numMerged++
+				info.MergeOpcode = uint8(nextDelta.Offset - delta.Offset)
+				if nextDelta.Info.Param-delta.Info.Param < 0 {
+					info.MergeOpcode |= support.MergeOpcodeNegative
+				}
+			}
+			s.seenDeltas[info] = libpf.Void{}
 		}
-		s.seenDeltas[info] = libpf.Void{}
 	}
-	numDeltas := uint(len(data.Deltas))
+	numDeltas := uint(intervals.NumDeltas)
 	s.numDeltas += numDeltas
 	s.numMerged += numMerged
 
