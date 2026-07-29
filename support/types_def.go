@@ -13,6 +13,7 @@ import (
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/luajit.h"
 */
 import "C"
 
@@ -203,6 +204,9 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+
+	LJCframeSpaceX86 = C.LUAJIT_CFRAME_SPACE_X86_64
+	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
 )
 
 var MetricsTranslation = []metrics.MetricID{

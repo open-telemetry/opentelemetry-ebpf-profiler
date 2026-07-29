@@ -9,6 +9,14 @@ import (
 
 var _ Expression = &extend{}
 
+func SignExtend32(v Expression) Expression {
+	return SignExtend(v, 32)
+}
+
+func SignExtend8(v Expression) Expression {
+	return SignExtend(v, 8)
+}
+
 func SignExtend(v Expression, bits int) Expression {
 	return &extend{v, bits, true}
 }
