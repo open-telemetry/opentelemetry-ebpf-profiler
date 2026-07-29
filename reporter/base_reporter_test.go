@@ -239,7 +239,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		PID:            3000,
 		TID:            3001,
 		CPU:            0,
-		ExtraMeta:      map[string]string{"process.name": "myapp"},
+		ExtraMeta:      map[libpf.String]string{libpf.Intern("process.name"): "myapp"},
 		ProfileType:    profileTypeSampling,
 	}
 
