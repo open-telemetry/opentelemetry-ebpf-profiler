@@ -363,9 +363,6 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
-// HandleTrace processes and reports the given host.Trace. This function
-// is not re-entrant due to frameCache not being synced. If the tracer is
-// later updated to distribute trace handling to goroutine pool, the caching
 // HandleTrace processes and reports the given eBPF trace. Process metadata
 // is looked up here rather than at trace-receive time as EbpfTrace carries
 // only data sourced from eBPF. If the process has already exited and been evicted,
