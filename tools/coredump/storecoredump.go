@@ -12,8 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
-
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 type StoreCoredump struct {
@@ -29,12 +27,6 @@ var _ pfelf.ELFOpener = &StoreCoredump{}
 func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 	info, ok := scd.modules[path]
 	if !ok {
-		// The test case creator should have bundled everything.
-		// However, old test cases have no bundle at all, so give a warning
-		// only if some modules exists.
-		if len(scd.modules) != 0 {
-			log.Warnf("Store does not bundle %s", path)
-		}
 		return nil, fmt.Errorf("failed to open file `%s`: %w", path, os.ErrNotExist)
 	}
 
