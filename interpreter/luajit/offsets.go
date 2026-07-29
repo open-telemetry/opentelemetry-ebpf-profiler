@@ -27,7 +27,7 @@ func scanSymbols(ef *pfelf.File) map[libpf.SymbolName]libpf.Symbol {
 
 	foundSymbols := map[libpf.SymbolName]libpf.Symbol{}
 
-	for name, _ := range interestingSymbols {
+	for name := range interestingSymbols {
 		if sym, err := ef.LookupSymbol(name); sym != nil && err == nil {
 			foundSymbols[name] = *sym
 			delete(interestingSymbols, name)
