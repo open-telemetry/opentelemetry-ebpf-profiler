@@ -125,9 +125,35 @@ For live heap profiling, the free side must recognise which pointers were previo
 
 The profiler does not care which of these models is used, which allocator is wrapped, or which language the process is written in; only that the contract above holds and that allocations are sampled according to the description above.
 
-### Expected Runtime Cost in Userspace
+### Expected Runtime Cost
 
-On each allocation, the fast path is TLS access, an integer decrement, and a well-predicted branch; only threshold crossings hit the slow path where the sampler draws a new interval and records the allocation as sampled. Experimentally this adds single-digit nanoseconds to unsampled allocations, and compiles to a `NOP` when nothing is attached to the USDT.
+#### In Userspace
+
+On each allocation, the fast path is TLS access, an integer decrement, and a well-predicted branch; only threshold crossings hit the slow path where the sampler draws a new interval and fires the USDT probe. A [USDT semaphore guard](https://github.com/DataDog/libdatadog/pull/2266) short-circuits even earlier: when no profiler is attached the semaphore is zero, so the entire TLS and counter path is skipped after a single memory read.
+
+Measured overhead per alloc/free: ~2.8 ns (arm64, +40%) / ~10.4 ns (x86-64, +99%) when the semaphore is inactive (no profiler attached), and ~14 ns (arm64) / ~54 ns (x86-64) on the sampled slow path with the semaphore active but no profiler attached. Live-heap tracking adds a further ~1.4 ns (arm64 TBI) / ~13 ns (x86-64 header-magic) to sampled allocations only. Percentages are relative to a 64-byte system-allocator round-trip, the smallest (and therefore worst-case) allocation size tested; the sampler's fixed overhead becomes proportionally cheaper as allocation size grows.
+
+#### In eBPF
+
+The profiler-side cost is incurred only for sampled events (one per ~512 KiB of allocation by default). Per-invocation latencies measured via `bpf_stats_enabled` on arm64 (includes the full tail-call unwinder chain, native frame walking and `send_trace`):
+
+| Program | Avg latency | Description |
+|---|---|---|
+| `uprobe_heap_alloc` | ~4.7 µs | Arg extraction, `heap_alloc_live` insert, per-PID limit check, stack unwind |
+| `uprobe_heap_free` | ~0.6 µs | Map lookup + delete, `send_trace`, no stack walk |
+| `native_tracer_entry` (CPU profiler) | ~3.0 µs | Full CPU sample for comparison |
+
+Projected overhead at various allocation rates (assuming ~1:1 alloc:free ratio):
+
+| Allocation rate | Samples/sec | eBPF CPU time/sec | % of 1 CPU-second |
+|---|---|---|---|
+| 10 MiB/sec | 20 alloc + 20 free | 107 µs | 0.011% |
+| 50 MiB/sec | 100 + 100 | 534 µs | 0.053% |
+| 100 MiB/sec | 200 + 200 | 1,068 µs | 0.107% |
+
+For comparison, the CPU profiler measured on the same system at its default 20 Hz consumes ~61 µs/sec (0.006%) per CPU.
+
+We are exploring dynamic sample distance adjustment on the client side, where the sampler adapts its sampling interval to target a fixed number of samples/sec regardless of allocation rate, bounding the profiling overhead to a predictable ceiling.
 
 ## USDT discovery
 
