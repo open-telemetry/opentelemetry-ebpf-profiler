@@ -236,7 +236,7 @@ func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 		return kprobe.New(kcfg)
 	case "uprobe":
 		var ucfg uprobe.Config
-		if err := mapstructure.Decode(cfg, &ucfg); err != nil {
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&ucfg); err != nil {
 			return nil, fmt.Errorf("decoding uprobe config: %w", err)
 		}
 		return uprobe.New(ucfg)

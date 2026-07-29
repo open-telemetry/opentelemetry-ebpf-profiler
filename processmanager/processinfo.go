@@ -858,8 +858,9 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
+// MetaForPID returns the process metadata for the given PID. If the PID is
+// not tracked, it returns a zero-value ProcessMeta.
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {

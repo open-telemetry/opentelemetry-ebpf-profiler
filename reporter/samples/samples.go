@@ -16,6 +16,7 @@ type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
 	ProfileType    *TypeMetadata
+	TraceHash      libpf.TraceHash
 	Value          int64
 	// AllocSize is the raw, un-weighted allocation size in bytes for
 	// TraceOriginHeapAlloc events (see libpf.EbpfTrace.Size); combined with

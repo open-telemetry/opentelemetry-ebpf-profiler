@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x72
+	MetricIDBeginCumulative = 0x74
 )
 
 const (
