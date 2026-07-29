@@ -27,6 +27,21 @@ func scanSymbols(ef *pfelf.File) map[libpf.SymbolName]libpf.Symbol {
 
 	foundSymbols := map[libpf.SymbolName]libpf.Symbol{}
 
+	for name, _ := range interestingSymbols {
+		if sym, err := ef.LookupSymbol(name); sym != nil && err == nil {
+			foundSymbols[name] = *sym
+			delete(interestingSymbols, name)
+		}
+	}
+
+	// It's unlikely we found all of these in dynamic symbols,
+	// but just in case, let's return now to avoid the scan in `VisitSymbols`.
+	if len(interestingSymbols) == 0 {
+		return foundSymbols
+	}
+
+	// We didn't find all the symbols in the dynamic symbols, so try again
+	// on the non-dynamic symbols, which requires a full scan.
 	visitor := func(sym libpf.Symbol) bool {
 		if _, ok := interestingSymbols[sym.Name]; ok {
 			foundSymbols[sym.Name] = sym
@@ -36,10 +51,6 @@ func scanSymbols(ef *pfelf.File) map[libpf.SymbolName]libpf.Symbol {
 	}
 	if err := ef.VisitSymbols(visitor); err != nil {
 		log.Warnf("failed to read symbols: %v", err)
-	}
-
-	if err := ef.VisitDynamicSymbols(visitor); err != nil {
-		log.Warnf("failed to read dynamic symbols: %v", err)
 	}
 
 	return foundSymbols
@@ -98,7 +109,7 @@ func extractOffsets(ef *pfelf.File, ljd *luajitData, ir util.Range) error {
 	ljd.g2Dispatch = uint16(g2dispatch)
 
 	// If we have symbols we can check that the start address is correct.
-	if s, e := oft.lookupSymbol("lj_vm_asm_begin"); e == nil && ir.Start != uint64(s.Address) {
+	if s, ok := oft.foundSymbols["lj_vm_asm_begin"]; ok && ir.Start != uint64(s.Address) {
 		return fmt.Errorf("lj: unexpected start address %x, expected %x", s.Address, ir.Start)
 	}
 
@@ -227,7 +238,7 @@ func (o *offsetData) findG2DispatchOffset() (libpf.Address, error) {
 }
 
 func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
-	if sym, err := o.lookupSymbol("jit_checktrace"); err == nil {
+	if sym, ok := o.foundSymbols["jit_checktrace"]; ok {
 		// easiest case
 		b, err := o.readSym(sym)
 		if err != nil {
@@ -237,7 +248,7 @@ func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 	}
 
 	// jit_checktrace could be inlined or we could be dealing with a stripped binary
-	if sym, err := o.lookupSymbol("lj_cf_jit_util_traceinfo"); err == nil {
+	if sym, ok := o.foundSymbols["lj_cf_jit_util_traceinfo"]; ok {
 		// Inline case
 		b, er := o.readSym(sym)
 		if er != nil {
@@ -252,7 +263,7 @@ func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 		return 0, err
 	}
 
-	b, err := o.readSym(sym)
+	b, err := o.readSym(*sym)
 	if err != nil {
 		return 0, err
 	}
@@ -292,9 +303,9 @@ func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 // which will be an argument to lj_lib_register.  Finally the lj_cf_jit_util_traceinfo function
 // will be the 4th element of that array.
 func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
-	pushCClosure, err := o.lookupSymbol("lua_pushcclosure")
-	if err != nil {
-		return nil, err
+	pushCClosure, ok := o.foundSymbols["lua_pushcclosure"]
+	if !ok {
+		return nil, libpf.ErrSymbolNotFound
 	}
 	pushClosureAddr := libpf.Address(pushCClosure.Address)
 	baseAddr := o.luajitOpenAddr
@@ -371,7 +382,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 		Size:    traceInfoSize}, nil
 }
 
-func (o *offsetData) readSym(sym *libpf.Symbol) ([]byte, error) {
+func (o *offsetData) readSym(sym libpf.Symbol) ([]byte, error) {
 	b := make([]byte, sym.Size)
 	n, err := o.f.ReadAt(b, int64(sym.Address))
 	if err != nil {
@@ -383,25 +394,14 @@ func (o *offsetData) readSym(sym *libpf.Symbol) ([]byte, error) {
 	return b, nil
 }
 
-func (o *offsetData) lookupSymbol(name libpf.SymbolName) (s *libpf.Symbol, err error) {
-	s, err = o.f.LookupSymbol(name)
-	if err == libpf.ErrSymbolNotFound && o.foundSymbols != nil {
-		if sym, ok := o.foundSymbols[name]; ok {
-			s = &sym
-			err = nil
-		}
-	}
-	return s, err
-}
-
 //nolint:gocritic
 func (o *offsetData) readSymByName(name string) ([]byte, int64, error) {
-	sym, err := o.lookupSymbol(libpf.SymbolName(name))
-	if err != nil {
-		return nil, 0, err
+	sym, ok := o.foundSymbols[libpf.SymbolName(name)]
+	if !ok {
+		return nil, 0, libpf.ErrSymbolNotFound
 	}
 	b := make([]byte, sym.Size)
-	_, err = o.f.ReadAt(b, int64(sym.Address))
+	_, err := o.f.ReadAt(b, int64(sym.Address))
 	if err != nil {
 		return nil, 0, err
 	}
