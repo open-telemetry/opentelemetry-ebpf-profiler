@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -80,8 +79,6 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
 	}
-	traceHash := traceutil.HashTrace(trace)
-
 	eventsTree := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&eventsTree)
 
@@ -98,7 +95,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	sampleKey := samples.SampleKey{
-		Hash:      traceHash,
+		Hash:      meta.TraceHash,
 		Comm:      meta.Comm,
 		TID:       int64(meta.TID),
 		CPU:       int64(meta.CPU),

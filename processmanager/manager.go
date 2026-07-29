@@ -465,6 +465,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 	pm.mu.RUnlock()
 
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
+	meta.TraceHash = traceutil.HashTrace(trace)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
