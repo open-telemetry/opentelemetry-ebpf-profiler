@@ -284,25 +284,30 @@ python_step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_fra
 }
 
 // python_step_native processes one native frame at an interpreter boundary
-// and updates *unwinder.
-static EBPF_INLINE ErrorCode python_step_native(PerCPURecord *record, int *unwinder)
+// and updates *unwinder. Go frames are handed to PROG_UNWIND_NATIVE via *delegate_go.
+static EBPF_INLINE ErrorCode
+python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_go)
 {
   Trace *trace = &record->trace;
   *unwinder    = PROG_UNWIND_STOP;
+  *delegate_go = false;
 
   increment_metric(metricID_UnwindNativeAttempts);
-  ErrorCode error = push_native(
-    &record->state,
-    trace,
-    record->state.text_section_id,
-    record->state.text_section_offset,
-    record->state.return_address);
-  if (error) {
-    return error;
-  }
+  u64 file = record->state.text_section_id;
+  u64 line = record->state.text_section_offset;
+  bool ra  = record->state.return_address;
 
   bool stop;
-  error = unwind_one_frame(record, &stop);
+  ErrorCode error = unwind_one_frame(record, &stop, delegate_go);
+  if (*delegate_go) {
+    *unwinder = PROG_UNWIND_NATIVE;
+    return ERR_OK;
+  }
+
+  ErrorCode push_error = push_native(&record->state, trace, file, line, ra);
+  if (push_error) {
+    return push_error;
+  }
   if (error || stop) {
     return error;
   }
@@ -356,9 +361,14 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
       case PROG_UNWIND_PYTHON:
         error = python_step_python(record, pyinfo, &py_frame, &unwinder);
         break;
-      case PROG_UNWIND_NATIVE:
-        error = python_step_native(record, &unwinder);
+      case PROG_UNWIND_NATIVE: {
+        bool delegate_go = false;
+        error = python_step_native(record, &unwinder, &delegate_go);
+        if (delegate_go) {
+          goto save_python_cursor;
+        }
         break;
+      }
       default:
         goto exit;
       }
@@ -368,6 +378,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
       }
     }
 
+  save_python_cursor:
     record->pythonUnwindState.py_frame = py_frame;
   }
 
