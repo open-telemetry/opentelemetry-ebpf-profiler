@@ -157,14 +157,14 @@ type extractor interface {
 	find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall libpf.Address) (libpf.Address, error)
 }
 
-func newExtractor(ef *pfelf.File) extractor {
+func newExtractor(ef *pfelf.File) (extractor, error) {
 	switch ef.Machine {
 	case elf.EM_X86_64:
-		return &x86Extractor{ef: ef}
+		return &x86Extractor{ef: ef}, nil
 	case elf.EM_AARCH64:
-		return &armExtractor{ef: ef}
+		return &armExtractor{ef: ef}, nil
 	default:
-		panic("unexpected architecture")
+		return nil, fmt.Errorf("unexpected architecture: %s", ef.Machine)
 	}
 }
 
@@ -178,9 +178,12 @@ type offsetData struct {
 
 func (o *offsetData) init(ef *pfelf.File) error {
 	o.f = ef
-	o.e = newExtractor(ef)
+	extractor, err := newExtractor(ef)
+	if err != nil {
+		return err
+	}
+	o.e = extractor
 
-	var err error
 	o.foundSymbols = scanSymbols(ef)
 	// Two extractors use luaopen_jit so cache it.
 	b, addr, err := o.readSymByName("luaopen_jit")
