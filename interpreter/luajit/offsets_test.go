@@ -70,7 +70,7 @@ func TestOffsets(t *testing.T) {
 				intervals, param, err := extractStackDeltas(target, ef)
 				require.NoError(t, err)
 
-				interp, err := extractInterpreterBounds(intervals.Deltas, param)
+				interp, err := extractInterpreterBounds(intervals, param)
 				require.NoError(t, err)
 
 				ljd := luajitData{}
@@ -137,9 +137,9 @@ func cacheLibrary(t *testing.T, tag, platform, libFile string) (string, bool) {
 }
 
 func extractStackDeltas(target string, ef *pfelf.File) (sdtypes.IntervalData, int32, error) {
-	var intervals sdtypes.IntervalData
-	if err := elfunwindinfo.Extract(target, &intervals); err != nil {
-		return intervals, 0, err
+	intervals, err := elfunwindinfo.Extract(target)
+	if err != nil {
+		return *intervals, 0, err
 	}
 
 	var param int32
@@ -149,7 +149,7 @@ func extractStackDeltas(target string, ef *pfelf.File) (sdtypes.IntervalData, in
 	case elf.EM_X86_64:
 		param = 80
 	}
-	return intervals, param, nil
+	return *intervals, param, nil
 }
 
 func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {

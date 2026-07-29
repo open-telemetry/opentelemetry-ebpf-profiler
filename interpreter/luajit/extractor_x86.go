@@ -130,7 +130,7 @@ func isZeroOperand(arg x86asm.Arg, regs *amd.Registers) bool {
 func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
 	type ref struct {
 		disp int64
-		pos  int
+		pos  uint64
 	}
 	var (
 		greg   x86asm.Reg
