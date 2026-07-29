@@ -366,7 +366,13 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // HandleTrace processes and reports the given host.Trace. This function
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
-// strategy needs to be updated accordingly.
+// HandleTrace processes and reports the given eBPF trace. Process metadata
+// is looked up here rather than at trace-receive time as EbpfTrace carries
+// only data sourced from eBPF. If the process has already exited and been evicted,
+// the trace is reported without that enrichment. This function is not re-entrant
+// due to frameCache not being synced. If the tracer is later updated to distribute
+// trace handling to a goroutine pool, the caching strategy needs to be updated
+// accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
 	procMeta := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
