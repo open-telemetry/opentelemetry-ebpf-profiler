@@ -128,7 +128,7 @@ type Trace struct {
 	Frames       Frames
 }
 
-// EbpfTrace represents a stack trace from Ebpf code.
+// EbpfTrace holds data sourced from eBPF.
 type EbpfTrace struct {
 	CustomLabels     map[String]String
 	Comm             Comm
