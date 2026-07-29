@@ -686,15 +686,18 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 299
 
+	// Number of samples skipped because the process is too new
+	IDSamplesSkippedProcessTooNew = 300
+
 	// Number of attempted Go asmcgocall stack-switch unwinds
-	IDUnwindGoAsmcgocallAttempts = 300
+	IDUnwindGoAsmcgocallAttempts = 301
 
 	// Number of successful Go asmcgocall unwinds
-	IDUnwindGoAsmcgocallSuccess = 301
+	IDUnwindGoAsmcgocallSuccess = 302
 
 	// Number of Go asmcgocall unwind failures
-	IDUnwindGoAsmcgocallUnwindFailure = 302
+	IDUnwindGoAsmcgocallUnwindFailure = 303
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 303
+	IDMax = 304
 )

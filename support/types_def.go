@@ -308,6 +308,7 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNativeErrNonExecutableVMA:            metrics.IDUnwindNativeErrNonExecutableVMA,
 	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
 	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
+	C.metricID_SamplesSkippedProcessTooNew:                metrics.IDSamplesSkippedProcessTooNew,
 	C.metricID_UnwindGoAsmcgocallAttempts:                 metrics.IDUnwindGoAsmcgocallAttempts,
 	C.metricID_UnwindGoAsmcgocallSuccess:                  metrics.IDUnwindGoAsmcgocallSuccess,
 	C.metricID_UnwindGoAsmcgocallUnwindFailure:            metrics.IDUnwindGoAsmcgocallUnwindFailure,

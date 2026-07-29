@@ -2190,24 +2190,31 @@
     "id": 299
   },
   {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 300
+  },
+  {
     "description": "Number of attempted Go asmcgocall stack-switch unwinds",
     "type": "counter",
     "name": "UnwindGoAsmcgocallAttempts",
     "field": "bpf.go.asmcgocall_attempts",
-    "id": 300
+    "id": 301
   },
   {
     "description": "Number of successful Go asmcgocall unwinds",
     "type": "counter",
     "name": "UnwindGoAsmcgocallSuccess",
     "field": "bpf.go.asmcgocall_success",
-    "id": 301
+    "id": 302
   },
   {
     "description": "Number of Go asmcgocall unwind failures",
     "type": "counter",
     "name": "UnwindGoAsmcgocallUnwindFailure",
     "field": "bpf.go.errors.asmcgocall_unwind_failure",
-    "id": 302
+    "id": 303
   }
 ]

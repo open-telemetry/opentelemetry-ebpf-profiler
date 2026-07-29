@@ -108,8 +108,6 @@ type MetaConfig struct {
 
 // ProcessMeta contains metadata about a tracked process.
 type ProcessMeta struct {
-	// process name retrieved from /proc/PID/comm
-	Name libpf.String
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String
 	// process env vars from /proc/PID/environ

@@ -834,8 +834,8 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// MetaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
+// metaForPID returns the process metadata for given PID.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
@@ -934,7 +934,7 @@ func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContex
 	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
 		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
 		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearExtraAttributes()
+		oldProcessContextInfo.ClearAttributes()
 		return oldProcessContextInfo
 	}
 

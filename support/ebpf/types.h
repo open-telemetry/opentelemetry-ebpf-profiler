@@ -346,6 +346,9 @@ enum {
   // number of failures to read LuaJIT proc info
   metricID_UnwindLuaJITErrNoProcInfo,
 
+  // number of samples skipped because the process is too new
+  metricID_SamplesSkippedProcessTooNew,
+
   // number of attempted Go asmcgocall stack-switch unwinds
   metricID_UnwindGoAsmcgocallAttempts,
 
