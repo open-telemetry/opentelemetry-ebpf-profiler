@@ -67,21 +67,41 @@ const (
 // big and has a somewhat unique FDE we can pick out. We could tighten this up by looking for
 // direct jumps to the start of the interpreter (one can be found lj_dispatch_update) but we'd
 // still need to consult the stack deltas to get the end of the interpreter.
-func extractInterpreterBounds(deltas sdtypes.StackDeltaArray, param int32) (util.Range,
+func extractInterpreterBounds(intervals sdtypes.IntervalData, param int32) (util.Range,
 	error) {
-	for i := 0; i < len(deltas)-1; i++ {
-		d, next := &deltas[i], &deltas[i+1]
-		if next.Address-d.Address <= minInterpreterSize {
-			continue
-		}
+DeltasLoop:
+	for i, bk := range intervals.Blocks {
+		for j, d := range bk.Deltas {
+			var next *sdtypes.StackDelta
+			var nextBk *sdtypes.BasicBlock
+			if j < len(bk.Deltas)-1 {
+				next = &bk.Deltas[j+1]
+				nextBk = bk
+			} else {
+				for nextI := i + 1; nextI < len(intervals.Blocks); nextI += 1 {
+					nextBk = intervals.Blocks[nextI]
+					if len(nextBk.Deltas) != 0 {
+						next = &nextBk.Deltas[0]
+						break
+					}
+				}
+			}
+			if next == nil {
+				break DeltasLoop
+			}
+			dAddr := bk.Start + uint64(d.Offset)
+			nextAddr := nextBk.Start + uint64(next.Offset)
+			if nextAddr < dAddr || nextAddr-dAddr <= minInterpreterSize {
+				continue
+			}
 
-		// The first case covers x86 w/ dwarf and old versions of luajit ARM that used dwarf and
-		// the second covers more recent arm versions that use frame pointers.
-		if (d.Info.BaseReg == support.UnwindRegSp && d.Info.Param == param) ||
-			(d.Info.BaseReg == support.UnwindRegFp && d.Info.Param == 16) {
-			return util.Range{Start: d.Address, End: next.Address}, nil
+			// The first case covers x86 w/ dwarf and old versions of luajit ARM that used dwarf and
+			// the second covers more recent arm versions that use frame pointers.
+			if (d.Info.BaseReg == support.UnwindRegSp && d.Info.Param == param) ||
+				(d.Info.BaseReg == support.UnwindRegFp && d.Info.Param == 16) {
+				return util.Range{Start: dAddr, End: nextAddr}, nil
+			}
 		}
 	}
-
 	return util.Range{}, errors.New("failed to find interpreter range")
 }
