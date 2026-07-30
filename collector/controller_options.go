@@ -16,10 +16,10 @@ type Option interface {
 }
 
 type controllerOption struct {
-	executableReporter  reporter.ExecutableReporter
+	executableReporter   reporter.ExecutableReporter
 	processMetaEnrichers []process.ProcessMetaEnricher
-	reporterFactory     func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	onShutdown          func() error
+	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
+	onShutdown           func() error
 }
 
 type optFunc func(*controllerOption) *controllerOption

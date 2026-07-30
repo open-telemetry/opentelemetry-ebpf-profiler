@@ -24,7 +24,7 @@ type Config struct {
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.ProcessMetaEnricher
-	OnShutdown          func() error
+	OnShutdown           func() error
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.
