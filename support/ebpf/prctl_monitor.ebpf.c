@@ -53,8 +53,11 @@ int tracepoint__sys_exit_prctl(void *ctx)
     goto exit;
   }
 
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = pid_tgid >> 32;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid)) {
+    goto exit;
+  }
 
   if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(pid)) {
     // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
@@ -75,7 +78,7 @@ int tracepoint__sys_exit_prctl(void *ctx)
     goto exit;
   }
 
-  if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
+  if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_DEFAULT)) {
     increment_metric(metricID_NumSyncsFromPrctl);
   }
 
