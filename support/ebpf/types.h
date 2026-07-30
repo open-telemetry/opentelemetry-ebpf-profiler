@@ -1001,6 +1001,9 @@ typedef struct StackDelta {
 // Cross the Go runtime.asmcgocall stack-switch boundary (arm64) by reading the
 // goroutine saved context from gobuf
 #define UNWIND_COMMAND_GO_ASMCGOCALL 5
+// Unwind past Go runtime.morestack by reading the caller registers it saved
+// into the goroutine's gobuf
+#define UNWIND_COMMAND_GO_MORESTACK  6
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {

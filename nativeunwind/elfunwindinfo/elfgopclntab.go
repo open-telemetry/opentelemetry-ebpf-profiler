@@ -654,9 +654,11 @@ func getSourceFileStrategyX86(sourceFile string) strategy {
 func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdtypes.UnwindInfo {
 	unwindInfoFramePointerOrStop := &sdtypes.UnwindInfoStop
 	unwindInfoGoAsmcgocallOrStop := &sdtypes.UnwindInfoStop
+	unwindInfoGoMorestackOrStop := &sdtypes.UnwindInfoStop
 	if useFP {
 		unwindInfoFramePointerOrStop = &sdtypes.UnwindInfoFramePointer
 		unwindInfoGoAsmcgocallOrStop = &sdtypes.UnwindInfoGoAsmcgocall
+		unwindInfoGoMorestackOrStop = &sdtypes.UnwindInfoGoMorestack
 	}
 
 	switch sourceFile {
@@ -675,6 +677,14 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdt
 		}
 		// asmcgocall FP is valid only on x86-64
 		return unwindInfoFramePointerOrStop
+	case "runtime.morestack":
+		// morestack clears the frame pointer before calling newstack, but first
+		// saves the caller's sp/pc/bp into the goroutine's gobuf, so the caller
+		// frame is recovered from there.
+		// Note that runtime.morestack_noctxt is deliberately not handled: it only
+		// clears the context register and jumps to morestack, so at that point
+		// nothing has been saved yet.
+		return unwindInfoGoMorestackOrStop
 	case "runtime.systemstack", "runtime.nanotime1", "time.now", "runtime.walltime":
 		// functions which preserve the frame pointer chain across the g0/user stack boundary
 		// so that the standard FP unwinding traverses it naturally.
