@@ -115,21 +115,49 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 	return nil
 }
 
-// getPidInformation returns existing process info for a known PID. For a new PID it
-// registers a dummy entry in the eBPF pid_page_to_mapping_info map and returns nil;
-// the caller is then responsible for building and storing a processInfo.
+// getOrCreateProcessInfo returns the processInfo for a PID.
+// If the PID is not yet known, the processInfo is created and the process
+// metadata is gathered (including configured process MetaEnrichers) without
+// the processmanager lock held.
 //
-// Caller must hold pm.mu write lock.
-func (pm *ProcessManager) getPidInformation(pid libpf.PID) *processInfo {
-	if info, ok := pm.pidToProcessInfo[pid]; ok {
+// Returns nil on failure.
+// Caller must not hold the pm.mu lock.
+func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
+	pr process.Process) *processInfo {
+	pm.mu.RLock()
+	info, ok := pm.pidToProcessInfo[pid]
+	pm.mu.RUnlock()
+	if ok {
+		return info
+	}
+
+	// Gather metadata without holding the processmanager lock:
+	// This reads /proc and may invoke arbitrary enricher callbacks.
+	meta := pr.GetProcessMeta(process.MetaConfig{
+		IncludeEnvVars: pm.includeEnvVars,
+		MetaEnrichers:  pm.metaEnrichers,
+	})
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Check if another goroutine registered the PID in-between.
+	if info, ok = pm.pidToProcessInfo[pid]; ok {
 		return info
 	}
 
 	if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
 		return nil
 	}
+
 	pm.pidPageToMappingInfoSize++
-	return nil
+	info = &processInfo{
+		meta:     meta,
+		libcInfo: nil,
+	}
+	pm.pidToProcessInfo[pid] = info
+
+	return info
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
@@ -548,21 +576,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// the case of main thread exit. Ignore it.
 	}
 
-	pm.mu.Lock()
-	info := pm.getPidInformation(pid)
+	info := pm.getOrCreateProcessInfo(pid, pr)
 	if info == nil {
-		pm.mu.Unlock()
-
-		meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
-		info = &processInfo{
-			meta:     meta,
-			libcInfo: nil,
-		}
-
-		// Two goroutines may race here for the same new PID; the second write silently wins.
-		pm.mu.Lock()
-		pm.pidToProcessInfo[pid] = info
+		return
 	}
+
+	pm.mu.Lock()
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 	oldProcessContextInfo := info.meta.ProcessContextInfo
@@ -745,10 +764,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
 	}
 
-	// Sort and publish the new mappings and meta
+	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)
+
+	info = pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
-	info = pm.getPidInformation(pid)
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
