@@ -21,9 +21,9 @@ type Config struct {
 	Version       bool
 
 	ExecutableReporter reporter.ExecutableReporter
-	// ProcessMetaEnricher is an optional hook for enriching process metadata at
-	// process discovery time. See processmanager.ProcessMetaEnricher.
-	ProcessMetaEnricher process.ProcessMetaEnricher
+	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
+	// process discovery time. Multiple enrichers are called in order.
+	ProcessMetaEnrichers []process.ProcessMetaEnricher
 	OnShutdown          func() error
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.

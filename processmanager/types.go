@@ -133,7 +133,7 @@ type ProcessManager struct {
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
 
-	metaEnricher process.ProcessMetaEnricher
+	metaEnrichers []process.ProcessMetaEnricher
 }
 
 // Mapping represents an executable memory mapping of a process.

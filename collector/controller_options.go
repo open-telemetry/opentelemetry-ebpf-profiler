@@ -17,7 +17,7 @@ type Option interface {
 
 type controllerOption struct {
 	executableReporter  reporter.ExecutableReporter
-	processMetaEnricher process.ProcessMetaEnricher
+	processMetaEnrichers []process.ProcessMetaEnricher
 	reporterFactory     func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 	onShutdown          func() error
 }
@@ -56,9 +56,9 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 // arbitrary key-value pairs in ProcessMeta.ExtraMeta. Those values are propagated
 // to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
 // resource or sample attributes on outgoing profiles.
-func WithProcessMetaEnricher(enricher process.ProcessMetaEnricher) Option {
+func WithProcessMetaEnricher(enrichers ...process.ProcessMetaEnricher) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
-		option.processMetaEnricher = enricher
+		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
 		return option
 	})
 }

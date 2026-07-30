@@ -105,7 +105,7 @@ type MetaConfig struct {
 	// IncludeEnvVars holds a list of env vars that should be captured from the process.
 	IncludeEnvVars libpf.Set[string]
 
-	MetaEnricher ProcessMetaEnricher
+	MetaEnrichers []ProcessMetaEnricher
 }
 
 // ProcessMeta contains metadata about a tracked process.
@@ -170,8 +170,18 @@ type Process interface {
 	pfelf.ELFOpener
 }
 
-// ProcessMetaEnricher is an optional hook called once per process when it is first
-// observed. Implementations may read from /proc or any other source and store
-// arbitrary key-value pairs in meta.ExtraMeta. The callback runs while the process
-// is still alive, so short-lived process data is reliably captured.
-type ProcessMetaEnricher func(libpf.PID, *ProcessMeta)
+// ProcessMetaEnricher is called once per process when it is first observed.
+// Implementations may read from /proc or any other source and store arbitrary
+// key-value pairs in meta.ExtraMeta. The call happens while the process is still
+// alive, so short-lived process data is reliably captured.
+type ProcessMetaEnricher interface {
+	EnrichProcessMeta(libpf.PID, *ProcessMeta)
+}
+
+// ProcessMetaEnricherFunc is an adapter to allow use of plain functions as a
+// ProcessMetaEnricher.
+type ProcessMetaEnricherFunc func(libpf.PID, *ProcessMeta)
+
+func (f ProcessMetaEnricherFunc) EnrichProcessMeta(pid libpf.PID, meta *ProcessMeta) {
+	f(pid, meta)
+}

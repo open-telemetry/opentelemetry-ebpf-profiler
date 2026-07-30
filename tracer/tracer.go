@@ -210,9 +210,9 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
-	// ProcessMetaEnricher is an optional hook for enriching process metadata at
-	// process discovery time.
-	ProcessMetaEnricher process.ProcessMetaEnricher
+	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
+	// process discovery time. Multiple enrichers are called in order.
+	ProcessMetaEnrichers []process.ProcessMetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.
@@ -290,7 +290,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
-		ProcessMetaEnricher:   cfg.ProcessMetaEnricher,
+		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)

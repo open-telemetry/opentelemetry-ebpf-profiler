@@ -553,7 +553,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	if info == nil {
 		pm.mu.Unlock()
 
-		meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnricher: pm.metaEnricher})
+		meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
 		info = &processInfo{
 			meta:     meta,
 			libcInfo: nil,
@@ -742,7 +742,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// Update metadata of the process.
 	var meta process.ProcessMeta
 	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnricher: pm.metaEnricher})
+		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
 	}
 
 	// Sort and publish the new mappings and meta

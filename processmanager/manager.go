@@ -57,23 +57,6 @@ var (
 	errPIDGone = errors.New("interpreter process gone")
 )
 
-// fillSelfContainerID sets the container ID on meta if the process shares the profiler's
-// cgroup root and standard cgroup-based detection returned no result.
-func fillSelfContainerID(selfContainerID libpf.String, selfCgroupIno uint64, pid libpf.PID, meta *process.ProcessMeta) {
-	if meta.ContainerID != libpf.NullString || selfContainerID == libpf.NullString {
-		return
-	}
-	ino, err := process.CgroupRootInode(pid)
-	if err != nil {
-		return
-	}
-	if ino == selfCgroupIno {
-		meta.ContainerID = selfContainerID
-	} else {
-		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, selfCgroupIno)
-	}
-}
-
 // Config contains the dependencies and options used to create a ProcessManager.
 type Config struct {
 	InterpretersConfig    interpreterconfig.Config
@@ -87,7 +70,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
-	ProcessMetaEnricher   process.ProcessMetaEnricher
+	ProcessMetaEnrichers  []process.ProcessMetaEnricher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -130,9 +113,11 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
+	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	} else {
+		cfg.ProcessMetaEnrichers = append(cfg.ProcessMetaEnrichers, selfContainerEnricher)
 	}
 
 	pm := &ProcessManager{
@@ -150,13 +135,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           cfg.IncludeEnvVars,
-		metaEnricher: func(pid libpf.PID, meta *process.ProcessMeta) {
-			if cfg.ProcessMetaEnricher != nil {
-				cfg.ProcessMetaEnricher(pid, meta)
-			}
-
-			fillSelfContainerID(selfContainerID, selfCgroupIno, pid, meta)
-		},
+		metaEnrichers:            cfg.ProcessMetaEnrichers,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
