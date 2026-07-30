@@ -1082,23 +1082,17 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			errRecordUnexpectedSize)
 	}
 
-	pid := libpf.PID(ptr.Pid)
-	procMeta := t.processManager.MetaForPID(pid)
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
 		Comm:             libpf.NewComm(ptr.Comm),
-		ExecutablePath:   procMeta.Executable,
-		ContainerID:      procMeta.ContainerID,
-		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
-		PID:              pid,
+		PID:              libpf.PID(ptr.Pid),
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
 		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
-		EnvVars:          procMeta.EnvVariables,
 	}
 
 	if t.origins.lookup(trace.Origin) == nil {

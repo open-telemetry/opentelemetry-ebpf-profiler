@@ -19,9 +19,9 @@ type Statistics struct {
 // StackDeltaProvider defines an interface for types that provide access to the stack deltas from
 // executables.
 type StackDeltaProvider interface {
-	// GetIntervalStructuresForFile inspects a single executable and extracts data that is needed
+	// GetIntervalDataForFile inspects a single executable and extracts data that is needed
 	// to rebuild the stack for traces of this executable.
-	GetIntervalStructuresForFile(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error
+	GetIntervalDataForFile(elfRef *pfelf.Reference) (*sdtypes.IntervalData, error)
 
 	// GetAndResetStatistics returns the internal statistics for this provider and resets all
 	// values to 0.

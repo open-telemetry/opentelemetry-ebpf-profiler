@@ -680,8 +680,7 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdt
 }
 
 // parseX86pclntabFunc extracts interval information from x86_64 based pclntabFunc.
-func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error {
-	hints := sdtypes.UnwindHintKeep
+func parseX86pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 	for ok := true; ok; ok = p.step() {
 		info := sdtypes.UnwindInfo{
 			BaseReg: support.UnwindRegSp,
@@ -691,19 +690,13 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) e
 			info.AuxBaseReg = support.UnwindRegCfa
 			info.AuxParam = -16
 		}
-		deltas.Add(sdtypes.StackDelta{
-			Address: uint64(p.pcStart),
-			Hints:   hints,
-			Info:    info,
-		})
-		hints = sdtypes.UnwindHintNone
+		bb.Deltas.Add(uint32(p.pcStart), info)
 	}
 	return nil
 }
 
 // parseArm64pclntabFunc extracts interval information from ARM64 based pclntabFunc.
-func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error {
-	hint := sdtypes.UnwindHintKeep
+func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 	for ok := true; ok; ok = p.step() {
 		var info sdtypes.UnwindInfo
 		if p.val == 0 {
@@ -722,14 +715,7 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy)
 				info.AuxParam = 0
 			}
 		}
-
-		deltas.Add(sdtypes.StackDelta{
-			Address: uint64(p.pcStart),
-			Hints:   hint,
-			Info:    info,
-		})
-
-		hint = sdtypes.UnwindHintNone
+		bb.Deltas.Add(uint32(p.pcStart), info)
 	}
 
 	return nil
@@ -804,7 +790,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	arch := ee.file.Machine
 	defaultStrategy := strategyFramePointer
 	useFP := true
-	var parsePclntab func(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error
+	var parsePclntab func(bb *sdtypes.BasicBlock, p pcval, s strategy) error
 	var cuStrategy map[int]strategy
 
 	switch arch {
@@ -858,12 +844,16 @@ func (ee *elfExtractor) parseGoPclntab() error {
 				i, mapPc, funcPc)
 		}
 
+		endPc, _ := g.getFuncMapEntry(i + 1)
+		bb := sdtypes.BasicBlock{
+			Start: uint64(funcPc),
+			End:   uint64(endPc),
+		}
+
 		// First, check for functions with special handling.
 		if info, ok := funcUnwindInfo[int32(fun.nameOff)]; ok {
-			ee.deltas.Add(sdtypes.StackDelta{
-				Address: uint64(funcPc),
-				Info:    *info,
-			})
+			bb.Deltas.Add(0, *info)
+			ee.intervals.Add(bb)
 			continue
 		}
 
@@ -880,10 +870,8 @@ func (ee *elfExtractor) parseGoPclntab() error {
 
 		if fileStrategy == strategyFramePointer {
 			// Use stack frame-pointer delta
-			ee.deltas.Add(sdtypes.StackDelta{
-				Address: uint64(funcPc),
-				Info:    sdtypes.UnwindInfoFramePointer,
-			})
+			bb.Deltas.Add(0, sdtypes.UnwindInfoFramePointer)
+			ee.intervals.Add(bb)
 			continue
 		}
 
@@ -897,22 +885,17 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			return fmt.Errorf("func %v pcscOff (%d) is invalid",
 				i, fun.pcspOff)
 		}
-		p := g.getPcval(fun.pcspOff, uint(funcPc))
-		if err := parsePclntab(ee.deltas, p, fileStrategy); err != nil {
+		p := g.getPcval(fun.pcspOff, 0)
+		if err := parsePclntab(&bb, p, fileStrategy); err != nil {
 			return err
 		}
+		ee.intervals.Add(bb)
 	}
 
 	// Filter out .gopclntab info from other sources
 	start, _ := g.getFuncMapEntry(0)
 	end, _ := g.getFuncMapEntry(g.numFuncs)
 	ee.hooks.golangHook(start, end)
-
-	// Add end of code indicator
-	ee.deltas.Add(sdtypes.StackDelta{
-		Address: uint64(end),
-		Info:    sdtypes.UnwindInfoInvalid,
-	})
 
 	return nil
 }

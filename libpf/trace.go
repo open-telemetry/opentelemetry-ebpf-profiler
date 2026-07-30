@@ -128,12 +128,8 @@ type Trace struct {
 	Frames       Frames
 }
 
-// EbpfTrace represents a stack trace from Ebpf code.
+// EbpfTrace holds data sourced from eBPF.
 type EbpfTrace struct {
-	EnvVars          map[String]String
-	ProcessName      String
-	ExecutablePath   String
-	ContainerID      String
 	CustomLabels     map[String]String
 	Comm             Comm
 	FrameData        []uint64
