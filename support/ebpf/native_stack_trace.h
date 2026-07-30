@@ -235,8 +235,7 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // through the flag instead, leaving state and trace untouched so the caller can
 // hand the frame to the Go capable flavor.
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
+static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_go)
 {
   *stop = false;
 
@@ -294,6 +293,16 @@ unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
         goto err_native_pc_read;
       }
       goto frame_ok;
+    case UNWIND_COMMAND_GO_MORESTACK: {
+      if (delegate_go) {
+        *delegate_go = true;
+        return ERR_OK;
+      }
+      if (go_unwind_morestack(record, state) != ERR_OK) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
+    }
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -409,6 +418,16 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop, 
       DEBUG_PRINT("go asmcgocall unwind failed: %d", error);
       *stop = true;
       return ERR_OK;
+    }
+    case UNWIND_COMMAND_GO_MORESTACK: {
+      if (delegate_go) {
+        *delegate_go = true;
+        return ERR_OK;
+      }
+      if (go_unwind_morestack(record, state) != ERR_OK) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     }
     default: return ERR_UNREACHABLE;
     }
