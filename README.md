@@ -128,6 +128,7 @@ To understand how this project works and learn more about profiling, check out [
 ### Emeritus
 
 - [Dmitry Filimonov](https://github.com/petethepig), Maintainer
+- [Felix Geisendörfer](https://github.com/felixge), Maintainer
 - [Joel Höner](https://github.com/athre0z), Approver
 - [Tim Rühsen](https://github.com/rockdaboot), Approver
 
