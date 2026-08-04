@@ -9,33 +9,33 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
-func TestParseProbeType(t *testing.T) {
+func TestParseProbeMode(t *testing.T) {
 	tests := []struct {
 		input   string
-		want    tracer.ProbeType
+		want    tracer.ProbeMode
 		wantErr bool
 	}{
-		{"kprobe", tracer.ProbeTypeKprobe, false},
-		{"KPROBE", tracer.ProbeTypeKprobe, false},
-		{"Kprobe", tracer.ProbeTypeKprobe, false},
-		{"kretprobe", tracer.ProbeTypeKretprobe, false},
-		{"KRETPROBE", tracer.ProbeTypeKretprobe, false},
-		{"uprobe", tracer.ProbeTypeUprobe, false},
-		{"UPROBE", tracer.ProbeTypeUprobe, false},
-		{"uretprobe", tracer.ProbeTypeUretprobe, false},
-		{"URETPROBE", tracer.ProbeTypeUretprobe, false},
+		{"kprobe", tracer.ProbeModeKprobe, false},
+		{"KPROBE", tracer.ProbeModeKprobe, false},
+		{"Kprobe", tracer.ProbeModeKprobe, false},
+		{"kretprobe", tracer.ProbeModeKretprobe, false},
+		{"KRETPROBE", tracer.ProbeModeKretprobe, false},
+		{"uprobe", tracer.ProbeModeUprobe, false},
+		{"UPROBE", tracer.ProbeModeUprobe, false},
+		{"uretprobe", tracer.ProbeModeUretprobe, false},
+		{"URETPROBE", tracer.ProbeModeUretprobe, false},
 		{"", 0, true},
 		{"tracepoint", 0, true},
 		{"kprobe ", 0, true},
 	}
 	for _, tc := range tests {
-		got, err := parseProbeType(tc.input)
+		got, err := parseProbeMode(tc.input)
 		if (err != nil) != tc.wantErr {
-			t.Errorf("parseProbeType(%q): wantErr=%v, got err=%v", tc.input, tc.wantErr, err)
+			t.Errorf("parseProbeMode(%q): wantErr=%v, got err=%v", tc.input, tc.wantErr, err)
 			continue
 		}
 		if !tc.wantErr && got != tc.want {
-			t.Errorf("parseProbeType(%q): want %v, got %v", tc.input, tc.want, got)
+			t.Errorf("parseProbeMode(%q): want %v, got %v", tc.input, tc.want, got)
 		}
 	}
 }
@@ -48,19 +48,19 @@ func TestNew(t *testing.T) {
 	}{
 		{
 			name: "valid kprobe",
-			cfg:  Config{Type: "kprobe", Symbol: "vfs_open"},
+			cfg:  Config{Mode: "kprobe", Symbol: "vfs_open"},
 		},
 		{
 			name: "valid kretprobe",
-			cfg:  Config{Type: "kretprobe", Symbol: "vfs_read"},
+			cfg:  Config{Mode: "kretprobe", Symbol: "vfs_read"},
 		},
 		{
 			name: "valid uprobe with target",
-			cfg:  Config{Type: "uprobe", Symbol: "main", Target: "/usr/bin/myapp"},
+			cfg:  Config{Mode: "uprobe", Symbol: "main", Target: "/usr/bin/myapp"},
 		},
 		{
 			name: "valid uretprobe with target",
-			cfg:  Config{Type: "uretprobe", Symbol: "main", Target: "/usr/bin/myapp"},
+			cfg:  Config{Mode: "uretprobe", Symbol: "main", Target: "/usr/bin/myapp"},
 		},
 		{
 			name: "default to type kprobe",
@@ -68,27 +68,27 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name:    "missing symbol",
-			cfg:     Config{Type: "kprobe"},
+			cfg:     Config{Mode: "kprobe"},
 			wantErr: true,
 		},
 		{
 			name:    "unknown type",
-			cfg:     Config{Type: "tracepoint", Symbol: "vfs_open"},
+			cfg:     Config{Mode: "tracepoint", Symbol: "vfs_open"},
 			wantErr: true,
 		},
 		{
 			name:    "uprobe missing target",
-			cfg:     Config{Type: "uprobe", Symbol: "main"},
+			cfg:     Config{Mode: "uprobe", Symbol: "main"},
 			wantErr: true,
 		},
 		{
 			name:    "uretprobe missing target",
-			cfg:     Config{Type: "uretprobe", Symbol: "main"},
+			cfg:     Config{Mode: "uretprobe", Symbol: "main"},
 			wantErr: true,
 		},
 		{
 			name: "kprobe does not require target",
-			cfg:  Config{Type: "kprobe", Symbol: "vfs_open", Target: ""},
+			cfg:  Config{Mode: "kprobe", Symbol: "vfs_open", Target: ""},
 		},
 	}
 	for _, tc := range tests {

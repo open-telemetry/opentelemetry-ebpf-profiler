@@ -20,7 +20,7 @@ func TestParseProbe(t *testing.T) {
 		"kprobe_valid": {
 			input: "kprobe:vfs_read",
 			expected: &ProbeSpec{
-				Type:     ProbeTypeKprobe,
+				Mode:     ProbeModeKprobe,
 				Symbol:   "vfs_read",
 				ProgName: "kprobe__generic",
 			},
@@ -29,7 +29,7 @@ func TestParseProbe(t *testing.T) {
 		"kretprobe_valid": {
 			input: "kretprobe:vfs_read",
 			expected: &ProbeSpec{
-				Type:     ProbeTypeKretprobe,
+				Mode:     ProbeModeKretprobe,
 				Symbol:   "vfs_read",
 				ProgName: "kprobe__generic",
 			},
@@ -38,7 +38,7 @@ func TestParseProbe(t *testing.T) {
 		"uprobe_valid": {
 			input: "uprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Type:     ProbeTypeUprobe,
+				Mode:     ProbeModeUprobe,
 				Target:   "/usr/lib/libc.so.6",
 				Symbol:   "malloc",
 				ProgName: "kprobe__generic",
@@ -48,7 +48,7 @@ func TestParseProbe(t *testing.T) {
 		"uretprobe_valid": {
 			input: "uretprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Type:     ProbeTypeUretprobe,
+				Mode:     ProbeModeUretprobe,
 				Target:   "/usr/lib/libc.so.6",
 				Symbol:   "malloc",
 				ProgName: "kprobe__generic",
@@ -84,7 +84,7 @@ func TestParseProbe(t *testing.T) {
 			input:   "uprobe::malloc",
 			wantErr: false, // This will parse but target will be empty
 			expected: &ProbeSpec{
-				Type:     ProbeTypeUprobe,
+				Mode:     ProbeModeUprobe,
 				Target:   "",
 				Symbol:   "malloc",
 				ProgName: "kprobe__generic",
@@ -123,7 +123,7 @@ func TestParseProbe(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, got)
-				assert.Equal(t, tc.expected.Type, got.Type)
+				assert.Equal(t, tc.expected.Mode, got.Mode)
 				assert.Equal(t, tc.expected.Symbol, got.Symbol)
 				if tc.expected.Target != "" {
 					assert.Equal(t, tc.expected.Target, got.Target)

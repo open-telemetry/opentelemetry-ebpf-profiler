@@ -1417,7 +1417,7 @@ func (t *Tracer) AttachProbes(probes []string) error {
 			return err
 		}
 
-		t.hooks[hookPoint{group: probeSpec.Type.String(), name: probeStr}] = probeLink
+		t.hooks[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = probeLink
 	}
 	return nil
 }

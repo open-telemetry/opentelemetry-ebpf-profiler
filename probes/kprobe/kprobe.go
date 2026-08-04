@@ -48,33 +48,33 @@ func New(cfg Config) (tracer.Probe, error) {
 		return nil, fmt.Errorf("kprobe: symbol is required")
 	}
 
-	probeType, err := parseProbeType(cfg.Mode)
+	probeMode, err := parseProbeMode(cfg.Mode)
 	if err != nil {
 		return nil, err
 	}
 
-	if (probeType == tracer.ProbeTypeUprobe || probeType == tracer.ProbeTypeUretprobe) && cfg.Target == "" {
+	if (probeMode == tracer.ProbeModeUprobe || probeMode == tracer.ProbeModeUretprobe) && cfg.Target == "" {
 		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Mode)
 	}
 
 	spec := &tracer.ProbeSpec{
-		Type:   probeType,
+		Mode:   probeMode,
 		Symbol: cfg.Symbol,
 		Target: cfg.Target,
 	}
 	return &probe{spec: spec}, nil
 }
 
-func parseProbeType(s string) (tracer.ProbeType, error) {
+func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	switch strings.ToLower(s) {
 	case "kprobe":
-		return tracer.ProbeTypeKprobe, nil
+		return tracer.ProbeModeKprobe, nil
 	case "kretprobe":
-		return tracer.ProbeTypeKretprobe, nil
+		return tracer.ProbeModeKretprobe, nil
 	case "uprobe":
-		return tracer.ProbeTypeUprobe, nil
+		return tracer.ProbeModeUprobe, nil
 	case "uretprobe":
-		return tracer.ProbeTypeUretprobe, nil
+		return tracer.ProbeModeUretprobe, nil
 	default:
 		return 0, fmt.Errorf("unknown probe type %q: must be kprobe, kretprobe, uprobe, or uretprobe", s)
 	}
