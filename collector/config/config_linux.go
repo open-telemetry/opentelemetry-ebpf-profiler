@@ -45,16 +45,16 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
-// Probe holds the kind and configuration for a single probe entry.
-// All fields except "kind" are probe-specific and collected via mapstructure's
+// Probe holds the type and configuration for a single probe entry.
+// All fields except "type" are probe-specific and collected via mapstructure's
 // remain feature, so the YAML is flat (no nested "config:" block):
 //
 //	probes:
-//	  - kind: kprobe
-//	    type: kprobe
+//	  - type: kprobe
+//	    mode: kprobe
 //	    symbol: vfs_open
 type Probe struct {
-	Kind   string         `mapstructure:"kind"`
+	Type   string         `mapstructure:"type"`
 	Config map[string]any `mapstructure:",remain"`
 }
 

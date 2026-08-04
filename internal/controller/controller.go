@@ -183,23 +183,23 @@ func (c *Controller) Start(ctx context.Context) error {
 
 func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
 	for i, p := range c.config.Probes {
-		probe, err := createProbe(p.Kind, p.Config)
+		probe, err := createProbe(p.Type, p.Config)
 		if err != nil {
 			return fmt.Errorf("probe %d: %w", i, err)
 		}
 
 		if err := trc.Enable(ctx, probe); err != nil {
-			return fmt.Errorf("probe %d (%s): %w", i, p.Kind, err)
+			return fmt.Errorf("probe %d (%s): %w", i, p.Type, err)
 		}
 
-		log.Infof("Enabled probe %d (%s)", i, p.Kind)
+		log.Infof("Enabled probe %d (%s)", i, p.Type)
 	}
 
 	return nil
 }
 
-func createProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
-	switch kind {
+func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
+	switch probeType {
 	case "kprobe":
 		var kcfg kprobe.Config
 		if err := mapstructure.Decode(cfg, &kcfg); err != nil {
@@ -207,7 +207,7 @@ func createProbe(kind string, cfg map[string]any) (tracer.Probe, error) {
 		}
 		return kprobe.New(kcfg)
 	default:
-		return nil, fmt.Errorf("unknown probe kind %q", kind)
+		return nil, fmt.Errorf("unknown probe type %q", probeType)
 	}
 }
 

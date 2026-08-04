@@ -22,12 +22,12 @@ const progName = "kprobe__generic"
 // Config holds the YAML configuration for the kprobe probe.
 //
 //	probes:
-//	  - kind: kprobe
-//	    type: kprobe        # kprobe (default) | kretprobe | uprobe | uretprobe
+//	  - type: kprobe
+//	    mode: kprobe        # kprobe (default) | kretprobe | uprobe | uretprobe
 //	    symbol: vfs_open
 //	    target: ""          # executable path; required for uprobe/uretprobe
 type Config struct {
-	Type   string `mapstructure:"type"`
+	Mode   string `mapstructure:"mode"`
 	Symbol string `mapstructure:"symbol"`
 	Target string `mapstructure:"target"`
 }
@@ -37,24 +37,24 @@ type probe struct {
 }
 
 // New validates cfg and returns a Probe backed by the generic unwinder program.
-// Type defaults to "kprobe" when omitted. Symbol is always required. Target is
+// Mode defaults to "kprobe" when omitted. Symbol is always required. Target is
 // required for uprobe/uretprobe. The caller is responsible for decoding the raw
 // YAML value into Config.
 func New(cfg Config) (tracer.Probe, error) {
-	if cfg.Type == "" {
-		cfg.Type = "kprobe"
+	if cfg.Mode == "" {
+		cfg.Mode = "kprobe"
 	}
 	if cfg.Symbol == "" {
 		return nil, fmt.Errorf("kprobe: symbol is required")
 	}
 
-	probeType, err := parseProbeType(cfg.Type)
+	probeType, err := parseProbeType(cfg.Mode)
 	if err != nil {
 		return nil, err
 	}
 
 	if (probeType == tracer.ProbeTypeUprobe || probeType == tracer.ProbeTypeUretprobe) && cfg.Target == "" {
-		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Type)
+		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Mode)
 	}
 
 	spec := &tracer.ProbeSpec{
