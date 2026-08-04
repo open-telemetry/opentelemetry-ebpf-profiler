@@ -824,13 +824,18 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
 
-	progs := make([]ProgLoaderHelper, len(tailCallProgs)+2)
+	progs := make([]ProgLoaderHelper, len(tailCallProgs)+3)
 	copy(progs, tailCallProgs)
 
 	schedProcessFree := schedProcessFreeHookName(libpf.MapKeysToSet(coll.Programs))
 	progs = append(progs,
 		ProgLoaderHelper{
 			Name:             schedProcessFree,
+			NoTailCallTarget: true,
+			Enable:           true,
+		},
+		ProgLoaderHelper{
+			Name:             "tracepoint__sys_exit_prctl",
 			NoTailCallTarget: true,
 			Enable:           true,
 		},
