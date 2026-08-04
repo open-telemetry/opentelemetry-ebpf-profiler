@@ -874,6 +874,11 @@ func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
+func (i *dotnetInstance) RuntimeInfo() (string, string, bool) {
+	ver := i.d.version
+	return "dotnet", fmt.Sprintf("%d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff), true
+}
+
 func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType

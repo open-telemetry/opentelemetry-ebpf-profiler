@@ -394,6 +394,8 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,
+		RuntimeName:    procMeta.RuntimeName,
+		RuntimeVersion: procMeta.RuntimeVersion,
 	}
 
 	pid := bpfTrace.PID

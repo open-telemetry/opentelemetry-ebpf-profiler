@@ -278,3 +278,73 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	}
 	assert.True(t, found, "expected process.name=myapp in the attribute table")
 }
+
+// TestReportTraceEventRuntimeBackfill verifies that the runtime name/version is
+// stored on the resource and backfilled when the first sample for a resource
+// arrived before the interpreter was detected.
+func TestReportTraceEventRuntimeBackfill(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+
+	trace := &libpf.Trace{
+		Frames: func() libpf.Frames {
+			frames := make(libpf.Frames, 0, 1)
+			frames.Append(&libpf.Frame{
+				Type:            libpf.PythonFrame,
+				AddressOrLineno: 42,
+				FunctionName:    libpf.Intern("main"),
+			})
+			return frames
+		}(),
+	}
+
+	now := time.Now()
+	baseMeta := func(ts time.Time, name, version string) *samples.TraceEventMeta {
+		return &samples.TraceEventMeta{
+			Timestamp:      libpf.UnixTime64(ts.UnixNano()),
+			Comm:           libpf.NewCommFromString("py"),
+			ExecutablePath: libpf.Intern("/usr/bin/python3"),
+			PID:            4242,
+			ProfileType:    profileTypeSampling,
+			RuntimeName:    name,
+			RuntimeVersion: version,
+		}
+	}
+
+	resourceRuntime := func() (string, string) {
+		eventsTreePtr := reporter.traceEvents.RLock()
+		defer reporter.traceEvents.RUnlock(&eventsTreePtr)
+		for _, rtp := range *eventsTreePtr {
+			return rtp.RuntimeName, rtp.RuntimeVersion
+		}
+		return "", ""
+	}
+
+	// First sample arrives before the interpreter attached: no runtime yet.
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(now, "", "")))
+	name, version := resourceRuntime()
+	assert.Empty(t, name)
+	assert.Empty(t, version)
+
+	// A later sample carries the detected runtime; it should be backfilled onto
+	// the existing resource bucket.
+	require.NoError(t, reporter.ReportTraceEvent(trace,
+		baseMeta(now.Add(time.Second), "cpython", "3.11.4")))
+	name, version = resourceRuntime()
+	assert.Equal(t, "cpython", name)
+	assert.Equal(t, "3.11.4", version)
+
+	// Runtime is immutable once set: a later sample reporting a different
+	// non-empty runtime under the same resource bucket shouldn't overwrite it.
+	require.NoError(t, reporter.ReportTraceEvent(trace,
+		baseMeta(now.Add(2*time.Second), "cpython", "3.12.0")))
+	name, version = resourceRuntime()
+	assert.Equal(t, "cpython", name)
+	assert.Equal(t, "3.11.4", version)
+
+	// A later sample that lacks a runtime doesn't clobber the known runtime.
+	require.NoError(t, reporter.ReportTraceEvent(trace,
+		baseMeta(now.Add(3*time.Second), "", "")))
+	name, version = resourceRuntime()
+	assert.Equal(t, "cpython", name)
+	assert.Equal(t, "3.11.4", version)
+}

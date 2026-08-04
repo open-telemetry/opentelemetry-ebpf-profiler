@@ -224,6 +224,27 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
+// selectProcessRuntime picks the runtime to emit as process.runtime.* for a
+// process that may have multiple runtimes. It prefers the top-level runtime,
+// i.e. the one whose DSO is the process's own executable (identified by exeOID).
+func selectProcessRuntime(interps map[util.OnDiskFileIdentifier]interpreter.Instance,
+	exeOID util.OnDiskFileIdentifier) (name, version string) {
+	if inst, ok := interps[exeOID]; ok {
+		if n, v, ok := inst.RuntimeInfo(); ok {
+			return n, v
+		}
+	}
+	// Pick the smallest (name, version) so a process with several non-exe runtimes
+	// always reports the same one
+	for _, inst := range interps {
+		if n, v, ok := inst.RuntimeInfo(); ok &&
+			(name == "" || n < name || (n == name && v < version)) {
+			name, version = n, v
+		}
+	}
+	return name, version
+}
+
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
@@ -617,6 +638,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
 	var processContextInfo processcontext.Info
+	// exeOID is the on-disk identity of the process's main executable, used by
+	// the runtime recompute below to prefer the top-level runtime.
+	var exeOID util.OnDiskFileIdentifier
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
@@ -646,6 +670,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		m.Path = libpf.Intern(m.Path).String()
 
 		if mappingNeeded {
+			if exeOID == (util.OnDiskFileIdentifier{}) && exe != libpf.NullString &&
+				m.Path == exe.String() {
+				exeOID = m.GetOnDiskFileIdentifier()
+			}
+
 			var fm libpf.FrameMapping
 			if oldm, ok := mpRemove[m.Vaddr]; ok {
 				if oldm.Length == m.Length && oldm.Device == m.Device && oldm.Inode == m.Inode {
@@ -762,6 +791,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)
 
+	needRuntime := false
 	info = pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
 	if info != nil {
@@ -770,6 +800,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			info.meta = meta
 		}
 		info.meta.ProcessContextInfo = processContextInfo
+		needRuntime = info.meta.RuntimeName == ""
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -784,6 +815,17 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
 					pid)
 			}
+		}
+	}
+
+	// Resolve the process runtime for OTLP process.runtime.* emission.
+	if needRuntime {
+		if name, version := selectProcessRuntime(interpreters, exeOID); name != "" {
+			pm.mu.Lock()
+			if info, ok := pm.pidToProcessInfo[pid]; ok && info.meta.RuntimeName == "" {
+				info.meta.RuntimeName, info.meta.RuntimeVersion = name, version
+			}
+			pm.mu.Unlock()
 		}
 	}
 
