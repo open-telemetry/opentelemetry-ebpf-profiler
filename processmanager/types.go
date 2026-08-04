@@ -173,7 +173,7 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, fixed for process lifetime (read-only)
+	// process metadata; updated in place by SynchronizeProcess (not immutable)
 	meta process.ProcessMeta
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping

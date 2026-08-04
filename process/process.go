@@ -41,6 +41,10 @@ var ErrCallbackStopped = errors.New("IterateMappings stopped by callback")
 // backing store (StoreCoredump bundle miss).
 var ErrMappingFileUnavailable = errors.New("mapping backing file unavailable")
 
+// deletedSuffix is appended by the kernel to the path of an unlinked file, in both
+// /proc/PID/maps and /proc/PID/exe; it is trimmed from both so they stay comparable.
+const deletedSuffix = " (deleted)"
+
 const (
 	containerSource = "[0-9a-f]{64}"
 	taskSource      = "[0-9a-f]{32}-\\d+"
@@ -109,7 +113,8 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 	if err != nil {
 		return libpf.NullString, err
 	}
-	return libpf.Intern(str), nil
+	// Trim the deleted indication from the executable path
+	return libpf.Intern(strings.TrimSuffix(str, deletedSuffix)), nil
 }
 
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
@@ -242,7 +247,7 @@ func DetectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 func trimMappingPath(path string) string {
 	// Trim the deleted indication from the path.
 	// See path_with_deleted in linux/fs/d_path.c
-	path = strings.TrimSuffix(path, " (deleted)")
+	path = strings.TrimSuffix(path, deletedSuffix)
 	if path == "/dev/zero" {
 		// Some JIT engines map JIT area from /dev/zero
 		// make it anonymous.

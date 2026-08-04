@@ -405,7 +405,9 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 			EnvVars: map[libpf.String]libpf.String{
 				libpf.Intern("FOO"): libpf.Intern("BAR"),
 			},
-			Events: events,
+			RuntimeName:    "cpython",
+			RuntimeVersion: "3.11.4",
+			Events:         events,
 		},
 	}
 
@@ -434,6 +436,60 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		assert.Equal(t, "BAR", val.Str(),
 			"Environment variable value 'BAR' should be in the resource attributes")
 	})
+
+	t.Run("Check runtime version attributes", func(t *testing.T) {
+		rp := profiles.ResourceProfiles().At(0)
+		name, exists := rp.Resource().Attributes().Get(string(semconv.ProcessRuntimeNameKey))
+		assert.True(t, exists, "process.runtime.name should be in the resource attributes")
+		assert.Equal(t, "cpython", name.Str())
+		version, exists := rp.Resource().Attributes().Get(string(semconv.ProcessRuntimeVersionKey))
+		assert.True(t, exists, "process.runtime.version should be in the resource attributes")
+		assert.Equal(t, "3.11.4", version.Str())
+	})
+}
+
+func TestSetResourceAttributes_Runtime(t *testing.T) {
+	tests := map[string]struct {
+		toProfiles  samples.ResourceToProfiles
+		wantName    string
+		wantVersion string
+		wantPresent bool
+	}{
+		"present": {
+			toProfiles:  samples.ResourceToProfiles{RuntimeName: "ruby", RuntimeVersion: "3.2.0"},
+			wantName:    "ruby",
+			wantVersion: "3.2.0",
+			wantPresent: true,
+		},
+		"absent when unset": {
+			toProfiles:  samples.ResourceToProfiles{},
+			wantPresent: false,
+		},
+		"version omitted when only name set": {
+			toProfiles:  samples.ResourceToProfiles{RuntimeName: "go"},
+			wantName:    "go",
+			wantPresent: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			attrs := pcommon.NewMap()
+			setResourceAttributes(attrs, samples.ResourceKey{PID: 1}, tt.toProfiles)
+
+			gotName, nameExists := attrs.Get(string(semconv.ProcessRuntimeNameKey))
+			gotVersion, versionExists := attrs.Get(string(semconv.ProcessRuntimeVersionKey))
+
+			assert.Equal(t, tt.wantPresent, nameExists)
+			if tt.wantPresent {
+				assert.Equal(t, tt.wantName, gotName.Str())
+			}
+			assert.Equal(t, tt.wantVersion != "", versionExists)
+			if tt.wantVersion != "" {
+				assert.Equal(t, tt.wantVersion, gotVersion.Str())
+			}
+		})
+	}
 }
 
 func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {

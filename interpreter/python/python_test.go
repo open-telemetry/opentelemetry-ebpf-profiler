@@ -90,3 +90,32 @@ func TestPythonRegexs(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodePyVersionHex verifies the PY_VERSION_HEX bit-decoding against
+// real CPython constants (the value stored in the Py_Version symbol). The
+// layout is (major<<24)|(minor<<16)|(micro<<8)|(releaselevel<<4)|serial, so the
+// low byte (release/serial) must not leak into major/minor/patch.
+func TestDecodePyVersionHex(t *testing.T) {
+	tests := map[string]struct {
+		hex                             uint32
+		wantMajor, wantMinor, wantPatch uint8
+	}{
+		// 0xMMmmppRS — RS = releaselevel(4b)+serial(4b); 0xF0 = final release.
+		"3.8.0 final":  {0x030800F0, 3, 8, 0},
+		"3.11.4 final": {0x030B04F0, 3, 11, 4},
+		"3.12.7 final": {0x030C07F0, 3, 12, 7},
+		"3.11.9 final": {0x030B09F0, 3, 11, 9},
+		// Pre-releases still carry the correct micro; only the low byte differs.
+		"3.14.0a1": {0x030E00A1, 3, 14, 0},
+		// Two-digit micro must survive the mask.
+		"3.9.19 final": {0x030913F0, 3, 9, 19},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			major, minor, patch := decodePyVersionHex(tt.hex)
+			assert.Equal(t, tt.wantMajor, major)
+			assert.Equal(t, tt.wantMinor, minor)
+			assert.Equal(t, tt.wantPatch, patch)
+		})
+	}
+}

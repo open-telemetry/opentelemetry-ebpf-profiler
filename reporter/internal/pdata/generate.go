@@ -103,7 +103,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars)
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -303,7 +303,7 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
+func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, toProfiles samples.ResourceToProfiles) {
 	if resource.APMServiceName != "" {
 		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
 	}
@@ -319,7 +319,14 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envV
 		attrs.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
 	}
 
-	for key, value := range envVars {
+	if toProfiles.RuntimeName != "" {
+		attrs.PutStr(string(semconv.ProcessRuntimeNameKey), toProfiles.RuntimeName)
+	}
+	if toProfiles.RuntimeVersion != "" {
+		attrs.PutStr(string(semconv.ProcessRuntimeVersionKey), toProfiles.RuntimeVersion)
+	}
+
+	for key, value := range toProfiles.EnvVars {
 		attrs.PutStr("process.environment_variable."+key.String(), value.String())
 	}
 }

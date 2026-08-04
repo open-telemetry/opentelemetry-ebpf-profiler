@@ -853,6 +853,15 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 	}
 }
 
+func (d *hotspotInstance) RuntimeInfo() (string, string, bool) {
+	vmd := d.d.Get()
+	if vmd == nil {
+		return "", "", false
+	}
+	return "openjdk", fmt.Sprintf("%d.%d.%d",
+		(vmd.version>>24)&0xff, (vmd.version>>16)&0xff, (vmd.version>>8)&0xff), true
+}
+
 func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping,
 ) error {

@@ -145,6 +145,7 @@ func (h *testEbpfHandler) SupportsLPMTrieBatchOperations() bool {
 
 type testProcess struct {
 	pid      libpf.PID
+	exe      libpf.String
 	mappings []process.RawMapping
 }
 
@@ -161,7 +162,7 @@ func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.ProcessMeta {
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
-	return libpf.NullString, nil
+	return tp.exe, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {
@@ -199,6 +200,78 @@ func (tp *testProcess) Close() error {
 
 func (tp *testProcess) OpenELF(string) (*pfelf.File, error) {
 	return nil, errors.New("not implemented")
+}
+
+type runtimeInstance struct {
+	interpreter.InstanceStubs
+	name    string
+	version string
+	ok      bool
+}
+
+func (r *runtimeInstance) RuntimeInfo() (string, string, bool) {
+	return r.name, r.version, r.ok
+}
+
+func (r *runtimeInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
+	return nil
+}
+
+func TestSelectProcessRuntime(t *testing.T) {
+	exeOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
+	libOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 2}
+
+	tests := map[string]struct {
+		interps     map[util.OnDiskFileIdentifier]interpreter.Instance
+		exeOID      util.OnDiskFileIdentifier
+		wantName    string
+		wantVersion string
+	}{
+		"exe runtime wins over embedded runtime": {
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				exeOID: &runtimeInstance{name: "go", version: "1.23.4", ok: true},
+				libOID: &runtimeInstance{name: "cpython", version: "3.11.4", ok: true},
+			},
+			exeOID:      exeOID,
+			wantName:    "go",
+			wantVersion: "1.23.4",
+		},
+		"falls back to sole HLL when exe is a launcher": {
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				libOID: &runtimeInstance{name: "openjdk", version: "17.0.8", ok: true},
+			},
+			exeOID:      exeOID,
+			wantName:    "openjdk",
+			wantVersion: "17.0.8",
+		},
+		"exe runtime opting out yields nothing": {
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				exeOID: &runtimeInstance{ok: false},
+			},
+			exeOID: exeOID,
+		},
+		"no interpreters yields nothing": {
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{},
+			exeOID:  exeOID,
+		},
+		"deterministically picks smallest (name, version) among non-exe runtimes": {
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				libOID:                     &runtimeInstance{name: "cpython", version: "3.11.4", ok: true},
+				{DeviceID: 1, InodeNum: 3}: &runtimeInstance{name: "ruby", version: "3.2.0", ok: true},
+			},
+			exeOID:      exeOID,    // absent from interps, so the fallback runs
+			wantName:    "cpython", // "cpython" < "ruby", independent of map order
+			wantVersion: "3.11.4",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			gotName, gotVersion := selectProcessRuntime(test.interps, test.exeOID)
+			assert.Equal(t, test.wantName, gotName)
+			assert.Equal(t, test.wantVersion, gotVersion)
+		})
+	}
 }
 
 func TestAssignLibcInfoMergesLibcInfo(t *testing.T) {
@@ -482,6 +555,108 @@ func TestSynchronizeProcessSkipsDllMappingsWithoutAnonymousMappingInterest(t *te
 	})
 
 	require.Empty(instance.syncMappings)
+}
+
+func TestSynchronizeProcessResolvesTopLevelRuntime(t *testing.T) {
+	const exePath = "/opt/app/bin/agent"
+	exeOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
+	libOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 2}
+
+	rawMapping := func(vaddr uint64, oid util.OnDiskFileIdentifier, path string) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: 0x1000,
+			Flags:  elf.PF_R | elf.PF_X,
+			Device: oid.DeviceID,
+			Inode:  oid.InodeNum,
+			Path:   path,
+		}
+	}
+	keptMapping := func(vaddr uint64, oid util.OnDiskFileIdentifier) Mapping {
+		return Mapping{
+			Vaddr:  libpf.Address(vaddr),
+			Length: 0x1000,
+			Device: oid.DeviceID,
+			Inode:  oid.InodeNum,
+			FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+				File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+					FileID:   libpf.NewFileID(oid.DeviceID, oid.InodeNum),
+					FileName: libpf.Intern("x"),
+				}),
+				Start: 0,
+				End:   0x1000,
+			}),
+		}
+	}
+
+	tests := map[string]struct {
+		interps     map[util.OnDiskFileIdentifier]interpreter.Instance
+		preMeta     process.ProcessMeta
+		wantName    string
+		wantVersion string
+	}{
+		"top-level exe runtime wins over embedded runtime": {
+			// Go binary that dlopen'd CPython: report the runtime whose DSO is
+			// the executable, not the embedded one.
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				exeOID: &runtimeInstance{name: "go", version: "1.23.4", ok: true},
+				libOID: &runtimeInstance{name: "cpython", version: "3.11.4", ok: true},
+			},
+			wantName:    "go",
+			wantVersion: "1.23.4",
+		},
+		"runtime is not overwritten once set": {
+			// Executable unchanged (meta preserved) and runtime already resolved:
+			// the recompute must leave it untouched (fill-once).
+			interps: map[util.OnDiskFileIdentifier]interpreter.Instance{
+				exeOID: &runtimeInstance{name: "go", version: "1.23.4", ok: true},
+			},
+			preMeta: process.ProcessMeta{
+				Executable:     libpf.Intern(exePath),
+				RuntimeName:    "cpython",
+				RuntimeVersion: "3.11.4",
+			},
+			wantName:    "cpython",
+			wantVersion: "3.11.4",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			pid := libpf.PID(123)
+			mappings := make([]Mapping, 0, len(test.interps))
+			raws := make([]process.RawMapping, 0, len(test.interps))
+			vaddr := uint64(0x1000)
+			for oid := range test.interps {
+				path := "/usr/lib/libembedded.so"
+				if oid == exeOID {
+					path = exePath
+				}
+				mappings = append(mappings, keptMapping(vaddr, oid))
+				raws = append(raws, rawMapping(vaddr, oid, path))
+				vaddr += 0x1000
+			}
+			pm := &ProcessManager{
+				ebpf: &testEbpfHandler{},
+				interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance{
+					pid: test.interps,
+				},
+				pidToProcessInfo: map[libpf.PID]*processInfo{
+					pid: {mappings: mappings, meta: test.preMeta},
+				},
+				exitEvents: make(map[libpf.PID]times.KTime),
+			}
+
+			pm.SynchronizeProcess(&testProcess{
+				pid:      pid,
+				exe:      libpf.Intern(exePath),
+				mappings: raws,
+			})
+
+			assert.Equal(t, test.wantName, pm.pidToProcessInfo[pid].meta.RuntimeName)
+			assert.Equal(t, test.wantVersion, pm.pidToProcessInfo[pid].meta.RuntimeVersion)
+		})
+	}
 }
 
 func TestIsInterpreterMapping(t *testing.T) {
