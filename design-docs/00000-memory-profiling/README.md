@@ -34,7 +34,7 @@ The remaining problems are:
 2. It has no eBPF entry points for allocation events, no map for correlating sampled allocations to their frees, and no OTLP output shape for memory data.
 3. Allocation events fire at much higher rates than perf samples, so back-pressure must be designed in from the start, and simply hooking 'malloc' and 'free' presents an unreasonably high performance cost for profiled applications.
 4. Further to the back-pressure problem above, we must ensure that we constrain memory telemetry production in a way that does not allow one process to starve others, and fits within the operational cost model of the full-host profiler (that is, with output telemetry proportional to vCPU on host)
-5. There is no stable, allocator-independent symbol to hook against. Allocators may be statically linked, inlined, or have their internal function names change across versions. This rules out attaching uprobes to allocator internals and motivates a contract-based approach where the target process explicitly provides the probes.
+5. Attaching uprobes directly to allocator internals is impractical for several reasons: allocators may be statically linked, making symbols invisible to the profiler; allocator-internal sampling paths are typically compiled out or disabled by default, leaving only the hot allocation entry points which fire too frequently to hook without unacceptable cost (see (3)); and internal symbol names are a moving target across allocator versions. This motivates a contract-based approach where the target process explicitly provides the probes.
 
 Although our initial focus with this proposal is on *native* heap, this mechanism can be trivially extended to capture managed heap by inserting the USDT probes within the allocation path within the targeted runtime. This would require no additional change on the profiler side.
 
@@ -118,8 +118,8 @@ We provide an [example implementation for the above contract](https://github.com
 The profiler is not prescriptive about how the USDTs end up in a target process. We anticipate three delivery models, all sharing a common core sampling library:
 
 1. **Compile-time allocator wrapping.** A language-specific shim wraps the allocator at compile time (e.g. a Rust `GlobalAlloc` implementation). This is the simplest model and works well when compile time instrumentation is available, and all allocations pass through the single allocator. This breaks down when a statically linked application depends on runtime libraries which cannot be intercepted in this fashion.
-2. **Existing allocator observability hooks.** Allocators like jemalloc and tcmalloc expose sampling hooks. A thin adapter registers with these at startup and emits USDTs from the callback. This can also be delivered via `LD_PRELOAD`, where a user preloads e.g. `LD_PRELOAD=jemalloc_with_hooks.so`. 
-3. **GOT table rewriting.** For already-running processes, a shared library is injected and rewrites allocator symbols in the GOT. Most flexible, but only works for dynamically linked allocators.
+2. **Existing allocator observability hooks.** Allocators like jemalloc and tcmalloc expose sampling hooks. A thin adapter registers with these at startup and emits USDTs from the callback. This can also be delivered via `LD_PRELOAD`, where a user preloads e.g. `LD_PRELOAD=jemalloc_with_hooks.so`. Only works for dynamically linked allocators. 
+3. **GOT table rewriting.** Whenever `LD_PRELOAD` is not an option, or when simpler packaging is desired (e.g. bundling into an OTel SDK), a shared library is injected and rewrites allocator symbols in the GOT. Most flexible delivery model, but only works for dynamically linked allocators.
 
 For live heap profiling, the free side must recognise which pointers were previously sampled. When using allocator hooks (model 2), this comes from the allocator's built-in book-keeping. When wrapping externally (models 1 and 3), the reference implementation uses hardware pointer tagging (ARM64 TBI) or a per-allocation magic prefix (x86-64) to flag sampled pointers for near-zero-cost detection on every free. See the [reference implementation's tagging documentation](https://github.com/DataDog/libdatadog/blob/main/libdd-profiling-heap-sampler/docs/tagging.md) for details. This tagging is entirely internal to the in-process sampler: the profiler only ever sees the plain `ptr` argument on the `free` USDT and is unaware of how (or whether) a sampled pointer was flagged.
 
@@ -150,6 +150,8 @@ Projected overhead at various allocation rates (assuming ~1:1 alloc:free ratio):
 | 10 MiB/sec | 20 alloc + 20 free | 107 µs | 0.011% |
 | 50 MiB/sec | 100 + 100 | 534 µs | 0.053% |
 | 100 MiB/sec | 200 + 200 | 1,068 µs | 0.107% |
+
+Measurements taken on an Apple M3 Max (ARM64, 64 GB) MacBook Pro, running Linux in a VM under Apple's Virtualization framework.
 
 For comparison, the CPU profiler measured on the same system at its default 20 Hz consumes ~61 µs/sec (0.006%) per CPU.
 
