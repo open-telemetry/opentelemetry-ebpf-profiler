@@ -112,7 +112,7 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 	return libpf.Intern(str), nil
 }
 
-func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
+func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) Meta {
 	exePath, _ := sp.GetExe()
 
 	var envVarMap map[libpf.String]libpf.String
@@ -137,14 +137,14 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
 
-	pMeta := ProcessMeta{
+	pMeta := Meta{
 		Executable:   exePath,
 		ContainerID:  containerID,
 		EnvVariables: envVarMap,
 	}
 
 	for _, e := range cfg.MetaEnrichers {
-		e.EnrichProcessMeta(sp.pid, &pMeta)
+		e.EnrichMeta(sp.pid, &pMeta)
 	}
 
 	return pMeta
@@ -205,12 +205,12 @@ func cgroupRootInode(pid libpf.PID) (uint64, error) {
 // detection returned no result. The profiler's own container ID is detected once at
 // construction time and reused for every subsequent process. If detection fails the
 // returned enricher is a no-op.
-func NewSelfContainerIDEnricher() (ProcessMetaEnricher, error) {
+func NewSelfContainerIDEnricher() (MetaEnricher, error) {
 	selfContainerID, selfCgroupIno, err := detectSelfContainerIDViaInode()
 	if err != nil {
 		return nil, err
 	}
-	return ProcessMetaEnricherFunc(func(pid libpf.PID, meta *ProcessMeta) {
+	return MetaEnricherFunc(func(pid libpf.PID, meta *Meta) {
 		if meta.ContainerID != libpf.NullString || selfContainerID == libpf.NullString {
 			return
 		}

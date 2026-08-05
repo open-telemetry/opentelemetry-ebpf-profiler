@@ -212,7 +212,7 @@ type Config struct {
 	OBIProcessCtx bool
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery time. Multiple enrichers are called in order.
-	ProcessMetaEnrichers []process.ProcessMetaEnricher
+	ProcessMetaEnrichers []process.MetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.

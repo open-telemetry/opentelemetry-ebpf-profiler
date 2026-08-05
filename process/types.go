@@ -105,11 +105,11 @@ type MetaConfig struct {
 	// IncludeEnvVars holds a list of env vars that should be captured from the process.
 	IncludeEnvVars libpf.Set[string]
 
-	MetaEnrichers []ProcessMetaEnricher
+	MetaEnrichers []MetaEnricher
 }
 
 // ProcessMeta contains metadata about a tracked process.
-type ProcessMeta struct {
+type Meta struct {
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String
 	// process env vars from /proc/PID/environ
@@ -136,7 +136,7 @@ type Process interface {
 	GetMachineData() MachineData
 
 	// GetProcessMeta returns process specific metadata.
-	GetProcessMeta(MetaConfig) ProcessMeta
+	GetProcessMeta(MetaConfig) Meta
 
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)

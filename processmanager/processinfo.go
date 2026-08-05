@@ -740,7 +740,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.pidPageToMappingInfoSize += numChanges
 
 	// Update metadata of the process.
-	var meta process.ProcessMeta
+	var meta process.Meta
 	if updateProcessMeta {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
 	}
@@ -817,13 +817,13 @@ func (pm *ProcessManager) CleanupPIDs() {
 }
 
 // metaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
+func (pm *ProcessManager) metaForPID(pid libpf.PID) process.Meta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
 		return procInfo.meta
 	}
-	return process.ProcessMeta{}
+	return process.Meta{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

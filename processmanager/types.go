@@ -133,7 +133,7 @@ type ProcessManager struct {
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
 
-	metaEnrichers []process.ProcessMetaEnricher
+	metaEnrichers []process.MetaEnricher
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -166,7 +166,7 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // and Thread Specific Data of a process.
 type processInfo struct {
 	// process metadata, fixed for process lifetime (read-only)
-	meta process.ProcessMeta
+	meta process.Meta
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

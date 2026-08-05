@@ -156,8 +156,8 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.ProcessMeta {
-	return process.ProcessMeta{}
+func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.Meta {
+	return process.Meta{}
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {

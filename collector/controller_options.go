@@ -56,7 +56,7 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 // arbitrary key-value pairs in process.Meta.ExtraMeta. Those values are propagated
 // to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
 // resource or sample attributes on outgoing profiles.
-func WithProcessMetaEnricher(enrichers ...process.ProcessMetaEnricher) Option {
+func WithProcessMetaEnricher(enrichers ...process.MetaEnricher) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
 		return option
