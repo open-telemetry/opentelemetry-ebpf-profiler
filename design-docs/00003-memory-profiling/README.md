@@ -24,7 +24,7 @@ Existing per-runtime memory profilers (the JVM, the Go runtime, CPython's `trace
 
 The eBPF profiler is well placed to fill this gap:
 
-- It already captures and symbolises native stacks from outside the process; no in-process unwinder is needed.
+- It already captures and symbolises stacks from outside the process; no in-process unwinder is needed.
 - It is cross-language by construction.
 - It already runs continuously and per-host, so memory profiling can be delivered for any application via the addition of a small userspace component.
 
@@ -41,8 +41,6 @@ Although our initial focus with this proposal is on *native* heap, this mechanis
 ## Success Criteria
 
 - Memory profiling is **opt-in**:
-  - `-allocation-profiling` turns on allocation profiling, attaching the profiler to the allocation side of the USDT contract
-  - `-live-heap-profiling` is a further opt-in on top of `-allocation-profiling` (see eBPF entry programs for what this gates)
 - Live heap tracking has bounded memory usage in the profiler, with both a global cap and a per-process cap, so one pathological or high-allocation process cannot exhaust resources needed to profile other processes.
 - Existing stack unwinding code paths are reused; no new unwinder.
 - Probes inside libraries `dlopen`'d after process start are eventually picked up.
@@ -59,7 +57,7 @@ This document focuses on the changes inside `opentelemetry-ebpf-profiler` needed
 - The USDT contract the profiler expects from a target process.
 - Per-process discovery of `.note.stapsdt` notes and PID-scoped uprobe attachment, with lifecycle management across `dlopen`, exec and exit.
 - eBPF entry programs that reuse the existing native unwinder via tail call.
-- Heap profiling (alloc-only) and live (in-use) heap profiling (alloc + free), gated by separate CLI flags.
+- Heap profiling (alloc-only) and live (in-use) heap profiling (alloc + free), if configured accordingly.
 - OTLP output shape (`alloc_space`, `alloc_objects`, and optional `inuse_space` / `inuse_objects`).
 - Sample applications and instrumentation on the user-space side and associated performance and implementation observations
 - Back-pressure: a closed-loop PID controller on the profiler side that holds memory-event throughput at a configured fraction of the overall sample budget.
