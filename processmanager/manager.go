@@ -114,11 +114,21 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
+	selfEnrichers := 1
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
-	} else {
-		cfg.ProcessMetaEnrichers = append(cfg.ProcessMetaEnrichers, selfContainerEnricher)
+		selfEnrichers = 0
 	}
+
+	metaEnrichers := make(
+		[]process.MetaEnricher,
+		len(cfg.ProcessMetaEnrichers)+selfEnrichers,
+	)
+
+	if selfEnrichers == 1 {
+		metaEnrichers[0] = selfContainerEnricher
+	}
+	copy(metaEnrichers[selfEnrichers:], cfg.ProcessMetaEnrichers)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
@@ -135,7 +145,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           cfg.IncludeEnvVars,
-		metaEnrichers:            cfg.ProcessMetaEnrichers,
+		metaEnrichers:            metaEnrichers,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)

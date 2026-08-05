@@ -105,6 +105,9 @@ type MetaConfig struct {
 	// IncludeEnvVars holds a list of env vars that should be captured from the process.
 	IncludeEnvVars libpf.Set[string]
 
+	// MetaEnrichers is a list of enrichers called to populate ExtraMeta during
+	// metadata collection and on executable changes, so may be invoked multiple
+	// times per process.
 	MetaEnrichers []MetaEnricher
 }
 
@@ -119,8 +122,10 @@ type Meta struct {
 	// process context
 	ProcessContextInfo processcontext.Info
 
-	// ExtraMeta holds arbitrary key-value pairs populated by a ProcessMetaEnricher.
+	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
 	// It is nil unless an enricher is configured and explicitly sets values.
+	// Must be treated as read-only after enricher logic has executed: access is
+	// not synchronized, so concurrent writes will trigger data races.
 	ExtraMeta map[libpf.String]string
 }
 
