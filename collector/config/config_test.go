@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/confmap/xconfmap"
+	"go.opentelemetry.io/collector/confmap"
 )
 
 // validConfig returns a config with valid defaults for testing.
@@ -30,7 +30,7 @@ func TestValidate(t *testing.T) {
 		SamplesPerSecond: 0,
 		ErrorMode:        PropagateError,
 	}
-	err := xconfmap.Validate(cfg)
+	err := confmap.Validate(cfg)
 	require.Error(t, err)
 	require.Equal(t, "invalid sampling frequency: 0", err.Error())
 }
@@ -68,7 +68,7 @@ func TestValidateFrameCacheSize(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validConfig()
 			cfg.FrameCacheSize = tt.frameCacheSize
-			err := xconfmap.Validate(cfg)
+			err := confmap.Validate(cfg)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -145,7 +145,7 @@ func TestValidateTargetCPUIDs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validConfig()
 			cfg.TargetCPUIDs = tt.targetCPUIDs
-			err := xconfmap.Validate(cfg)
+			err := confmap.Validate(cfg)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -187,7 +187,7 @@ func TestValidateErrorMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validConfig()
 			cfg.ErrorMode = tt.errorMode
-			err := xconfmap.Validate(cfg)
+			err := confmap.Validate(cfg)
 			if tt.wantErr {
 				require.Error(t, err)
 				return
@@ -202,6 +202,6 @@ func TestValidateFilterMinProcessAge(t *testing.T) {
 	cfg := validConfig()
 	cfg.FilterMinProcessAge = -1 * time.Second
 
-	err := xconfmap.Validate(cfg)
+	err := confmap.Validate(cfg)
 	require.Error(t, err)
 }
