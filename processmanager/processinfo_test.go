@@ -145,6 +145,7 @@ func (h *testEbpfHandler) SupportsLPMTrieBatchOperations() bool {
 
 type testProcess struct {
 	pid      libpf.PID
+	exe      libpf.String
 	mappings []process.RawMapping
 }
 
@@ -156,12 +157,16 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.Meta {
-	return process.Meta{}
+func (tp *testProcess) GetProcessMeta(cfg process.MetaConfig) process.Meta {
+	meta := process.Meta{Executable: tp.exe}
+	for _, e := range cfg.MetaEnrichers {
+		e.EnrichMeta(tp.pid, &meta)
+	}
+	return meta
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
-	return libpf.NullString, nil
+	return tp.exe, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {
@@ -542,4 +547,41 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x5000, Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 	}, collector.mappings())
+}
+
+// TestSynchronizeProcessRunEnrichers verifies that meta enrichers run at process
+// discovery and again when the executable changes, so that enricher-produced
+// ExtraMeta is not lost when process metadata is refetched.
+func TestSynchronizeProcessRunEnrichers(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	key := libpf.Intern("test.key")
+	enricherCalls := 0
+	enricher := process.MetaEnricherFunc(func(p libpf.PID, meta *process.Meta) {
+		enricherCalls++
+		require.Equal(pid, p)
+		meta.ExtraMeta = map[libpf.String]string{key: meta.Executable.String()}
+	})
+
+	pm := &ProcessManager{
+		ebpf:             &testEbpfHandler{},
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: make(map[libpf.PID]*processInfo),
+		exitEvents:       make(map[libpf.PID]times.KTime),
+		metaEnrichers:    []process.MetaEnricher{enricher},
+	}
+
+	// Process first seen: gather and enrich metadata.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(1, enricherCalls)
+	require.Equal("foobar", pm.metaForPID(pid).ExtraMeta[key])
+
+	// Unchanged executable: don't refetch metadata, don't enrich.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(1, enricherCalls)
+
+	// Executable changed: refetch metadata and enrich.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
+	require.Equal(2, enricherCalls)
+	require.Equal("foobarbaz", pm.metaForPID(pid).ExtraMeta[key])
 }
