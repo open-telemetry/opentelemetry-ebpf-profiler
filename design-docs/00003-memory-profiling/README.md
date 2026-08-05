@@ -155,6 +155,12 @@ For comparison, the CPU profiler measured on the same system at its default 20 H
 
 We are exploring dynamic sample distance adjustment on the client side, where the sampler adapts its sampling interval to target a fixed number of samples/sec regardless of allocation rate, bounding the profiling overhead to a predictable ceiling.
 
+#### Memory Overhead
+
+The primary profiler-side memory cost is the BPF hash map used for live-heap correlation. In our sample implementation, each entry is 24 bytes (PID + pointer as the key, allocation weight as the value) and the map is capped at 65,536 entries. With BPF hash-map per-entry kernel overhead this puts the worst-case pinned memory for the correlation map at roughly 5-6 MiB. When only allocation profiling is enabled (no live-heap tracking), no entries are inserted into the correlation map; alloc events flow through the existing per-CPU trace records and `trace_events` ringbuf shared with on-CPU/off-CPU profiling, so no additional memory is required.
+
+Because the map size is fixed at creation time, it acts as a hard cap: once full (or once a per-PID limit is hit), new allocations are simply not tracked for `inuse_*` profiles (see **Live heap state bounds**). The `alloc_space`/`alloc_objects` output is unaffected.
+
 ## USDT discovery
 
 USDT notes are emitted into `.note.stapsdt` ELF sections. For each process the profiler tracks, we scan the executable file-backed mappings, parse their `.note.stapsdt` section, filter to our provider, and translate probe names to a small fixed `ProbeKind` enum (`ProbeHeapAlloc`, `ProbeHeapFree`). This enum is expected to grow (e.g. `ProbeHeapMmap`, `ProbeHeapMunmap`) as the `mmap`/`munmap` probes land in subsequent work.
