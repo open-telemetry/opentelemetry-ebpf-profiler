@@ -17,7 +17,7 @@ type Option interface {
 
 type controllerOption struct {
 	executableReporter   reporter.ExecutableReporter
-	processMetaEnrichers []process.ProcessMetaEnricher
+	processMetaEnrichers []process.MetaEnricher
 	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 	onShutdown           func() error
 }
