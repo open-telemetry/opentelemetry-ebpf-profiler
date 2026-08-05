@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-viper/mapstructure/v2"
+	"go.opentelemetry.io/collector/confmap"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -202,7 +202,7 @@ func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 	switch probeType {
 	case "kprobe":
 		var kcfg kprobe.Config
-		if err := mapstructure.Decode(cfg, &kcfg); err != nil {
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&kcfg); err != nil {
 			return nil, fmt.Errorf("decoding kprobe config: %w", err)
 		}
 		return kprobe.New(kcfg)
