@@ -174,14 +174,14 @@ type Process interface {
 // Implementations may read from /proc or any other source and store arbitrary
 // key-value pairs in meta.ExtraMeta. The call happens while the process is still
 // alive, so short-lived process data is reliably captured.
-type ProcessMetaEnricher interface {
-	EnrichProcessMeta(libpf.PID, *ProcessMeta)
+type MetaEnricher interface {
+	EnrichMeta(libpf.PID, *Meta)
 }
 
-// ProcessMetaEnricherFunc is an adapter to allow use of plain functions as a
-// ProcessMetaEnricher.
-type ProcessMetaEnricherFunc func(libpf.PID, *ProcessMeta)
+// MetaEnricherFunc is an adapter to allow use of plain functions as a
+// MetaEnricher.
+type MetaEnricherFunc func(libpf.PID, *Meta)
 
-func (f ProcessMetaEnricherFunc) EnrichProcessMeta(pid libpf.PID, meta *ProcessMeta) {
+func (f MetaEnricherFunc) EnrichMeta(pid libpf.PID, meta *Meta) {
 	f(pid, meta)
 }
