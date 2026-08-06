@@ -493,6 +493,17 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	tokenRemainder &= cdac.calculated.MethodDescTokenRemainderMask
 	chunkIndex := npsr.Uint8(methodDesc, vms.MethodDesc.ChunkIndex)
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
+	if classification == mcDynamic {
+		name := libpf.NullString
+		if vms.DynamicMethodDesc.MethodName != 0 {
+			name = libpf.Intern(i.rm.StringPtr(methodDescPtr +
+				libpf.Address(vms.DynamicMethodDesc.MethodName)))
+		}
+		return &dotnetMethod{
+			classification: classification,
+			dynamicName:    name,
+		}, nil
+	}
 
 	// Calculate the offset to the owning MethodDescChunk structure
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L2321-L2328
@@ -857,7 +868,18 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		if err != nil {
 			return err
 		}
-		if method.index == 0 || method.classification == mcDynamic {
+		if method.classification == mcDynamic {
+			if method.dynamicName == libpf.NullString {
+				i.appendStubFrame(frames, codeDynamic)
+			} else {
+				frames.Append(&libpf.Frame{
+					Type:         libpf.DotnetFrame,
+					FunctionName: method.dynamicName,
+				})
+			}
+			break
+		}
+		if method.index == 0 {
 			i.appendStubFrame(frames, codeDynamic)
 			break
 		}
