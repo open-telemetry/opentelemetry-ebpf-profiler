@@ -175,7 +175,7 @@ type Process interface {
 	pfelf.ELFOpener
 }
 
-// ProcessMetaEnricher is called once per process when it is first observed.
+// MetaEnricher is called once per process when it is first observed.
 // Implementations may read from /proc or any other source and store arbitrary
 // key-value pairs in meta.ExtraMeta. The call happens while the process is still
 // alive, so short-lived process data is reliably captured.
