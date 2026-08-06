@@ -101,7 +101,7 @@ type Tracer struct {
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
 
 	// hooks holds references to loaded eBPF hooks.
-	hooks map[hookPoint]link.Link
+	hooks xsync.RWMutex[hooksState]
 
 	// processManager keeps track of loading, unloading and organization of information
 	// that is required to unwind processes in the kernel. This includes maintaining the
@@ -229,6 +229,14 @@ type hookPoint struct {
 	group, name string
 }
 
+// hooksState keeps track of loaded hooks.
+type hooksState struct {
+	// Closed indicates a graceful termination, so no new elements should
+	// be added to m.
+	closed bool
+	m      map[hookPoint]link.Link
+}
+
 // ProgLoaderHelper supports the loading process of eBPF programs.
 type ProgLoaderHelper struct {
 	// Enable tells whether a prog shall be loaded.
@@ -311,7 +319,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
-		hooks:                  make(map[hookPoint]link.Link),
+		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]link.Link)}),
 		intervals:              cfg.Intervals,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
 		samplesPerSecond:       cfg.SamplesPerSecond,
@@ -335,12 +343,15 @@ func (t *Tracer) Close() {
 	t.perfEntrypoints.WUnlock(&events)
 
 	// Avoid resource leakage by closing all kernel hooks.
-	for hookPoint, hook := range t.hooks {
+	h := t.hooks.WLock()
+	h.closed = true
+	for hp, hook := range h.m {
 		if err := hook.Close(); err != nil {
-			log.Errorf("Failed to close '%s/%s': %v", hookPoint.group, hookPoint.name, err)
+			log.Errorf("Failed to close '%s/%s': %v", hp.group, hp.name, err)
 		}
-		delete(t.hooks, hookPoint)
+		delete(h.m, hp)
 	}
+	t.hooks.WUnlock(&h)
 
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
@@ -1379,7 +1390,9 @@ func (t *Tracer) StartOffCPUProfiling() error {
 			continue
 		}
 		attached = true
-		t.hooks[hookPoint{group: "kprobe", name: string(symb.Name)}] = kprobeLink
+		h := t.hooks.WLock()
+		h.m[hookPoint{group: "kprobe", name: string(symb.Name)}] = kprobeLink
+		t.hooks.WUnlock(&h)
 	}
 	if !attached {
 		return fmt.Errorf("failed to attach to one of %d symbols with prefix '%s'",
@@ -1395,7 +1408,9 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	if err != nil {
 		return fmt.Errorf("failed to attach sched_switch tracepoint: %w", err)
 	}
-	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
+	h := t.hooks.WLock()
+	h.m[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
+	t.hooks.WUnlock(&h)
 
 	return nil
 }
@@ -1417,7 +1432,9 @@ func (t *Tracer) AttachProbes(probes []string) error {
 			return err
 		}
 
-		t.hooks[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = probeLink
+		h := t.hooks.WLock()
+		h.m[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = probeLink
+		t.hooks.WUnlock(&h)
 	}
 	return nil
 }

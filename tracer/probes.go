@@ -249,7 +249,7 @@ type Probe interface {
 //
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
-// Enable must not be called concurrently with Close.
+// Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	if !t.kprobeChainLoaded {
 		return fmt.Errorf("Enable requires the kprobe unwinder chain to be loaded at startup: " +
@@ -267,7 +267,15 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	}
 
 	if lnk != nil {
-		t.hooks[hookPoint{group: "probe", name: fmt.Sprintf("%p", p)}] = lnk
+		key := hookPoint{group: "probe", name: fmt.Sprintf("%p", p)}
+		h := t.hooks.WLock()
+		if h.closed {
+			t.hooks.WUnlock(&h)
+			lnk.Close()
+			return fmt.Errorf("tracer is already closed")
+		}
+		h.m[key] = lnk
+		t.hooks.WUnlock(&h)
 	}
 	return nil
 }

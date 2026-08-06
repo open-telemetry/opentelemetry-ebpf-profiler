@@ -24,7 +24,9 @@ func (t *Tracer) attachToTracepoint(group, name string, prog *ebpf.Program) erro
 	if err != nil {
 		return fmt.Errorf("failed to configure tracepoint on %#v: %v", hp, err)
 	}
-	t.hooks[hp] = hook
+	h := t.hooks.WLock()
+	h.m[hp] = hook
+	t.hooks.WUnlock(&h)
 	return nil
 }
 
