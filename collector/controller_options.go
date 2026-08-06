@@ -52,7 +52,7 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 }
 
 // WithProcessMetaEnricher registers a hook that is called once per process when it
-// is first observed. The enricher may read from /proc or other sources and store
+// is first observed and when its executable changes. The enricher may read from /proc or other sources and store
 // arbitrary key-value pairs in process.Meta.ExtraMeta. Those values are propagated
 // to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
 // resource or sample attributes on outgoing profiles.
