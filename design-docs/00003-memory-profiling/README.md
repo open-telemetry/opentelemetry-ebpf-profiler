@@ -34,13 +34,13 @@ The remaining problems are:
 2. It has no eBPF entry points for allocation events, no map for correlating sampled allocations to their frees, and no OTLP output shape for memory data.
 3. Allocation events fire at much higher rates than perf samples, so back-pressure must be designed in from the start, and simply hooking 'malloc' and 'free' presents an unreasonably high performance cost for profiled applications.
 4. Further to the back-pressure problem above, we must ensure that we constrain memory telemetry production in a way that does not allow one process to starve others, and fits within the operational cost model of the full-host profiler (that is, with output telemetry proportional to vCPU on host)
-5. Attaching uprobes directly to allocator internals is impractical for several reasons: allocators may be statically linked, making symbols invisible to the profiler; allocator-internal sampling paths are typically compiled out or disabled by default, leaving only the hot allocation entry points which fire too frequently to hook without unacceptable cost (see (3)); and internal symbol names are a moving target across allocator versions. This motivates a contract-based approach where the target process explicitly provides the probes.
+5. Attaching uprobes directly to allocator internals is impractical for several reasons: allocators may be statically linked, making symbols invisible to the profiler; allocator-internal sampling paths are typically compiled out or disabled by default, leaving only the hot allocation entry points which fire too frequently to hook with low overhead (see 3); and internal symbol names are a moving target across allocator versions. This motivates a contract-based approach where the target process explicitly provides the probes.
 
 Although our initial focus with this proposal is on *native* heap, this mechanism can be trivially extended to capture managed heap by inserting the USDT probes within the allocation path within the targeted runtime. This would require no additional change on the profiler side.
 
 ## Success Criteria
 
-- Memory profiling is **opt-in**:
+- Memory profiling is **opt-in**.
 - Live heap tracking has bounded memory usage in the profiler, with both a global cap and a per-process cap, so one pathological or high-allocation process cannot exhaust resources needed to profile other processes.
 - Existing stack unwinding code paths are reused; no new unwinder.
 - Probes inside libraries `dlopen`'d after process start are eventually picked up.
@@ -59,7 +59,7 @@ This document focuses on the changes inside `opentelemetry-ebpf-profiler` needed
 - eBPF entry programs that reuse the existing native unwinder via tail call.
 - Heap profiling (alloc-only) and live (in-use) heap profiling (alloc + free), if configured accordingly.
 - OTLP output shape (`alloc_space`, `alloc_objects`, and optional `inuse_space` / `inuse_objects`).
-- Sample applications and instrumentation on the user-space side and associated performance and implementation observations
+- Sample applications and instrumentation on the user-space side and associated performance and implementation observations.
 - Back-pressure: a closed-loop PID controller on the profiler side that holds memory-event throughput at a configured fraction of the overall sample budget.
 
 ### Non-success criteria / out of scope
@@ -91,7 +91,7 @@ The profiler expects a target process to emit the following USDTs from a single 
 | `otel_memory:mmap(address, size)` | `address` = mapped region start pointer, `size` = mapped region size in bytes | On successful `mmap` | Subsequent work; build on top of lessons from the initial release |
 | `otel_memory:munmap(address, size)` | `address` = unmapped region start pointer, `size` = unmapped region size in bytes | On successful `munmap` | Subsequent work; build on top of lessons from the initial release |
 
-`weight` is `nsamples * sampling_interval`, already computed by the in-process sampler (see **Background** below for the sampling algorithm). `nsamples` counts the number of sampling-interval boundaries the allocation's byte range crossed: 1 for a typical allocation, more for a single allocation large enough to span several intervals. The profiler uses `weight` directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `cmalloc`, `aligned_alloc`, etc.
+`weight` is `nsamples * sampling_interval`, already computed by the in-process sampler (see **Background** below for the sampling algorithm). `nsamples` counts the number of sampling-interval boundaries the allocation's byte range crossed: 1 for a typical allocation, more for a single allocation large enough to span several intervals. The profiler uses `weight` directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `calloc`, `aligned_alloc`, etc.
 
 For the initial support in the profiler we plan to support `alloc` and `free` only and add `mmap` support subsequently as this is more nuanced.
 
