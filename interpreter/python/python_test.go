@@ -4,11 +4,41 @@
 package python
 
 import (
+	"bytes"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
+
+func TestGetCodeObjectSizeLimit(t *testing.T) {
+	rm := remotememory.RemoteMemory{ReaderAt: bytes.NewReader(make([]byte, 4096))}
+	cases := []struct {
+		name      string
+		size      uint
+		wantSizeE bool
+	}{
+		{"oversized 1GiB", 1 << 30, true},
+		{"zero", 0, true},
+		{"just over cap", maxCodeObjectSize + 1, true},
+		{"at cap", maxCodeObjectSize, false},
+		{"nominal", 224, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := &pythonData{}
+			d.vmStructs.PyCodeObject.Sizeof = tc.size
+			p := &pythonInstance{d: d, rm: rm}
+
+			_, err := p.getCodeObject(libpf.Address(0x1234), 0)
+			gotSizeErr := err != nil && strings.Contains(err.Error(), "unexpected PyCodeObject size")
+			assert.Equal(t, tc.wantSizeE, gotSizeErr, "err: %v", err)
+		})
+	}
+}
 
 func TestFrozenNameToFileName(t *testing.T) {
 	tests := map[string]struct {

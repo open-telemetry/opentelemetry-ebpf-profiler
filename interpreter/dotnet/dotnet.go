@@ -119,6 +119,23 @@ const (
 	// maxBoundsSize is the maximum size of boundary debug info (for a method)
 	// that we accept as valid. This is to prevent OOM situation.
 	maxBoundsSize = 16 * 1024
+
+	// maxRangeSections bounds the traversal of RangeSection / fragment lists,
+	// which are attacker-controlled linked structures.
+	maxRangeSections = 1 << 20
+
+	// maxRangeListBlocks bounds the number of blocks traversed in a stub
+	// RangeList.
+	maxRangeListBlocks = 1 << 16
+
+	// maxRangeMapLevels bounds the number of intermediate level nodes read
+	// while walking a dotnet RangeSectionMap (protects against aliased level
+	// pointers causing exponential traversal).
+	maxRangeMapLevels = 1 << 17
+
+	// maxDotnetStructSize caps the size of any per-struct read from target
+	// memory. All real CoreCLR struct sizes are well below this value.
+	maxDotnetStructSize = 64 * 1024
 )
 
 var (
