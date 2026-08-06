@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x73
+	MetricIDBeginCumulative = 0x75
 )
 
 const (
@@ -502,7 +502,9 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6d: metrics.IDUnwindLuaJITAttempts,
 	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
 	0x6f: metrics.IDSamplesSkippedProcessTooNew,
-	0x70: metrics.IDUnwindGoAsmcgocallAttempts,
-	0x71: metrics.IDUnwindGoAsmcgocallSuccess,
-	0x72: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x70: metrics.IDNumSyncsFromPrctl,
+	0x71: metrics.IDNumPriorityEventDeferred,
+	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

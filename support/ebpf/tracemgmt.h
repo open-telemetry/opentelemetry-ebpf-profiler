@@ -238,11 +238,16 @@ static inline EBPF_INLINE bool pid_uses_anonymous_mappings(PIDPageMappingInfo *i
 }
 
 // Reset the ratelimit cache
-#define RATELIMIT_ACTION_RESET   0
+#define RATELIMIT_ACTION_RESET    0
 // Use default timer
-#define RATELIMIT_ACTION_DEFAULT 1
+#define RATELIMIT_ACTION_DEFAULT  1
 // Set PID to fast timer mode
-#define RATELIMIT_ACTION_FAST    2
+#define RATELIMIT_ACTION_FAST     2
+// Deliver once per activity burst. Once a priority event has been delivered, further
+// events, including subsequent priority events, fall back to the normal window until
+// the PID goes quiet again, so a process cannot defeat rate limiting by spamming
+// priority events.
+#define RATELIMIT_ACTION_PRIORITY 3
 
 // pid_event_ratelimit determines if the PID event should be inhibited or not
 // based on rate limiting rules.
@@ -255,41 +260,58 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
   const u8 default_max_attempts = 8; // 25 seconds
   const u8 fast_max_attempts    = 4; // 1.6 seconds
   const u8 fast_timer_flag      = 0x10;
+  const u8 priority_sent_flag   = 0x20;
   u64 *token_ptr                = bpf_map_lookup_elem(&reported_pids, &pid);
   u64 ts                        = bpf_ktime_get_ns();
   u8 attempt                    = 0;
   u8 fast_timer                 = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
+  u8 priority_sent              = 0;
 
   if (token_ptr) {
     u64 token   = *token_ptr;
-    u64 diff_ts = ts - (token & ~0x1fULL);
+    u64 diff_ts = ts - (token & ~0x3fULL);
     attempt     = token & 0xf;
     fast_timer |= token & fast_timer_flag;
+    priority_sent       = token & priority_sent_flag;
     // Calculate the limit window size. 100ms << attempt.
     u64 limit_window_ts = (100 * 1000000ULL) << attempt;
 
+    // A priority event is delivered on the leading edge of an activity burst: it
+    // bypasses the minimum-interval inhibition below. Only the first priority event of
+    // a burst is treated this way.
+    bool priority_event = (ratelimit_action == RATELIMIT_ACTION_PRIORITY) && !priority_sent;
+
     if (diff_ts < limit_window_ts) {
       // Minimum event interval.
-      DEBUG_PRINT("PID %d event limited: too fast", pid);
-      return true;
-    }
-    if (diff_ts < limit_window_ts + (5000 * 1000000ULL)) {
+      if (!priority_event) {
+        DEBUG_PRINT("PID %d event limited: too fast", pid);
+        return true;
+      }
+    } else if (diff_ts < limit_window_ts + (5000 * 1000000ULL)) {
       // PID event within 5 seconds, increase limit window size if possible
       if (attempt < (fast_timer ? fast_max_attempts : default_max_attempts)) {
         attempt++;
       }
     } else {
-      // Silence for at least 5 seconds. Reset back to zero.
-      attempt = 0;
+      // Silence for at least 5 seconds. Reset back to zero and re-arm the priority
+      // slot so the next activity burst gets a fresh delivery.
+      attempt       = 0;
+      priority_sent = 0;
     }
   }
 
+  // A delivered priority event marks the burst so the next one is throttled.
+  if (ratelimit_action == RATELIMIT_ACTION_PRIORITY) {
+    priority_sent = priority_sent_flag;
+  }
+
   // Create new token:
-  // 59 bits - the high bits of timestamp of last event
+  // 58 bits - the high bits of timestamp of last event
+  //  1 bit  - set if a priority event has been delivered this activity burst
   //  1 bit  - set if the PID should be in fast timer mode
   //  4 bits - number of bursts left at event time
   DEBUG_PRINT("PID %d event send, attempt=%d", pid, attempt);
-  u64 token = (ts & ~0x1fULL) | fast_timer | attempt;
+  u64 token = (ts & ~0x3fULL) | priority_sent | fast_timer | attempt;
 
   // Update the map entry. Technically this is not SMP safe, but doing
   // an atomic update would require EBPF atomics. At worst we send an
@@ -308,12 +330,18 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
 
 // report_pid informs userspace about a PID that needs to be processed.
 // See pid_event_ratelimit for ratelimit_action functional specifics.
-// Returns true if the PID was successfully reported to user space.
+// Returns true if userspace was notified, false if the event was dropped or (for
+// RATELIMIT_ACTION_PRIORITY) deferred.
 static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit_action)
 {
   u32 pid = pid_tgid >> 32;
 
-  if (pid_event_ratelimit(pid, ratelimit_action)) {
+  bool inhibited = pid_event_ratelimit(pid, ratelimit_action);
+
+  // Rate-limited priority events are deferred rather than dropped: still recorded in
+  // pid_events (coalescing) but not signalled, so the next periodic drain picks them up.
+  // No trigger means a process cannot drive resyncs by spamming priority events.
+  if (inhibited && ratelimit_action != RATELIMIT_ACTION_PRIORITY) {
     return false;
   }
 
@@ -327,6 +355,12 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
   }
   if (ratelimit_action == RATELIMIT_ACTION_RESET) {
     bpf_map_delete_elem(&reported_pids, &pid);
+  }
+
+  if (inhibited) {
+    // Deferred priority event: recorded but not signalled.
+    increment_metric(metricID_NumPriorityEventDeferred);
+    return false;
   }
 
   // Notify userspace that there is a PID waiting to be processed.
