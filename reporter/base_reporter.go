@@ -10,7 +10,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
@@ -62,7 +61,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    meta.ContainerID,
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
-		ContextKey:     processcontext.ResourceToContextKey(meta.Resource),
+		ContextKey:     resourceToContextKey(meta.Resource),
 	}
 	traceHash := traceutil.HashTrace(trace)
 

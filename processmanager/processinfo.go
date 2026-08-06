@@ -32,7 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -585,7 +585,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
-	oldProcessContextPublishedAtNs := info.meta.ProcessContextInfo.PublishedAtNs
+	oldProcessContextPublishedAtNs := info.processContext.PublishedAtNs
 	oldEnvVars := info.meta.EnvVariables
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
@@ -782,7 +782,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			info.meta = meta
 		}
 		if publishProcessContextInfo {
-			info.meta.ProcessContextInfo = newProcessContextInfo
+			info.processContext = newProcessContextInfo
 		}
 	}
 	interpreters := pm.interpreters[pid]
@@ -845,14 +845,15 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
+// metaForPID returns a consistent snapshot of the process metadata and its
+// resolved OTel process context for the given PID.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.ProcessMeta, processcontext.Info) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.meta
+		return procInfo.meta, procInfo.processContext
 	}
-	return process.ProcessMeta{}
+	return process.ProcessMeta{}, processcontext.Info{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

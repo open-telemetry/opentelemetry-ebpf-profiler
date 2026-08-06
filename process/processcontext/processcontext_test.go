@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build amd64 || arm64
+//go:build linux && (amd64 || arm64)
 
 package processcontext_test
 
@@ -21,7 +21,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
@@ -635,83 +635,6 @@ func TestWithMergedEnvVars(t *testing.T) {
 				return true
 			})
 			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
-
-func TestResourceToContextKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		attrs    map[string]string
-		nilRes   bool
-		expected string
-	}{
-		{
-			name:     "nil resource",
-			nilRes:   true,
-			expected: "",
-		},
-		{
-			name:     "empty resource",
-			attrs:    nil,
-			expected: "",
-		},
-		{
-			name: "all three present",
-			attrs: map[string]string{
-				"service.namespace":   "ns",
-				"service.name":        "svc",
-				"service.instance.id": "id",
-			},
-			expected: "ns:svc:id",
-		},
-		{
-			name: "missing namespace",
-			attrs: map[string]string{
-				"service.name":        "svc",
-				"service.instance.id": "id",
-			},
-			expected: ":svc:id",
-		},
-		{
-			name: "missing name",
-			attrs: map[string]string{
-				"service.namespace":   "ns",
-				"service.instance.id": "id",
-			},
-			expected: "ns::id",
-		},
-		{
-			name: "missing instance id",
-			attrs: map[string]string{
-				"service.namespace": "ns",
-				"service.name":      "svc",
-			},
-			expected: "ns:svc:",
-		},
-		{
-			name: "irrelevant attributes ignored",
-			attrs: map[string]string{
-				"service.namespace":   "ns",
-				"service.name":        "svc",
-				"service.instance.id": "id",
-				"deployment.env":      "prod",
-			},
-			expected: "ns:svc:id",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var res *pcommon.Resource
-			if !tt.nilRes {
-				r := pcommon.NewResource()
-				for k, v := range tt.attrs {
-					r.Attributes().PutStr(k, v)
-				}
-				res = &r
-			}
-			assert.Equal(t, tt.expected, processcontext.ResourceToContextKey(res).String())
 		})
 	}
 }

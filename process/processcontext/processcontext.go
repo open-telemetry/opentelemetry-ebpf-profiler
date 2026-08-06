@@ -1,7 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processcontext // import "go.opentelemetry.io/ebpf-profiler/processcontext"
+// Package processcontext implements the OpenTelemetry Process Context sharing
+// protocol for reading resource attributes from an external process.
+//
+// See [OTEP 4719].
+//
+// [OTEP 4719]: https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md
+package processcontext // import "go.opentelemetry.io/ebpf-profiler/process/processcontext"
 
 import (
 	"encoding/binary"
@@ -74,7 +80,7 @@ var (
 
 // Info is a snapshot of process context. The pointed-to Resource and
 // ExtraAttributes are shared by pointer across goroutines (process-manager
-// writer, tracer, reporter) without locking; once an Info is published they
+// writer, reporter) without locking; once an Info is published they
 // MUST be treated as read-only by all holders.
 type Info struct {
 	Resource        *pcommon.Resource
@@ -437,31 +443,4 @@ func parseResourceAttributes(raw string) ([]resourceAttribute, error) {
 		pairs = append(pairs, resourceAttribute{key, value})
 	}
 	return pairs, nil
-}
-
-// ResourceToContextKey returns a stable key derived from the
-// (service.namespace, service.name, service.instance.id) triplet which the
-// OTel semantic conventions describe as globally unique for a service
-// instance.
-// See: https://github.com/open-telemetry/semantic-conventions/blob/main/docs/registry/attributes/service.md
-//
-// Returns libpf.NullString only when resource is nil or none of the three
-// attributes is present. When at least one is present, the result joins all
-// three with ':' (missing components render as empty strings); callers
-// should treat the null sentinel as "unidentifiable" and may choose to
-// group such samples by other fields.
-func ResourceToContextKey(resource *pcommon.Resource) libpf.String {
-	if resource == nil {
-		return libpf.NullString
-	}
-	serviceNamespace, namespaceOk := resource.Attributes().Get(string(semconv.ServiceNamespaceKey))
-	serviceName, nameOk := resource.Attributes().Get(string(semconv.ServiceNameKey))
-	serviceInstanceID, instanceIdOk := resource.Attributes().Get(string(semconv.ServiceInstanceIDKey))
-	// If all three attributes are missing, return an empty string instead of ":::" to ensure that nil resource
-	// and empty resource are treated as the same.
-	if !namespaceOk && !nameOk && !instanceIdOk {
-		return libpf.NullString
-	}
-	return libpf.Intern(fmt.Sprintf("%s:%s:%s",
-		serviceNamespace.Str(), serviceName.Str(), serviceInstanceID.Str()))
 }
