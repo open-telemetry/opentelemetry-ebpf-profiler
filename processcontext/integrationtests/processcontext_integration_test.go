@@ -23,6 +23,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	"go.opentelemetry.io/otel/metric/noop"
 )
@@ -48,6 +50,23 @@ func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.M
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
 
+// captureReporter is a minimal TraceReporter that captures TraceEventMeta
+// so the test can inspect the Resource that HandleTrace resolved.
+type captureReporter struct {
+	metaCh chan *samples.TraceEventMeta
+}
+
+func newCaptureReporter() *captureReporter {
+	return &captureReporter{metaCh: make(chan *samples.TraceEventMeta, 64)}
+}
+
+func (r *captureReporter) ReportTraceEvent(_ *libpf.Trace, meta *samples.TraceEventMeta) error {
+	r.metaCh <- meta
+	return nil
+}
+
+var _ reporter.TraceReporter = (*captureReporter)(nil)
+
 func isRoot() bool {
 	return os.Geteuid() == 0
 }
@@ -60,6 +79,7 @@ func Test_ProcessContext(t *testing.T) {
 	curDir, err := os.Getwd()
 	require.NoError(t, err)
 	exeDir := filepath.Join(curDir, "testdata")
+	allCPUs := []int{}
 
 	tests := map[string]struct {
 		exeName string
@@ -81,6 +101,7 @@ func Test_ProcessContext(t *testing.T) {
 			metrics.Start(noop.Meter{})
 
 			log.SetLevel(slog.LevelDebug)
+			rep := newCaptureReporter()
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
 				InterpretersConfig:     interpreterconfig.AllInterpreters(),
@@ -89,12 +110,13 @@ func Test_ProcessContext(t *testing.T) {
 				ProbabilisticThreshold: 100,
 				OffCPUThreshold:        uint32(math.MaxUint32 / 100),
 				VerboseMode:            true,
+				TraceReporter:          rep,
 			})
 			require.NoError(t, err)
 			defer trc.Close()
 
 			trc.StartPIDEventProcessor(ctx)
-			require.NoError(t, trc.AttachTracer())
+			require.NoError(t, trc.AttachTracer(allCPUs))
 
 			t.Log("Attached tracer program")
 			require.NoError(t, trc.EnableProfiling())
@@ -102,6 +124,22 @@ func Test_ProcessContext(t *testing.T) {
 
 			traceCh := make(chan *libpf.EbpfTrace)
 			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
+
+			// Read raw EbpfTrace from the monitor, feed through HandleTrace
+			// (which resolves process metadata including the Resource), and
+			// inspect the TraceEventMeta captured by the reporter.
+			go func() {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case trace := <-traceCh:
+						if trace != nil {
+							trc.HandleTrace(trace)
+						}
+					}
+				}
+			}()
 
 			cmd := exec.CommandContext(ctx, filepath.Join(exeDir, tc.exeName), tc.args...)
 			cmd.Stderr = os.Stderr
@@ -133,17 +171,17 @@ func Test_ProcessContext(t *testing.T) {
 				select {
 				case <-timeout.C:
 					break Loop
-				case trace := <-traceCh:
-					if trace == nil || trace.PID != libpf.PID(cmd.Process.Pid) {
+				case meta := <-rep.metaCh:
+					if meta.PID != libpf.PID(cmd.Process.Pid) {
 						continue
 					}
-					if trace.Resource == nil {
+					if meta.Resource == nil {
 						continue
 					}
-					if !resourceMatches(trace.Resource, expectedResource) {
+					if !resourceMatches(meta.Resource, expectedResource) {
 						continue
 					}
-					t.Logf("Got expected resource for PID %d", trace.PID)
+					t.Logf("Got expected resource for PID %d", meta.PID)
 					ok = true
 					break Loop
 				}
