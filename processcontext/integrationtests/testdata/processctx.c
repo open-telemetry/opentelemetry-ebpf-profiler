@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 #include "processctx_lib.h"
@@ -81,6 +82,19 @@ int main(int argc, char *argv[]) {
 #endif
 
   signal(SIGTERM, handle_sigterm);
+
+  // OTEL_PROCESS_CTX_PUBLISH_DELAY_MS lets the test exercise the prctl monitor
+  // path: the profiler discovers the PID first, then the publish prctl fires
+  // and triggers a resync. We burn CPU rather than sleep so the process stays
+  // on-CPU and is sampled by the profiler's perf event, which drives process
+  // synchronization before the context is published.
+  const char *delay_str = getenv("OTEL_PROCESS_CTX_PUBLISH_DELAY_MS");
+  if (delay_str != NULL) {
+    int delay_ms = atoi(delay_str);
+    if (delay_ms > 0) {
+      burn(delay_ms);
+    }
+  }
 
   if (init_process_context()) {
     fprintf(stderr, "Failed to initialize process context\n");
