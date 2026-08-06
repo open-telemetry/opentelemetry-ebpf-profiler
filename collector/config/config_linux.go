@@ -51,7 +51,6 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 //
 //	probes:
 //	  - type: kprobe
-//	    mode: kprobe
 //	    symbol: vfs_open
 type Probe struct {
 	Type   string         `mapstructure:"type"`

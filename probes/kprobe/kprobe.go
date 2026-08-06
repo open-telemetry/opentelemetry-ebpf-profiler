@@ -40,7 +40,7 @@ type probe struct {
 // Mode defaults to "kprobe" when omitted. Symbol is always required. Target is
 // required for uprobe/uretprobe. The caller is responsible for decoding the raw
 // YAML value into Config.
-func New(cfg Config) (tracer.Probe, error) {
+func New(cfg Config) (*probe, error) {
 	if cfg.Mode == "" {
 		cfg.Mode = "kprobe"
 	}
