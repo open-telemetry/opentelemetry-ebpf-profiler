@@ -200,7 +200,7 @@ func cgroupRootInode(pid libpf.PID) (uint64, error) {
 	return st.Ino, nil
 }
 
-// NewSelfContainerIDEnricher returns a ProcessMetaEnricher that sets the container ID on
+// NewSelfContainerIDEnricher returns a MetaEnricher that sets the container ID on
 // meta when the process shares the profiler's cgroup root and standard cgroup-based
 // detection returned no result. The profiler's own container ID is detected once at
 // construction time and reused for every subsequent process. If detection fails the
