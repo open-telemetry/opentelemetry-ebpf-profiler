@@ -1560,6 +1560,13 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		} else {
 			vms.vm_struct.gc_objspace = 1272
 		}
+		if version >= rubyVersion(4, 0, 6) {
+			// Ruby 4.0.6 inserted rb_vm_t.master_box before root_box,
+			// shifting the gc.objspace field by one pointer.
+			// https://github.com/ruby/ruby/blob/v4.0.6/vm_core.h
+			// https://github.com/ruby/ruby/commit/99aac00fa13c03f71d3a4d89686e447f2950df68
+			vms.vm_struct.gc_objspace += 8
+		}
 		vms.objspace.flags = 28
 	default:
 		rid.hasObjspace = true
@@ -1715,6 +1722,14 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 				vms.rb_ractor_struct.running_ec = 0x138
 			} else {
 				vms.rb_ractor_struct.running_ec = 0x148
+			}
+			if version >= rubyVersion(4, 0, 6) {
+				// Ruby 4.0.6 added runnable_hot_th and runnable_hot_th_waiting
+				// to struct rb_thread_sched, which is embedded in
+				// rb_ractor_struct.threads before running_ec.
+				// https://github.com/ruby/ruby/blob/v4.0.6/thread_pthread.h
+				// https://github.com/ruby/ruby/commit/21a2595676d2d3df0eccd3af74065e2ba2a876b5
+				vms.rb_ractor_struct.running_ec += 8
 			}
 		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {

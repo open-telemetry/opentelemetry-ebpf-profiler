@@ -10,7 +10,6 @@ import (
 
 type TraceEventMeta struct {
 	Comm           libpf.Comm
-	ProcessName    libpf.String
 	ExecutablePath libpf.String
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String

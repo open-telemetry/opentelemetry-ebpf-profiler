@@ -185,9 +185,9 @@ func (r *Reader) Discard(n int) (discarded int, err error) {
 	return discarded, nil
 }
 
-// ReadN reads and returns a byte slice to 'n' bytes of data.
+// Peek returns the internal buffer for next 'n' bytes if possible.
 // The returned slice points to the internal buffer and is invalid after the next read.
-func (r *Reader) ReadN(n int) ([]byte, error) {
+func (r *Reader) Peek(n int) ([]byte, error) {
 	if n > bufferSize {
 		return nil, ErrBufferTooSmall
 	}
@@ -198,10 +198,26 @@ func (r *Reader) ReadN(n int) ([]byte, error) {
 	}
 	if r.size-r.pos >= n {
 		b := r.buf[r.pos : r.pos+n]
-		r.pos += n
 		return b, nil
 	}
 	return nil, io.EOF
+}
+
+// ReadN reads and returns a byte slice to 'n' bytes of data.
+// The returned slice points to the internal buffer and is invalid after the next read.
+func (r *Reader) ReadN(n int) ([]byte, error) {
+	b, err := r.Peek(n)
+	if b != nil {
+		r.pos += n
+	}
+	return b, err
+}
+
+// ReadStringN reads a string with a length of 'n' bytes.
+// The returned string points to the internal buffer and is invalid after the next read.
+func (r *Reader) ReadStringN(n int) (string, error) {
+	slice, err := r.ReadN(n)
+	return pfunsafe.ToString(slice), err
 }
 
 // ReadSlice reads until the first occurrence of delim.

@@ -15,12 +15,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	processcontextpb "go.opentelemetry.io/ebpf-profiler/processcontext/v1development"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -286,9 +286,9 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 	}
 
 	var extraAttributes *pcommon.Map
-	if ctx.ExtraAttributes != nil {
+	if ctx.Attributes != nil {
 		m := pcommon.NewMap()
-		for _, attr := range ctx.ExtraAttributes {
+		for _, attr := range ctx.Attributes {
 			if v, ok := convertAnyValue(attr.Value); ok {
 				v.MoveTo(m.PutEmpty(attr.Key))
 			}

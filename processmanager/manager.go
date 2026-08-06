@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -67,6 +68,7 @@ type Config struct {
 	TraceReporter         reporter.TraceReporter
 	ExecutableReporter    reporter.ExecutableReporter
 	StackDeltaProvider    nativeunwind.StackDeltaProvider
+	KernelSymbolizer      *kallsyms.Symbolizer
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
@@ -118,6 +120,10 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	})
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
+	var ks kallsyms.Resolver
+	if cfg.KernelSymbolizer != nil {
+		ks = cfg.KernelSymbolizer
+	}
 
 	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
 	if err != nil {
@@ -135,6 +141,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		frameCache:               frameCache,
 		traceReporter:            cfg.TraceReporter,
 		exeReporter:              cfg.ExecutableReporter,
+		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           includeEnvVars,
@@ -241,6 +248,39 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 		len(pm.interpreters[pid]), errSymbolizationNotSupported)
 }
 
+func (pm *ProcessManager) appendKernelFrames(addrs []uint64, dst *libpf.Frames) (uint64, uint64) {
+	var cacheHit, cacheMiss uint64
+
+	snapshot := pm.kernelSymbols.Snapshot()
+	for _, addr := range addrs {
+		address := libpf.Address(addr)
+		// Kernel/module symbols are the common case. BPF JIT addresses do not
+		// overlap module ranges, so cache probe order does not change
+		// ResolveAddress precedence.
+		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.KernelGeneration())); ok {
+			cacheHit++
+			*dst = append(*dst, cached...)
+			continue
+		}
+		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.BPFGeneration())); ok {
+			cacheHit++
+			*dst = append(*dst, cached...)
+			continue
+		}
+
+		resolution, resolved := snapshot.ResolveAddress(address)
+		frame, cacheable := symbolizeKernelFrame(address, resolution)
+		if resolved && cacheable {
+			cacheMiss++
+			pm.frameCache.Add(kernelFrameCacheKey(address, resolution.Generation), libpf.Frames{frame})
+		}
+
+		*dst = append(*dst, frame)
+	}
+
+	return cacheHit, cacheMiss
+}
+
 // convertFrame converts one host Frame to one or more libpf.Frames. It returns true
 // if the converted frame data should be cached.
 func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *libpf.Frames) bool {
@@ -336,11 +376,15 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
-// HandleTrace processes and reports the given host.Trace. This function
-// is not re-entrant due to frameCache not being synced. If the tracer is
-// later updated to distribute trace handling to goroutine pool, the caching
-// strategy needs to be updated accordingly.
+// HandleTrace processes and reports the given eBPF trace. Process metadata
+// is looked up here rather than at trace-receive time as EbpfTrace carries
+// only data sourced from eBPF. If the process has already exited and been evicted,
+// the trace is reported without that enrichment. This function is not re-entrant
+// due to frameCache not being synced. If the tracer is later updated to distribute
+// trace handling to a goroutine pool, the caching strategy needs to be updated
+// accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
+	procMeta := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -348,29 +392,38 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CpuID,
-		ProcessName:    bpfTrace.ProcessName,
-		ExecutablePath: bpfTrace.ExecutablePath,
-		ContainerID:    bpfTrace.ContainerID,
+		ExecutablePath: procMeta.Executable,
+		ContainerID:    procMeta.ContainerID,
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
-		EnvVars:        bpfTrace.EnvVars,
-		Resource:       bpfTrace.Resource,
+		EnvVars:        procMeta.EnvVariables,
+		Resource:       procMeta.ProcessContextInfo.Resource,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 	}
 
 	pid := bpfTrace.PID
-	kernelFramesLen := len(bpfTrace.KernelFrames)
 	trace := &libpf.Trace{
-		Frames:       make(libpf.Frames, kernelFramesLen, kernelFramesLen+int(bpfTrace.NumFrames)),
+		Frames:       make(libpf.Frames, 0, int(bpfTrace.NumKernelFrames)+int(bpfTrace.NumFrames)),
 		CustomLabels: bpfTrace.CustomLabels,
 	}
-	copy(trace.Frames, bpfTrace.KernelFrames)
 
 	cacheMiss := uint64(0)
 	cacheHit := uint64(0)
 
-	for frames := libpf.EbpfFrame(bpfTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
+	numKernelFrames := int(bpfTrace.NumKernelFrames)
+	if numKernelFrames > len(bpfTrace.FrameData) {
+		log.Errorf("Kernel frame count %d exceeds frame data length %d", numKernelFrames, len(bpfTrace.FrameData))
+		numKernelFrames = len(bpfTrace.FrameData)
+	}
+	if numKernelFrames > 0 {
+		hits, misses := pm.appendKernelFrames(bpfTrace.FrameData[:numKernelFrames], &trace.Frames)
+		cacheHit += hits
+		cacheMiss += misses
+	}
+
+	userFrameData := bpfTrace.FrameData[numKernelFrames:]
+	for frames := libpf.EbpfFrame(userFrameData); len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
 		if frame.Flags().Error() {
 			if !pm.filterErrorFrames {

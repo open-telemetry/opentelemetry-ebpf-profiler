@@ -680,6 +680,21 @@ const (
 	// Number of times the current PC was found in a non-executable VMA
 	IDUnwindNativeErrNonExecutableVMA = 297
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 298
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 299
+
+	// Number of samples skipped because the process is too new
+	IDSamplesSkippedProcessTooNew = 300
+
+	// Number of PID resynchronizations triggered by the prctl monitor
+	IDNumSyncsFromPrctl = 301
+
+	// Number of priority PID events deferred (recorded but not signalled) due to rate limiting
+	IDNumPriorityEventDeferred = 302
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 298
+	IDMax = 303
 )

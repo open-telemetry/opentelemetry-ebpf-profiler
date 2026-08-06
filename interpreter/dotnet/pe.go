@@ -449,7 +449,7 @@ func (pp *peParser) parseOptionalHeader() error {
 		return fmt.Errorf("invalid header size: %d", sizeHeaders)
 	}
 	if numDirectories < 0x10 {
-		return fmt.Errorf("invalid unmber of data directories: %d", numDirectories)
+		return fmt.Errorf("invalid number of data directories: %d", numDirectories)
 	}
 
 	// ECMA-335 II.25.2.3.3 "PE header data directories" defines the data directory

@@ -85,7 +85,7 @@ lint:
 	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 format:
-	$(CLANG_FORMAT) -i -style=file *.[ch]
+	$(CLANG_FORMAT) -i -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 clean:
 	rm -f *.o *.d

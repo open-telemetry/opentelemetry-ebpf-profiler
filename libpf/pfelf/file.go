@@ -21,8 +21,8 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
-	"debug/buildinfo"
 	"debug/elf"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -31,7 +31,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"slices"
 	"syscall"
 	"unsafe"
@@ -54,6 +53,9 @@ const (
 	// parsed sections (e.g. symbol tables and string tables; libxul
 	// has about 4MB .dynstr)
 	maxBytesLargeSection = 16 * 1024 * 1024
+
+	// notYetProcessed is an internal placeholder to mark not yet parsed data.
+	notYetProcessed = "\x01"
 )
 
 // List of public errors.
@@ -70,8 +72,17 @@ var (
 	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
 	ErrNoteNotFound = errors.New("note not found")
 
-	// errNotProcessed is internal placeholder to mark not yet parsed data.
+	// errNoGoBuildinfo is returned when the ELF is not a Go executable.
+	errNoGoBuildinfo = errors.New("go buildinfo not found")
+
+	// errNotProcessed is an internal placeholder to mark not yet parsed data.
 	errNotProcessed = errors.New("not yet processed")
+
+	// strNotProcessed is an internal placeholder to mark not yet parsed data.
+	strNotProcessed = libpf.Intern(notYetProcessed)
+
+	// goBuildInfoMagic is the magic header for Go buildinfo
+	goBuildInfoMagic = []byte("\xff Go buildinf:")
 )
 
 // File represents an open ELF file
@@ -140,16 +151,14 @@ type File struct {
 	// Path to the debuglink exe,
 	// or empty if none exists
 	debuglinkPath string
-	// Whether we have checked for a debuglink
-	debuglinkChecked bool
 
 	// Cached notes data
 	notesError error
 	gnuBuildId string
 	goBuildId  string
 
-	// Contains the Go build information if present
-	goBuildInfo *debug.BuildInfo
+	// Go build info
+	golangVersion libpf.String
 }
 
 var (
@@ -233,10 +242,12 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
 	f := &File{
-		elfReader:  r,
-		InsideCore: loadAddress != 0,
-		closer:     closer,
-		notesError: errNotProcessed,
+		elfReader:     r,
+		InsideCore:    loadAddress != 0,
+		closer:        closer,
+		debuglinkPath: notYetProcessed,
+		notesError:    errNotProcessed,
+		golangVersion: strNotProcessed,
 	}
 	success := false
 	defer func() {
@@ -628,10 +639,48 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 	return ErrNoteNotFound
 }
 
+// visitBuildIDNoteSections iterates the named ELF note sections that can contain build IDs.
+// The visitor must make copies of the 'data' it keeps after return.
+func (f *File) visitBuildIDNoteSections(visitor func(uint64, []byte) bool) error {
+	if f.InsideCore {
+		return ErrNoteNotFound
+	}
+
+	if err := f.LoadSections(); err != nil {
+		return ErrNoteNotFound
+	}
+
+	rdr := pfbufio.GetReader()
+	defer pfbufio.PutReader(rdr)
+
+	visited := false
+	buildIDSections := []string{".note.gnu.build-id", ".note.go.buildid", ".notes"}
+	for i := range f.Sections {
+		section := &f.Sections[i]
+		if section.Type != elf.SHT_NOTE || section.Size == 0 ||
+			!slices.Contains(buildIDSections, section.Name) {
+			continue
+		}
+		visited = true
+
+		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
+		err := visitNotes(rdr, visitor)
+		if errors.Is(err, ErrNoteNotFound) {
+			continue
+		}
+		return err
+	}
+
+	if !visited {
+		return ErrNoteNotFound
+	}
+	return nil
+}
+
 // parseNotes parses and caches the ELF notes for the File.
 func (f *File) parseNotes() error {
 	if f.notesError == errNotProcessed {
-		f.notesError = f.VisitNotes(func(note uint64, desc []byte) bool {
+		cacheNote := func(note uint64, desc []byte) bool {
 			switch note {
 			case NoteGnuBuildId:
 				f.gnuBuildId = hex.EncodeToString(desc)
@@ -639,11 +688,19 @@ func (f *File) parseNotes() error {
 				f.goBuildId = string(desc)
 			}
 			return true
-		})
-		if errors.Is(f.notesError, ErrNoteNotFound) {
-			// Visiting every note is expected here because parseNotes caches all
-			// build ID notes, which results in terminating with ErrNoteNotFound.
-			f.notesError = nil
+		}
+
+		f.notesError = f.visitBuildIDNoteSections(cacheNote)
+		if f.notesError != nil && !errors.Is(f.notesError, ErrNoteNotFound) {
+			return f.notesError
+		}
+		if f.notesError != nil || f.gnuBuildId == "" || f.goBuildId == "" {
+			f.notesError = f.VisitNotes(cacheNote)
+			if errors.Is(f.notesError, ErrNoteNotFound) {
+				// Visiting every note is expected here because parseNotes caches all
+				// build ID notes, which results in terminating with ErrNoteNotFound.
+				f.notesError = nil
+			}
 		}
 	}
 	return f.notesError
@@ -667,29 +724,9 @@ func (f *File) GetBuildID() (string, error) {
 	return f.gnuBuildId, err
 }
 
-// GoVersion returns the Go version if present and empty string otherwise. This will delegate
-// to buildinfo.Read for any binaries where IsGolang is true which will scan the binary with
-// debug/elf. This will incur additional CPU/IO overhead but the libpf.readbufat buffer and
-// OS file buffers should ameliorate most of that.
-func (f *File) GoVersion() (string, error) {
-	if f.goBuildInfo != nil {
-		return f.goBuildInfo.GoVersion, nil
-	}
-	if !f.IsGolang() {
-		return "", nil
-	}
-	bi, err := buildinfo.Read(f.getReader())
-	if err != nil {
-		return "", err
-	}
-	f.goBuildInfo = bi
-
-	return bi.GoVersion, nil
-}
-
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
 func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
-	if f.debuglinkChecked {
+	if f.debuglinkPath != notYetProcessed {
 		return f.debuglinkPath
 	}
 	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
@@ -871,7 +908,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	debugELF *File, debugFile string,
 ) {
-	f.debuglinkChecked = true
+	f.debuglinkPath = ""
 	// Get the debug link
 	linkName, linkCRC32, err := f.GetDebugLink()
 	if err != nil {
@@ -1261,5 +1298,128 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 
 // IsGolang determines if this ELF is a Golang executable
 func (f *File) IsGolang() bool {
+	if _, err := f.GetGoBuildID(); err == nil {
+		return true
+	}
 	return f.Section(".go.buildinfo") != nil || f.Section(".gopclntab") != nil
+}
+
+func decodeString(rdr *pfbufio.Reader) (string, error) {
+	size, err := binary.ReadUvarint(rdr)
+	if err != nil {
+		return "", err
+	}
+	return rdr.ReadStringN(int(size))
+}
+
+func readString(r io.ReaderAt, addr uint64) (string, error) {
+	var addrAndSize [16]byte
+
+	if _, err := r.ReadAt(addrAndSize[:], int64(addr)); err != nil {
+		return "", err
+	}
+	addr = binary.LittleEndian.Uint64(addrAndSize[0:])
+	size := binary.LittleEndian.Uint64(addrAndSize[8:])
+	if size >= maxBytesSmallSection {
+		return "", errNoGoBuildinfo
+	}
+
+	val := make([]byte, size)
+	_, err := r.ReadAt(val, int64(addr))
+	return pfunsafe.ToString(val), err
+}
+
+func (f *File) parseGoBuildinfo() error {
+	if f.golangVersion != strNotProcessed {
+		return nil
+	}
+	f.golangVersion = libpf.NullString
+
+	var off, sz int64
+	if s := f.Section(".go.buildinfo"); s != nil {
+		off = int64(s.Offset)
+		sz = int64(s.Size)
+	} else {
+		if !f.IsGolang() {
+			return nil
+		}
+		for _, p := range f.Progs {
+			if p.Type == elf.PT_LOAD && p.Flags&(elf.PF_X|elf.PF_W) == elf.PF_W {
+				off = int64(p.Off)
+				sz = int64(p.Filesz)
+				break
+			}
+		}
+	}
+	if sz == 0 {
+		return errNoGoBuildinfo
+	}
+
+	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
+	defer pfbufio.PutReader(rdr)
+
+	for {
+		offset, err := rdr.SearchSlice(goBuildInfoMagic)
+		if err != nil {
+			return errNoGoBuildinfo
+		}
+		if offset%16 == 0 {
+			break
+		}
+	}
+
+	// type buildInfoHeader struct {
+	// 	magic       [14]byte
+	// 	ptrSize     uint8 // used if flagsVersionPtr
+	// 	flags       uint8
+	// 	versPtr     targetUintptr // used if flagsVersionPtr
+	// 	modPtr      targetUintptr // used if flagsVersionPtr
+	// }
+	ptrSize, err := rdr.ReadByte()
+	if err != nil {
+		return errNoGoBuildinfo
+	}
+	flags, err := rdr.ReadByte()
+	if err != nil {
+		return errNoGoBuildinfo
+	}
+	if flags&2 != 0 {
+		// Go 1.18+ inline strings
+		_, err = rdr.Discard(16)
+		if err != nil {
+			return errNoGoBuildinfo
+		}
+		ver, err := decodeString(rdr)
+		if err != nil {
+			return err
+		}
+		f.golangVersion = libpf.Intern(ver)
+	} else {
+		// Go <1.18 with string pointers
+		ptrs, err := rdr.ReadN(16)
+		if err != nil {
+			return errNoGoBuildinfo
+		}
+		// Only 64-bit little-endian is supported
+		if ptrSize != 8 || flags&1 != 0 {
+			return fmt.Errorf("pointers with size %d, flags %x not supported",
+				ptrSize, flags)
+		}
+		verPtr := binary.LittleEndian.Uint64(ptrs[0:])
+
+		ver, err := readString(f, verPtr)
+		if err != nil {
+			return err
+		}
+		f.golangVersion = libpf.Intern(ver)
+	}
+	return nil
+}
+
+// GoVersion returns the Go version if present and empty string otherwise.
+func (f *File) GoVersion() string {
+	if err := f.parseGoBuildinfo(); err != nil {
+		log.Debugf("Failed to read go buildinfo: %v", err)
+	}
+	return f.golangVersion.String()
 }

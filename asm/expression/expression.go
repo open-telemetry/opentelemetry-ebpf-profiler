@@ -74,7 +74,43 @@ func cmpOrder(u Expression) int {
 		return 4
 	case *immediate:
 		return 5
+	case *clear:
+		return 6
 	default:
 		return 0
+	}
+}
+
+// AsConstant checks whether the value of the expression is statically known,
+// and if so, returns it.
+//
+// Currently, we don't attempt to do any simplification that hasn't
+// already been done while constructing expressions, so this is just
+// shorthand for the common pattern of checking for an immediate at
+// the top level:
+//
+//	cap := expression.NewImmediateCapture("cap")
+//
+//	if v.Match(cap) {
+//	  return cap.CapturedValue(), true
+//	}
+//
+//	 return 0, false;
+func AsConstant(v Expression) (uint64, bool) {
+	switch typed := v.(type) {
+	case *immediate:
+		return typed.Value, true
+	default:
+		return 0, false
+	}
+}
+
+// AsNamed checks whether `v` is a named value, returning its name if so.
+func AsNamed(v Expression) (string, bool) {
+	switch typed := v.(type) {
+	case *named:
+		return typed.name, true
+	default:
+		return "", false
 	}
 }

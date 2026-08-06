@@ -85,26 +85,28 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		TraceReporter:          c.reporter,
-		Intervals:              intervals,
-		InterpretersConfig:     c.config.Interpreters,
-		FilterErrorFrames:      !c.config.SendErrorFrames,
-		FilterIdleFrames:       !c.config.SendIdleFrames,
-		SamplesPerSecond:       c.config.SamplesPerSecond,
-		MapScaleFactor:         int(c.config.MapScaleFactor),
-		FrameCacheSize:         uint32(c.config.FrameCacheSize),
-		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
-		VerboseMode:            c.config.VerboseMode,
-		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
-		ProbabilisticInterval:  c.config.ProbabilisticInterval,
-		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
-		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
-		IncludeEnvVars:         envVars,
-		ProbeLinks:             c.config.ProbeLinks,
-		LoadProbe:              c.config.LoadProbe,
-		ExecutableReporter:     c.config.ExecutableReporter,
-		BPFFSRoot:              c.config.BPFFSRoot,
-		OBIProcessCtx:          c.config.OBIProcessCtx,
+		TraceReporter:           c.reporter,
+		Intervals:               intervals,
+		InterpretersConfig:      c.config.Interpreters,
+		FilterErrorFrames:       !c.config.SendErrorFrames,
+		FilterIdleFrames:        !c.config.SendIdleFrames,
+		FilterMinProcessAge:     c.config.FilterMinProcessAge,
+		SamplesPerSecond:        c.config.SamplesPerSecond,
+		MapScaleFactor:          int(c.config.MapScaleFactor),
+		FrameCacheSize:          uint32(c.config.FrameCacheSize),
+		KernelVersionCheck:      !c.config.NoKernelVersionCheck,
+		VerboseMode:             c.config.VerboseMode,
+		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
+		ProbabilisticInterval:   c.config.ProbabilisticInterval,
+		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
+		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
+		IncludeEnvVars:          envVars,
+		ProbeLinks:              c.config.ProbeLinks,
+		LoadProbe:               c.config.LoadProbe,
+		ExecutableReporter:      c.config.ExecutableReporter,
+		BPFFSRoot:               c.config.BPFFSRoot,
+		OBIProcessCtx:           c.config.OBIProcessCtx,
+		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -120,7 +122,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(); err != nil {
+	if err := trc.AttachTracer(c.config.PinnedCPUIDs); err != nil {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
@@ -155,6 +157,14 @@ func (c *Controller) Start(ctx context.Context) error {
 	// This log line is used in our system tests to verify if that the agent has started.
 	// So if you change this log line update also the system test.
 	log.Info("Attached sched monitor")
+
+	// A missing prctl monitor only delays discovery of process context mappings;
+	// core profiling is unaffected, so warn and continue rather than aborting.
+	if err := trc.AttachPrctlMonitor(); err != nil {
+		log.Warnf("Failed to attach prctl monitor: %v", err)
+	} else {
+		log.Info("Attached prctl monitor")
+	}
 
 	if err := c.startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)

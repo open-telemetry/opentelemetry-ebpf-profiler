@@ -633,10 +633,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
 			contextMappingAddr = m.Vaddr
-			// Even if process context is not found, it might be published in the future.
-			// For now, we rely on a new call to synchronizeMappings to pick it up.
-			// TODO: Add some kind of polling mechanism or a hook on prctl to be notified
-			// when the process context is published.
+			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
+			// PID resynchronization when the process names its context mapping "OTEL_CTX".
 		}
 
 		interpreterMapping := isInterpreterMapping(&m)
@@ -847,8 +845,8 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// MetaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
+// metaForPID returns the process metadata for given PID.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {

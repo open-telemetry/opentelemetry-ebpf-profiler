@@ -21,15 +21,51 @@ func TestVDSOArm64(t *testing.T) {
 		AuxParam:   8,
 	}
 
-	testCases := map[string]sdtypes.StackDeltaArray{
+	testCases := map[string]sdtypes.IntervalData{
 		"vdso.arch64.withframe": {
-			{Address: 0, Info: sdtypes.UnwindInfoLR},
-			{Address: 0x7d8, Info: frameSize16},
-			{Address: 0x7e4, Info: sdtypes.UnwindInfoLR},
-			{Address: 0x800, Info: frameSize16},
-			{Address: 0x80c, Info: sdtypes.UnwindInfoLR},
-			{Address: 0x8f7, Info: sdtypes.UnwindInfoSignal},
-			{Address: 0x900, Info: sdtypes.UnwindInfoLR},
+			NumDeltas: 9,
+
+			Blocks: []*sdtypes.BasicBlock{
+				{
+					Start: 0,
+					End:   0x7d0,
+					Deltas: sdtypes.StackDeltaArray{
+						{0, sdtypes.UnwindInfoLR},
+					},
+				},
+				{
+					Start: 0x7d0,
+					End:   0x7d0 + 40,
+					Deltas: sdtypes.StackDeltaArray{
+						{0, sdtypes.UnwindInfoLR},
+						{8, frameSize16},
+						{20, sdtypes.UnwindInfoLR},
+					},
+				},
+				{
+					Start: 0x7f8,
+					End:   0x7f8 + 40,
+					Deltas: sdtypes.StackDeltaArray{
+						{0, sdtypes.UnwindInfoLR},
+						{8, frameSize16},
+						{20, sdtypes.UnwindInfoLR},
+					},
+				},
+				{
+					Start: 0x820,
+					End:   0x820 + 172,
+					Deltas: sdtypes.StackDeltaArray{
+						{0, sdtypes.UnwindInfoLR},
+					},
+				},
+				{
+					Start: 0x8f8,
+					End:   0x8f8 + 8,
+					Deltas: sdtypes.StackDeltaArray{
+						{0, sdtypes.UnwindInfoSignal},
+					},
+				},
+			},
 		},
 	}
 
@@ -39,8 +75,8 @@ func TestVDSOArm64(t *testing.T) {
 			require.NoError(t, err)
 			defer ef.Close()
 
-			deltas := createVDSOSyntheticRecordArm64(ef)
-			require.Equal(t, expected, deltas.Deltas, "vdso deltas wrong")
+			intervals := createVDSOSyntheticRecordArm64(ef)
+			require.Equal(t, expected, *intervals, "vdso deltas wrong")
 		})
 	}
 }

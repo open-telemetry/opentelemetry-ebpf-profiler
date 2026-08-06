@@ -1,0 +1,170 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//go:build linux && (amd64 || arm64)
+
+package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
+)
+
+const (
+	// 1TB of executable address space
+	MaxArgMapScaleFactor = 8
+
+	minFrameCacheSize = 1024
+	maxFrameCacheSize = 1024 * 1024
+)
+
+// ErrorMode controls how the profiler receiver handles startup errors.
+type ErrorMode string
+
+const (
+	// IgnoreError means startup errors are logged but not returned to the collector.
+	IgnoreError ErrorMode = "ignore"
+	// PropagateError means startup errors are returned to the collector (default).
+	PropagateError ErrorMode = "propagate"
+)
+
+func (e *ErrorMode) UnmarshalText(text []byte) error {
+	str := ErrorMode(strings.ToLower(string(text)))
+	switch str {
+	case IgnoreError, PropagateError:
+		*e = str
+		return nil
+	default:
+		return fmt.Errorf("unknown error mode %q", str)
+	}
+}
+
+// Config is the configuration for the collector.
+type Config struct {
+	ReporterInterval        time.Duration            `mapstructure:"reporter_interval"`
+	ReporterJitter          float64                  `mapstructure:"reporter_jitter"`
+	MonitorInterval         time.Duration            `mapstructure:"monitor_interval"`
+	SamplesPerSecond        int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize          uint                     `mapstructure:"frame_cache_size"`
+	ProbabilisticInterval   time.Duration            `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold  uint                     `mapstructure:"probabilistic_threshold"`
+	Interpreters            interpreterconfig.Config `mapstructure:"interpreters"`
+	ClockSyncInterval       time.Duration            `mapstructure:"clock_sync_interval"`
+	SendErrorFrames         bool                     `mapstructure:"send_error_frames"`
+	SendIdleFrames          bool                     `mapstructure:"send_idle_frames"`
+	FilterMinProcessAge     time.Duration            `mapstructure:"filter_min_process_age"`
+	VerboseMode             bool                     `mapstructure:"verbose_mode"`
+	OffCPUThreshold         float64                  `mapstructure:"off_cpu_threshold"`
+	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
+	ProbeLinks              []string                 `mapstructure:"probe_links"`
+	LoadProbe               bool                     `mapstructure:"load_probe"`
+	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
+	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
+	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`
+	MaxGRPCRetries          uint32                   `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize           int                      `mapstructure:"max_rpc_msg_size"`
+	BPFFSRoot               string                   `mapstructure:"bpf_fs_root"`
+	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
+	ErrorMode               ErrorMode                `mapstructure:"error_mode"`
+	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
+	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
+
+	// Configuration options that users can not set directly:
+	//
+	// PinnedCPUIDs is derived from TargetCPUIDs during Validate
+	PinnedCPUIDs []int `mapstructure:"-"`
+}
+
+// Validate validates the config.
+// This is automatically called by the config parser as it implements the confmap.Validator interface.
+func (cfg *Config) Validate() error {
+	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
+		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
+	}
+
+	if cfg.SamplesPerSecond < 1 {
+		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
+	}
+
+	if cfg.FrameCacheSize < minFrameCacheSize || cfg.FrameCacheSize > maxFrameCacheSize {
+		return fmt.Errorf("invalid frame cache size %d (min: %d, max: %d)",
+			cfg.FrameCacheSize, minFrameCacheSize, maxFrameCacheSize)
+	}
+
+	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
+		return fmt.Errorf(
+			"eBPF map scaling factor %d exceeds limit (max: %d)",
+			cfg.MapScaleFactor, MaxArgMapScaleFactor,
+		)
+	}
+
+	if cfg.BPFVerifierLogLevel > 2 {
+		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BPFVerifierLogLevel)
+	}
+
+	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {
+		return errors.New(
+			"invalid argument for probabilistic-interval: use " +
+				"a duration between 1 and 5 minutes",
+		)
+	}
+
+	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
+		return errors.New(
+			"invalid argument for off-cpu-threshold. The value " +
+				"should be in the range [0..1]. 0 disables off-cpu profiling")
+	}
+
+	if cfg.FilterMinProcessAge < 0 {
+		return errors.New(
+			"invalid argument for filter-min-process-age. The value " +
+				"should be a non-negative duration. 0 disables minimum process age filtering")
+	}
+
+	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {
+		return errors.New(
+			"invalid argument for reporter-jitter. The value " +
+				"should be in the range [0..1]. 0 disables jitter")
+	}
+
+	if cfg.TargetCPUIDs != "" {
+		cpus, err := tracer.ReadCPURange(cfg.TargetCPUIDs)
+		if err != nil {
+			return fmt.Errorf("invalid argument for target-cpu-ids: %v", err)
+		}
+		cfg.PinnedCPUIDs = cpus
+	}
+
+	if cfg.ProbabilisticThreshold < 1 ||
+		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
+		return fmt.Errorf(
+			"invalid argument for probabilistic-threshold. Value "+
+				"should be between 1 and %d",
+			tracer.ProbabilisticThresholdMax,
+		)
+	}
+
+	if cfg.NoKernelVersionCheck {
+		return nil
+	}
+
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %v", err)
+	}
+
+	var minMajor, minMinor uint32
+	minMajor, minMinor = 5, 10
+	if major < minMajor || (major == minMajor && minor < minMinor) {
+		return fmt.Errorf("host Agent requires kernel version "+
+			"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
+	}
+
+	return nil
+}

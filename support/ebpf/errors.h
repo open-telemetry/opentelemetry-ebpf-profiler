@@ -231,7 +231,10 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // LuaJIT: No entry for this process exists in the LuaJIT process info array
+  ERR_LUAJIT_NO_PROC_INFO = 8000
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H
