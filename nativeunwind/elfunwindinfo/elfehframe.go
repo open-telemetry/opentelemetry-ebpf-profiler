@@ -1003,10 +1003,6 @@ func readEhframe(ef *pfelf.File) (elfRegion, error) {
 		return elfRegion{}, fmt.Errorf("eh_frame_hdr version %d not supported",
 			hdr.version)
 	}
-	if hdr.tableEnc != encAdjustDataRel+encSignedMask+encFormatData4 {
-		return elfRegion{}, fmt.Errorf("eh_frame_hdr table encoding %#x not supported",
-			hdr.tableEnc)
-	}
 	framePtr, err := r.ptr(hdr.ehFramePtrEnc)
 	if err != nil {
 		return elfRegion{}, fmt.Errorf("eh_frame_hdr frame pointer: %v", err)
