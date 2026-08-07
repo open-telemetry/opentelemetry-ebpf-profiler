@@ -89,7 +89,7 @@ func (r *Reader) Init(source io.ReaderAt, start, maxLen int64) {
 	r.flush()
 }
 
-// SetBufferSize configured the read-ahead buffer size.
+// SetBufferSize configures the read-ahead buffer size.
 func (r *Reader) SetBufferSize(size int) {
 	r.bufSize = min(max(size, 1024), maxBufferSize)
 }
@@ -101,9 +101,6 @@ func (r *Reader) Outer() (source io.ReaderAt, start, maxLen int64) {
 
 // Remaining returns number of bytes left before end of segment or section.
 func (r *Reader) Remaining() int64 {
-	if r.nlim != r.nbuf {
-		return int64(r.nlim - r.pos)
-	}
 	return r.slimit - r.off + int64(r.nbuf-r.pos)
 }
 

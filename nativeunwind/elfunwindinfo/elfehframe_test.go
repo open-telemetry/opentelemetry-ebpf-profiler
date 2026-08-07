@@ -139,7 +139,7 @@ func TestParseCIE(t *testing.T) {
 				regRA:     uleb128(8),
 
 				initialState: vmRegs{
-					// The CIE is really for a hypothethical RISC machine
+					// The CIE is really for a hypothetical RISC machine
 					// but map to how it gets generated for x86-64.
 					arch: elf.EM_X86_64,
 					cfa:  vmReg{arch: elf.EM_X86_64, reg: x86RegRSP},
