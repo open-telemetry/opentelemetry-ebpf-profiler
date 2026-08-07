@@ -203,7 +203,7 @@ func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
 }
 
-func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) Meta {
+func (cd *CoredumpProcess) GetProcessMeta(_ []MetaEnricher) Meta {
 	return Meta{}
 }
 

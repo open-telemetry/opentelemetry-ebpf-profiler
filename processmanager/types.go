@@ -130,9 +130,6 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	// includeEnvVars holds a list of env vars that should be captured from processes
-	includeEnvVars libpf.Set[string]
-
 	metaEnrichers []process.MetaEnricher
 }
 
@@ -165,7 +162,7 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, fixed for process lifetime (read-only)
+	// process metadata, updated on executable changes
 	meta process.Meta
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping

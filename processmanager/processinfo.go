@@ -133,10 +133,7 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 
 	// Gather metadata without holding the processmanager lock:
 	// This reads /proc and may invoke arbitrary enricher callbacks.
-	meta := pr.GetProcessMeta(process.MetaConfig{
-		IncludeEnvVars: pm.includeEnvVars,
-		MetaEnrichers:  pm.metaEnrichers,
-	})
+	meta := pr.GetProcessMeta(pm.metaEnrichers)
 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -759,7 +756,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// Update metadata of the process.
 	var meta process.Meta
 	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars, MetaEnrichers: pm.metaEnrichers})
+		meta = pr.GetProcessMeta(pm.metaEnrichers)
 	}
 
 	// Sort and publish the new mappings and meta.

@@ -113,8 +113,12 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
+	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
+	if len(cfg.IncludeEnvVars) > 0 {
+		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(cfg.IncludeEnvVars))
+	}
+
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
-	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+1)
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
 	} else {
@@ -136,7 +140,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		includeEnvVars:           cfg.IncludeEnvVars,
 		metaEnrichers:            metaEnrichers,
 	}
 
