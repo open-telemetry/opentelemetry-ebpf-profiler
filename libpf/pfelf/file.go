@@ -502,16 +502,6 @@ func (f *File) LoadSections() error {
 	return nil
 }
 
-// findProg finds the first matching program header of given type.
-func (f *File) findProg(t elf.ProgType) *Prog {
-	for i := range f.Progs {
-		if f.Progs[i].Type == t {
-			return &f.Progs[i]
-		}
-	}
-	return nil
-}
-
 // Section returns a section with the given name, or nil if no such section exists.
 func (f *File) Section(name string) *Section {
 	if f.InsideCore {
@@ -530,7 +520,17 @@ func (f *File) Section(name string) *Section {
 	return nil
 }
 
-// ProgByVirtualAddress searches the Prog header containing the virtual address.
+// ProgByType finds the first matching program header of given type.
+func (f *File) ProgByType(t elf.ProgType) *Prog {
+	for i := range f.Progs {
+		if f.Progs[i].Type == t {
+			return &f.Progs[i]
+		}
+	}
+	return nil
+}
+
+// ProgByVirtualAddress determines the Prog header containing the virtual address.
 func (f *File) ProgByVirtualAddress(addr uint64) *Prog {
 	// Search for the Program header that contains the start address.
 	for _, ph := range f.loadData {
@@ -578,41 +578,6 @@ func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []
 		return nil, nil, err
 	}
 	return sym, data, nil
-}
-
-// EHFrame constructs a Program header with the EH Frame sections
-func (f *File) EHFrame() (*Prog, error) {
-	p := f.findProg(elf.PT_GNU_EH_FRAME)
-	if p == nil {
-		return nil, errors.New("no PT_GNU_EH_FRAME tag found")
-	}
-	// Find matching PT_LOAD segment
-	for i := range f.Progs {
-		ph := &f.Progs[i]
-		if ph.Type != elf.PT_LOAD || p.Vaddr < ph.Vaddr ||
-			p.Vaddr >= ph.Vaddr+ph.Filesz {
-			continue
-		}
-		// Normally the LOAD segment contains .rodata, .eh_frame_hdr
-		// and .eh_frame. Craft a subset segment that contains the data
-		// from start of the PT_GNU_EH_FRAME start until end of the LOAD
-		// segment.
-		offs := p.Vaddr - ph.Vaddr
-		return &Prog{
-			ProgHeader: elf.ProgHeader{
-				Type:   ph.Type,
-				Flags:  ph.Flags,
-				Off:    ph.Off + offs,
-				Vaddr:  ph.Vaddr + offs,
-				Paddr:  ph.Paddr + offs,
-				Filesz: ph.Filesz - offs,
-				Memsz:  ph.Memsz - offs,
-				Align:  ph.Align,
-			},
-			elfReader: f.getReader(),
-		}, nil
-	}
-	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
 }
 
 // VisitNotes iterates the ELF notes.
