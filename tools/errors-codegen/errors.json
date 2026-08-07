@@ -384,5 +384,20 @@
     "id": 8000,
     "name": "luajit_no_proc_info",
     "description": "LuaJIT: No entry for this process exists in the LuaJIT process info array"
+  },
+  {
+    "id": 9000,
+    "name": "go_no_offsets",
+    "description": "Go: required runtime offsets or layout are missing or invalid"
+  },
+  {
+    "id": 9001,
+    "name": "go_asmcgocall_unwind_failure",
+    "description": "Go: asmcgocall unwind could not recover the caller frame"
+  },
+  {
+    "id": 9002,
+    "name": "go_runtime_load_failure",
+    "description": "Go: failed to read g and runtime.m prefix"
   }
 ]

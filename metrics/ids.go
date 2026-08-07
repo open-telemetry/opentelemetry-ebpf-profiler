@@ -695,6 +695,15 @@ const (
 	// Number of priority PID events deferred (recorded but not signalled) due to rate limiting
 	IDNumPriorityEventDeferred = 302
 
+	// Number of attempted Go asmcgocall stack-switch unwinds
+	IDUnwindGoAsmcgocallAttempts = 303
+
+	// Number of successful Go asmcgocall unwinds
+	IDUnwindGoAsmcgocallSuccess = 304
+
+	// Number of Go asmcgocall unwind failures
+	IDUnwindGoAsmcgocallUnwindFailure = 305
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 303
+	IDMax = 306
 )

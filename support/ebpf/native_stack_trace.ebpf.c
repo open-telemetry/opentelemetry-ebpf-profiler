@@ -167,7 +167,8 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(record, &stop);
+    // This program can unwind Go frames, so no frame is delegated.
+    error = unwind_one_frame(record, &stop, NULL);
     if (error || stop) {
       break;
     }
