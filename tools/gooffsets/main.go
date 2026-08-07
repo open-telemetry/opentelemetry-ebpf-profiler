@@ -52,22 +52,14 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 		return nil, errors.New("type of m in runtime.g is not a pointer")
 	}
 
-	// Read gobuf sp/bp offsets within g.sched.
+	// Read the gobuf offset within g and the bp offset within gobuf, reported as a single
+	// bp offset within g.
 	r.Seek(g.Offset)
 	_, err = r.Next()
 	if err != nil {
 		return nil, err
 	}
-	schedType, _, err := ReadChildTypeAndOffset(r, "sched")
-	if err != nil {
-		return nil, err
-	}
-	r.Seek(schedType.Offset)
-	_, err = r.Next()
-	if err != nil {
-		return nil, err
-	}
-	_, schedSpOff, err := ReadChildTypeAndOffset(r, "sp")
+	schedType, schedOffset, err := ReadChildTypeAndOffset(r, "sched")
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +128,7 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 			mGsignal:   uint32(gsignalOffset),
 			curg:       uint32(curgOffset),
 			labels:     uint32(labelsOffset),
-			schedBpOff: uint32(schedBpOff - schedSpOff),
+			schedBpOff: uint32(schedOffset + schedBpOff),
 		}, nil
 	}
 
@@ -171,7 +163,7 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 		hmapCount:           uint32(countOffset),
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
-		schedBpOff:          uint32(schedBpOff - schedSpOff),
+		schedBpOff:          uint32(schedOffset + schedBpOff),
 	}, nil
 }
 

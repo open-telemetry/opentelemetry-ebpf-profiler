@@ -293,6 +293,9 @@ python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_go)
   *delegate_go = false;
 
   increment_metric(metricID_UnwindNativeAttempts);
+  // ra is read before unwinding, which marks the frame non-leaf and overwrites it. The push
+  // comes after, because unwind_one_frame may hand a Go frame over to PROG_UNWIND_NATIVE,
+  // which then pushes this same frame itself.
   u64 file = record->state.text_section_id;
   u64 line = record->state.text_section_offset;
   bool ra  = record->state.return_address;

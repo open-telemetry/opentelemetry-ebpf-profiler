@@ -208,33 +208,30 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
   }
 
   // Post-gosave because g == m.g0 happens after gosave_systemstack_switch switched tls to m.g0.
-  // One read to cover:
-  //   sizeof(g.m) + sched_bp_off + sizeof(bp).
-  const u64 max_bp_off = sizeof(record->goUnwindScratch.buf) - 2 * sizeof(u64);
-  u64 bp_off           = offs->sched_bp_off;
-  if (bp_off > max_bp_off) {
-    DEBUG_PRINT("asmcgocall: sched_bp_off exceeds scratch");
+  // The read is anchored at curg, so one read of the g prefix covers both the curg.m check
+  // and g.sched.bp.
+  const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u64 m_off         = offs->m_offset;
+  u64 bp_off        = offs->sched_bp_off;
+  if (bp_off > max_off || m_off > bp_off) {
+    DEBUG_PRINT("asmcgocall: unusable g offsets");
     goto unwind_failure;
   }
-  u64 gobuf_read_size = sizeof(u64) + bp_off + sizeof(u64);
-  if (bpf_probe_read_user(scratch, gobuf_read_size, (void *)(ctx.m_curg + offs->m_offset))) {
+  if (bpf_probe_read_user(scratch, bp_off + sizeof(u64), (void *)ctx.m_curg)) {
     DEBUG_PRINT("asmcgocall: failed to read curg gobuf");
     goto unwind_failure;
   }
 
-  u64 curg_m = *((u64 *)scratch);
+  u64 curg_m = *((u64 *)(scratch + m_off));
   // Safety guard to ensure m.curg still point at a g bound to this m before we trust gobuf.
   if (curg_m != ctx.m) {
     DEBUG_PRINT("asmcgocall: stale curg (curg.m != m)");
     goto unwind_failure;
   }
 
-  // We need to read g.sched that is 8 bytes after g.m.
-  u8 *gobuf    = scratch + sizeof(u64);
-  u64 saved_sp = *((u64 *)gobuf);
-  u64 saved_bp = *((u64 *)(gobuf + bp_off));
-  if (!saved_sp || !saved_bp) {
-    DEBUG_PRINT("asmcgocall: gobuf sp/bp not populated");
+  u64 saved_bp = *((u64 *)(scratch + bp_off));
+  if (!saved_bp) {
+    DEBUG_PRINT("asmcgocall: gobuf bp not populated");
     goto unwind_failure;
   }
 
