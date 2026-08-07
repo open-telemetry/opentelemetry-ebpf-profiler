@@ -11,10 +11,19 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-// Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
-func Start(ctx context.Context, interval time.Duration, callback func()) func() {
+// Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled
+// or the returned function is called.
+//
+// The returned function unconditionally stops the goroutine (it does not
+// depend on <ctx> being, or ever becoming, canceled) and blocks until it has
+// actually exited -- so it is always safe to call, but must not be called
+// from within <callback> itself.
+func Start(parentCtx context.Context, interval time.Duration, callback func()) func() {
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(interval)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -27,7 +36,10 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // CallbackFunc is a function that can be triggered periodically or manually.
@@ -37,12 +49,21 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 type CallbackFunc func(manualTrigger bool) bool
 
 // StartWithManualTrigger starts a timer goroutine that calls <callback> every
-// <interval> until the <ctx> is canceled or <callback> returns false.
+// <interval> until the <ctx> is canceled, <callback> returns false, or the
+// returned function is called.
 // The 'trigger' channel can be used to trigger callback immediately.
-func StartWithManualTrigger(ctx context.Context, interval time.Duration,
+//
+// The returned function unconditionally stops the goroutine (it does not
+// depend on <ctx> being, or ever becoming, canceled, or on <callback> ever
+// returning false) and blocks until it has actually exited -- so it is
+// always safe to call, but must not be called from within <callback> itself.
+func StartWithManualTrigger(parentCtx context.Context, interval time.Duration,
 	trigger chan bool, callback CallbackFunc) func() {
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(interval)
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -61,16 +82,26 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		cancel()
+		<-done
+	}
 }
 
 // StartWithJitter starts a timer that calls <callback> every <baseDuration+jitter>
-// until the <ctx> is canceled. <jitter>, [0..1], is used to add +/- jitter
-// to <baseDuration> at every iteration of the timer.
-func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter float64,
+// until the <ctx> is canceled or the returned function is called. <jitter>,
+// [0..1], is used to add +/- jitter to <baseDuration> at every iteration.
+//
+// The returned function unconditionally stops the goroutine and blocks until
+// it has actually exited -- so it is always safe to call, but must not be
+// called from within <callback> itself.
+func StartWithJitter(parentCtx context.Context, baseDuration time.Duration, jitter float64,
 	callback func()) func() {
+	ctx, cancel := context.WithCancel(parentCtx)
 	ticker := time.NewTicker(libpf.AddJitter(baseDuration, jitter))
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		defer ticker.Stop()
 
 		for {
@@ -84,5 +115,8 @@ func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter flo
 		}
 	}()
 
-	return ticker.Stop
+	return func() {
+		cancel()
+		<-done
+	}
 }
