@@ -130,18 +130,7 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	// includeEnvVars holds a list of env vars that should be captured from processes
-	includeEnvVars libpf.Set[string]
-
-	// selfCgroupIno is the inode of the profiler's cgroup directory
-	// (stat("/sys/fs/cgroup")). Used to identify processes whose cgroup root
-	// matches the profiler's, which need the selfContainerID fallback.
-	selfCgroupIno uint64
-
-	// selfContainerID is the profiler's own container ID, detected once at startup.
-	// Used as a fallback when /proc/<pid>/cgroup yields no container ID for processes
-	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
-	selfContainerID libpf.String
+	metaEnrichers []process.MetaEnricher
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -173,8 +162,8 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, fixed for process lifetime (read-only)
-	meta process.ProcessMeta
+	// process metadata, updated on executable changes
+	meta process.Meta
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information
