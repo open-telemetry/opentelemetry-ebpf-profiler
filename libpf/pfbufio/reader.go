@@ -129,6 +129,11 @@ func (r *Reader) Tell() int64 {
 	return r.off - r.start - int64(r.nbuf-r.pos)
 }
 
+// updateBufferLimit updates the 'nlim' field after 'nbuf', 'off' or 'slimit' change.
+func (r *Reader) updateBufferLimit() {
+	r.nlim = r.nbuf - int(max(0, r.off-r.slimit))
+}
+
 // fill populates the internal array from the source.
 func (r *Reader) fill() error {
 	if r.off >= r.slimit {
@@ -153,7 +158,7 @@ func (r *Reader) fill() error {
 	n, err := r.source.ReadAt(r.buf[preserve:preserve+int(toRead)], r.off)
 	r.nbuf = n + preserve
 	r.off += int64(n)
-	r.nlim = r.nbuf - int(max(0, r.off-r.slimit))
+	r.updateBufferLimit()
 
 	if n > 0 {
 		return nil
@@ -420,7 +425,7 @@ func (r *Reader) StartSection(n int64) error {
 
 	r.sectionEnds = append(r.sectionEnds, r.slimit)
 	r.slimit = r.off - int64(r.nbuf-r.pos) + n
-	r.nlim = r.nbuf - int(max(0, r.off-r.slimit))
+	r.updateBufferLimit()
 	return nil
 }
 
@@ -433,5 +438,5 @@ func (r *Reader) EndSection() {
 		r.Discard(int(remaining))
 	}
 	r.slimit = oldEnd
-	r.nlim = r.nbuf - int(max(0, r.off-r.slimit))
+	r.updateBufferLimit()
 }
