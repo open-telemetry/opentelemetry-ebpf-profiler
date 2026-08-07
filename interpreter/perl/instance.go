@@ -398,6 +398,11 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 	return c, nil
 }
 
+func (i *perlInstance) RuntimeInfo() (string, string, bool) {
+	ver := i.d.version
+	return "perl", fmt.Sprintf("%d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff), true
+}
+
 func (i *perlInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Perl) {
 		return interpreter.ErrMismatchInterpreterType

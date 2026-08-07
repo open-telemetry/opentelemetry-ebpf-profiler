@@ -13,6 +13,8 @@ type TraceEventMeta struct {
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
+	RuntimeName    string
+	RuntimeVersion string
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
 	ProfileType    *TypeMetadata
@@ -39,7 +41,9 @@ type TraceEventsTree map[ResourceKey]ResourceToProfiles
 type ResourceToProfiles struct {
 	// EnvVars can not be part of ResourceKey as maps are not
 	// comparable.
-	EnvVars map[libpf.String]libpf.String
+	EnvVars        map[libpf.String]libpf.String
+	RuntimeName    string
+	RuntimeVersion string
 
 	// Events holds the actual profiling information.
 	Events map[*TypeMetadata]SampleToEvents
