@@ -3,6 +3,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 import (
 	"debug/elf"
 	"errors"
+	"fmt"
 	"testing"
 	"unsafe"
 
@@ -157,10 +158,10 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (tp *testProcess) GetProcessMeta(cfg process.MetaConfig) process.Meta {
+func (tp *testProcess) GetProcessMeta(enrichers []process.MetaEnricher) process.Meta {
 	meta := process.Meta{Executable: tp.exe}
-	for _, e := range cfg.MetaEnrichers {
-		e.EnrichMeta(tp.pid, &meta)
+	for _, e := range enrichers {
+		e.EnrichMeta(fmt.Sprintf("/proc/%d", tp.pid), &meta)
 	}
 	return meta
 }
@@ -557,9 +558,9 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	pid := libpf.PID(123)
 	key := libpf.Intern("test.key")
 	enricherCalls := 0
-	enricher := process.MetaEnricherFunc(func(p libpf.PID, meta *process.Meta) {
+	enricher := process.MetaEnricherFunc(func(procBase string, meta *process.Meta) {
 		enricherCalls++
-		require.Equal(pid, p)
+		require.Equal(fmt.Sprintf("/proc/%d", pid), procBase)
 		meta.ExtraMeta = map[libpf.String]string{key: meta.Executable.String()}
 	})
 
