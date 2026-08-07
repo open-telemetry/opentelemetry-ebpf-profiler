@@ -962,74 +962,67 @@ func elfRegionFromSection(s *pfelf.Section) elfRegion {
 	}
 }
 
-type ehframeInfo struct {
-	header      elfRegion
-	frames      elfRegion
-	hdr         ehFrameHdr
-	tableOffset int64
-}
-
-// parseEhframe resolves the .eh_frame_hdr and .eh_frame and reads the header if available.
-func readEhframe(ef *pfelf.File) (*ehframeInfo, error) {
-	var info ehframeInfo
+// parseEhframe returns an elfRegion for the eh_frame area.
+func readEhframe(ef *pfelf.File) (elfRegion, error) {
+	// Use the section directly if available
+	if frames := elfRegionFromSection(ef.Section(".eh_frame")); frames.Valid() {
+		return frames, nil
+	}
 
 	// Use section headers first, they are most accurate and usually present.
-	info.header = elfRegionFromSection(ef.Section(".eh_frame_hdr"))
-	info.frames = elfRegionFromSection(ef.Section(".eh_frame"))
-
-	if !info.header.Valid() {
-		// If header was not available, try the PT_GNU_EH_FRAME tag
-		if p := ef.ProgByType(elf.PT_GNU_EH_FRAME); p != nil {
-			info.header = elfRegion{
-				offset: int64(p.Off),
-				length: int64(p.Filesz),
-				vaddr:  p.Vaddr,
-			}
+	header := elfRegionFromSection(ef.Section(".eh_frame_hdr"))
+	if !header.Valid() {
+		// Synthesize from the PT_GNU_EH_FRAME program header
+		p := ef.ProgByType(elf.PT_GNU_EH_FRAME)
+		if p == nil {
+			return elfRegion{}, nil
+		}
+		header = elfRegion{
+			offset: int64(p.Off),
+			length: int64(p.Filesz),
+			vaddr:  p.Vaddr,
 		}
 	}
 
-	if info.header.Valid() {
-		// Cap read-ahead to header with two pointers (don't read the search table)
-		hdrLength := int64(unsafe.Sizeof(ehFrameHdr{}) + 2*8)
-		rdr := pfbufio.NewReader(ef.Underlying(), info.header.offset, hdrLength)
-		defer pfbufio.PutReader(rdr)
-		r := reader{
-			Reader:  rdr,
-			machine: ef.Machine,
-			vaddr:   info.header.vaddr,
-		}
-
-		// Read and parse the header
-		if _, err := r.Read(pfunsafe.FromPointer(&info.hdr)); err != nil {
-			return nil, err
-		}
-		if info.hdr.version != 1 {
-			return nil, fmt.Errorf("eh_frame_hdr version %d not supported",
-				info.hdr.version)
-		}
-		if info.hdr.tableEnc != encAdjustDataRel+encSignedMask+encFormatData4 {
-			return nil, fmt.Errorf("eh_frame_hdr table encoding %#x not supported",
-				info.hdr.tableEnc)
-		}
-		framePtr, err := r.ptr(info.hdr.ehFramePtrEnc)
-		if err != nil {
-			return nil, fmt.Errorf("eh_frame_hdr frame pointer: %v", err)
-		}
-		info.tableOffset = r.Tell()
-
-		if !info.frames.Valid() {
-			if p := ef.ProgByVirtualAddress(uint64(framePtr)); p != nil {
-				fileoffset := p.Off + uint64(framePtr) - p.Vaddr
-				info.frames = elfRegion{
-					offset: int64(fileoffset),
-					length: int64(p.Filesz + p.Off - fileoffset),
-					vaddr:  uint64(framePtr),
-				}
-			}
-		}
+	// Cap read-ahead to header with two pointers (don't read the search table)
+	var hdr ehFrameHdr
+	hdrLength := int64(unsafe.Sizeof(hdr) + 2*8)
+	rdr := pfbufio.NewReader(ef.Underlying(), header.offset, hdrLength)
+	defer pfbufio.PutReader(rdr)
+	r := reader{
+		Reader:  rdr,
+		machine: ef.Machine,
+		vaddr:   header.vaddr,
 	}
 
-	return &info, nil
+	// Read and parse the header
+	if _, err := r.Read(pfunsafe.FromPointer(&hdr)); err != nil {
+		return elfRegion{}, err
+	}
+	if hdr.version != 1 {
+		return elfRegion{}, fmt.Errorf("eh_frame_hdr version %d not supported",
+			hdr.version)
+	}
+	if hdr.tableEnc != encAdjustDataRel+encSignedMask+encFormatData4 {
+		return elfRegion{}, fmt.Errorf("eh_frame_hdr table encoding %#x not supported",
+			hdr.tableEnc)
+	}
+	framePtr, err := r.ptr(hdr.ehFramePtrEnc)
+	if err != nil {
+		return elfRegion{}, fmt.Errorf("eh_frame_hdr frame pointer: %v", err)
+	}
+
+	p := ef.ProgByVirtualAddress(uint64(framePtr))
+	if p == nil {
+		return elfRegion{}, fmt.Errorf("eh_frame_hdr: unmappable frame pointer %x", framePtr)
+	}
+
+	fileoffset := p.Off + uint64(framePtr) - p.Vaddr
+	return elfRegion{
+		offset: int64(fileoffset),
+		length: int64(p.Filesz + p.Off - fileoffset),
+		vaddr:  uint64(framePtr),
+	}, nil
 }
 
 // walkFDEs walks .debug_frame or .eh_frame section, and processes it for stack deltas.
@@ -1073,7 +1066,6 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, frames elfRegion, debugFrame bo
 			if err != nil {
 				return fmt.Errorf("failed to parse FDE %#x: CIE %#x: %v", id, ciePos, err)
 			}
-
 			if _, err = r.parseFDE(id, n, 0, cie, ee); err != nil {
 				return fmt.Errorf("failed to parse FDE %#x: %v", id, err)
 			}
@@ -1088,11 +1080,11 @@ func hashInt64(u int64) uint32 {
 
 // parseEHFrame parses the .eh_frame DWARF info, extracting stack deltas.
 func (ee *elfExtractor) parseEHFrame() error {
-	info, err := readEhframe(ee.file)
-	if err != nil || !info.frames.Valid() {
+	frames, err := readEhframe(ee.file)
+	if err != nil || !frames.Valid() {
 		return err
 	}
-	return ee.walkFDEs(ee.file, info.frames, false)
+	return ee.walkFDEs(ee.file, frames, false)
 }
 
 // parseDebugFrame parses the .debug_frame DWARF info, extracting stack deltas.
