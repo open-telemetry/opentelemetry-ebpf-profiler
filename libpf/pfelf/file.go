@@ -143,6 +143,9 @@ type File struct {
 	// InsideCore indicates that this ELF is mapped from a coredump ELF
 	InsideCore bool
 
+	// isExecutable is set for main executable program (not for shared libraries)
+	isExecutable bool
+
 	// Fields to mimic elf.debug
 	Type    elf.Type
 	Machine elf.Machine
@@ -342,6 +345,9 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		return int(a.Flags&(elf.PF_R|elf.PF_X)) - int(b.Flags&(elf.PF_R|elf.PF_X))
 	})
 
+	if f.Type == elf.ET_EXEC {
+		f.isExecutable = true
+	}
 	for i := range f.Progs {
 		p := &f.Progs[i]
 		if p.Filesz <= 0 {
@@ -368,6 +374,10 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					adjustedVal -= bias
 				}
 				switch elf.DynTag(dyn.Tag) {
+				case elf.DT_FLAGS_1:
+					if elf.DynFlag1(dyn.Val)&elf.DF_1_PIE != 0 {
+						f.isExecutable = true
+					}
 				case elf.DT_NEEDED:
 					f.neededIndexes = append(f.neededIndexes, int64(dyn.Val))
 				case elf.DT_SONAME:
@@ -383,6 +393,8 @@ func newFile(r io.ReaderAt, closer io.Closer,
 				}
 			}
 			pfbufio.PutReader(rdr)
+		case elf.PT_INTERP:
+			f.isExecutable = true
 		}
 	}
 
@@ -1259,6 +1271,11 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 		dynStrings = append(dynStrings, rm.String(strAddr))
 	}
 	return dynStrings, nil
+}
+
+// IsExecutable returns true if this ELF is an executable program (and not a shared library).
+func (f *File) IsExecutable() bool {
+	return f.isExecutable
 }
 
 // IsGolang determines if this ELF is a Golang executable
