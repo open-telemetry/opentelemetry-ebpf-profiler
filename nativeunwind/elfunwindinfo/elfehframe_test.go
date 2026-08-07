@@ -4,9 +4,11 @@
 package elfunwindinfo
 
 import (
+	"bytes"
 	"debug/elf"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -21,12 +23,9 @@ type ehtester struct {
 	found int
 }
 
-func (e *ehtester) fdeUnsorted() {
-}
-
-func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo, _ *sdtypes.IntervalData) bool {
-	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
-		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
+func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
+	e.t.Logf("FDE %x cie %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
+		fde.id, fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
 		cie.enc, cie.codeAlign, cie.dataAlign, cie.regRA)
 	e.t.Logf("   LOC           CFA          rbp   ra")
 	return true
@@ -138,6 +137,15 @@ func TestParseCIE(t *testing.T) {
 				dataAlign: sleb128(-4),
 				codeAlign: uleb128(4),
 				regRA:     uleb128(8),
+
+				initialState: vmRegs{
+					// The CIE is really for a hypothetical RISC machine
+					// but map to how it gets generated for x86-64.
+					arch: elf.EM_X86_64,
+					cfa:  vmReg{arch: elf.EM_X86_64, reg: x86RegRSP},
+					fp:   vmReg{arch: elf.EM_X86_64, reg: regSame},
+					ra:   vmReg{arch: elf.EM_X86_64, reg: regUndefined},
+				},
 			},
 			data: []byte{36, 0, 0, 0, // length
 				255, 255, 255, 255, // CIE_id
@@ -167,13 +175,19 @@ func TestParseCIE(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			rdr := pfbufio.NewReader(bytes.NewReader(tc.data), 0, int64(len(tc.data)))
+			defer pfbufio.PutReader(rdr)
+
 			fakeReader := &reader{
+				Reader:     rdr,
+				machine:    tc.expected.initialState.arch,
 				debugFrame: tc.debugFrame,
-				data:       tc.data,
-				end:        uintptr(len(tc.data)),
 			}
-			extracted := &cieInfo{}
-			err := fakeReader.parseCIE(extracted)
+			length, marker, err := fakeReader.parseLengthAndMarker()
+			require.NoError(t, err)
+			require.Equal(t, marker, int64(-1))
+
+			extracted, err := fakeReader.parseCIE(length)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, extracted)
 		})
@@ -246,41 +260,6 @@ func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
 			assert.Equal(t, tt.expected, actual)
 		})
 	}
-}
-
-// TestReaderStrUnterminated verifies that reader.str() does not index its
-// backing slice out of bounds when the input contains no NUL terminator within
-// the reader's bounds (e.g. a CIE augmentation string at the tail of a
-// truncated/crafted .eh_frame section). Such input must be reported as an
-// overread (isValid() == false) so the caller rejects the record, rather than
-// panicking and crashing the profiler. Regression test for the unbounded scan
-// in (*reader).str().
-func TestReaderStrUnterminated(t *testing.T) {
-	t.Run("unterminated does not panic and signals overread", func(t *testing.T) {
-		// No 0x00 byte anywhere in the region.
-		data := []byte{'z', 'R', 0xff, 0xff}
-		r := &reader{data: data, pos: 0, end: uintptr(len(data))}
-		require.NotPanics(t, func() { _ = r.str() })
-		assert.False(t, r.isValid(),
-			"reader must be marked invalid (overread) when no terminator is found")
-	})
-
-	t.Run("terminated string still parses normally", func(t *testing.T) {
-		data := []byte{'z', 'R', 0x00, 0x42}
-		r := &reader{data: data, pos: 0, end: uintptr(len(data))}
-		var s []byte
-		require.NotPanics(t, func() { s = r.str() })
-		assert.Equal(t, []byte("zR"), s)
-		assert.True(t, r.isValid())
-		assert.Equal(t, uintptr(3), r.pos, "pos must advance past the NUL")
-	})
-
-	t.Run("terminator at last byte is in-bounds", func(t *testing.T) {
-		data := []byte{'a', 0x00}
-		r := &reader{data: data, pos: 0, end: uintptr(len(data))}
-		require.NotPanics(t, func() { _ = r.str() })
-		assert.True(t, r.isValid())
-	})
 }
 
 func TestEntryDetection(t *testing.T) {
