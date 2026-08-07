@@ -65,6 +65,27 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	require.Equal(t, 1, pm.frameCache.Len())
 }
 
+func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
+	requestedEnvVars := libpf.Set[string]{"FOO": {}}
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		IncludeEnvVars:        requestedEnvVars,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, pm.reportEnvVars)
+	assert.Equal(t, libpf.Set[string]{
+		"FOO": {}, "OTEL_SERVICE_NAME": {}, "OTEL_RESOURCE_ATTRIBUTES": {},
+	}, pm.includeEnvVars)
+
+	requestedEnvVars["BAR"] = libpf.Void{}
+	assert.NotContains(t, pm.reportEnvVars, "BAR")
+	assert.NotContains(t, pm.includeEnvVars, "BAR")
+}
+
 func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)

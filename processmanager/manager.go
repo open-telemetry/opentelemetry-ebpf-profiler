@@ -84,15 +84,17 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
-	// Always collect the env vars used to derive process context resource
-	// attributes, independently of the user-configured set. Clone first to avoid
-	// mutating the caller's set.
+	// Keep the user-requested reporting set separate from the full capture set.
+	reportEnvVars := maps.Clone(cfg.IncludeEnvVars)
 	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
 	if includeEnvVars == nil {
 		includeEnvVars = make(libpf.Set[string])
 	}
-	for _, env := range processcontext.EnvVars() {
-		includeEnvVars[env] = libpf.Void{}
+	// Always collect the env vars used to derive process context resource attributes.
+	internalEnvVars := make([]libpf.String, 0, len(processcontext.EnvVars()))
+	for _, name := range processcontext.EnvVars() {
+		includeEnvVars[name] = libpf.Void{}
+		internalEnvVars = append(internalEnvVars, libpf.Intern(name))
 	}
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
@@ -145,6 +147,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           includeEnvVars,
+		reportEnvVars:            reportEnvVars,
+		internalEnvVars:          internalEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
 	}

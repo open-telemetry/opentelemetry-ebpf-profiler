@@ -14,6 +14,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"slices"
@@ -130,16 +131,44 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 		return nil
 	}
 
-	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	pm.fillSelfContainerID(pid, &meta)
+	meta, internalEnvVars := pm.readProcessMeta(pid, pr)
 
 	info := &processInfo{
-		meta:     meta,
-		libcInfo: nil,
+		meta:            meta,
+		internalEnvVars: internalEnvVars,
+		libcInfo:        nil,
 	}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
 	return info
+}
+
+// readProcessMeta collects both user-requested environment variables and the
+// variables needed to derive OTel resource attributes. The latter are copied
+// into a separate map, while reportEnvVars determines which captured values
+// remain in ProcessMeta.
+func (pm *ProcessManager) readProcessMeta(pid libpf.PID, pr process.Process) (
+	process.ProcessMeta, map[libpf.String]libpf.String,
+) {
+	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	pm.fillSelfContainerID(pid, &meta)
+	var internalEnvVars map[libpf.String]libpf.String
+	for _, key := range pm.internalEnvVars {
+		if value, ok := meta.EnvVariables[key]; ok {
+			if internalEnvVars == nil {
+				internalEnvVars = make(map[libpf.String]libpf.String, len(pm.internalEnvVars))
+			}
+			internalEnvVars[key] = value
+		}
+	}
+	maps.DeleteFunc(meta.EnvVariables, func(name, _ libpf.String) bool {
+		_, report := pm.reportEnvVars[name.String()]
+		return !report
+	})
+	if len(meta.EnvVariables) == 0 {
+		meta.EnvVariables = nil
+	}
+	return meta, internalEnvVars
 }
 
 // fillSelfContainerID sets the container ID on meta if the process has the same cgroup
@@ -586,7 +615,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Get existing info
 	oldProcessContextPublishedAtNs := info.processContext.PublishedAtNs
-	oldEnvVars := info.meta.EnvVariables
+	oldInternalEnvVars := info.internalEnvVars
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
 	var numInterpreters int
@@ -761,16 +790,14 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Update metadata of the process.
 	var meta process.ProcessMeta
-	envVars := oldEnvVars
+	internalEnvVars := oldInternalEnvVars
 	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-		pm.fillSelfContainerID(pid, &meta)
-		envVars = meta.EnvVariables
+		meta, internalEnvVars = pm.readProcessMeta(pid, pr)
 	}
 
 	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
 		contextMappingAddr, pid, pr.GetRemoteMemory(),
-		oldProcessContextPublishedAtNs, envVars, updateProcessMeta || newProcess)
+		oldProcessContextPublishedAtNs, internalEnvVars, updateProcessMeta || newProcess)
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
@@ -780,6 +807,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		info.mappings = mappings
 		if updateProcessMeta {
 			info.meta = meta
+			info.internalEnvVars = internalEnvVars
 		}
 		if publishProcessContextInfo {
 			info.processContext = newProcessContextInfo
