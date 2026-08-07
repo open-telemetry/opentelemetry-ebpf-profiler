@@ -4,7 +4,6 @@
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
-	"debug/elf"
 	"errors"
 	"fmt"
 	"go/version"
@@ -98,24 +97,12 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 	if !file.IsGolang() {
 		return nil, nil
 	}
-
-	// Go plugins are shared objects that share the runtime with the main
-	// binary. The offsets we need are determined by the main binary so there
-	// is no reason to create a duplicate instance for a plugin. A shared
-	// library is ET_DYN without a PT_INTERP segment (PIE executables are also
-	// ET_DYN but have PT_INTERP).
-	if file.Type == elf.ET_DYN {
-		hasInterp := false
-		for i := range file.Progs {
-			if file.Progs[i].Type == elf.PT_INTERP {
-				hasInterp = true
-				break
-			}
-		}
-		if !hasInterp {
-			log.Debugf("file %s is a Go shared library, skipping", info.FileName())
-			return nil, nil
-		}
+	if !file.IsExecutable() {
+		// Go plugins are shared objects that share the runtime with the main
+		// binary. The offsets we need are determined by the main binary so there
+		// is no reason to create a duplicate instance for a plugin.
+		log.Debugf("file %s is a Go shared library, skipping", info.FileName())
+		return nil, nil
 	}
 
 	goVersion := file.GoVersion()
