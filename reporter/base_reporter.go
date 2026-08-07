@@ -61,6 +61,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    meta.ContainerID,
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
+		ContextKey:     resourceToContextKey(meta.Resource),
 	}
 	traceHash := traceutil.HashTrace(trace)
 
@@ -69,8 +70,9 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
-			EnvVars: meta.EnvVars,
-			Events:  make(map[*samples.TypeMetadata]samples.SampleToEvents),
+			EnvVars:  meta.EnvVars,
+			Resource: meta.Resource,
+			Events:   make(map[*samples.TypeMetadata]samples.SampleToEvents),
 		}
 	}
 

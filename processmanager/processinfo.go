@@ -14,6 +14,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"slices"
@@ -32,7 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -130,15 +131,44 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 		return nil
 	}
 
-	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	pm.fillSelfContainerID(pid, &meta)
+	meta, internalEnvVars := pm.readProcessMeta(pid, pr)
+
 	info := &processInfo{
-		meta:     meta,
-		libcInfo: nil,
+		meta:            meta,
+		internalEnvVars: internalEnvVars,
+		libcInfo:        nil,
 	}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
 	return info
+}
+
+// readProcessMeta collects both user-requested environment variables and the
+// variables needed to derive OTel resource attributes. The latter are copied
+// into a separate map, while reportEnvVars determines which captured values
+// remain in ProcessMeta.
+func (pm *ProcessManager) readProcessMeta(pid libpf.PID, pr process.Process) (
+	process.ProcessMeta, map[libpf.String]libpf.String,
+) {
+	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	pm.fillSelfContainerID(pid, &meta)
+	var internalEnvVars map[libpf.String]libpf.String
+	for _, key := range pm.internalEnvVars {
+		if value, ok := meta.EnvVariables[key]; ok {
+			if internalEnvVars == nil {
+				internalEnvVars = make(map[libpf.String]libpf.String, len(pm.internalEnvVars))
+			}
+			internalEnvVars[key] = value
+		}
+	}
+	maps.DeleteFunc(meta.EnvVariables, func(name, _ libpf.String) bool {
+		_, report := pm.reportEnvVars[name.String()]
+		return !report
+	})
+	if len(meta.EnvVariables) == 0 {
+		meta.EnvVariables = nil
+	}
+	return meta, internalEnvVars
 }
 
 // fillSelfContainerID sets the container ID on meta if the process has the same cgroup
@@ -582,9 +612,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	oldProcessContextInfo := info.meta.ProcessContextInfo
 
 	// Get existing info
+	oldProcessContextPublishedAtNs := info.processContext.PublishedAtNs
+	oldInternalEnvVars := info.internalEnvVars
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
 	var numInterpreters int
@@ -617,17 +648,20 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	capHint := max(32, min(len(oldMappings), 256))
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
-	var processContextInfo processcontext.Info
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
+
+	// Address of the OTel ProcessContext mapping, or 0 if absent. Reading the
+	// payload is deferred until after GetProcessMeta so env vars are available for the merge.
+	var contextMappingAddr uint64
 
 	// This callback processes each memory mapping, keeping only executable
 	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
-			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
+			contextMappingAddr = m.Vaddr
 			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
 			// PID resynchronization when the process names its context mapping "OTEL_CTX".
 		}
@@ -756,10 +790,14 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Update metadata of the process.
 	var meta process.ProcessMeta
+	internalEnvVars := oldInternalEnvVars
 	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-		pm.fillSelfContainerID(pid, &meta)
+		meta, internalEnvVars = pm.readProcessMeta(pid, pr)
 	}
+
+	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
+		contextMappingAddr, pid, pr.GetRemoteMemory(),
+		oldProcessContextPublishedAtNs, internalEnvVars, updateProcessMeta || newProcess)
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
@@ -769,8 +807,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		info.mappings = mappings
 		if updateProcessMeta {
 			info.meta = meta
+			info.internalEnvVars = internalEnvVars
 		}
-		info.meta.ProcessContextInfo = processContextInfo
+		if publishProcessContextInfo {
+			info.processContext = newProcessContextInfo
+		}
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -832,14 +873,15 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) process.ProcessMeta {
+// metaForPID returns a consistent snapshot of the process metadata and its
+// resolved OTel process context for the given PID.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.ProcessMeta, processcontext.Info) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.meta
+		return procInfo.meta, procInfo.processContext
 	}
-	return process.ProcessMeta{}
+	return process.ProcessMeta{}, processcontext.Info{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.
@@ -917,25 +959,4 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
-}
-
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
-	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
-	if err == nil {
-		return ctxInfo
-	}
-	if errors.Is(err, processcontext.ErrNoUpdate) {
-		return oldProcessContextInfo
-	}
-	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearAttributes()
-		return oldProcessContextInfo
-	}
-
-	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
-	return processcontext.Info{}
 }

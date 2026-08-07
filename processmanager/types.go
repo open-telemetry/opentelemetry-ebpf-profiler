@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -130,8 +131,15 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	// includeEnvVars holds a list of env vars that should be captured from processes
+	// includeEnvVars holds all env vars captured from processes.
 	includeEnvVars libpf.Set[string]
+
+	// reportEnvVars holds only the user-requested env vars that may be reported.
+	reportEnvVars libpf.Set[string]
+
+	// internalEnvVars holds the interned names of the env vars captured for the
+	// profiler's own use, to derive process context resource attributes.
+	internalEnvVars []libpf.String
 
 	// selfCgroupIno is the inode of the profiler's cgroup directory
 	// (stat("/sys/fs/cgroup")). Used to identify processes whose cgroup root
@@ -175,6 +183,13 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 type processInfo struct {
 	// process metadata, fixed for process lifetime (read-only)
 	meta process.ProcessMeta
+	// processContext is the resolved OTel process-context snapshot. It is
+	// published together with meta under ProcessManager.mu.
+	processContext processcontext.Info
+	// internalEnvVars contains the OTel environment values needed to
+	// rebuild processContext without exposing them through process metadata. It
+	// is immutable once published under ProcessManager.mu.
+	internalEnvVars map[libpf.String]libpf.String
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information
