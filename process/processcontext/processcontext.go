@@ -19,7 +19,7 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 	"google.golang.org/protobuf/proto"
@@ -219,7 +219,7 @@ func Resolve(
 			return Info{}, false
 		}
 	default:
-		log.Warnf("Failed to read ProcessContext for PID %d: %v", pid, err)
+		log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
 	}
 
 	return WithMergedEnvVars(Info{}, envVars), true
