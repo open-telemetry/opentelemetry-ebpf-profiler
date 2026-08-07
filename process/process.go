@@ -136,11 +136,18 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
-	return ProcessMeta{
+
+	pMeta := ProcessMeta{
 		Executable:   exePath,
 		ContainerID:  containerID,
 		EnvVariables: envVarMap,
 	}
+
+	for _, e := range cfg.MetaEnrichers {
+		e.EnrichProcessMeta(sp.pid, &pMeta)
+	}
+
+	return pMeta
 }
 
 // parseContainerID parses cgroup v1 and v2 container IDs
@@ -183,14 +190,40 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	return parseContainerID(cgroupFile), nil
 }
 
-// CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
+// cgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
-func CgroupRootInode(pid libpf.PID) (uint64, error) {
+func cgroupRootInode(pid libpf.PID) (uint64, error) {
 	var st unix.Stat_t
 	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
 		return 0, err
 	}
 	return st.Ino, nil
+}
+
+// NewSelfContainerIDEnricher returns a ProcessMetaEnricher that sets the container ID on
+// meta when the process shares the profiler's cgroup root and standard cgroup-based
+// detection returned no result. The profiler's own container ID is detected once at
+// construction time and reused for every subsequent process. If detection fails the
+// returned enricher is a no-op.
+func NewSelfContainerIDEnricher() (ProcessMetaEnricher, error) {
+	selfContainerID, selfCgroupIno, err := detectSelfContainerIDViaInode()
+	if err != nil {
+		return nil, err
+	}
+	return ProcessMetaEnricherFunc(func(pid libpf.PID, meta *ProcessMeta) {
+		if meta.ContainerID != libpf.NullString || selfContainerID == libpf.NullString {
+			return
+		}
+		ino, err := cgroupRootInode(pid)
+		if err != nil {
+			return
+		}
+		if ino == selfCgroupIno {
+			meta.ContainerID = selfContainerID
+		} else {
+			log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, selfCgroupIno)
+		}
+	}), nil
 }
 
 // DetectSelfContainerIDViaInode detects the current process's container ID by matching
@@ -201,7 +234,7 @@ func CgroupRootInode(pid libpf.PID) (uint64, error) {
 // namespace masking. This function walks the host's cgroup tree (via
 // /proc/1/root/sys/fs/cgroup) to find the directory whose inode matches, then extracts
 // the container ID from its path.
-func DetectSelfContainerIDViaInode() (libpf.String, uint64, error) {
+func detectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 	const hostCgroupRoot = "/proc/1/root/sys/fs/cgroup"
 
 	var selfStat unix.Stat_t

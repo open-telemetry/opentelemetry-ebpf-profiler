@@ -104,6 +104,8 @@ type ReadAtCloser = pfelf.ReadAtCloser
 type MetaConfig struct {
 	// IncludeEnvVars holds a list of env vars that should be captured from the process.
 	IncludeEnvVars libpf.Set[string]
+
+	MetaEnrichers []ProcessMetaEnricher
 }
 
 // ProcessMeta contains metadata about a tracked process.
@@ -116,6 +118,10 @@ type ProcessMeta struct {
 	ContainerID libpf.String
 	// process context
 	ProcessContextInfo processcontext.Info
+
+	// ExtraMeta holds arbitrary key-value pairs populated by a ProcessMetaEnricher.
+	// It is nil unless an enricher is configured and explicitly sets values.
+	ExtraMeta map[libpf.String]string
 }
 
 // Process is the interface to inspect ELF coredump/process.
@@ -162,4 +168,20 @@ type Process interface {
 	io.Closer
 
 	pfelf.ELFOpener
+}
+
+// ProcessMetaEnricher is called once per process when it is first observed.
+// Implementations may read from /proc or any other source and store arbitrary
+// key-value pairs in meta.ExtraMeta. The call happens while the process is still
+// alive, so short-lived process data is reliably captured.
+type ProcessMetaEnricher interface {
+	EnrichProcessMeta(libpf.PID, *ProcessMeta)
+}
+
+// ProcessMetaEnricherFunc is an adapter to allow use of plain functions as a
+// ProcessMetaEnricher.
+type ProcessMetaEnricherFunc func(libpf.PID, *ProcessMeta)
+
+func (f ProcessMetaEnricherFunc) EnrichProcessMeta(pid libpf.PID, meta *ProcessMeta) {
+	f(pid, meta)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/process"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
@@ -20,7 +21,10 @@ type Config struct {
 	Version       bool
 
 	ExecutableReporter reporter.ExecutableReporter
-	OnShutdown         func() error
+	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
+	// process discovery time. Multiple enrichers are called in order.
+	ProcessMetaEnrichers []process.ProcessMetaEnricher
+	OnShutdown           func() error
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.

@@ -70,6 +70,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
+	ProcessMetaEnrichers  []process.ProcessMetaEnricher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -112,9 +113,11 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
+	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	} else {
+		cfg.ProcessMetaEnrichers = append(cfg.ProcessMetaEnrichers, selfContainerEnricher)
 	}
 
 	pm := &ProcessManager{
@@ -132,8 +135,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           cfg.IncludeEnvVars,
-		selfCgroupIno:            selfCgroupIno,
-		selfContainerID:          selfContainerID,
+		metaEnrichers:            cfg.ProcessMetaEnrichers,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
@@ -386,6 +388,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		EnvVars:        procMeta.EnvVariables,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
+		ExtraMeta:      procMeta.ExtraMeta,
 	}
 
 	pid := bpfTrace.PID
