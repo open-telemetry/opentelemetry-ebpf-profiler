@@ -213,7 +213,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
   const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
   u64 m_off         = offs->m_offset;
   u64 bp_off        = offs->sched_bp_off;
-  if (bp_off > max_off || m_off > bp_off) {
+  if (m_off > max_off || bp_off > max_off) {
     DEBUG_PRINT("asmcgocall: unusable g offsets");
     goto unwind_failure;
   }
