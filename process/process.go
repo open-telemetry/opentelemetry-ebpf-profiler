@@ -302,10 +302,6 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			flags |= elf.PF_X
 		}
 
-		// Ignore non-readable and non-executable mappings
-		if flags&(elf.PF_R|elf.PF_X) == 0 {
-			continue
-		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
 			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
@@ -333,22 +329,33 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 
 		var path string
 		if inode == 0 {
-			if fields[5] == "[vdso]" {
+			switch fieldValue := fields[5]; {
+			case fieldValue == "[vdso]":
 				// Map to something filename looking with synthesized inode
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			} else if fields[5] == "" {
+			case fieldValue == "":
 				// This is an anonymous mapping, keep it
-			} else if strings.HasPrefix(fields[5], "[anon:") {
-				// Keep named anonymous mapping
-				path = fields[5]
-			} else {
+			case strings.HasPrefix(fieldValue, "[anon:"):
+				// This is an anonymous mapping named with prctl(PR_SET_VMA), keep the name
+				path = trimMappingPath(fieldValue)
+			default:
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {
 			path = trimMappingPath(fields[5])
+		}
+
+		// Ignore non-readable and non-executable mappings except anonymous
+		// reservations. Ruby JIT uses PROT_NONE anonymous VMAs for the unused tail
+		// of the executable reservation, and interpreters need to see them to detect
+		// the full reserved area.
+		mappingForPredicate := RawMapping{Path: path}
+		anonymousMapping := mappingForPredicate.IsAnonymous()
+		if flags&(elf.PF_R|elf.PF_X) == 0 && !anonymousMapping {
+			continue
 		}
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)

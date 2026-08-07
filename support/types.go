@@ -281,6 +281,8 @@ type RubyProcInfo struct {
 	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
+	Jit_start                    uint64
+	Jit_end                      uint64
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
@@ -329,7 +331,7 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x48
+	sizeof_RubyProcInfo   = 0x60
 )
 
 const (
@@ -394,6 +396,7 @@ const (
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
+	RubyFrameTypeJit      = 0x5
 )
 
 var MetricsTranslation = []metrics.MetricID{

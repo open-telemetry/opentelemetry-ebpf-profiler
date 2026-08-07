@@ -127,6 +127,10 @@ typedef enum ErrorCode {
   // Ruby: Unable to read objspace flags
   ERR_RUBY_READ_OBJSPACE_FLAGS = 3033,
 
+  // Ruby: Native resume requested after Ruby JIT, but unwinding was stopped because JIT frames
+  // cannot resume native unwinding
+  ERR_RUBY_JIT_NATIVE_RESUME_UNSUPPORTED = 3034,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 
