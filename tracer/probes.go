@@ -243,7 +243,7 @@ type Probe interface {
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
 // startup. Set LoadProbe: true in the Config passed to NewTracer (or enable
-// off-CPU profiling or ProbeLinks, which also trigger the chain load).
+// off-CPU profiling, which also triggers the chain load).
 // Without the chain the probe attaches successfully but its tail calls into
 // kprobe_progs silently miss, producing no stack samples.
 //
