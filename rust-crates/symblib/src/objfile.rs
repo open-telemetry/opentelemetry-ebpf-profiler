@@ -638,14 +638,14 @@ impl Protection {
     fn from_segment_flags(flags: object::SegmentFlags) -> Option<Self> {
         match flags {
             object::SegmentFlags::Elf { p_flags, .. } => Some(Self {
-                r: p_flags & object::elf::PF_R != 0,
-                w: p_flags & object::elf::PF_W != 0,
-                x: p_flags & object::elf::PF_X != 0,
+                r: p_flags & object::elf::PF_R != object::elf::ProgramFlags(0),
+                w: p_flags & object::elf::PF_W != object::elf::ProgramFlags(0),
+                x: p_flags & object::elf::PF_X != object::elf::ProgramFlags(0),
             }),
             object::SegmentFlags::MachO { maxprot, .. } => Some(Self {
-                r: maxprot & object::macho::VM_PROT_READ != 0,
-                w: maxprot & object::macho::VM_PROT_WRITE != 0,
-                x: maxprot & object::macho::VM_PROT_EXECUTE != 0,
+                r: maxprot & object::macho::VM_PROT_READ != object::macho::VmProt(0),
+                w: maxprot & object::macho::VM_PROT_WRITE != object::macho::VmProt(0),
+                x: maxprot & object::macho::VM_PROT_EXECUTE != object::macho::VmProt(0),
             }),
             _ => None,
         }

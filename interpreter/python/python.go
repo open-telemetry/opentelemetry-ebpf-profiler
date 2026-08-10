@@ -987,8 +987,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 }
 
 // findColdRange finds a relative jump from the _PyEval_EvalFrameDefault outside itself
-// (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the range of the .cold
-// symbol using an instance of elfunwindinfo.EhFrameTable.
+// (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the .cold range.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
 func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {

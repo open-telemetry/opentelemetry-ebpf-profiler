@@ -81,6 +81,17 @@ Rewriting Git history makes it difficult to keep track of iterations during
 code review.
 All pull requests are squashed to a single commit upon merge to `main`.
 
+### Rerunning Failed Workflows
+
+PR authors can rerun failed GitHub Actions workflows by commenting `/rerun` on the pull
+request. This will automatically rerun all failed workflow runs for the PR's latest commit.
+
+Example rerun comment:
+
+```
+/rerun
+```
+
 ### How to Receive Comments
 
 * If the PR is not ready for review, please put `[WIP]` in the title,
