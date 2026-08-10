@@ -49,9 +49,6 @@ func pythonVer(major, minor uint16) uint16 {
 }
 
 const (
-	// maxCodeObjectSize caps the PyCodeObject struct size read from target
-	// memory. Real tp_basicsize values are in the low hundreds of bytes.
-	maxCodeObjectSize = 4096
 	// maxPyMemberDefs caps the number of PyMemberDef entries traversed when
 	// reading introspection data; real tables hold a few dozen entries.
 	maxPyMemberDefs = 256
@@ -107,7 +104,9 @@ type pythonData struct {
 			Data uint `name:"data"`
 		}
 		PyCodeObject struct {
-			Sizeof         uint
+			// Sizeof is PyCode_Type.tp_basicsize read from target memory; the
+			// maxValue tag bounds it to prevent forged-size allocation bombs.
+			Sizeof         uint `maxValue:"4096"`
 			ArgCount       uint `name:"co_argcount"`
 			KwOnlyArgCount uint `name:"co_kwonlyargcount"`
 			Flags          uint `name:"co_flags"`
@@ -520,9 +519,6 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	}
 
 	vms := &p.d.vmStructs
-	if vms.PyCodeObject.Sizeof == 0 || vms.PyCodeObject.Sizeof > maxCodeObjectSize {
-		return nil, fmt.Errorf("unexpected PyCodeObject size %d", vms.PyCodeObject.Sizeof)
-	}
 	cobj := make([]byte, vms.PyCodeObject.Sizeof)
 	if err := p.rm.Read(addr, cobj); err != nil {
 		return nil, fmt.Errorf("failed to read code object: %v", err)
@@ -651,6 +647,31 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	return reflect.Value{}
 }
 
+// maxValueTag is the struct tag that bounds an introspection field read from
+// target memory.
+const maxValueTag = "maxValue"
+
+// validateMaxValue rejects a value read from target memory that is 0 (a failed
+// read) or exceeds the field's maxValue struct tag, if any.
+func validateMaxValue(structType reflect.Type, fieldName string, value uint64) error {
+	field, ok := structType.FieldByName(fieldName)
+	if !ok {
+		return nil
+	}
+	maxStr, ok := field.Tag.Lookup(maxValueTag)
+	if !ok {
+		return nil
+	}
+	maxVal, err := strconv.ParseUint(maxStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid %s maxValue tag %q: %v", fieldName, maxStr, err)
+	}
+	if value == 0 || value > maxVal {
+		return fmt.Errorf("unexpected %s size %d (max %d)", fieldName, value, maxVal)
+	}
+	return nil
+}
+
 func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolName,
 	vmObj any,
 ) error {
@@ -664,6 +685,9 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	reflection := reflect.ValueOf(vmObj).Elem()
 	if f := reflection.FieldByName("Sizeof"); f.IsValid() {
 		size := rm.Uint64(typedataAddress + vms.PyTypeObject.BasicSize)
+		if err := validateMaxValue(reflection.Type(), "Sizeof", size); err != nil {
+			return err
+		}
 		f.SetUint(size)
 	}
 
@@ -672,8 +696,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 		return nil
 	}
 
-	for addr, count := membersPtr, 0; addr != 0 && count < maxPyMemberDefs; addr += vms.PyMemberDef.Sizeof {
-		count++
+	membersEnd := membersPtr + maxPyMemberDefs*vms.PyMemberDef.Sizeof
+	for addr := membersPtr; addr < membersEnd; addr += vms.PyMemberDef.Sizeof {
 		memberName := rm.StringPtr(addr + libpf.Address(vms.PyMemberDef.Name))
 		if memberName == "" {
 			break
@@ -681,9 +705,6 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 		if f := fieldByPythonName(reflection, memberName); f.IsValid() {
 			offset := rm.Uint32(addr + libpf.Address(vms.PyMemberDef.Offset))
 			f.SetUint(uint64(offset))
-		}
-		if vms.PyMemberDef.Sizeof == 0 {
-			break
 		}
 	}
 	return nil

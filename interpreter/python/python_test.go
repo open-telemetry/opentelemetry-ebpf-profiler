@@ -4,38 +4,38 @@
 package python
 
 import (
-	"bytes"
+	"reflect"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
-func TestGetCodeObjectSizeLimit(t *testing.T) {
-	rm := remotememory.RemoteMemory{ReaderAt: bytes.NewReader(make([]byte, 4096))}
+func TestValidateMaxValue(t *testing.T) {
+	type testStruct struct {
+		Sizeof uint `maxValue:"4096"`
+		Plain  uint
+	}
+	structType := reflect.TypeOf(testStruct{})
+
 	cases := []struct {
 		name      string
-		size      uint
+		fieldName string
+		value     uint64
 		wantSizeE bool
 	}{
-		{"oversized 1GiB", 1 << 30, true},
-		{"zero", 0, true},
-		{"just over cap", maxCodeObjectSize + 1, true},
-		{"at cap", maxCodeObjectSize, false},
-		{"nominal", 224, false},
+		{"oversized 1GiB", "Sizeof", 1 << 30, true},
+		{"zero", "Sizeof", 0, true},
+		{"just over cap", "Sizeof", 4096 + 1, true},
+		{"at cap", "Sizeof", 4096, false},
+		{"nominal", "Sizeof", 224, false},
+		{"untagged", "Plain", 1 << 40, false},
+		{"missing field", "Nope", 123, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			d := &pythonData{}
-			d.vmStructs.PyCodeObject.Sizeof = tc.size
-			p := &pythonInstance{d: d, rm: rm}
-
-			_, err := p.getCodeObject(libpf.Address(0x1234), 0)
-			gotSizeErr := err != nil && strings.Contains(err.Error(), "unexpected PyCodeObject size")
-			assert.Equal(t, tc.wantSizeE, gotSizeErr, "err: %v", err)
+			err := validateMaxValue(structType, tc.fieldName, tc.value)
+			assert.Equal(t, tc.wantSizeE, err != nil, "err: %v", err)
 		})
 	}
 }
