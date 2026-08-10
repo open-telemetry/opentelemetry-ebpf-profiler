@@ -257,7 +257,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 	log.Debugf("Found %s stub range list head at %x", stubName, headPtr)
 	blockNum := 0
 	seen := make(map[libpf.Address]libpf.Void)
-	for blockPtr := headPtr + 0x8; blockPtr != 0; {
+	for blockPtr := headPtr + 0x8; blockPtr != 0; blockNum++ {
 		if _, ok := seen[blockPtr]; ok {
 			return
 		}
@@ -282,7 +282,6 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 			i.addRange(ebpf, pid, startAddr, endAddr, startAddr, uint64(codeType|flagLeaf))
 		}
 		blockPtr = npsr.Ptr(block, numRangesInBlock*rangeSize)
-		blockNum++
 	}
 }
 
