@@ -48,6 +48,15 @@ func pythonVer(major, minor uint16) uint16 {
 	return major*0x100 + minor
 }
 
+const (
+	// maxCodeObjectSize caps the PyCodeObject struct size read from target
+	// memory. Real tp_basicsize values are in the low hundreds of bytes.
+	maxCodeObjectSize = 4096
+	// maxPyMemberDefs caps the number of PyMemberDef entries traversed when
+	// reading introspection data; real tables hold a few dozen entries.
+	maxPyMemberDefs = 256
+)
+
 func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	// Py_Version is referenced in CPython internals for versioned Python binaries.
 	// https://github.com/python/cpython/blob/v3.11.0/Doc/c-api/apiabiversion.rst
@@ -511,6 +520,9 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	}
 
 	vms := &p.d.vmStructs
+	if vms.PyCodeObject.Sizeof == 0 || vms.PyCodeObject.Sizeof > maxCodeObjectSize {
+		return nil, fmt.Errorf("unexpected PyCodeObject size %d", vms.PyCodeObject.Sizeof)
+	}
 	cobj := make([]byte, vms.PyCodeObject.Sizeof)
 	if err := p.rm.Read(addr, cobj); err != nil {
 		return nil, fmt.Errorf("failed to read code object: %v", err)
@@ -660,7 +672,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 		return nil
 	}
 
-	for addr := membersPtr; true; addr += vms.PyMemberDef.Sizeof {
+	for addr, count := membersPtr, 0; addr != 0 && count < maxPyMemberDefs; addr += vms.PyMemberDef.Sizeof {
+		count++
 		memberName := rm.StringPtr(addr + libpf.Address(vms.PyMemberDef.Name))
 		if memberName == "" {
 			break
@@ -668,6 +681,9 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 		if f := fieldByPythonName(reflection, memberName); f.IsValid() {
 			offset := rm.Uint32(addr + libpf.Address(vms.PyMemberDef.Offset))
 			f.SetUint(uint64(offset))
+		}
+		if vms.PyMemberDef.Sizeof == 0 {
+			break
 		}
 	}
 	return nil
