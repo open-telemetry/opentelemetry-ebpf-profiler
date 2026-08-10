@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -32,19 +33,31 @@ func TestParseIntrospectionStrideLimit(t *testing.T) {
 	require.Error(t, err)
 }
 
+type countingReaderAt struct {
+	r     *bytes.Reader
+	reads int
+}
+
+func (c *countingReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	c.reads++
+	return c.r.ReadAt(p, off)
+}
+
 func TestParseIntrospectionEntryLimit(t *testing.T) {
-	// Fill the whole table with non-null type-name pointers so the loop cannot
-	// terminate on the empty-name sentinel. The loop must still terminate at
-	// the entry-count cap instead of spinning forever.
+	// Fill every entry with a non-null type-name pointer so the loop cannot
+	// terminate on the empty-name sentinel. The loop must instead stop at the
+	// end-address cap (base + maxEntries*stride) instead of spinning forever.
 	const entries = 1 << 17
 	const stride = 16
-	buf := make([]byte, entries*stride)
-	for i := range buf {
+	const base libpf.Address = 0x2000
+	buf := make([]byte, int(base)+entries*stride)
+	binary.LittleEndian.PutUint64(buf[0x100:], stride)
+	binary.LittleEndian.PutUint64(buf[8:], uint64(base))
+	for i := int(base); i < len(buf); i++ {
 		buf[i] = 0x01
 	}
-	binary.LittleEndian.PutUint64(buf[0x100:], stride)
-	binary.LittleEndian.PutUint64(buf[8:], 1)
-	rm := remotememory.RemoteMemory{ReaderAt: bytes.NewReader(buf)}
+	cr := &countingReaderAt{r: bytes.NewReader(buf)}
+	rm := remotememory.RemoteMemory{ReaderAt: cr}
 
 	it := &hotspotIntrospectionTable{
 		base:        8,
@@ -56,6 +69,9 @@ func TestParseIntrospectionEntryLimit(t *testing.T) {
 	vmd := &hotspotVMData{}
 	err := vmd.parseIntrospection(it, rm, 0)
 	require.NoError(t, err)
+	// The walk must have actually covered the whole table (no early break on a
+	// null sentinel), proving the cap is what terminates it.
+	require.Greater(t, cr.reads, entries)
 }
 
 func TestValidateVMStructSizes(t *testing.T) {

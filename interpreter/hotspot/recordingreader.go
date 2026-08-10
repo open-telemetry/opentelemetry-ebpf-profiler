@@ -22,9 +22,6 @@ type RecordingReader struct {
 	i int
 	// chunk is the number of bytes to read from target process when mora data is needed
 	chunk int
-	// maxBufSize is the maximum number of buffered bytes that we are willing to
-	// allocate. It bounds the amount of target-controlled memory we record.
-	maxBufSize int
 }
 
 // maxRecordingReaderBuf is the cap for how much memory a single RecordingReader
@@ -35,9 +32,9 @@ const maxRecordingReaderBuf = 1 * 1024 * 1024
 func (rr *RecordingReader) ReadByte() (byte, error) {
 	// Readahead to buffer if needed
 	if rr.i >= len(rr.buf) {
-		if len(rr.buf)+rr.chunk > rr.maxBufSize {
+		if len(rr.buf)+rr.chunk > maxRecordingReaderBuf {
 			return 0, fmt.Errorf("recording reader exceeded maximum buffer size of %d bytes",
-				rr.maxBufSize)
+				maxRecordingReaderBuf)
 		}
 		buf := make([]byte, len(rr.buf)+rr.chunk)
 		copy(buf, rr.buf)
@@ -62,9 +59,8 @@ func (rr *RecordingReader) GetBuffer() []byte {
 // newRecordingReader returns a RecordingReader to read and record data from given start.
 func newRecordingReader(reader io.ReaderAt, offs int64, chunkSize uint) *RecordingReader {
 	return &RecordingReader{
-		reader:     reader,
-		offs:       offs,
-		chunk:      int(chunkSize),
-		maxBufSize: maxRecordingReaderBuf,
+		reader: reader,
+		offs:   offs,
+		chunk:  int(chunkSize),
 	}
 }

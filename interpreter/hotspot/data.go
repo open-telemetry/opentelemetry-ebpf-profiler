@@ -25,6 +25,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
+const (
+	// maxIntrospectionStride bounds the per-entry size of the introspection
+	// tables. Real VMStruct/VMType entries are well below 256 bytes.
+	maxIntrospectionStride = 256
+	// maxIntrospectionEntries bounds the number of introspection table entries
+	// parsed; real JVM tables hold a few thousand entries.
+	maxIntrospectionEntries = 1 << 17
+	// maxClassSize caps the size of any per-class struct read from the target
+	// JVM. All real HotSpot classes are well below this value.
+	maxClassSize = 64 * 1024
+)
+
 // hotspotIntrospectionTable contains the resolved ELF symbols for an introspection table
 type hotspotIntrospectionTable struct {
 	skipBaseDref               bool
@@ -235,14 +247,6 @@ func fieldByJavaName(obj reflect.Value, fieldName string) reflect.Value {
 func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 	rm remotememory.RemoteMemory, loadBias libpf.Address,
 ) error {
-	const (
-		// maxIntrospectionStride bounds the per-entry size of the introspection
-		// tables. Real VMStruct/VMType entries are well below 256 bytes.
-		maxIntrospectionStride = 256
-		// maxIntrospectionEntries bounds the number of introspection table
-		// entries parsed; real JVM tables hold a few thousand entries.
-		maxIntrospectionEntries = 1 << 17
-	)
 	stride := libpf.Address(rm.Uint64(it.stride + loadBias))
 	typeOffs := uint(rm.Uint64(it.typeOffset + loadBias))
 	addrOffs := uint(rm.Uint64(it.addressOffset + loadBias))
@@ -261,9 +265,14 @@ func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 	// Parse the introspection table
 	e := make([]byte, stride)
 	vm := reflect.ValueOf(&vmd.vmStructs).Elem()
-	count := 0
-	for addr := base; addr != 0 && count < maxIntrospectionEntries; addr += stride {
-		count++
+	// end is the first address we are not willing to parse. Computing it up
+	// front (instead of counting iterations) makes the bound explicit; base is
+	// already validated to be non-zero above.
+	end := base + libpf.Address(maxIntrospectionEntries)*stride
+	if end < base {
+		return fmt.Errorf("introspection table range overflow")
+	}
+	for addr := base; addr < end; addr += stride {
 		if err := rm.Read(addr, e); err != nil {
 			return err
 		}
@@ -652,7 +661,6 @@ func (vmd *hotspotVMData) validateVMStructSizes() error {
 	}
 
 	// Verify that all struct fields are within limits
-	const maxClassSize = 64 * 1024
 	structs := reflect.ValueOf(&vmd.vmStructs).Elem()
 	for i := 0; i < structs.NumField(); i++ {
 		klass := structs.Field(i)
