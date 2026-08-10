@@ -43,7 +43,7 @@ Although our initial focus with this proposal is on *native* heap, this mechanis
 - Memory profiling is **opt-in**.
 - Live heap tracking has bounded memory usage in the profiler, with both a global cap and a per-process cap, so one pathological or high-allocation process cannot exhaust resources needed to profile other processes.
 - Existing stack unwinding code paths are reused; no new unwinder.
-- Probes inside libraries `dlopen`'d after process start are picked up within a bounded latency; we propose a 5s minimum frequency aligning with the existing polling infrastructure.
+- Probes inside libraries `dlopen`'d after process start are picked up within a bounded latency. We add a periodic reconciliation sweep of all tracked PIDs, staggered over a 60s window, to guarantee deterministic worst-case discovery.
 - Output is standard OTLP profiles using existing sample-type conventions (`alloc_space/bytes`, `alloc_objects/count`, optionally `inuse_space/bytes` and `inuse_objects/count`).
 - The feature respects the profiler's existing sample budget; memory events cannot starve on-CPU profiling.
 - Compatible with x86-64 and arm64 Linux, maintaining the profiler's existing kernel version requirements.
@@ -91,9 +91,9 @@ The profiler expects a target process to emit the following USDTs from a single 
 | `otel_memory:mmap(address, size)` | `address` = mapped region start pointer, `size` = mapped region size in bytes | On successful `mmap` | Subsequent work; build on top of lessons from the initial release |
 | `otel_memory:munmap(address, size)` | `address` = unmapped region start pointer, `size` = unmapped region size in bytes | On successful `munmap` | Subsequent work; build on top of lessons from the initial release |
 
-`weight` is `nsamples * sampling_interval`, already computed by the in-process sampler (see **Background** below for the sampling algorithm). `nsamples` counts the number of sampling-interval boundaries the allocation's byte range crossed: 1 for a typical allocation, more for a single allocation large enough to span several intervals. The profiler uses `weight` directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `calloc`, `aligned_alloc`, etc.
+`weight` is `nsamples * sampling_interval`, already computed by the in-process sampler (see **Background** below for the sampling algorithm). `nsamples` counts the number of sampling-interval boundaries the allocation's byte range crossed: 1 for a typical allocation, more for a single allocation large enough to span several intervals. The profiler uses `weight` directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. We pass weight pre-combined rather than as separate `(nsamples, interval)` arguments because some existing allocator sampling hooks (e.g. jemalloc) already provide the combined result, and in practice the profiler never needs to decompose it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `calloc`, `aligned_alloc`, etc.
 
-For the initial support in the profiler we plan to support `alloc` and `free` only and add `mmap` support subsequently as this is more nuanced.
+For the initial support in the profiler we plan to support `alloc` and `free` only and add `mmap` support subsequently as this is more nuanced. We expect the `mmap`/`munmap` probes to be unweighted, as they fire infrequently enough to capture every call without sampling. They are USDTs rather than syscall hooks because userspace can filter before firing (e.g. only anonymous mappings, suppressing allocator-internal mmaps that would double-count a user-facing allocation).
 
 We don't version the contract explicitly (no version field on the provider or probe names). We think it's unlikely the `alloc`/`free` signatures will need to change once fixed, and if they do, we'd introduce new `_v2`-suffixed probe names rather than mutate the existing ones in place - old and new samplers can then coexist against old and new profiler versions without a coordinated flag day.
 
@@ -198,7 +198,9 @@ Two sibling profiles share the alloc call stacks and timestamps:
 - `sample_type = alloc_space/bytes` - values are USDT `weight`.
 - `sample_type = alloc_objects/count` - value is `1` per event; aggregation gives the number of allocation events captured.
 
-When live-heap profiling is enabled, the free program decrements the correlated allocation's contribution; we additionally emit:
+When live-heap profiling is enabled, the userspace tracker maintains a live set keyed by `(pid, ptr)`, recording each allocation's trace hash and weight. Alloc events insert; free events remove. Periodic snapshots aggregate remaining entries by call stack. This lives in userspace rather than eBPF because producing inuse profiles requires grouping by call stack, and the trace hash is only known after the unwind chain completes and userspace symbolizes the trace. The eBPF-side correlation map exists purely for the free hot path.
+
+We additionally emit:
 
 - `sample_type = inuse_space/bytes`
 - `sample_type = inuse_objects/count`
@@ -238,7 +240,6 @@ The two layers are independent: the in-process sampler is unaware of the control
 - **Attach uprobes to allocator-specific internal sampling paths (`jemalloc`, `tcmalloc`)** - we discount this approach as it is fragile against the internals of the allocators, the allocators do not by default have sampling turned on (or if it is turned on, it may do more work than we want - for instance, with jemalloc and its optional stack-collection behaviour in the sampling path), and does not generalise to all allocators. Additionally, allocators are frequently statically linked, meaning there is no predictable symbol to attach to - internal names and inlining decisions vary across versions and build configurations.
 - **Sample every alloc/free.** Prohibitive overhead; allocators are on the critical path for most workloads.
 - **Global (per-binary) uprobe attachment** rather than per-PID. Loses the ability to opt processes in/out individually and complicates cleanup; doesn't fit the profiler's existing lifecycle model.
-- **Hand-rolled `.note.stapsdt` parsing.** Pointless given the `parca-dev/usdt` parser already exists, is small, and is permissively licensed.
 - **Per-process backpressure from profiler to sampler.** We considered using the global PID controller to feed pressure back proportionally to all sampled processes, so they scale their sampling intervals fairly rather than one process starving others. We discarded this for now because the interface is problematic: passing writable pointers through the USDT is a security concern for the profiler, and alternatives (shared memory mappings, backchannel syscalls) add significant complexity to the userspace sampler. Additionally, the more complex the contract between profiler and sampler, the less likely we can upstream this mechanism into allocators and runtimes themselves.
 
 # Author's Preferred Solution
