@@ -1298,30 +1298,6 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	})
 }
 
-func (t *Tracer) AttachProbes(probes []string) error {
-	for _, probeStr := range probes {
-		probeSpec, err := ParseProbe(probeStr)
-		if err != nil {
-			return err
-		}
-
-		uProbeProg, ok := t.ebpfProgs[probeSpec.ProgName]
-		if !ok {
-			return fmt.Errorf("%s is not available", probeSpec.ProgName)
-		}
-
-		probeLink, err := AttachProbe(uProbeProg, probeSpec)
-		if err != nil {
-			return err
-		}
-
-		h := t.hooks.WLock()
-		h.m[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = probeLink
-		t.hooks.WUnlock(&h)
-	}
-	return nil
-}
-
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
