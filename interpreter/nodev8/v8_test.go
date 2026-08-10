@@ -93,7 +93,8 @@ func TestExtractStringLengthLimit(t *testing.T) {
 
 	tag := uint16(i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag)
 	calls := 0
-	err := i.extractString(0, tag, func(string) error { calls++; return nil })
+	_, err := i.extractString(0, tag, func(string) error { calls++; return nil },
+		maxMemoizedStringBytes, maxStringDepth)
 	require.Error(t, err)
 	require.Zero(t, calls)
 }
@@ -107,7 +108,8 @@ func TestExtractStringValid(t *testing.T) {
 
 	tag := uint16(i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag)
 	got := ""
-	err := i.extractString(0, tag, func(s string) error { got += s; return nil })
+	_, err := i.extractString(0, tag, func(s string) error { got += s; return nil },
+		maxMemoizedStringBytes, maxStringDepth)
 	require.NoError(t, err)
 	assert.Equal(t, "abcdef", got)
 }
@@ -128,7 +130,8 @@ func TestExtractStringConsCycle(t *testing.T) {
 
 	// A self-referencing ConsString must be stopped by the depth bound instead
 	// of exhausting the stack.
-	err := i.extractString(A|HeapObjectTag, 0, func(string) error { return nil })
+	_, err := i.extractString(A|HeapObjectTag, 0, func(string) error { return nil },
+		maxSourceStringBytes, maxStringDepth)
 	require.Error(t, err)
 }
 
