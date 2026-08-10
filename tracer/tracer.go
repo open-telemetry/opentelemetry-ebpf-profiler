@@ -206,9 +206,6 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
-	// Probes holds a list of probe_type:target[:symbol] elements to which
-	// a probe will be attached.
-	ProbeLinks []string
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
@@ -360,7 +357,7 @@ func (t *Tracer) Close() {
 // It is the single source of truth consulted both during initialization and when recording
 // kprobeChainLoaded on the Tracer.
 func kprobeChainRequired(cfg *Config) bool {
-	return len(cfg.ProbeLinks) > 0 || cfg.LoadProbe
+	return cfg.LoadProbe
 }
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
@@ -517,24 +514,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
 			ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
-		}
-	}
-
-	if len(cfg.ProbeLinks) > 0 {
-		// kprobe__generic is only needed in ebpfProgs when ProbeLinks are configured:
-		// AttachProbes retrieves it from there. Custom probes (Enable path) load their
-		// own fresh instance via ProbeContext.LoadProbeUnwinders, so we skip it here.
-		probeProgs := []ProgLoaderHelper{
-			{
-				Name:             genericProgName,
-				NoTailCallTarget: true,
-				Enable:           true,
-			},
-		}
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], probeProgs,
-			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
-			ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
 	}
 

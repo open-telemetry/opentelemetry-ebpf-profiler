@@ -102,7 +102,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticInterval:   c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
 		IncludeEnvVars:          envVars,
-		ProbeLinks:              c.config.ProbeLinks,
 		LoadProbe:               c.config.LoadProbe || len(c.config.Probes) > 0,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
@@ -127,13 +126,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
-
-	if len(c.config.ProbeLinks) > 0 {
-		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
-			return fmt.Errorf("failed to attach probes: %v", err)
-		}
-		log.Info("Attached probes")
-	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)

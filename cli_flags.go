@@ -178,7 +178,18 @@ func parseArgs() (*controller.Config, error) {
 	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
 
 	fs.Func("probe-link", probeLinkHelper, func(link string) error {
-		args.ProbeLinks = append(args.ProbeLinks, link)
+		probeSpec, err := tracer.ParseProbe(link)
+		if err != nil {
+			return err
+		}
+		args.Probes = append(args.Probes, config.Probe{
+			Type: "kprobe",
+			Config: map[string]any{
+				"mode":   probeSpec.Mode.String(),
+				"symbol": probeSpec.Symbol,
+				"target": probeSpec.Target,
+			},
+		})
 		return nil
 	})
 

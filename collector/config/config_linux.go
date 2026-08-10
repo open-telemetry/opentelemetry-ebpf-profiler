@@ -73,7 +73,6 @@ type Config struct {
 	FilterMinProcessAge     time.Duration            `mapstructure:"filter_min_process_age"`
 	VerboseMode             bool                     `mapstructure:"verbose_mode"`
 	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
-	ProbeLinks              []string                 `mapstructure:"probe_links"`
 	LoadProbe               bool                     `mapstructure:"load_probe"`
 	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`

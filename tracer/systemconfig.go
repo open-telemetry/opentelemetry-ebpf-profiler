@@ -455,7 +455,7 @@ func probeVMALookupSupport(cfg *Config) (bool, string) {
 	defer restoreRlimit()
 
 	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
-	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+	if cfg.LoadProbe {
 		progTypes = append(progTypes, cebpf.Kprobe)
 	}
 
@@ -675,8 +675,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 // setOriginIDs assigns an origin ID to every kind of sample the tracer's
 // eBPF programs can produce and writes each ID into the corresponding
-// RODATA variable. Sampling is always active; probe profiling only gets
-// one if ProbeLinks are configured.
+// RODATA variable.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
 	sampling, err := origins.Register(&samples.TypeMetadata{
 		PeriodType: "cpu",
@@ -689,23 +688,6 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 	}
 	if err := coll.Variables["origin_id_sampling"].Set(sampling); err != nil {
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
-	}
-
-	// ProbeLinks use the generic eBPF program loaded at startup and need their
-	// origin ID baked into RODATA here. Custom probes (the Enable path) skip
-	// this block: they register their own origin IDs dynamically in Tracer.Enable
-	// before calling Probe.Load, so LoadProbe alone does not require a static ID.
-	if len(cfg.ProbeLinks) > 0 {
-		probe, err := origins.Register(&samples.TypeMetadata{
-			SampleType: "events",
-			SampleUnit: "count",
-		})
-		if err != nil {
-			return err
-		}
-		if err := coll.Variables["origin_id_probe"].Set(uint16(probe)); err != nil {
-			return fmt.Errorf("failed to set origin_id_probe: %v", err)
-		}
 	}
 
 	return nil
