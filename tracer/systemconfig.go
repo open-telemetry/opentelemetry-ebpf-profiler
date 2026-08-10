@@ -455,7 +455,7 @@ func probeVMALookupSupport(cfg *Config) (bool, string) {
 	defer restoreRlimit()
 
 	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
-	if cfg.OffCPUThreshold > 0 || len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+	if cfg.OffCPUThreshold > 0 || cfg.LoadProbe {
 		progTypes = append(progTypes, cebpf.Kprobe)
 	}
 
@@ -708,23 +708,6 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		}
 		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
 			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
-		}
-	}
-
-	// ProbeLinks use the generic eBPF program loaded at startup and need their
-	// origin ID baked into RODATA here. Custom probes (the Enable path) skip
-	// this block: they register their own origin IDs dynamically in Tracer.Enable
-	// before calling Probe.Load, so LoadProbe alone does not require a static ID.
-	if len(cfg.ProbeLinks) > 0 {
-		probe, err := origins.Register(&samples.TypeMetadata{
-			SampleType: "events",
-			SampleUnit: "count",
-		})
-		if err != nil {
-			return err
-		}
-		if err := coll.Variables["origin_id_probe"].Set(uint16(probe)); err != nil {
-			return fmt.Errorf("failed to set origin_id_probe: %v", err)
 		}
 	}
 
