@@ -130,14 +130,14 @@ type dotnetRangeSection struct {
 }
 
 // rangeWalker carries per-walk state for walking a dotnet8 RangeSectionMap. It
-// deduplicates aliased level/fragment pointers and tracks visit budgets so that
-// a malicious tree cannot cause exponential traversal or unbounded loops.
+// deduplicates every pointer touched during the walk so that aliased or cyclic
+// structures cannot cause exponential traversal or infinite loops.
 type rangeWalker struct {
-	sectionSeen  map[libpf.Address]libpf.Void
-	levelSeen    map[libpf.Address]libpf.Void
-	fragmentSeen map[libpf.Address]libpf.Void
-	levelReads   int
-	fragments    int
+	// seenAddress records every address visited while walking a RangeSectionMap:
+	// map levels, fragment lists and RangeSections all live in the same address
+	// space, so seeing the same address in any context means it was already
+	// processed.
+	seenAddress map[libpf.Address]libpf.Void
 }
 
 type dotnetInstance struct {
@@ -257,7 +257,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 	log.Debugf("Found %s stub range list head at %x", stubName, headPtr)
 	blockNum := 0
 	seen := make(map[libpf.Address]libpf.Void)
-	for blockPtr := headPtr + 0x8; blockPtr != 0 && blockNum < maxRangeListBlocks; blockNum++ {
+	for blockPtr := headPtr + 0x8; blockPtr != 0; {
 		if _, ok := seen[blockPtr]; ok {
 			return
 		}
@@ -282,6 +282,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 			i.addRange(ebpf, pid, startAddr, endAddr, startAddr, uint64(codeType|flagLeaf))
 		}
 		blockPtr = npsr.Ptr(block, numRangesInBlock*rangeSize)
+		blockNum++
 	}
 }
 
@@ -356,17 +357,12 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
 	seen := make(map[libpf.Address]libpf.Void)
-	count := 0
 	ptr := i.rm.Ptr(i.codeRangeListPtr)
 	for ptr != 0 {
 		if _, ok := seen[ptr]; ok {
 			break
 		}
 		seen[ptr] = libpf.Void{}
-		count++
-		if count > maxRangeSections {
-			return fmt.Errorf("too many range sections in list")
-		}
 		if err := i.rm.Read(ptr, rangeSection); err != nil {
 			return err
 		}
@@ -388,24 +384,20 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 	fragment := make([]byte, 4*8)
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	for fragmentPtr != 0 {
-		if _, ok := w.fragmentSeen[fragmentPtr]; ok {
+		if _, ok := w.seenAddress[fragmentPtr]; ok {
 			break
 		}
-		w.fragmentSeen[fragmentPtr] = libpf.Void{}
-		w.fragments++
-		if w.fragments > maxRangeSections {
-			return fmt.Errorf("too many range section fragments")
-		}
+		w.seenAddress[fragmentPtr] = libpf.Void{}
 		if err := i.rm.Read(fragmentPtr, fragment); err != nil {
 			return fmt.Errorf("failed to read fragment: %v", err)
 		}
 		// Remove collectible bit
 		fragmentPtr = npsr.Ptr(fragment, 0) &^ 1
 		rangeSectionPtr := npsr.Ptr(fragment, 24)
-		if _, ok := w.sectionSeen[rangeSectionPtr]; ok {
+		if _, ok := w.seenAddress[rangeSectionPtr]; ok {
 			continue
 		}
-		w.sectionSeen[rangeSectionPtr] = libpf.Void{}
+		w.seenAddress[rangeSectionPtr] = libpf.Void{}
 
 		if err := i.rm.Read(rangeSectionPtr, rangeSection); err != nil {
 			return fmt.Errorf("failed to read range section: %v", err)
@@ -436,14 +428,10 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 			continue
 		}
 		if level < maxLevel {
-			w.levelReads++
-			if w.levelReads > maxRangeMapLevels {
-				return fmt.Errorf("too many range section map levels")
-			}
-			if _, ok := w.levelSeen[ptr]; ok {
+			if _, ok := w.seenAddress[ptr]; ok {
 				continue
 			}
-			w.levelSeen[ptr] = libpf.Void{}
+			w.seenAddress[ptr] = libpf.Void{}
 			if err := i.walkRangeSectionMapLevel(ebpf, pid, ptr, level+1, w); err != nil {
 				return err
 			}
@@ -458,11 +446,7 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 
 // walkRangeSectionMap processes a dotnet8 RangeSectionMap to enumerate all RangeSections
 func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	w := &rangeWalker{
-		sectionSeen:  make(map[libpf.Address]libpf.Void),
-		levelSeen:    make(map[libpf.Address]libpf.Void),
-		fragmentSeen: make(map[libpf.Address]libpf.Void),
-	}
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 	return i.walkRangeSectionMapLevel(ebpf, pid, i.codeRangeListPtr, 1, w)
 }
 
