@@ -121,6 +121,26 @@ func TestWalkRangeListCycle(t *testing.T) {
 	require.Len(t, i.ranges, 20)
 }
 
+// TestMarkSeen verifies that markSeen deduplicates addresses and enforces the
+// maxRangeSectionWalkNodes bound on a single walk.
+func TestMarkSeen(t *testing.T) {
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
+
+	for addr := libpf.Address(0); addr < maxRangeSectionWalkNodes; addr++ {
+		fresh, err := w.markSeen(addr)
+		require.NoError(t, err)
+		require.True(t, fresh)
+	}
+	// A new address beyond the bound must be rejected.
+	fresh, err := w.markSeen(maxRangeSectionWalkNodes)
+	require.Error(t, err)
+	require.False(t, fresh)
+	// Already-seen addresses stay accepted (dedup, not an error).
+	fresh, err = w.markSeen(0)
+	require.NoError(t, err)
+	require.False(t, fresh)
+}
+
 func putAllEntries(buf []byte, at, val libpf.Address) {
 	for off := 0; off < 256*8; off += 8 {
 		putUint64(buf, int(at)+off, uint64(val))

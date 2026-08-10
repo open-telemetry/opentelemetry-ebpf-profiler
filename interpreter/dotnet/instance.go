@@ -129,15 +129,37 @@ type dotnetRangeSection struct {
 	prefixes []lpm.Prefix
 }
 
-// rangeWalker carries per-walk state for walking a dotnet8 RangeSectionMap. It
-// deduplicates every pointer touched during the walk so that aliased or cyclic
-// structures cannot cause exponential traversal or infinite loops.
+// rangeWalker carries per-walk state for walking a
+// RangeSectionMap/RangeSectionList/RangeList. It deduplicates every pointer
+// touched during the walk so that aliased or cyclic structures cannot cause
+// exponential traversal or infinite loops.
 type rangeWalker struct {
-	// seenAddress records every address visited while walking a RangeSectionMap:
-	// map levels, fragment lists and RangeSections all live in the same address
-	// space, so seeing the same address in any context means it was already
-	// processed.
+	// seenAddress records every address visited while walking: map levels,
+	// fragment lists and RangeSections all live in the same address space, so
+	// seeing the same address in any context means it was already processed.
 	seenAddress map[libpf.Address]libpf.Void
+}
+
+// maxRangeSectionWalkNodes caps the number of distinct addresses that a
+// single RangeSectionMap/RangeSectionList/RangeList walk may visit. A
+// legitimate .NET process will never come close to this limit; it exists
+// to bound memory growth when the target's in-memory structures are
+// corrupt or adversarially crafted.
+const maxRangeSectionWalkNodes = 1 << 20
+
+// markSeen records addr and reports whether it is newly seen (true) or was
+// already visited (false). It returns an error when the walk has exceeded
+// maxRangeSectionWalkNodes, preventing unbounded memory growth on corrupt or
+// adversarially crafted target structures.
+func (w *rangeWalker) markSeen(addr libpf.Address) (bool, error) {
+	if _, ok := w.seenAddress[addr]; ok {
+		return false, nil
+	}
+	if len(w.seenAddress) >= maxRangeSectionWalkNodes {
+		return false, fmt.Errorf("range walk exceeded %d-node limit", maxRangeSectionWalkNodes)
+	}
+	w.seenAddress[addr] = libpf.Void{}
+	return true, nil
 }
 
 type dotnetInstance struct {
@@ -256,12 +278,16 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 	stubName := codeName[codeType]
 	log.Debugf("Found %s stub range list head at %x", stubName, headPtr)
 	blockNum := 0
-	seen := make(map[libpf.Address]libpf.Void)
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 	for blockPtr := headPtr + 0x8; blockPtr != 0; blockNum++ {
-		if _, ok := seen[blockPtr]; ok {
+		fresh, err := w.markSeen(blockPtr)
+		if err != nil {
+			log.Debugf("walkRangeList: %v", err)
 			return
 		}
-		seen[blockPtr] = libpf.Void{}
+		if !fresh {
+			return
+		}
 		if err := i.rm.Read(blockPtr, block); err != nil {
 			log.Debugf("Failed to read %s stub range block %d: %v",
 				stubName, blockNum, err)
@@ -355,13 +381,16 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 	vms := &i.d.Get().Types
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
-	seen := make(map[libpf.Address]libpf.Void)
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 	ptr := i.rm.Ptr(i.codeRangeListPtr)
 	for ptr != 0 {
-		if _, ok := seen[ptr]; ok {
+		fresh, err := w.markSeen(ptr)
+		if err != nil {
+			return err
+		}
+		if !fresh {
 			break
 		}
-		seen[ptr] = libpf.Void{}
 		if err := i.rm.Read(ptr, rangeSection); err != nil {
 			return err
 		}
@@ -383,20 +412,25 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 	fragment := make([]byte, 4*8)
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	for fragmentPtr != 0 {
-		if _, ok := w.seenAddress[fragmentPtr]; ok {
+		fresh, err := w.markSeen(fragmentPtr)
+		if err != nil {
+			return err
+		}
+		if !fresh {
 			break
 		}
-		w.seenAddress[fragmentPtr] = libpf.Void{}
 		if err := i.rm.Read(fragmentPtr, fragment); err != nil {
 			return fmt.Errorf("failed to read fragment: %v", err)
 		}
 		// Remove collectible bit
 		fragmentPtr = npsr.Ptr(fragment, 0) &^ 1
 		rangeSectionPtr := npsr.Ptr(fragment, 24)
-		if _, ok := w.seenAddress[rangeSectionPtr]; ok {
+		if fresh, err = w.markSeen(rangeSectionPtr); err != nil {
+			return err
+		}
+		if !fresh {
 			continue
 		}
-		w.seenAddress[rangeSectionPtr] = libpf.Void{}
 
 		if err := i.rm.Read(rangeSectionPtr, rangeSection); err != nil {
 			return fmt.Errorf("failed to read range section: %v", err)
@@ -427,10 +461,13 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 			continue
 		}
 		if level < maxLevel {
-			if _, ok := w.seenAddress[ptr]; ok {
+			fresh, err := w.markSeen(ptr)
+			if err != nil {
+				return err
+			}
+			if !fresh {
 				continue
 			}
-			w.seenAddress[ptr] = libpf.Void{}
 			if err := i.walkRangeSectionMapLevel(ebpf, pid, ptr, level+1, w); err != nil {
 				return err
 			}
