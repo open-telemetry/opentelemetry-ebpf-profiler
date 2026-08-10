@@ -3,7 +3,6 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -12,10 +11,10 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
+	"go.opentelemetry.io/ebpf-profiler/probes/offcpu"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -102,7 +101,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:   c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
-		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:          envVars,
 		ProbeLinks:              c.config.ProbeLinks,
 		LoadProbe:               c.config.LoadProbe || len(c.config.Probes) > 0,
@@ -129,13 +127,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
-
-	if c.config.OffCPUThreshold > 0.0 {
-		if err := trc.StartOffCPUProfiling(); err != nil {
-			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
-		}
-		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
-	}
 
 	if len(c.config.ProbeLinks) > 0 {
 		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
@@ -206,6 +197,12 @@ func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 			return nil, fmt.Errorf("decoding kprobe config: %w", err)
 		}
 		return kprobe.New(kcfg)
+	case "offcpu":
+		var ocfg offcpu.Config
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&ocfg); err != nil {
+			return nil, fmt.Errorf("decoding offcpu config: %w", err)
+		}
+		return offcpu.New(ocfg)
 	default:
 		return nil, fmt.Errorf("unknown probe type %q", probeType)
 	}
