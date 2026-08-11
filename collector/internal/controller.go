@@ -7,6 +7,7 @@ package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
 
 	"go.opentelemetry.io/collector/component"
@@ -19,14 +20,23 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
+
+// ProbeProvider is satisfied by any component.Component that also exposes a
+// Probe method. It mirrors collector.ProbeExtension without creating a circular
+// import between the collector and collector/internal packages.
+type ProbeProvider interface {
+	Probe() tracer.Probe
+}
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
 // interface and our [internal.Controller].
 type Controller struct {
-	ctlr       *controller.Controller
-	onShutdown func() error
-	errorMode  config.ErrorMode
+	ctlr         *controller.Controller
+	onShutdown   func() error
+	errorMode    config.ErrorMode
+	extensionIDs []component.ID
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -82,15 +92,33 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	meter := rs.MeterProvider.Meter(metadata.ScopeName)
 	metrics.Start(meter)
 
+	extIDs, err := parseExtensionIDs(cfg.Probes)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Controller{
-		onShutdown: cfg.OnShutdown,
-		ctlr:       controller.New(cfg),
-		errorMode:  cfg.ErrorMode,
+		onShutdown:   cfg.OnShutdown,
+		ctlr:         controller.New(cfg),
+		errorMode:    cfg.ErrorMode,
+		extensionIDs: extIDs,
 	}, nil
 }
 
+// parseExtensionIDs converts the string slice from the receiver config to
+// typed component IDs, returning an error on the first malformed entry.
+func parseExtensionIDs(ids []string) ([]component.ID, error) {
+	result := make([]component.ID, len(ids))
+	for i, s := range ids {
+		if err := result[i].UnmarshalText([]byte(s)); err != nil {
+			return nil, fmt.Errorf("invalid probes entry %q: %w", s, err)
+		}
+	}
+	return result, nil
+}
+
 // Start the receiver.
-func (c *Controller) Start(ctx context.Context, _ component.Host) error {
+func (c *Controller) Start(ctx context.Context, host component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
 			c.ctlr.Shutdown()
@@ -98,6 +126,41 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 			return nil
 		}
 		return err
+	}
+
+	if err := c.enableProbes(ctx, host); err != nil {
+		if c.errorMode == config.IgnoreError {
+			c.ctlr.Shutdown()
+			log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
+// enableProbes resolves each configured extension ID from the host,
+// verifies it implements ProbeExtension, and enables its probe on the tracer.
+func (c *Controller) enableProbes(ctx context.Context, host component.Host) error {
+	if len(c.extensionIDs) == 0 {
+		return nil
+	}
+
+	extensions := host.GetExtensions()
+	for _, id := range c.extensionIDs {
+		ext, ok := extensions[id]
+		if !ok {
+			return fmt.Errorf("extension %q not found; ensure it is listed under service.extensions", id)
+		}
+		pp, ok := ext.(ProbeProvider)
+		if !ok {
+			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
+		}
+		if err := c.ctlr.EnableProbe(ctx, pp.Probe()); err != nil {
+			return fmt.Errorf("enabling probe from extension %q: %w", id, err)
+		}
+		log.Infof("Enabled probe from extension %q", id)
 	}
 	return nil
 }
