@@ -1288,11 +1288,9 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 // back into PROT_NONE, so the reservation may appear as multiple VMAs.
 // On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
 // giving it a path like "[anon:Ruby:rb_jit_reserve_addr_space]". Otherwise we use
-// a conservative fallback that spans from the first anonymous executable mapping
-// to the end of the last anonymous executable mapping, plus any contiguous
-// anonymous tail after that last executable mapping. This covers production
-// layouts where Ruby exposes multiple discontiguous anonymous executable ranges
-// without requiring multi-segment tracking in eBPF.
+// a conservative fallback spanning the observed anonymous executable mappings.
+// This includes non-executable holes between executable fragments, but does not
+// extend through a trailing anonymous mapping whose ownership cannot be proven.
 // Returns (start, end, found).
 func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 	var jitStart, jitEnd uint64
@@ -1333,13 +1331,6 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 		anonExecFound = true
 	}
 	if anonExecFound {
-		for idx := range mappings {
-			m := &mappings[idx]
-			if !m.IsAnonymous() || m.Vaddr != jitEnd {
-				continue
-			}
-			jitEnd = m.Vaddr + m.Length
-		}
 		return jitStart, jitEnd, true
 	}
 
@@ -1353,9 +1344,9 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	log.Debugf("Synchronizing ruby mappings")
 
-	// Detect the JIT region once and register interpreter prefixes for the whole
-	// reservation. PROT_NONE gaps are safe to include because they cannot execute,
-	// and covering the full range avoids churn as Ruby mprotects new code pages.
+	// Register one prefix set for the labeled reservation or the conservative
+	// executable envelope. Non-executable gaps inside either range are safe to
+	// include because they cannot be sampled as PCs.
 	jitStart, jitEnd, jitFound := findJITRegion(mappings)
 	if !jitFound {
 		jitStart = 0

@@ -362,7 +362,7 @@ func TestFindJITRegion(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback includes contiguous anonymous reservation",
+			name: "heuristic fallback spans internal hole but excludes trailing mapping",
 			mappings: []process.RawMapping{
 				execAnon(0x7f17d99b9000, 0x15f000),
 				rwAnon(0x7f17d9b18000, 0x1000),
@@ -370,7 +370,17 @@ func TestFindJITRegion(t *testing.T) {
 				protNoneAnon(0x7f17d9c31000, 0x7d88000),
 			},
 			wantStart: 0x7f17d99b9000,
-			wantEnd:   0x7f17d9c31000 + 0x7d88000,
+			wantEnd:   0x7f17d9c31000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback does not absorb adjacent writable mapping",
+			mappings: []process.RawMapping{
+				execAnon(0x7f0000000000, 0x10000000),
+				rwAnon(0x7f0010000000, 0x10000000),
+			},
+			wantStart: 0x7f0000000000,
+			wantEnd:   0x7f0010000000,
 			wantFound: true,
 		},
 		{
@@ -406,7 +416,7 @@ func TestFindJITRegion(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "ruby --yjit --yjit-mem-size=4 with rw holes and PROT_NONE tail",
+			name: "unlabeled ruby --yjit uses executable envelope despite non-executable tail",
 			// $ ruby --yjit --yjit-mem-size=4 /app.rb
 			// 7f84e7a23000-7f84e7a5f000 r-xp 00000000 00:00 0
 			// 7f84e7a5f000-7f84e7a60000 rw-p 00000000 00:00 0
@@ -423,7 +433,7 @@ func TestFindJITRegion(t *testing.T) {
 				rwAnon(0x7f84e8110000, 0x7f84e8200000-0x7f84e8110000),
 			},
 			wantStart: 0x7f84e7a23000,
-			wantEnd:   0x7f84e7e23000,
+			wantEnd:   0x7f84e7a62000,
 			wantFound: true,
 		},
 	}
