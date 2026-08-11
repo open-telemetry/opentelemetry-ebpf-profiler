@@ -176,27 +176,16 @@ func TestBaseReporterGenerate(t *testing.T) {
 		"Should have at least one profile")
 }
 
-// TestReportTraceEventResourceKeyContextKey verifies that the ContextKey
-// derived from meta.Resource controls bucketing in the events tree:
-//   - Same (namespace,name,instance.id) triplet collapses to one bucket.
-//   - A different service.instance.id splits into a second bucket.
-//   - A partial triplet (e.g. only service.name) produces a non-null key
-//     like ":svc:" — distinct from the populated triplets and from nil.
-//   - A nil Resource yields a NullString ContextKey, also distinct.
-func TestReportTraceEventResourceKeyContextKey(t *testing.T) {
+// TestReportTraceEventLateResourceAppliesRetroactively verifies that a process
+// context published after sampling started applies to samples already collected
+// for that PID: they stay in one bucket, get the late resource, and a later nil
+// resource (context mapping gone on teardown) does not strip it.
+func TestReportTraceEventLateResourceAppliesRetroactively(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
 
-	makeResource := func(namespace, name, instanceID string) *pcommon.Resource {
+	makeResource := func(name string) *pcommon.Resource {
 		r := pcommon.NewResource()
-		if namespace != "" {
-			r.Attributes().PutStr("service.namespace", namespace)
-		}
-		if name != "" {
-			r.Attributes().PutStr("service.name", name)
-		}
-		if instanceID != "" {
-			r.Attributes().PutStr("service.instance.id", instanceID)
-		}
+		r.Attributes().PutStr("service.name", name)
 		return &r
 	}
 
@@ -226,34 +215,27 @@ func TestReportTraceEventResourceKeyContextKey(t *testing.T) {
 		}
 	}
 
-	// Two events with the same triplet -> one bucket.
-	resA := makeResource("ns", "svc", "instance-1")
-	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resA)))
-	resADup := makeResource("ns", "svc", "instance-1")
-	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resADup)))
+	// Samples collected before the process context is detected.
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
 
-	// Different service.instance.id -> second bucket.
-	resB := makeResource("ns", "svc", "instance-2")
-	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resB)))
+	// The context is published and detected: later samples carry the resource.
+	resource := makeResource("svc")
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resource)))
 
-	// Partial triplet (only service.name) -> non-null key ":svc:" -> third bucket.
-	resPartial := makeResource("", "svc", "")
-	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resPartial)))
-
-	// Nil Resource -> ContextKey is NullString -> fourth bucket.
+	// Process tears down and the context mapping disappears.
 	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
 
 	treePtr := reporter.traceEvents.RLock()
 	defer reporter.traceEvents.RUnlock(&treePtr)
 	tree := *treePtr
 
-	keys := make(map[libpf.String]bool)
-	for k := range tree {
-		keys[k.ContextKey] = true
+	require.Len(t, tree, 1, "all samples for one PID belong to a single bucket")
+	for _, rtp := range tree {
+		require.NotNil(t, rtp.Resource,
+			"late-detected resource should apply to the whole period")
+		serviceName, ok := rtp.Resource.Attributes().Get("service.name")
+		require.True(t, ok)
+		assert.Equal(t, "svc", serviceName.Str())
 	}
-	assert.Equal(t, 4, len(tree), "expected four buckets")
-	assert.True(t, keys[libpf.Intern("ns:svc:instance-1")], "missing bucket for instance-1")
-	assert.True(t, keys[libpf.Intern("ns:svc:instance-2")], "missing bucket for instance-2")
-	assert.True(t, keys[libpf.Intern(":svc:")], "missing bucket for partial-triplet key")
-	assert.True(t, keys[libpf.NullString], "missing NullString bucket for nil resource")
 }

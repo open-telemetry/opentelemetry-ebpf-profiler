@@ -44,6 +44,8 @@ type ResourceToProfiles struct {
 	EnvVars map[libpf.String]libpf.String
 
 	// Resource is the OTel resource from ProcessContext, if available.
+	// Deliberately not part of ResourceKey: refreshing it as samples arrive lets
+	// a late-detected process context apply to the whole reporting period.
 	Resource *pcommon.Resource
 
 	// Events holds the actual profiling information.
@@ -67,9 +69,6 @@ type ResourceKey struct {
 
 	// APMServiceName is provided by the eBPF programs
 	APMServiceName string
-
-	// ContextKey is the unique identifier for a service instance
-	ContextKey libpf.String
 
 	PID int64
 }

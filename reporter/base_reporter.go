@@ -61,7 +61,6 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    meta.ContainerID,
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
-		ContextKey:     resourceToContextKey(meta.Resource),
 	}
 	traceHash := traceutil.HashTrace(trace)
 
@@ -70,13 +69,19 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
-			EnvVars:  meta.EnvVars,
-			Resource: meta.Resource,
-			Events:   make(map[*samples.TypeMetadata]samples.SampleToEvents),
+			EnvVars: meta.EnvVars,
+			Events:  make(map[*samples.TypeMetadata]samples.SampleToEvents),
 		}
 	}
 
 	rtp := (*eventsTree)[key]
+	// Refresh so a late-detected process context applies to samples already
+	// collected for this PID. Only non-nil overwrites: the context mapping
+	// disappearing on teardown must not strip attribution.
+	if meta.Resource != nil && meta.Resource != rtp.Resource {
+		rtp.Resource = meta.Resource
+		(*eventsTree)[key] = rtp
+	}
 	if _, exists := rtp.Events[meta.ProfileType]; !exists {
 		rtp.Events[meta.ProfileType] = make(samples.SampleToEvents)
 	}
