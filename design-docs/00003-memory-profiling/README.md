@@ -60,7 +60,7 @@ This document focuses on the changes inside `opentelemetry-ebpf-profiler` needed
 - Heap profiling (alloc-only) and live (in-use) heap profiling (alloc + free), if configured accordingly.
 - OTLP output shape (`alloc_space`, `alloc_objects`, and optional `inuse_space` / `inuse_objects`).
 - Sample applications and instrumentation on the user-space side and associated performance and implementation observations.
-- Back-pressure: a closed-loop PID controller on the profiler side that holds memory-event throughput at a configured fraction of the overall sample budget.
+- Back-pressure: a closed-loop rate limiter on the profiler side that holds memory-event throughput at a configured fraction of the overall sample budget.
 
 ### Non-success criteria / out of scope
 
@@ -68,6 +68,7 @@ Everything on the in-process side of the USDT contract:
 
 - How USDTs get into a target process (compile-time wrappers, `LD_PRELOAD`, runtime GOT rewriting). See **Producing the USDTs in userspace** for the delivery models we've considered; ultimately we want to focus on providing a _uniform_ mechanism for tracking allocations, regardless of how and where the probes are fired.
 - Allocator-specific quirks (size classes, alignment).
+- Implementing the USDT contract inside OTel SDKs (language-specific SDK integration is a separate effort that builds on top of the contract defined here).
 
 And from the profiler side, the following are deferred:
 
@@ -212,27 +213,27 @@ These four sample types follow standard pprof / OTLP profile conventions.
 Allocation USDTs are expected to fire more frequently than perf samples even after in-process sampling. Back-pressure is layered at two points:
 
 - **In-process: open-loop random-interval sampling** (see Background: assumed in-process contract for the mechanism). This is open-loop - the application has no idea what the profiler is currently doing - and gives an unbiased estimator via `weight`. Cheap, simple, and the primary cost of the book-keeping is accessing the TLS to track state. This is also the approach used by samplers such as jemalloc and tcmalloc in their own observability infrastructure; by supporting the ecosystem where it is, we increase the chances of being able to influence allocators to include sampling hooks by default when this method shows adoption.
-- **eBPF / collector side: closed-loop PID control.** The profiler maintains a global target rate of memory events (expressed as a fraction of the overall sample budget) and runs a single PID controller in user space that adjusts a drop probability applied inside the `uprobe_heap_alloc` eBPF program. The controller observes the measured event rate, compares it against the target, and updates the threshold so that memory events occupy a bounded share of the payload regardless of workload spikes. Note that because the controller is global (not per-process), a single high-allocation process could consume most of the memory event budget, starving others. This is an intentional design decision to keep the interface to userspace simple; see **Per-process backpressure from profiler to sampler** in Alternatives Considered for why we chose not to feed rate adjustments back to individual processes. The per-process live-heap state cap (described below) bounds the resource impact of this, but it does not guarantee fair event-rate distribution across processes.
+- **eBPF / collector side: closed-loop rate limiting.** The profiler maintains a global target rate of memory events (expressed as a fraction of the overall sample budget) and runs a rate limiter in user space that adjusts a drop probability applied inside the `uprobe_heap_alloc` eBPF program. The limiter observes the measured event rate, compares it against the target, and updates the threshold so that memory events occupy a bounded share of the payload regardless of workload spikes. Candidate implementations include a PID (Proportional-Integral-Derivative) controller or a token bucket; the choice will be informed by empirical tuning (see Plan to Acquire Missing Data). Note that because the limiter is global (not per-process), a single high-allocation process could consume most of the memory event budget, starving others. This is an intentional design decision to keep the interface to userspace simple; see **Per-process backpressure from profiler to sampler** in Alternatives Considered for why we chose not to feed rate adjustments back to individual processes. The per-process live-heap state cap (described below) bounds the resource impact of this, but it does not guarantee fair event-rate distribution across processes.
 
 We also anticipate a future in-process addition: dynamic interval adjustment, where the sampler targets a fixed samples-per-second rate and self-adjusts its interval to hit it. This is purely a sampler-side concern - it doesn't change the USDT contract and the profiler doesn't need to know it's happening.
 
-Notes on the controller:
+Notes on the rate limiter:
 
 - The controlled variable is a per-CPU drop threshold read by the eBPF program at the top of `uprobe_heap_alloc`; the eBPF side does one compare-and-bail.
 - The setpoint is `target_memory_events_per_sec`, derived from the existing sample budget multiplied by a configurable memory fraction. Memory events cannot starve on-CPU profiling because the budget is apportioned, not shared.
 - Dropped events are still counted (so we can surface drop ratios as a metric and ultimately fold the drop probability back into `weight` for unbiased totals).
-- The controller's tuning constants and the target memory fraction are to be determined empirically; see Plan to Acquire Missing Data.
-- The controller bounds memory-event throughput, but it does not by itself bound the amount of live allocation state retained for `inuse_*` profiles. Live heap tracking therefore also requires explicit global and per-process state limits, described below.
+- Tuning constants and the target memory fraction are to be determined empirically; see Plan to Acquire Missing Data.
+- The rate limiter bounds memory-event throughput, but it does not by itself bound the amount of live allocation state retained for `inuse_*` profiles. Live heap tracking therefore also requires explicit global and per-process state limits, described below.
 
 ### Live heap state bounds
 
-Sampled allocations awaiting a matching free are tracked in a live-heap correlation map, keyed by `(pid, ptr)` (this is the same map `uprobe_heap_free` consults - see eBPF entry programs). This map is bounded by both a global cap and a per-process cap. When either cap is reached, we simply stop accepting new elements into the map: further sampled allocations are not added to live-heap tracking until existing entries are freed and their slots released. This only affects `inuse_*` accounting - the `alloc_space`/`alloc_objects` profiles are unaffected, since those are produced directly from the alloc-side event and don't depend on the correlation map. As an aside, we already emit drop-ratio metrics for the PID controller (above); the live-heap cap gets the same treatment, so operators have visibility into both throttling paths.
+Sampled allocations awaiting a matching free are tracked in a live-heap correlation map, keyed by `(pid, ptr)` (this is the same map `uprobe_heap_free` consults - see eBPF entry programs). This map is bounded by both a global cap and a per-process cap. When either cap is reached, we simply stop accepting new elements into the map: further sampled allocations are not added to live-heap tracking until existing entries are freed and their slots released. This only affects `inuse_*` accounting - the `alloc_space`/`alloc_objects` profiles are unaffected, since those are produced directly from the alloc-side event and don't depend on the correlation map. As an aside, we already emit drop-ratio metrics for the rate limiter (above); the live-heap cap gets the same treatment, so operators have visibility into both throttling paths.
 
-Because `uprobe_heap_free` only decrements state for pointers it finds in the correlation map, an allocation dropped for being over-cap is simply never seen by the corresponding free (the same behaviour as an allocation dropped by the PID controller).
+Because `uprobe_heap_free` only decrements state for pointers it finds in the correlation map, an allocation dropped for being over-cap is simply never seen by the corresponding free (the same behaviour as an allocation dropped by the rate limiter).
 
 On process exit, the probe's `Detach` path purges all remaining entries for the exiting PID from these maps (both eBPF-side and userspace tracker), ensuring dead processes do not leak state.
 
-The two layers are independent: the in-process sampler is unaware of the controller, which keeps the hot path branch-prediction-friendly and allocator-agnostic.
+The two layers are independent: the in-process sampler is unaware of the rate limiter, which keeps the hot path branch-prediction-friendly and allocator-agnostic.
 
 # Alternatives Considered
 
@@ -240,7 +241,7 @@ The two layers are independent: the in-process sampler is unaware of the control
 - **Attach uprobes to allocator-specific internal sampling paths (`jemalloc`, `tcmalloc`)** - we discount this approach as it is fragile against the internals of the allocators, the allocators do not by default have sampling turned on (or if it is turned on, it may do more work than we want - for instance, with jemalloc and its optional stack-collection behaviour in the sampling path), and does not generalise to all allocators. Additionally, allocators are frequently statically linked, meaning there is no predictable symbol to attach to - internal names and inlining decisions vary across versions and build configurations.
 - **Sample every alloc/free.** Prohibitive overhead; allocators are on the critical path for most workloads.
 - **Global (per-binary) uprobe attachment** rather than per-PID. Loses the ability to opt processes in/out individually and complicates cleanup; doesn't fit the profiler's existing lifecycle model.
-- **Per-process backpressure from profiler to sampler.** We considered using the global PID controller to feed pressure back proportionally to all sampled processes, so they scale their sampling intervals fairly rather than one process starving others. We discarded this for now because the interface is problematic: passing writable pointers through the USDT is a security concern for the profiler, and alternatives (shared memory mappings, backchannel syscalls) add significant complexity to the userspace sampler. Additionally, the more complex the contract between profiler and sampler, the less likely we can upstream this mechanism into allocators and runtimes themselves.
+- **Per-process backpressure from profiler to sampler.** We considered using the global rate limiter to feed pressure back proportionally to all sampled processes, so they scale their sampling intervals fairly rather than one process starving others. We discarded this for now because the interface is problematic: passing writable pointers through the USDT is a security concern for the profiler, and alternatives (shared memory mappings, backchannel syscalls) add significant complexity to the userspace sampler. Additionally, the more complex the contract between profiler and sampler, the less likely we can upstream this mechanism into allocators and runtimes themselves.
 
 # Author's Preferred Solution
 
@@ -270,7 +271,7 @@ The memory pipeline is an additive code path: the on-CPU and off-CPU flows are u
 - **Argument-descriptor handling.** v1 reads `pt_regs` directly, assuming the SysV ABI. We need to confirm whether any of the in-process samplers we expect to support emit non-trivial SDT argument descriptors that require per-arg location decoding.
 - **`mmap` / `munmap` probes.** Pending the reference sampler adding them; once available, they slot into the same `ProbeKind` enum and reuse the same entry-program pattern.
 - **Empirical overhead.** Benchmarks of plain heap profiling vs live-heap profiling on representative Rust and Python workloads, with the existing on-CPU profiler running, to size the memory share of the sample budget.
-- **PID controller tuning.** Setpoint (target memory-events / sec, or equivalently target fraction of the sample budget), proportional / integral / derivative gains, and sample window. We should look at the JVM's TLAB allocation sampler as a starting point and tune against the same benchmark workloads used for overhead measurement.
+- **Rate limiter tuning.** Choice of algorithm (PID controller vs token bucket), setpoint (target memory-events / sec, or equivalently target fraction of the sample budget), and tuning parameters. To be determined empirically against the same benchmark workloads used for overhead measurement.
 - **Live heap state sizing.** Determine the default global and per-process caps for sampled-allocation live-state tracking.
 
 # Decision
