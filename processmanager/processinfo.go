@@ -610,7 +610,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		pm.mu.Unlock()
 		return
 	}
-	// Check if process meta needs an update
+	// Check if process meta needs an update. execve preserves the tgid, so a
+	// re-exec of the same path is invisible here and leaves env vars and the
+	// process context unrefreshed. Detecting it needs a sched_process_exec
+	// tracepoint.
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
