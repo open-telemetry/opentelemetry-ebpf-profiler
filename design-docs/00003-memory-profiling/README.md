@@ -276,4 +276,4 @@ The memory pipeline is an additive code path: the on-CPU and off-CPU flows are u
 
 # Decision
 
-TBD. To be filled in once the proposal has been reviewed.
+We proceed with the proposed design: opt-in memory profiling consuming `otel_memory:alloc`/`free` USDTs, per-PID uprobe attachment via the existing `ProcessManager` lifecycle, reuse of the native unwinder, a global closed-loop rate limiter for backpressure, and standard OTLP output (`alloc_space`, `alloc_objects`, optionally `inuse_space`, `inuse_objects`). Live-heap tracking is gated behind a separate flag. Implementation is tracked in PR #1693.
