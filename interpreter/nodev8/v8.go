@@ -200,6 +200,18 @@ const (
 	// value to avoid huge malloc that could cause OOM crash.
 	maximumFixedTableSize = 512 * 1024
 
+	// maxMemoizedStringBytes caps strings memoized in addrToString: file,
+	// function and class names. Real names are far below this.
+	maxMemoizedStringBytes = 1024
+
+	// maxSourceStringBytes caps the non-memoized path (reading Script.Source to
+	// compute line ends), which can legitimately be large.
+	maxSourceStringBytes = 16 * 1024 * 1024
+
+	// maxStringDepth caps the recursion depth for ConsString/ThinString
+	// decomposition to guard against cyclic strings causing stack exhaustion.
+	maxStringDepth = 16
+
 	// lruSourceFileCacheSize is the LRU size for caching source files for an interpreter.
 	// This should reflect the number of hot source files that are seen often in a trace.
 	lruSourceFileCacheSize = 128
@@ -813,24 +825,34 @@ func (i *v8Instance) readTypedObjectPtr(addr libpf.Address, expectedType uint16)
 // fragments. Some V8 string representations (e.g. ConsString) is naturally fragmented, but this
 // code will also internally split long continuous string literals to fragments to avoid large
 // memory usage.
-func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string) error) error {
-	var err error
+// limit caps the total number of string bytes read during this call. It returns
+// the number of bytes actually read.
+func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string) error,
+	limit int64, depth int,
+) (int64, error) {
+	if depth <= 0 {
+		return 0, fmt.Errorf("string nesting too deep at %#x", ptr)
+	}
 
+	var err error
 	vms := &i.d.vmStructs
 	if tag == 0 {
 		ptr, tag, err = i.getObjectAddrAndType(ptr)
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 
 	if tag >= vms.Fixed.FirstNonstringType {
-		return fmt.Errorf("not a string at %#x, tag is %#x", ptr, tag)
+		return 0, fmt.Errorf("not a string at %#x, tag is %#x", ptr, tag)
 	}
 
 	switch tag & vms.Fixed.StringRepresentationMask {
 	case vms.Fixed.SeqStringTag:
 		length := i.rm.Uint32(ptr + libpf.Address(vms.String.Length))
+		if int64(length) > limit {
+			return 0, fmt.Errorf("string too long (%d)", length)
+		}
 		switch tag & vms.Fixed.StringEncodingMask {
 		case vms.Fixed.OneByteStringTag:
 			bufSz := min(uint32(16*1024), length)
@@ -844,36 +866,41 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 					libpf.Address(offs),
 					buf)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				if err = cb(pfunsafe.ToString(buf)); err != nil {
-					return err
+					return 0, err
 				}
 			}
 		case vms.Fixed.TwoByteStringTag:
-			return errors.New("two byte string not supported")
+			return 0, errors.New("two byte string not supported")
 		default:
-			return fmt.Errorf("unsupported encoding: %#x", tag)
+			return 0, fmt.Errorf("unsupported encoding: %#x", tag)
 		}
+		return int64(length), nil
 	case vms.Fixed.ConsStringTag:
-		if err = i.extractStringPtr(ptr+libpf.Address(vms.ConsString.First),
-			cb); err != nil {
-			return err
+		n, err := i.extractString(i.rm.Ptr(ptr+libpf.Address(vms.ConsString.First)),
+			0, cb, limit, depth-1)
+		if err != nil {
+			return n, err
 		}
-		if err = i.extractStringPtr(ptr+libpf.Address(vms.ConsString.Second),
-			cb); err != nil {
-			return err
+		m, err := i.extractString(i.rm.Ptr(ptr+libpf.Address(vms.ConsString.Second)),
+			0, cb, limit-n, depth-1)
+		if err != nil {
+			return n + m, err
 		}
+		return n + m, nil
 	case vms.Fixed.ThinStringTag:
-		return i.extractStringPtr(ptr+libpf.Address(vms.ThinString.Actual), cb)
+		return i.extractString(i.rm.Ptr(ptr+libpf.Address(vms.ThinString.Actual)),
+			0, cb, limit, depth-1)
 	default:
-		return fmt.Errorf("unsupported string tag %#x", tag&vms.Fixed.StringRepresentationMask)
+		return 0, fmt.Errorf("unsupported string tag %#x", tag&vms.Fixed.StringRepresentationMask)
 	}
-	return nil
 }
 
 func (i *v8Instance) extractStringPtr(ptr libpf.Address, cb func(string) error) error {
-	return i.extractString(i.rm.Ptr(ptr), 0, cb)
+	_, err := i.extractString(i.rm.Ptr(ptr), 0, cb, maxSourceStringBytes, maxStringDepth)
+	return err
 }
 
 // getString extracts and caches a small string object from given address.
@@ -884,15 +911,10 @@ func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (libpf.String, err
 	}
 
 	str := ""
-	err := i.extractString(ptr, tag, func(fragment string) error {
-		// 1kB maximum for file, function and class names
-		if len(str)+len(fragment) >= 1024 {
-			return fmt.Errorf("string too long (at least %d+%d)",
-				len(str), len(fragment))
-		}
+	_, err := i.extractString(ptr, tag, func(fragment string) error {
 		str += fragment
 		return nil
-	})
+	}, maxMemoizedStringBytes, maxStringDepth)
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -1005,7 +1027,7 @@ func (i *v8Instance) readFixedTable(addr libpf.Address, itemSize, maxItems uint3
 		numItems = maxItems
 	}
 
-	size := numItems * itemSize
+	size := uint64(numItems) * uint64(itemSize)
 	if size == 0 || size >= maximumFixedTableSize {
 		return nil, fmt.Errorf("fixed table size: %d", size)
 	}
