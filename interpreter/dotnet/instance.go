@@ -282,7 +282,6 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 	for blockPtr := headPtr + 0x8; blockPtr != 0; blockNum++ {
 		fresh, err := w.markSeen(blockPtr)
 		if err != nil {
-			log.Debugf("walkRangeList: %v", err)
 			return
 		}
 		if !fresh {
