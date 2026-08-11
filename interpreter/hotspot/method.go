@@ -119,9 +119,6 @@ func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
 	var err error
 	maxScopeOff := uint32(len(ji.scopesData))
 	for scopeNum := 0; scopeOff != 0 && scopeOff < maxScopeOff && scopeNum < maxInlinedScopes; scopeNum++ {
-		if scopeOff >= maxScopeOff {
-			break
-		}
 		// Keep track of the current scope offset, and use it as the next maximum
 		// offset. This makes sure the scope offsets decrease monotonically and
 		// this loop terminates. It has been verified empirically for this assumption
