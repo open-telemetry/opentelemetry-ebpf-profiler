@@ -13,30 +13,30 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
-// ProbeType represents the type of eBPF probe.
-type ProbeType int
+// ProbeMode represents the type of eBPF probe.
+type ProbeMode int
 
 const (
-	// ProbeTypeKprobe represents a kernel probe.
-	ProbeTypeKprobe ProbeType = iota
-	// ProbeTypeKretprobe represents a kernel return probe.
-	ProbeTypeKretprobe
-	// ProbeTypeUprobe represents a user-space probe.
-	ProbeTypeUprobe
-	// ProbeTypeUretprobe represents a user-space return probe.
-	ProbeTypeUretprobe
+	// ProbeModeKprobe represents a kernel probe.
+	ProbeModeKprobe ProbeMode = iota
+	// ProbeModeKretprobe represents a kernel return probe.
+	ProbeModeKretprobe
+	// ProbeModeUprobe represents a user-space probe.
+	ProbeModeUprobe
+	// ProbeModeUretprobe represents a user-space return probe.
+	ProbeModeUretprobe
 )
 
 // String returns the string representation of the probe type.
-func (p ProbeType) String() string {
+func (p ProbeMode) String() string {
 	switch p {
-	case ProbeTypeKprobe:
+	case ProbeModeKprobe:
 		return "kprobe"
-	case ProbeTypeKretprobe:
+	case ProbeModeKretprobe:
 		return "kretprobe"
-	case ProbeTypeUprobe:
+	case ProbeModeUprobe:
 		return "uprobe"
-	case ProbeTypeUretprobe:
+	case ProbeModeUretprobe:
 		return "uretprobe"
 	default:
 		return "unknown"
@@ -45,8 +45,8 @@ func (p ProbeType) String() string {
 
 // ProbeSpec defines the specification for attaching an eBPF probe.
 type ProbeSpec struct {
-	// Type specifies the probe type (kprobe, kretprobe, uprobe, uretprobe).
-	Type ProbeType
+	// Mode specifies the probe mode (kprobe, kretprobe, uprobe, uretprobe).
+	Mode ProbeMode
 	// Target specifies the target executable path for user-space probes.
 	Target string
 	// Symbol specifies the function or symbol name to probe.
@@ -77,37 +77,37 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 
 	probeTypeStr := strings.ToLower(parts[0])
 
-	var probeType ProbeType
+	var probeType ProbeMode
 	switch probeTypeStr {
 	case "kprobe":
-		probeType = ProbeTypeKprobe
+		probeType = ProbeModeKprobe
 	case "kretprobe":
-		probeType = ProbeTypeKretprobe
+		probeType = ProbeModeKretprobe
 	case "uprobe":
-		probeType = ProbeTypeUprobe
+		probeType = ProbeModeUprobe
 	case "uretprobe":
-		probeType = ProbeTypeUretprobe
+		probeType = ProbeModeUretprobe
 	default:
 		return nil, fmt.Errorf("unknown probe type: %s", parts[0])
 	}
 
 	switch probeType {
-	case ProbeTypeKprobe, ProbeTypeKretprobe:
+	case ProbeModeKprobe, ProbeModeKretprobe:
 		if n != 2 || parts[1] == "" {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 		}
 		return &ProbeSpec{
-			Type:     probeType,
+			Mode:     probeType,
 			Symbol:   parts[1],
 			ProgName: genericProgName,
 		}, nil
 
-	case ProbeTypeUprobe, ProbeTypeUretprobe:
+	case ProbeModeUprobe, ProbeModeUretprobe:
 		if n != 3 || parts[2] == "" {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
-			Type:     probeType,
+			Mode:     probeType,
 			Target:   parts[1],
 			Symbol:   parts[2],
 			ProgName: genericProgName,
@@ -127,23 +127,23 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 // For user-space probes (uprobe/uretprobe), it attaches to the specified symbol in
 // the target executable.
 func AttachProbe(prog *ebpf.Program, spec *ProbeSpec) (link.Link, error) {
-	switch spec.Type {
-	case ProbeTypeKprobe:
+	switch spec.Mode {
+	case ProbeModeKprobe:
 		return link.Kprobe(spec.Symbol, prog, nil)
-	case ProbeTypeKretprobe:
+	case ProbeModeKretprobe:
 		return link.Kretprobe(spec.Symbol, prog, nil)
-	case ProbeTypeUprobe:
+	case ProbeModeUprobe:
 		ex, err := link.OpenExecutable(spec.Target)
 		if err != nil {
 			return nil, err
 		}
 		return ex.Uprobe(spec.Symbol, prog, nil)
-	case ProbeTypeUretprobe:
+	case ProbeModeUretprobe:
 		ex, err := link.OpenExecutable(spec.Target)
 		if err != nil {
 			return nil, err
 		}
 		return ex.Uretprobe(spec.Symbol, prog, nil)
 	}
-	return nil, fmt.Errorf("unsupported probe type: %s", spec.Type)
+	return nil, fmt.Errorf("unsupported probe mode: %s", spec.Mode)
 }

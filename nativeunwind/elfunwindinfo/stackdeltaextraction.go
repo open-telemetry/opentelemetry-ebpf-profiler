@@ -30,51 +30,24 @@ type extractionFilter struct {
 	// stub code with synthesized stack deltas.
 	entryStart, entryEnd uintptr
 
-	// entryPending is true if the entry stub stack delta has not been added.
-	entryPending bool
-
 	// ehFrames is true if .eh_frame stack deltas are found
 	ehFrames bool
 
 	// golangFrames is true if .gopclntab stack deltas are found
 	golangFrames bool
-
-	// unsortedFrames is set if stack deltas from unsorted source are found
-	unsortedFrames bool
 }
 
 var _ ehframeHooks = &extractionFilter{}
 
-// addEntryDeltas generates the entry stub stack deltas.
-func (f *extractionFilter) addEntryDeltas(intervals *sdtypes.IntervalData) {
-	bb := sdtypes.BasicBlock{
-		Start: uint64(f.entryStart),
-		End:   uint64(f.entryEnd),
-	}
-	bb.Deltas.Add(0, sdtypes.UnwindInfoStop)
-	intervals.Add(bb)
-
-	f.ehFrames = true
-	f.entryPending = false
-}
-
-func (f *extractionFilter) fdeUnsorted() {
-	f.unsortedFrames = true
-}
-
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
-func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, intervals *sdtypes.IntervalData) bool {
+func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
 	// Drop FDEs inside the gopclntab area
 	if f.start <= fde.ipStart && fde.ipStart+fde.ipLen <= f.end {
 		return false
 	}
 	// Seems .debug_frame sometimes has broken FDEs for zero address
-	if f.unsortedFrames && fde.ipStart == 0 {
+	if fde.ipStart == 0 {
 		return false
-	}
-	// Insert entry stub deltas to their sorted position.
-	if f.entryPending && fde.ipStart >= f.entryStart {
-		f.addEntryDeltas(intervals)
 	}
 	// Drop FDEs overlapping with the detected entry stub.
 	if fde.ipStart+fde.ipLen > f.entryStart && f.entryEnd >= fde.ipStart {
@@ -193,13 +166,18 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference) (*sdtypes.Interva
 		hooks:            &filter,
 		allowGenericRegs: isLibGenericRegsAllowed(elfFile),
 	}
-
 	if entryLength := detectEntry(elfFile); entryLength != 0 {
-		filter.entryStart = uintptr(elfFile.Entry)
-		filter.entryEnd = filter.entryStart + uintptr(entryLength)
-		filter.entryPending = true
-	}
+		bb := sdtypes.BasicBlock{
+			Start: elfFile.Entry,
+			End:   elfFile.Entry + uint64(entryLength),
+		}
+		bb.Deltas.Add(0, sdtypes.UnwindInfoStop)
+		intervals.Add(bb)
 
+		filter.entryStart = uintptr(bb.Start)
+		filter.entryEnd = uintptr(bb.End)
+		filter.ehFrames = true
+	}
 	if err := ee.parseGoPclntab(); err != nil {
 		return nil, fmt.Errorf("failure to parse golang stack deltas: %v", err)
 	}
@@ -216,12 +194,7 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference) (*sdtypes.Interva
 			return nil, fmt.Errorf("failure to parse debug stack deltas: %v", err)
 		}
 	}
-	if filter.entryPending {
-		filter.addEntryDeltas(ee.intervals)
-	}
-
-	// If multiple sources were merged, sort them.
-	if filter.unsortedFrames || (filter.ehFrames && filter.golangFrames) {
+	if filter.ehFrames {
 		intervals.Sort()
 	}
 	return intervals, nil
