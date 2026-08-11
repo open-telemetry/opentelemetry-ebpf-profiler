@@ -26,6 +26,7 @@ type rubyTestEbpfHandler struct {
 	procDataUpdates   []support.RubyProcInfo
 	mappingUpdates    int
 	updateProcDataErr error
+	updateMappingErr  error
 }
 
 func (h *rubyTestEbpfHandler) UpdateProcData(_ libpf.InterpreterType, _ libpf.PID,
@@ -41,7 +42,7 @@ func (h *rubyTestEbpfHandler) UpdatePidInterpreterMapping(_ libpf.PID, _ lpm.Pre
 ) error {
 	h.calls = append(h.calls, "interpreter-mapping")
 	h.mappingUpdates++
-	return nil
+	return h.updateMappingErr
 }
 
 type rubyTestProcess struct {
@@ -475,6 +476,35 @@ func TestSynchronizeMappingsPublishesJITRangeBeforePrefixes(t *testing.T) {
 	assert.Equal(t, uint64(0x110000), handler.procDataUpdates[0].Jit_end)
 	assert.Equal(t, uint64(0x100000), instance.procInfo.Jit_start)
 	assert.Equal(t, uint64(0x110000), instance.procInfo.Jit_end)
+}
+
+func TestSynchronizeMappingsReportsPartialPublicationAfterMappingFailure(t *testing.T) {
+	instance := &rubyInstance{
+		procInfo: &support.RubyProcInfo{},
+		prefixes: make(map[lpm.Prefix]uint32),
+	}
+	updateErr := errors.New("update interpreter mapping")
+	handler := &rubyTestEbpfHandler{updateMappingErr: updateErr}
+	pr := &rubyTestProcess{pid: 123}
+	mappings := []process.RawMapping{{
+		Vaddr:  0x100000,
+		Length: 0x10000,
+		Flags:  elf.PF_R | elf.PF_X,
+	}}
+
+	err := instance.SynchronizeMappings(handler, nil, pr, mappings)
+	require.ErrorIs(t, err, updateErr)
+	assert.ErrorContains(t, err, "JIT proc data was already published")
+	assert.Equal(t, []string{"proc-data", "interpreter-mapping"}, handler.calls)
+	assert.Equal(t, uint64(0x100000), instance.procInfo.Jit_start)
+	assert.Equal(t, uint64(0x110000), instance.procInfo.Jit_end)
+	assert.Empty(t, instance.prefixes)
+
+	handler.calls = nil
+	handler.updateMappingErr = nil
+	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	assert.Equal(t, []string{"interpreter-mapping"}, handler.calls)
+	assert.NotEmpty(t, instance.prefixes)
 }
 
 func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {

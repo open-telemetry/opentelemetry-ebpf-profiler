@@ -1381,7 +1381,9 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if _, exists := r.prefixes[prefix]; !exists {
 			if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
 				support.ProgUnwindRuby, 0, 0); err != nil {
-				return err
+				return fmt.Errorf("failed to publish Ruby JIT prefix %#v; JIT proc data was "+
+					"already published and mapping state may be partial until the next "+
+					"synchronization: %w", prefix, err)
 			}
 		}
 		r.prefixes[prefix] = r.mappingGeneration
