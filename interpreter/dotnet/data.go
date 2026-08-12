@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"unsafe"
 
@@ -379,6 +380,20 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 		}
 	}
 	vms.RealCodeHeader.SizeOf = vms.RealCodeHeader.MethodDesc + 8
+
+	// Validate that all struct sizes used for allocations are within bounds.
+	// The JSON descriptor is read from target memory and is attacker-controlled.
+	structs := reflect.ValueOf(&cdac.Types).Elem()
+	for i := 0; i < structs.NumField(); i++ {
+		sizeOf := structs.Field(i).FieldByName("SizeOf")
+		if !sizeOf.IsValid() {
+			continue
+		}
+		if s := sizeOf.Uint(); s > maxDotnetStructSize {
+			return dotnetCdac{}, fmt.Errorf("%s.SizeOf value %d out of bounds",
+				structs.Type().Field(i).Name, s)
+		}
+	}
 
 	// Calculated masks
 	cdac.calculated.MethodDescTokenRemainderMask = (1 << cdac.Globals.MethodDescTokenRemainderBitCount) - 1

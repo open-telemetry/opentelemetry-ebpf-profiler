@@ -88,8 +88,6 @@ var (
 		"Default is %d.", defaultArgFrameCacheSize)
 	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
-	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
-		"various user or kernel space hooks."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
@@ -177,13 +175,22 @@ func parseArgs() (*controller.Config, error) {
 	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
 
 	fs.Func("probe-link", probeLinkHelper, func(link string) error {
-		args.ProbeLinks = append(args.ProbeLinks, link)
+		probeSpec, err := tracer.ParseProbe(link)
+		if err != nil {
+			return err
+		}
+		args.Probes = append(args.Probes, config.Probe{
+			Type: "kprobe",
+			Config: map[string]any{
+				"mode":   probeSpec.Mode.String(),
+				"symbol": probeSpec.Symbol,
+				"target": probeSpec.Target,
+			},
+		})
 		return nil
 	})
 
 	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
-
-	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

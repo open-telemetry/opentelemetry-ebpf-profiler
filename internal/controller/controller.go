@@ -8,8 +8,11 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/collector/confmap"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -101,12 +104,11 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
 		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:          envVars,
-		ProbeLinks:              c.config.ProbeLinks,
-		LoadProbe:               c.config.LoadProbe,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
 		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
+		ProcessMetaEnrichers:    c.config.ProcessMetaEnrichers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -132,13 +134,6 @@ func (c *Controller) Start(ctx context.Context) error {
 			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
 		}
 		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
-	}
-
-	if len(c.config.ProbeLinks) > 0 {
-		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
-			return fmt.Errorf("failed to attach probes: %v", err)
-		}
-		log.Info("Attached probes")
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
@@ -170,7 +165,42 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
+	if err := c.enableProbes(ctx, trc); err != nil {
+		c.cancelFunc() // stop the startTraceHandling goroutine
+		return fmt.Errorf("failed to enable probes: %w", err)
+	}
+
 	return nil
+}
+
+func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
+	for i, p := range c.config.Probes {
+		probe, err := createProbe(p.Type, p.Config)
+		if err != nil {
+			return fmt.Errorf("probe %d: %w", i, err)
+		}
+
+		if err := trc.Enable(ctx, probe); err != nil {
+			return fmt.Errorf("probe %d (%s): %w", i, p.Type, err)
+		}
+
+		log.Infof("Enabled probe %d (%s)", i, p.Type)
+	}
+
+	return nil
+}
+
+func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
+	switch probeType {
+	case "kprobe":
+		var kcfg kprobe.Config
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&kcfg); err != nil {
+			return nil, fmt.Errorf("decoding kprobe config: %w", err)
+		}
+		return kprobe.New(kcfg)
+	default:
+		return nil, fmt.Errorf("unknown probe type %q", probeType)
+	}
 }
 
 // Shutdown stops the controller
