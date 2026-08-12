@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -142,11 +143,6 @@ type Tracer struct {
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
 
-	// kprobeChainLoaded records whether the kprobe tail-call unwinder chain was
-	// loaded at startup. Enable requires this; without it a custom probe's tail
-	// calls into kprobe_progs silently miss at runtime.
-	kprobeChainLoaded bool
-
 	// origins is the tracer-wide registry origin IDs are assigned from and
 	// profile type metadata is looked up by.
 	origins *originRegistry
@@ -206,13 +202,13 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
-	// LoadProbe indicates whether the generic eBPF program should be loaded
-	// without being attached to something.
-	LoadProbe bool
 	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
+	// process discovery time. Multiple enrichers are called in order.
+	ProcessMetaEnrichers []process.MetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// their container-namespace equivalents. Useful for sidecar deployments where
 	// the profiler and the target application share a PID namespace but not host PIDs.
@@ -299,6 +295,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
+		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -323,7 +320,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
-		kprobeChainLoaded:      kprobeChainRequired(cfg),
 	}
 
 	return tracer, nil
@@ -351,13 +347,6 @@ func (t *Tracer) Close() {
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
 	t.signalDone()
-}
-
-// kprobeChainRequired reports whether the kprobe tail-call unwinder chain must be loaded.
-// It is the single source of truth consulted both during initialization and when recording
-// kprobeChainLoaded on the Tracer.
-func kprobeChainRequired(cfg *Config) bool {
-	return cfg.LoadProbe
 }
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
@@ -505,16 +494,14 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		return nil, nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if kprobeChainRequired(cfg) {
-		// Load the tail call destinations if any kind of event profiling is enabled.
-		// loadProbeUnwinders repoints the probe unwinder's per_cpu_records references
-		// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
-		// the perf unwinder keeps per_cpu_records.
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
-			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
-			ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
-		}
+	// Load the tail call destinations so custom probes can use it.
+	// loadProbeUnwinders repoints the probe unwinder's per_cpu_records references
+	// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
+	// the perf unwinder keeps per_cpu_records.
+	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
+		ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {

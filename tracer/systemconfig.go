@@ -454,11 +454,7 @@ func probeVMALookupSupport(cfg *Config) (bool, string) {
 	}
 	defer restoreRlimit()
 
-	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
-	if cfg.LoadProbe {
-		progTypes = append(progTypes, cebpf.Kprobe)
-	}
-
+	progTypes := []cebpf.ProgramType{cebpf.PerfEvent, cebpf.Kprobe}
 	helpers := []asm.BuiltinFunc{asm.FnGetCurrentTaskBtf, asm.FnFindVma}
 	for _, progType := range progTypes {
 		for _, helper := range helpers {

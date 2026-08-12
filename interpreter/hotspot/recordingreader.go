@@ -4,6 +4,7 @@
 package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -23,10 +24,18 @@ type RecordingReader struct {
 	chunk int
 }
 
+// maxRecordingReaderBuf is the cap for how much memory a single RecordingReader
+// may buffer. Real JIT line tables are small; this bounds attacker-forced growth.
+const maxRecordingReaderBuf = 1 * 1024 * 1024
+
 // ReadByte implements io.ByteReader interface to read memory single byte at a time.
 func (rr *RecordingReader) ReadByte() (byte, error) {
 	// Readahead to buffer if needed
 	if rr.i >= len(rr.buf) {
+		if len(rr.buf)+rr.chunk > maxRecordingReaderBuf {
+			return 0, fmt.Errorf("recording reader exceeded maximum buffer size of %d bytes",
+				maxRecordingReaderBuf)
+		}
 		buf := make([]byte, len(rr.buf)+rr.chunk)
 		copy(buf, rr.buf)
 		_, err := rr.reader.ReadAt(buf[len(rr.buf):], rr.offs)

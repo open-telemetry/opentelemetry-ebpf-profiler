@@ -280,7 +280,6 @@ func TestAllTracers(t *testing.T) {
 				ProbabilisticThreshold: 100,
 
 				VerboseMode:             true,
-				LoadProbe:               true,
 				PIDNamespaceTranslation: tc.enablePIDNamespaceTranslation,
 			})
 			require.NoError(t, err)
