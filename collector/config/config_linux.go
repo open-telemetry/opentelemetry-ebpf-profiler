@@ -74,7 +74,6 @@ type Config struct {
 	VerboseMode             bool                     `mapstructure:"verbose_mode"`
 	OffCPUThreshold         float64                  `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
-	LoadProbe               bool                     `mapstructure:"load_probe"`
 	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
 	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`
