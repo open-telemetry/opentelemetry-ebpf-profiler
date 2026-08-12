@@ -103,7 +103,6 @@ func Test_Golabels(t *testing.T) {
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
-				LoadProbe:              true,
 				VerboseMode:            true,
 			})
 			require.NoError(t, err)
