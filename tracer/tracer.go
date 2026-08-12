@@ -208,9 +208,6 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
-	// LoadProbe indicates whether the generic eBPF program should be loaded
-	// without being attached to something.
-	LoadProbe bool
 	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
@@ -359,7 +356,7 @@ func (t *Tracer) Close() {
 // It is the single source of truth consulted both during initialization and when recording
 // kprobeChainLoaded on the Tracer.
 func kprobeChainRequired(cfg *Config) bool {
-	return cfg.OffCPUThreshold > 0 || cfg.LoadProbe
+	return cfg.OffCPUThreshold > 0
 }
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided

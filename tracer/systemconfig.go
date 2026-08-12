@@ -455,7 +455,7 @@ func probeVMALookupSupport(cfg *Config) (bool, string) {
 	defer restoreRlimit()
 
 	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
-	if cfg.OffCPUThreshold > 0 || cfg.LoadProbe {
+	if cfg.OffCPUThreshold > 0 {
 		progTypes = append(progTypes, cebpf.Kprobe)
 	}
 
