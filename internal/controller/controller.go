@@ -109,6 +109,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
 		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
+		ProcessMetaEnrichers:    c.config.ProcessMetaEnrichers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
