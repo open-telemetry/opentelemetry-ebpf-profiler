@@ -86,8 +86,6 @@ var (
 		"captured profiling samples."
 	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
 		"Default is %d.", defaultArgFrameCacheSize)
-	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
-		"various user or kernel space hooks."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
@@ -175,8 +173,6 @@ func parseArgs() (*controller.Config, error) {
 	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
 
 	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
-
-	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

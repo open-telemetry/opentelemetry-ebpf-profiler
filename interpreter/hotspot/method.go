@@ -14,6 +14,12 @@ import (
 // Constants for the JVM internals that have never changed
 const ConstMethod_has_linenumber_table = 0x0001
 
+// maxInlinedScopes bounds the number of inlined scopes expanded for a single
+// frame. The JVM default inlining depth is ~9 (raised to 12-18 in some
+// configurations); 64 is far beyond any real chain while still bounding
+// attacker-forced CPU usage.
+const maxInlinedScopes = 64
+
 // hotspotMethod contains symbolization information for one Java method. It caches
 // information from Hotspot class Method, the connected class ConstMethod, and
 // chasing the pointers in the ConstantPool and other dynamic parts.
@@ -112,7 +118,7 @@ func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
 	// Found scope data. Expand the inlined scope information from it.
 	var err error
 	maxScopeOff := uint32(len(ji.scopesData))
-	for scopeOff != 0 && scopeOff < maxScopeOff {
+	for scopeNum := 0; scopeOff != 0 && scopeOff < maxScopeOff && scopeNum < maxInlinedScopes; scopeNum++ {
 		// Keep track of the current scope offset, and use it as the next maximum
 		// offset. This makes sure the scope offsets decrease monotonically and
 		// this loop terminates. It has been verified empirically for this assumption

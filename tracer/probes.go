@@ -242,8 +242,7 @@ type Probe interface {
 // ProbeRegistrar. The returned links are stored and closed when the tracer shuts down.
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
-// startup. Set LoadProbe: true in the Config passed to NewTracer (or enable
-// off-CPU profiling, which also triggers the chain load).
+// startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
 // Without the chain the probe attaches successfully but its tail calls into
 // kprobe_progs silently miss, producing no stack samples.
 //
@@ -253,7 +252,7 @@ type Probe interface {
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	if !t.kprobeChainLoaded {
 		return fmt.Errorf("Enable requires the kprobe unwinder chain to be loaded at startup: " +
-			"set LoadProbe: true in the tracer Config")
+			"enable off-CPU profiling (OffCPUThreshold > 0) to load the chain")
 	}
 
 	probeCtx := &ProbeContext{
