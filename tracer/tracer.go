@@ -143,11 +143,6 @@ type Tracer struct {
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
 
-	// kprobeChainLoaded records whether the kprobe tail-call unwinder chain was
-	// loaded at startup. Enable requires this; without it a custom probe's tail
-	// calls into kprobe_progs silently miss at runtime.
-	kprobeChainLoaded bool
-
 	// origins is the tracer-wide registry origin IDs are assigned from and
 	// profile type metadata is looked up by.
 	origins *originRegistry
@@ -327,7 +322,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
-		kprobeChainLoaded:      kprobeChainRequired(cfg),
 	}
 
 	return tracer, nil
@@ -355,13 +349,6 @@ func (t *Tracer) Close() {
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
 	t.signalDone()
-}
-
-// kprobeChainRequired reports whether the kprobe tail-call unwinder chain must be loaded.
-// It is the single source of truth consulted both during initialization and when recording
-// kprobeChainLoaded on the Tracer.
-func kprobeChainRequired(cfg *Config) bool {
-	return cfg.OffCPUThreshold > 0
 }
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
@@ -509,16 +496,14 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		return nil, nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if kprobeChainRequired(cfg) {
-		// Load the tail call destinations if any kind of event profiling is enabled.
-		// loadProbeUnwinders repoints the probe unwinder's per_cpu_records references
-		// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
-		// the perf unwinder keeps per_cpu_records.
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
-			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
-			ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
-		}
+	// Load the tail call destinations if any kind of event profiling is enabled.
+	// loadProbeUnwinders repoints the probe unwinder's per_cpu_records references
+	// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
+	// the perf unwinder keeps per_cpu_records.
+	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
+		ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
 	}
 
 	if cfg.OffCPUThreshold > 0 {
