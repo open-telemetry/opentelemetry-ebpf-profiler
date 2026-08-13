@@ -10,8 +10,8 @@ import (
 
 // ProbeAttacher is implemented by probes that need to attach to individual processes.
 // ProcessManager calls Match for each new executable mapping; if Match returns true,
-// Attach is called once for that PID (subsequent matching mappings for the same PID
-// are deduplicated — Attach is only ever called once per PID per attacher).
+// Attach is called for that mapping. Attach may therefore be called multiple times for
+// the same PID if the process has more than one matching mapping.
 // Detach is called exactly once per PID when the process exits.
 //
 // Implementations must not call back into ProcessManager during Attach or Detach,
@@ -21,7 +21,7 @@ type ProbeAttacher interface {
 	// given executable mapping. Must be cheap and must not block.
 	Match(pr process.Process, mapping *process.RawMapping) bool
 
-	// Attach is called the first time a matching mapping is seen for a PID.
+	// Attach is called for each matching mapping seen for a PID.
 	// The implementation is responsible for opening and managing per-PID
 	// kernel resources (e.g. a uprobe link restricted to that PID).
 	Attach(pr process.Process) error

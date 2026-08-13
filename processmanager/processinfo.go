@@ -226,7 +226,7 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 
 // attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
 // for every attacher whose Match returns true for the given mapping.
-// Attach may therefore be called multiple times for the same attacher if the process
+// Attach may be called multiple times for the same attacher if the process
 // has more than one matching mapping. The caller must hold pm.mu for writing.
 func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
 	pid := pr.PID()
