@@ -4,7 +4,7 @@
 // Package uprobe implements a per-process probe that attaches a PID-filtered uprobe
 // to every process that maps a given target executable or shared library.
 //
-// A OTel config using this approach could look like this:
+// An OTel config using this approach could look like this:
 //
 //	receivers:
 //	  profiling:
@@ -48,12 +48,16 @@ type probe struct {
 	links map[libpf.PID]link.Link
 }
 
+func (p *probe) String() string {
+	return "uprobe " + p.target + ":" + p.symbol
+}
+
 func New(cfg Config) (tracer.Probe, error) {
 	if cfg.Target == "" {
-		return nil, fmt.Errorf("uprobe: target is required")
+		return nil, fmt.Errorf("uprobe: missing target")
 	}
 	if cfg.Symbol == "" {
-		return nil, fmt.Errorf("uprobe: symbol is required")
+		return nil, fmt.Errorf("uprobe: missing symbol")
 	}
 	return &probe{
 		target: cfg.Target,
@@ -127,14 +131,22 @@ func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
 // for the given process and stores the link for later cleanup.
 func (p *probe) Attach(pr process.Process) error {
 	pid := pr.PID()
+
+	p.mu.Lock()
+	_, alreadyAttached := p.links[pid]
+	p.mu.Unlock()
+	if alreadyAttached {
+		return nil
+	}
+
 	ex, err := link.OpenExecutable(p.target)
 	if err != nil {
-		return fmt.Errorf("open %s: %w", p.target, err)
+		return fmt.Errorf("%s: open executable: %w", p, err)
 	}
 
 	lnk, err := ex.Uprobe(p.symbol, p.prog, &link.UprobeOptions{PID: int(pid)})
 	if err != nil {
-		return fmt.Errorf("uprobe %s:%s pid %d: %w", p.target, p.symbol, pid, err)
+		return fmt.Errorf("%s: attach to PID %d: %w", p, pid, err)
 	}
 
 	p.mu.Lock()

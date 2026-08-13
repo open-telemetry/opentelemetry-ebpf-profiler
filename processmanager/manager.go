@@ -378,7 +378,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // due to frameCache not being synced. If the tracer is later updated to distribute
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) (libpf.TraceHash, libpf.Frames) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
 	procMeta := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
@@ -469,5 +469,5 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		log.Errorf("Failed to report trace event: %v", err)
 	}
 
-	return traceutil.HashTrace(trace), trace.Frames
+	return trace
 }

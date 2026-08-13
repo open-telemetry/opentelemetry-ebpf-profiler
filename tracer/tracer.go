@@ -45,6 +45,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -154,14 +155,6 @@ type Tracer struct {
 	// postTraceHandlers are probes that implement PostTraceHandler and
 	// receive traces after symbolization and reporting.
 	postTraceHandlers []PostTraceHandler
-
-	// sampleSources are probes that implement SampleSource and produce
-	// additional profiles at each collection interval.
-	sampleSources []SampleSource
-
-	// metricsProviders are probes that implement MetricsProvider and expose
-	// operational metrics collected once per report interval.
-	metricsProviders []MetricsProvider
 
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
@@ -1430,11 +1423,15 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		}
 	}
 
-	hash, frames := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
 	// Post-handlers receive the symbolized result (e.g. live-heap correlation).
-	for _, h := range t.postTraceHandlers {
-		h.PostHandleTrace(bpfTrace, hash, frames)
+	// Hashing is deferred to here so we only pay the cost when handlers exist.
+	if len(t.postTraceHandlers) > 0 {
+		hash := traceutil.HashTrace(trace)
+		for _, h := range t.postTraceHandlers {
+			h.PostHandleTrace(bpfTrace, hash, trace.Frames)
+		}
 	}
 
 	// Reclaim the EbpfTrace
