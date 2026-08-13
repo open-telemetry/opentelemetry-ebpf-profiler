@@ -116,6 +116,9 @@ func (c *ProbeContext) sysVarSetters() []sysVar {
 		{"vma_vm_flags_offset", sv.vma_vm_flags_offset},
 		{"task_group_leader_offset", sv.task_group_leader_offset},
 		{"task_start_time_offset", sv.task_start_time_offset},
+		{"pid_ns_translation_enabled", sv.pid_ns_translation_enabled},
+		{"target_pid_ns_dev", sv.target_pid_ns_dev},
+		{"target_pid_ns_inode", sv.target_pid_ns_inode},
 	}
 }
 

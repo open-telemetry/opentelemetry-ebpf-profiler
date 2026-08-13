@@ -12,7 +12,9 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/crash"
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
+	"go.opentelemetry.io/ebpf-profiler/probes/oom"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -192,6 +194,18 @@ func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error
 
 func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 	switch probeType {
+	case "crash":
+		var ccfg crash.Config
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&ccfg); err != nil {
+			return nil, fmt.Errorf("decoding crash config: %w", err)
+		}
+		return crash.New(ccfg)
+	case "oom":
+		var ocfg oom.Config
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&ocfg); err != nil {
+			return nil, fmt.Errorf("decoding oom config: %w", err)
+		}
+		return oom.New(ocfg)
 	case "kprobe":
 		var kcfg kprobe.Config
 		if err := confmap.NewFromStringMap(cfg).Unmarshal(&kcfg); err != nil {

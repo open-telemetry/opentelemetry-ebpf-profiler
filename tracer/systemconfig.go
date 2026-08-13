@@ -41,6 +41,13 @@ type SysConfigVars struct {
 	vma_vm_flags_offset      uint32
 	task_group_leader_offset uint32
 	task_start_time_offset   uint32
+
+	// PID namespace translation settings, mirrored from the eBPF RODATA vars so
+	// custom probes attached via Enable resolve PIDs the same way the main
+	// tracer does. Zero values disable translation (global PIDs).
+	pid_ns_translation_enabled bool
+	target_pid_ns_dev          uint64
+	target_pid_ns_inode        uint64
 }
 
 var (
@@ -568,6 +575,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		}
 	}
 
+	var pidNSEnabled bool
+	var pidNSDev, pidNSInode uint64
 	if cfg.PIDNamespaceTranslation {
 		dev, ino, err := getCurrentNS("/proc/self/ns/pid")
 		if err != nil {
@@ -582,6 +591,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
 			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
 		}
+		pidNSEnabled, pidNSDev, pidNSInode = true, dev, ino
 		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
 	}
 
@@ -634,7 +644,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
 	}
 
-	rodataVars := SysConfigVars{inverse_pac_mask: ^pacMask}
+	rodataVars := SysConfigVars{
+		inverse_pac_mask:           ^pacMask,
+		pid_ns_translation_enabled: pidNSEnabled,
+		target_pid_ns_dev:          pidNSDev,
+		target_pid_ns_inode:        pidNSInode,
+	}
 	configureVMALookup(coll, cfg, &rodataVars)
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
