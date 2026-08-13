@@ -185,52 +185,91 @@ func TestWalkRangeSectionMapAlias(t *testing.T) {
 func TestReadMethodDynamicName(t *testing.T) {
 	const (
 		methodDescPtr       = libpf.Address(0x100)
-		methodNamePtr       = 0x200
+		methodDescChunkSize = 0x18
+		methodTablePtr      = 0x300
+		loaderModulePtr     = libpf.Address(0x400)
+		methodNamePtr       = 0x500
 		methodDescFlagsOffs = 0x6
 		dynamicMethodName   = "lambda_method1"
 	)
 
 	tests := map[string]struct {
 		methodNameFieldOffs uint
+		methodName          string
+		moduleAvailable     bool
 		wantName            string
 	}{
 		"friendly name": {
 			methodNameFieldOffs: 0x20,
+			methodName:          dynamicMethodName,
+			moduleAvailable:     true,
 			wantName:            dynamicMethodName,
 		},
-		"missing cDAC field": {},
+		"empty name": {
+			methodNameFieldOffs: 0x20,
+			moduleAvailable:     true,
+			wantName:            "[stub: dynamic]",
+		},
+		"missing cDAC field": {
+			moduleAvailable: true,
+			wantName:        "[stub: dynamic]",
+		},
+		"module without PE mapping": {
+			methodNameFieldOffs: 0x20,
+			methodName:          dynamicMethodName,
+			wantName:            dynamicMethodName,
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			memory := make([]byte, 0x400)
+			memory := make([]byte, 0x600)
 			binary.LittleEndian.PutUint16(memory[int(methodDescPtr)+methodDescFlagsOffs:], mcDynamic)
 			if tt.methodNameFieldOffs != 0 {
 				binary.LittleEndian.PutUint64(
 					memory[int(methodDescPtr)+int(tt.methodNameFieldOffs):], methodNamePtr)
-				copy(memory[methodNamePtr:], dynamicMethodName+"\x00")
+				copy(memory[methodNamePtr:], tt.methodName+"\x00")
 			}
+			methodDescChunkPtr := methodDescPtr - methodDescChunkSize
+			putUint64(memory, int(methodDescChunkPtr), methodTablePtr)
+			putUint64(memory, methodTablePtr+0x18, uint64(loaderModulePtr))
 
 			cdac := dotnetCdac{}
+			cdac.Globals.MethodDescAlignment = 0x8
 			cdac.Types.MethodDesc.Flags = methodDescFlagsOffs
 			cdac.Types.MethodDesc.SizeOf = 0x8
 			cdac.Types.DynamicMethodDesc.MethodName = tt.methodNameFieldOffs
+			cdac.Types.MethodDescChunk.MethodTable = 0
+			cdac.Types.MethodDescChunk.FlagsAndTokenRange = 0x12
+			cdac.Types.MethodDescChunk.SizeOf = methodDescChunkSize
+			cdac.Types.MethodTable.Module = 0x18
 
 			d := &dotnetData{}
 			_, err := d.GetOrInit(func() (dotnetCdac, error) {
 				return cdac, nil
 			})
 			require.NoError(t, err)
+			module := &peInfo{simpleName: libpf.Intern("ProfileDemo.dll")}
+			moduleToPEInfo := make(map[libpf.Address]*peInfo)
+			if tt.moduleAvailable {
+				moduleToPEInfo[loaderModulePtr] = module
+			}
 
 			instance := &dotnetInstance{
-				d:  d,
-				rm: remotememory.RemoteMemory{ReaderAt: bytes.NewReader(memory)},
+				d:              d,
+				rm:             remotememory.RemoteMemory{ReaderAt: bytes.NewReader(memory)},
+				moduleToPEInfo: moduleToPEInfo,
 			}
 			method, err := instance.readMethod(methodDescPtr, 0)
 			require.NoError(t, err)
 			require.NotNil(t, method)
 			assert.Equal(t, uint16(mcDynamic), method.classification)
 			assert.Equal(t, tt.wantName, method.dynamicName.String())
+			if tt.moduleAvailable {
+				assert.Same(t, module, method.module)
+			} else {
+				assert.Nil(t, method.module)
+			}
 		})
 	}
 }
@@ -239,26 +278,47 @@ func TestSymbolizeDynamicMethod(t *testing.T) {
 	const codeHeaderPtr = libpf.Address(0x1234)
 
 	tests := map[string]struct {
-		dynamicName string
+		dynamicName libpf.String
+		withModule  bool
 		wantName    string
 	}{
 		"friendly name": {
-			dynamicName: "lambda_method1",
+			dynamicName: libpf.Intern("lambda_method1"),
+			withModule:  true,
 			wantName:    "lambda_method1",
 		},
-		"missing name": {
-			wantName: "[stub: dynamic]",
+		"fallback name": {
+			dynamicName: stubFrameName[codeDynamic],
+			withModule:  true,
+			wantName:    "[stub: dynamic]",
+		},
+		"friendly name without module": {
+			dynamicName: libpf.Intern("lambda_method1"),
+			wantName:    "lambda_method1",
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			moduleName := libpf.Intern("ProfileDemo.dll")
+			moduleMapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+				File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+					FileID:   libpf.NewFileID(1, 2),
+					FileName: moduleName,
+				}),
+			})
+			module := &peInfo{simpleName: moduleName, mapping: moduleMapping}
+			var methodModule *peInfo
+			if tt.withModule {
+				methodModule = module
+			}
 			addrToMethod, err := freelru.New[libpf.Address, *dotnetMethod](
 				interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 			require.NoError(t, err)
 			addrToMethod.Add(codeHeaderPtr, &dotnetMethod{
 				classification: mcDynamic,
-				dynamicName:    libpf.Intern(tt.dynamicName),
+				dynamicName:    tt.dynamicName,
+				module:         methodModule,
 			})
 
 			instance := &dotnetInstance{addrToMethod: addrToMethod}
@@ -270,7 +330,15 @@ func TestSymbolizeDynamicMethod(t *testing.T) {
 			err = instance.Symbolize(ebpfFrame, &frames, mapping)
 			require.NoError(t, err)
 			require.Len(t, frames, 1)
-			assert.Equal(t, tt.wantName, frames[0].Value().FunctionName.String())
+			frame := frames[0].Value()
+			assert.Equal(t, tt.wantName, frame.FunctionName.String())
+			if tt.withModule {
+				assert.Equal(t, moduleName, frame.SourceFile)
+				assert.Equal(t, moduleMapping, frame.Mapping)
+			} else {
+				assert.Equal(t, libpf.NullString, frame.SourceFile)
+				assert.False(t, frame.Mapping.Valid())
+			}
 		})
 	}
 }

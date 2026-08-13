@@ -109,6 +109,14 @@ var codeName = []string{
 	codeDynamic:                   "dynamic",
 }
 
+var stubFrameName = func() []libpf.String {
+	names := make([]libpf.String, len(codeName))
+	for codeType, name := range codeName {
+		names[codeType] = libpf.Intern("[stub: " + name + "]")
+	}
+	return names
+}()
+
 // dotnetMapping reflects mapping of PE file to process.
 type dotnetMapping struct {
 	start, end uint64
@@ -222,7 +230,7 @@ type dotnetInstance struct {
 func (i *dotnetInstance) appendStubFrame(frames *libpf.Frames, codeType uint) {
 	frames.Append(&libpf.Frame{
 		Type:         libpf.DotnetFrame,
-		FunctionName: libpf.Intern("[stub: " + codeName[codeType] + "]"),
+		FunctionName: stubFrameName[codeType],
 	})
 }
 
@@ -555,16 +563,15 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	tokenRemainder &= cdac.calculated.MethodDescTokenRemainderMask
 	chunkIndex := npsr.Uint8(methodDesc, vms.MethodDesc.ChunkIndex)
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
+	dynamicName := libpf.NullString
 	if classification == mcDynamic {
-		name := libpf.NullString
+		dynamicName = stubFrameName[codeDynamic]
 		if vms.DynamicMethodDesc.MethodName != 0 {
-			name = libpf.Intern(i.rm.StringPtr(methodDescPtr +
-				libpf.Address(vms.DynamicMethodDesc.MethodName)))
+			if name := libpf.Intern(i.rm.StringPtr(methodDescPtr +
+				libpf.Address(vms.DynamicMethodDesc.MethodName))); name != libpf.NullString {
+				dynamicName = name
+			}
 		}
-		return &dotnetMethod{
-			classification: classification,
-			dynamicName:    name,
-		}, nil
 	}
 
 	// Calculate the offset to the owning MethodDescChunk structure
@@ -599,11 +606,17 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
 	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
 	if err != nil {
-		return nil, err
+		if classification != mcDynamic {
+			return nil, err
+		}
+		// Dynamic methods can belong to modules without a PE mapping. Preserve the
+		// recovered method name when no module information is available.
+		log.Debugf("failed to resolve module for dynamic method @%x: %v", methodDescPtr, err)
 	}
 
 	method := &dotnetMethod{
 		classification: classification,
+		dynamicName:    dynamicName,
 		index:          index,
 		module:         module,
 	}
@@ -931,14 +944,15 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 			return err
 		}
 		if method.classification == mcDynamic {
-			if method.dynamicName == libpf.NullString {
-				i.appendStubFrame(frames, codeDynamic)
-			} else {
-				frames.Append(&libpf.Frame{
-					Type:         libpf.DotnetFrame,
-					FunctionName: method.dynamicName,
-				})
+			frame := &libpf.Frame{
+				Type:         libpf.DotnetFrame,
+				FunctionName: method.dynamicName,
 			}
+			if method.module != nil {
+				frame.SourceFile = method.module.simpleName
+				frame.Mapping = method.module.mapping
+			}
+			frames.Append(frame)
 			break
 		}
 		if method.index == 0 {

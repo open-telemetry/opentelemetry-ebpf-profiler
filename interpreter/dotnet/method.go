@@ -17,7 +17,7 @@ import (
 type dotnetMethod struct {
 	// module is the PE DLL defining this method
 	module *peInfo
-	// dynamicName is the friendly name of a method without metadata.
+	// dynamicName is the symbol name of a dynamic method, including its fallback.
 	dynamicName libpf.String
 	// boundInfo is the extracted boundary debug information from coreclr vm.
 	boundsInfo []byte
