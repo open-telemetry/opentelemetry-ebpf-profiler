@@ -12,7 +12,6 @@ import (
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -240,14 +239,6 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
 	c.registerAttacher(a)
 }
 
-// Map returns a handle to one of the tracer's shared eBPF maps by name.
-// Probes use this to perform userspace reads/writes on maps that were loaded
-// as part of the main tracer collection (e.g. writing per-PID entries).
-func (c *ProbeContext) Map(name string) (*cebpf.Map, bool) {
-	m, ok := c.maps[name]
-	return m, ok
-}
-
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
@@ -268,10 +259,15 @@ type Probe interface {
 // tracker and should never be symbolized or reported).
 //
 // The tracer checks whether a Probe satisfies PreTraceHandler after Enable
-// and, if so, invokes it for every incoming trace before symbolization.
+// and registers it for the origins returned by PreOrigins(). The handler is
+// only invoked for traces whose origin matches one of the registered values.
 type PreTraceHandler interface {
-	// PreHandleTrace is called for each incoming trace before symbolization.
-	// The handler should inspect the trace's Origin to decide if it's relevant.
+	// PreOrigins returns the set of origin IDs this handler wants to receive.
+	// The tracer dispatches only traces with a matching origin to this handler.
+	PreOrigins() []uint16
+
+	// PreHandleTrace is called for each incoming trace (with matching origin)
+	// before symbolization.
 	//
 	// Return true to continue with normal symbolization and reporting, or
 	// false to consume the trace (it will not be symbolized or reported).
@@ -281,33 +277,20 @@ type PreTraceHandler interface {
 // PostTraceHandler is an optional interface that Probe implementations may
 // satisfy to receive traces after symbolization and reporting. This allows
 // probes to perform post-processing that requires the symbolized trace hash
-// and frames (e.g. feeding alloc events into a live-heap correlator).
+// (e.g. feeding alloc events into a live-heap correlator).
 //
 // The tracer checks whether a Probe satisfies PostTraceHandler after Enable
-// and, if so, invokes it for every trace that was not consumed by a
-// PreTraceHandler.
+// and registers it for the origins returned by PostOrigins(). The handler is
+// only invoked for traces whose origin matches one of the registered values,
+// avoiding unnecessary hash computation on the hot path.
 type PostTraceHandler interface {
-	// PostHandleTrace is called after symbolization and reporting.
-	// The handler should inspect the trace's Origin to decide if it's relevant.
-	PostHandleTrace(trace *libpf.EbpfTrace, hash libpf.TraceHash, frames libpf.Frames)
-}
+	// PostOrigins returns the set of origin IDs this handler wants to receive.
+	// The tracer dispatches only traces with a matching origin to this handler.
+	PostOrigins() []uint16
 
-// SampleSource is an optional interface that Probe implementations may satisfy
-// to produce additional profiles at each report interval. This allows probes to
-// emit data that isn't tied to individual traces (e.g. live/inuse heap snapshots
-// aggregated from alloc/free correlation).
-//
-// The tracer checks whether a Probe satisfies SampleSource after Enable and, if
-// so, includes it in the periodic collection performed by CollectSampleSources.
-type SampleSource interface {
-	ProduceSamples() []samples.SourceProfile
-}
-
-// MetricsProvider is an optional interface that Probe implementations may
-// satisfy to expose operational metrics (e.g. tracker size, dropped samples).
-// The tracer collects these once per report interval via CollectProbeMetrics.
-type MetricsProvider interface {
-	GetAndResetMetrics() []metrics.Metric
+	// PostHandleTrace is called after symbolization and reporting for traces
+	// with a matching origin.
+	PostHandleTrace(trace *libpf.Trace, hash libpf.TraceHash)
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
@@ -357,40 +340,16 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	}
 
 	if pth, ok := p.(PreTraceHandler); ok {
-		t.preTraceHandlers = append(t.preTraceHandlers, pth)
+		for _, origin := range pth.PreOrigins() {
+			t.preTraceHandlers[origin] = append(t.preTraceHandlers[origin], pth)
+		}
 	}
 
 	if pth, ok := p.(PostTraceHandler); ok {
-		t.postTraceHandlers = append(t.postTraceHandlers, pth)
-	}
-
-	if ss, ok := p.(SampleSource); ok {
-		t.sampleSources = append(t.sampleSources, ss)
-	}
-
-	if mp, ok := p.(MetricsProvider); ok {
-		t.metricsProviders = append(t.metricsProviders, mp)
+		for _, origin := range pth.PostOrigins() {
+			t.postTraceHandlers[origin] = append(t.postTraceHandlers[origin], pth)
+		}
 	}
 
 	return nil
-}
-
-// CollectSampleSources invokes all registered SampleSource probes and returns
-// their combined profiles. Called by the reporter once per collection interval.
-func (t *Tracer) CollectSampleSources() []samples.SourceProfile {
-	var profiles []samples.SourceProfile
-	for _, ss := range t.sampleSources {
-		profiles = append(profiles, ss.ProduceSamples()...)
-	}
-	return profiles
-}
-
-// CollectProbeMetrics collects operational metrics from all probes that
-// implement MetricsProvider. Called once per report interval.
-func (t *Tracer) CollectProbeMetrics() []metrics.Metric {
-	var result []metrics.Metric
-	for _, mp := range t.metricsProviders {
-		result = append(result, mp.GetAndResetMetrics()...)
-	}
-	return result
 }

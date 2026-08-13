@@ -45,6 +45,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -147,21 +148,14 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
-	// preTraceHandlers are probes that implement PreTraceHandler and may
-	// consume traces before symbolization.
-	preTraceHandlers []PreTraceHandler
+	// preTraceHandlers maps origin ID to pre-trace handlers registered for
+	// that origin. Only traces with a matching origin are dispatched.
+	preTraceHandlers map[uint16][]PreTraceHandler
 
-	// postTraceHandlers are probes that implement PostTraceHandler and
-	// receive traces after symbolization and reporting.
-	postTraceHandlers []PostTraceHandler
-
-	// sampleSources are probes that implement SampleSource and produce
-	// additional profiles at each collection interval.
-	sampleSources []SampleSource
-
-	// metricsProviders are probes that implement MetricsProvider and expose
-	// operational metrics collected once per report interval.
-	metricsProviders []MetricsProvider
+	// postTraceHandlers maps origin ID to post-trace handlers registered for
+	// that origin. Only traces with a matching origin are dispatched,
+	// avoiding hash computation on the hot path for unrelated traces.
+	postTraceHandlers map[uint16][]PostTraceHandler
 
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
@@ -338,6 +332,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
+		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
+		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
 
 	return tracer, nil
@@ -1422,19 +1418,25 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	// Pre-handlers may consume traces before symbolization (e.g. free events).
-	for _, h := range t.preTraceHandlers {
-		if !h.PreHandleTrace(bpfTrace) {
-			t.tracePool.Put(bpfTrace)
-			return
+	// Pre-handlers gated by origin may consume traces before symbolization.
+	if handlers := t.preTraceHandlers[bpfTrace.Origin]; len(handlers) > 0 {
+		for _, h := range handlers {
+			if !h.PreHandleTrace(bpfTrace) {
+				t.tracePool.Put(bpfTrace)
+				return
+			}
 		}
 	}
 
-	hash, frames := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
-	// Post-handlers receive the symbolized result (e.g. live-heap correlation).
-	for _, h := range t.postTraceHandlers {
-		h.PostHandleTrace(bpfTrace, hash, frames)
+	// Post-handlers gated by origin receive the symbolized result.
+	// Hashing is deferred and only computed when a matching handler exists.
+	if handlers := t.postTraceHandlers[bpfTrace.Origin]; len(handlers) > 0 {
+		hash := traceutil.HashTrace(trace)
+		for _, h := range handlers {
+			h.PostHandleTrace(trace, hash)
+		}
 	}
 
 	// Reclaim the EbpfTrace

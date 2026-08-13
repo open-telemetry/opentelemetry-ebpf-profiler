@@ -88,29 +88,6 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
-// SourceProfile is a set of samples sharing the same sample type schema,
-// produced by a probe's SampleSource implementation at each collection interval.
-type SourceProfile struct {
-	// SampleTypes describes each value column (name + unit).
-	SampleTypes []SourceSampleType
-	// Samples are the data rows.
-	Samples []SourceSample
-}
-
-// SourceSampleType describes a single value column in a SourceProfile.
-type SourceSampleType struct {
-	Type string // e.g. "inuse_space"
-	Unit string // e.g. "bytes"
-}
-
-// SourceSample is a single sample row produced by a SampleSource probe.
-type SourceSample struct {
-	PID       libpf.PID
-	TraceHash libpf.TraceHash
-	Frames    libpf.Frames
-	Values    []int64 // one per SampleType, positional
-}
-
 // TypeMetadata describes how profiling events of a particular kind
 // should be interpreted and exported as an OTel profile.
 type TypeMetadata struct {
@@ -130,11 +107,4 @@ type TypeMetadata struct {
 	// ReportValues indicates whether a sample's value should be included
 	// in the exported sample (e.g. off-CPU durations).
 	ReportValues bool
-}
-
-// ProcessMeta holds per-process metadata needed when building OTLP
-// resource attributes for profile export.
-type ProcessMeta struct {
-	ExecutablePath libpf.String
-	ContainerID    libpf.String
 }
