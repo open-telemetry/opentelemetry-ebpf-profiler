@@ -485,7 +485,6 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 			log.Error(err)
 		}
 	}()
-
 	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -839,7 +838,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
-
 }
 
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.
