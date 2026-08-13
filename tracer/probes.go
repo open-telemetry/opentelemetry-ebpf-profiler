@@ -265,11 +265,6 @@ type Probe interface {
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
-	if !t.kprobeChainLoaded {
-		return fmt.Errorf("Enable requires the kprobe unwinder chain to be loaded at startup: " +
-			"enable off-CPU profiling (OffCPUThreshold > 0) to load the chain")
-	}
-
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
