@@ -99,20 +99,20 @@ type MachineData struct {
 // ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
 type ReadAtCloser = pfelf.ReadAtCloser
 
-// MetaConfig provides options that influences gathering ProcessMeta.
-type MetaConfig struct {
-	// IncludeEnvVars holds a list of env vars that should be captured from the process.
-	IncludeEnvVars libpf.Set[string]
-}
-
 // ProcessMeta contains metadata about a tracked process.
-type ProcessMeta struct {
+type Meta struct {
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String
 	// process env vars from /proc/PID/environ
 	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
 	ContainerID libpf.String
+
+	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
+	// It is nil unless an enricher is configured and explicitly sets values.
+	// Must be treated as read-only after enricher logic has executed: access is
+	// not synchronized, so concurrent writes will trigger data races.
+	ExtraMeta map[libpf.String]string
 }
 
 // Process is the interface to inspect ELF coredump/process.
@@ -127,7 +127,7 @@ type Process interface {
 	GetMachineData() MachineData
 
 	// GetProcessMeta returns process specific metadata.
-	GetProcessMeta(MetaConfig) ProcessMeta
+	GetProcessMeta([]MetaEnricher) Meta
 
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)
@@ -159,4 +159,22 @@ type Process interface {
 	io.Closer
 
 	pfelf.ELFOpener
+}
+
+// MetaEnricher is called once per process when it is first observed.
+// Implementations may read from /proc or any other source and store arbitrary
+// key-value pairs in meta.ExtraMeta. The call happens while the process is still
+// alive, so short-lived process data is reliably captured.
+type MetaEnricher interface {
+	// EnrichMeta is called with the process's /proc/<pid>/ base path (including
+	// trailing slash) and a pointer to the Meta to populate.
+	EnrichMeta(string, *Meta)
+}
+
+// MetaEnricherFunc is an adapter to allow use of plain functions as a
+// MetaEnricher.
+type MetaEnricherFunc func(string, *Meta)
+
+func (f MetaEnricherFunc) EnrichMeta(procBase string, meta *Meta) {
+	f(procBase, meta)
 }

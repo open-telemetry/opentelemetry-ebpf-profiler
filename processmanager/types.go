@@ -131,9 +131,6 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	// includeEnvVars holds all env vars captured from processes.
-	includeEnvVars libpf.Set[string]
-
 	// reportEnvVars holds only the user-requested env vars that may be reported.
 	reportEnvVars libpf.Set[string]
 
@@ -141,15 +138,16 @@ type ProcessManager struct {
 	// profiler's own use, to derive process context resource attributes.
 	internalEnvVars []libpf.String
 
-	// selfCgroupIno is the inode of the profiler's cgroup directory
-	// (stat("/sys/fs/cgroup")). Used to identify processes whose cgroup root
-	// matches the profiler's, which need the selfContainerID fallback.
-	selfCgroupIno uint64
+	metaEnrichers []process.MetaEnricher
 
-	// selfContainerID is the profiler's own container ID, detected once at startup.
-	// Used as a fallback when /proc/<pid>/cgroup yields no container ID for processes
-	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
-	selfContainerID libpf.String
+	// probeAttachers is the set of per-process probe attachers registered via
+	// RegisterProbeAttacher. Protected by mu.
+	probeAttachers []ProbeAttacher
+
+	// attachedProbes tracks which ProbeAttacher have been successfully attached to each PID.
+	// Using a set ensures each attacher is Detach-called exactly once per PID
+	// regardless of how many matching mappings triggered Attach. Protected by mu.
+	attachedProbes map[libpf.PID]map[ProbeAttacher]libpf.Void
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -181,8 +179,8 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// process metadata, fixed for process lifetime (read-only)
-	meta process.ProcessMeta
+	// process metadata, updated on executable changes
+	meta process.Meta
 	// processContext is the resolved OTel process-context snapshot. It is
 	// published together with meta under ProcessManager.mu.
 	processContext processcontext.Info

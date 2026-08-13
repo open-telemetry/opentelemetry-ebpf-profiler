@@ -116,42 +116,57 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 	return nil
 }
 
-// getPidInformation gets or creates the Pid information for given PID.
+// getOrCreateProcessInfo returns the processInfo for a PID.
+// If the PID is not yet known, the processInfo is created and the process
+// metadata is gathered (including configured process MetaEnrichers) without
+// the processmanager lock held.
 //
-// Caller must hold pm.mu write lock.
-func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
-) *processInfo {
-	if info, ok := pm.pidToProcessInfo[pid]; ok {
+// Returns nil on failure.
+// Caller must not hold the pm.mu lock.
+func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
+	pr process.Process) *processInfo {
+	pm.mu.RLock()
+	info, ok := pm.pidToProcessInfo[pid]
+	pm.mu.RUnlock()
+	if ok {
 		return info
 	}
 
-	// Insert a dummy page into the eBPF map pid_page_to_mapping_info that provides the eBPF
-	// a quick way to check if we know something about this particular process.
+	// Gather metadata without holding the processmanager lock:
+	// This reads /proc and may invoke arbitrary enricher callbacks.
+	meta, internalEnvVars := pm.readProcessMeta(pr)
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Check if another goroutine registered the PID in-between.
+	if info, ok = pm.pidToProcessInfo[pid]; ok {
+		return info
+	}
+
 	if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
 		return nil
 	}
 
-	meta, internalEnvVars := pm.readProcessMeta(pid, pr)
-
-	info := &processInfo{
+	pm.pidPageToMappingInfoSize++
+	info = &processInfo{
 		meta:            meta,
 		internalEnvVars: internalEnvVars,
 		libcInfo:        nil,
 	}
 	pm.pidToProcessInfo[pid] = info
-	pm.pidPageToMappingInfoSize++
+
 	return info
 }
 
-// readProcessMeta collects both user-requested environment variables and the
-// variables needed to derive OTel resource attributes. The latter are copied
-// into a separate map, while reportEnvVars determines which captured values
-// remain in ProcessMeta.
-func (pm *ProcessManager) readProcessMeta(pid libpf.PID, pr process.Process) (
-	process.ProcessMeta, map[libpf.String]libpf.String,
+// readProcessMeta gathers the process metadata and separates the environment
+// variables captured for the profiler's own use from those the user asked to
+// report. The former are copied into a dedicated map, while reportEnvVars
+// determines which captured values remain in the returned Meta.
+func (pm *ProcessManager) readProcessMeta(pr process.Process) (
+	process.Meta, map[libpf.String]libpf.String,
 ) {
-	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	pm.fillSelfContainerID(pid, &meta)
+	meta := pr.GetProcessMeta(pm.metaEnrichers)
 	var internalEnvVars map[libpf.String]libpf.String
 	for _, key := range pm.internalEnvVars {
 		if value, ok := meta.EnvVariables[key]; ok {
@@ -169,23 +184,6 @@ func (pm *ProcessManager) readProcessMeta(pid libpf.PID, pr process.Process) (
 		meta.EnvVariables = nil
 	}
 	return meta, internalEnvVars
-}
-
-// fillSelfContainerID sets the container ID on meta if the process has the same cgroup
-// directory root as the profiler and the standard cgroup-based detection returned no result.
-func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.ProcessMeta) {
-	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
-		return
-	}
-	ino, err := process.CgroupRootInode(pid)
-	if err != nil {
-		return
-	}
-	if ino == pm.selfCgroupIno {
-		meta.ContainerID = pm.selfContainerID
-	} else {
-		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, pm.selfCgroupIno)
-	}
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
@@ -253,6 +251,27 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	}
 
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
+}
+
+// attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
+// for every attacher whose Match returns true for the given mapping.
+// Attach may be called multiple times for the same attacher if the process
+// has more than one matching mapping. The caller must hold pm.mu for writing.
+func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
+	pid := pr.PID()
+	for _, a := range pm.probeAttachers {
+		if !a.Match(pr, m) {
+			continue
+		}
+		if err := a.Attach(pr); err != nil {
+			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
+			continue
+		}
+		if pm.attachedProbes[pid] == nil {
+			pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
+		}
+		pm.attachedProbes[pid][a] = libpf.Void{}
+	}
 }
 
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
@@ -452,6 +471,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
+	pm.attachProbesForMapping(pr, m)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -525,6 +545,11 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	}
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
+
+	for a := range pm.attachedProbes[pid] {
+		a.Detach(pid)
+	}
+	delete(pm.attachedProbes, pid)
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
@@ -604,12 +629,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// the case of main thread exit. Ignore it.
 	}
 
-	pm.mu.Lock()
-	info := pm.getPidInformation(pid, pr)
+	info := pm.getOrCreateProcessInfo(pid, pr)
 	if info == nil {
-		pm.mu.Unlock()
 		return
 	}
+
+	pm.mu.Lock()
 	// Check if process meta needs an update. execve preserves the tgid, so a
 	// re-exec of the same path is invisible here and leaves env vars and the
 	// process context unrefreshed. Detecting it needs a sched_process_exec
@@ -792,20 +817,21 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.pidPageToMappingInfoSize += numChanges
 
 	// Update metadata of the process.
-	var meta process.ProcessMeta
+	var meta process.Meta
 	internalEnvVars := oldInternalEnvVars
 	if updateProcessMeta {
-		meta, internalEnvVars = pm.readProcessMeta(pid, pr)
+		meta, internalEnvVars = pm.readProcessMeta(pr)
 	}
 
 	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
 		contextMappingAddr, pid, pr.GetRemoteMemory(),
 		oldProcessContextPublishedAtNs, internalEnvVars, updateProcessMeta || newProcess)
 
-	// Sort and publish the new mappings and meta
+	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)
+
+	info = pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
-	info = pm.getPidInformation(pid, pr)
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
@@ -878,13 +904,13 @@ func (pm *ProcessManager) CleanupPIDs() {
 
 // metaForPID returns a consistent snapshot of the process metadata and its
 // resolved OTel process context for the given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.ProcessMeta, processcontext.Info) {
+func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, processcontext.Info) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
 		return procInfo.meta, procInfo.processContext
 	}
-	return process.ProcessMeta{}, processcontext.Info{}
+	return process.Meta{}, processcontext.Info{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

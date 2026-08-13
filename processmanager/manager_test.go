@@ -76,14 +76,23 @@ func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Only the user-requested env vars may be reported.
 	assert.Equal(t, libpf.Set[string]{"FOO": {}}, pm.reportEnvVars)
-	assert.Equal(t, libpf.Set[string]{
-		"FOO": {}, "OTEL_SERVICE_NAME": {}, "OTEL_RESOURCE_ATTRIBUTES": {},
-	}, pm.includeEnvVars)
 
+	// The env vars used to derive process context are captured for internal use only.
+	internalNames := make([]string, 0, len(pm.internalEnvVars))
+	for _, name := range pm.internalEnvVars {
+		internalNames = append(internalNames, name.String())
+	}
+	assert.ElementsMatch(t,
+		[]string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"}, internalNames)
+
+	// New must not add the internal env vars to the caller's set.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, requestedEnvVars)
+
+	// Later mutations of the caller's set must not affect the reported set.
 	requestedEnvVars["BAR"] = libpf.Void{}
 	assert.NotContains(t, pm.reportEnvVars, "BAR")
-	assert.NotContains(t, pm.includeEnvVars, "BAR")
 }
 
 func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {

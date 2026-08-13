@@ -72,6 +72,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
+	ProcessMetaEnrichers  []process.MetaEnricher
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -127,10 +128,17 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
+	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
+	// includeEnvVars is never empty: it always holds the process context env vars.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
+
+	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	} else {
+		metaEnrichers = append(metaEnrichers, selfContainerEnricher)
 	}
+	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
@@ -146,11 +154,10 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		includeEnvVars:           includeEnvVars,
 		reportEnvVars:            reportEnvVars,
 		internalEnvVars:          internalEnvVars,
-		selfCgroupIno:            selfCgroupIno,
-		selfContainerID:          selfContainerID,
+		metaEnrichers:            metaEnrichers,
+		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
@@ -404,6 +411,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		Resource:       processContext.Resource,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
+		ExtraMeta:      procMeta.ExtraMeta,
 	}
 
 	pid := bpfTrace.PID

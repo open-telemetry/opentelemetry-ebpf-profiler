@@ -119,6 +119,10 @@ const (
 	// maxBoundsSize is the maximum size of boundary debug info (for a method)
 	// that we accept as valid. This is to prevent OOM situation.
 	maxBoundsSize = 16 * 1024
+
+	// maxDotnetStructSize caps the size of any per-struct read from target
+	// memory. All real CoreCLR struct sizes are well below this value.
+	maxDotnetStructSize = 64 * 1024
 )
 
 var (

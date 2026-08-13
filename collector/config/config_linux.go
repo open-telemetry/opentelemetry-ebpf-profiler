@@ -45,6 +45,18 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
+// Probe holds the type and configuration for a single probe entry.
+// All fields except "type" are probe-specific and collected via mapstructure's
+// remain feature, so the YAML is flat (no nested "config:" block):
+//
+//	probes:
+//	  - type: kprobe
+//	    symbol: vfs_open
+type Probe struct {
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:",remain"`
+}
+
 // Config is the configuration for the collector.
 type Config struct {
 	ReporterInterval        time.Duration            `mapstructure:"reporter_interval"`
@@ -62,18 +74,17 @@ type Config struct {
 	VerboseMode             bool                     `mapstructure:"verbose_mode"`
 	OffCPUThreshold         float64                  `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
-	ProbeLinks              []string                 `mapstructure:"probe_links"`
-	LoadProbe               bool                     `mapstructure:"load_probe"`
 	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
 	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries          uint32                   `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize           int                      `mapstructure:"max_rpc_msg_size"`
 	BPFFSRoot               string                   `mapstructure:"bpf_fs_root"`
-	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
 	ErrorMode               ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
+	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
+	Probes                  []Probe                  `mapstructure:"probes"`
 
 	// Configuration options that users can not set directly:
 	//
