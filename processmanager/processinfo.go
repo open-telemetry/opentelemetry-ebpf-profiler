@@ -238,7 +238,10 @@ func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.
 			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
 			continue
 		}
-		pm.attachedProbes[pid] = append(pm.attachedProbes[pid], a)
+		if pm.attachedProbes[pid] == nil {
+			pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
+		}
+		pm.attachedProbes[pid][a] = libpf.Void{}
 	}
 }
 
@@ -514,7 +517,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
-	for _, a := range pm.attachedProbes[pid] {
+	for a := range pm.attachedProbes[pid] {
 		a.Detach(pid)
 	}
 	delete(pm.attachedProbes, pid)
