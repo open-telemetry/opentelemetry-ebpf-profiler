@@ -526,7 +526,8 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
 // SynchronizeMappings when an attached interpreter has requested mapping updates.
 func isInterpreterMapping(m *process.RawMapping) bool {
-	return (m.IsExecutable() && m.IsAnonymous()) || strings.HasSuffix(m.Path, ".dll")
+	return (m.IsAnonymous() && (m.IsExecutable() || m.IsPrctlNamed())) ||
+		strings.HasSuffix(m.Path, ".dll")
 }
 
 type interpreterMappingCollector struct {
@@ -635,9 +636,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	// interpreterMappings collects the subset of mappings relevant to interpreters:
-	// executable anonymous mappings (JIT) and DLL file-backed mappings (.NET PE).
-	// Pending mappings are retained from the first /proc/PID/maps pass and flushed
-	// if an interpreter attaches later during the same synchronization.
+	// executable or prctl-named anonymous mappings (JIT) and DLL file-backed
+	// mappings (.NET PE). Pending mappings are retained from the first
+	// /proc/PID/maps pass and flushed if an interpreter attaches later during the
+	// same synchronization.
 	interpreterMappings := newInterpreterMappingCollector(8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
 	capHint := max(32, min(len(oldMappings), 256))
@@ -649,7 +651,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	start := time.Now()
 
 	// This callback processes each memory mapping, keeping only executable
-	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
+	// file-backed mappings and executable/prctl-named anonymous or DLL mappings
+	// needed by interpreters. Prctl-named mappings remain relevant when
+	// non-executable because a JIT reservation may be split across r-x/rw/--- VMAs.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {

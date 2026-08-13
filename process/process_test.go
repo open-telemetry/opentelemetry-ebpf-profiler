@@ -29,7 +29,8 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8eef000-7f63c8fdf000 r-xp 0001c000 1fd.01 1075944
 7f63c8eef000-7f63c8fdf000 r- 0001c000 1fd:01 1075944
 7f63c8eef000 r-xp 0001c000 1fd:01 1075944
-7f8b929f0000-7f8b92a00000 r-xp 00000000 00:00 0 `
+7f8b929f0000-7f8b92a00000 r-xp 00000000 00:00 0
+7f8b92a00000-7f8b92b00000 ---p 00000000 00:00 0`
 
 var allExpectedMappings = []RawMapping{
 	{
@@ -101,6 +102,15 @@ var allExpectedMappings = []RawMapping{
 		Flags:      elf.PF_R + elf.PF_X,
 		Inode:      0,
 		Length:     0x10000,
+		FileOffset: 0,
+		Path:       "",
+	},
+	{
+		Vaddr:      0x7f8b92a00000,
+		Device:     0x0,
+		Flags:      0,
+		Inode:      0,
+		Length:     0x100000,
 		FileOffset: 0,
 		Path:       "",
 	},
