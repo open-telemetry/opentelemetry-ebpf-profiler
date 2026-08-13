@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"go/version"
+	"strings"
 	"sync/atomic"
 	"unsafe"
 
@@ -59,6 +60,13 @@ func (d *goData) unref() {
 
 func (d *goData) String() string {
 	return "Go " + d.goVersion
+}
+
+func (g *goInstance) RuntimeInfo() (string, string, bool) {
+	if g.d.goVersion == "" {
+		return "", "", false
+	}
+	return "go", strings.TrimPrefix(g.d.goVersion, "go"), true
 }
 
 func (d *goData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,

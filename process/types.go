@@ -102,7 +102,8 @@ type ReadAtCloser = pfelf.ReadAtCloser
 
 // ProcessMeta contains metadata about a tracked process.
 type Meta struct {
-	// executable path retrieved from /proc/PID/exe
+	// executable path retrieved from /proc/PID/exe, with the
+	// " (deleted)" suffix removed
 	Executable libpf.String
 	// process env vars from /proc/PID/environ
 	EnvVariables map[libpf.String]libpf.String
@@ -110,6 +111,13 @@ type Meta struct {
 	ContainerID libpf.String
 	// process context
 	ProcessContextInfo processcontext.Info
+	// RuntimeName is the detected language runtime family (e.g. "cpython"),
+	// emitted as the process.runtime.name OTLP resource attribute. Empty until
+	// resolved.
+	RuntimeName string
+	// RuntimeVersion is the detected runtime version (e.g. "3.11.4"), emitted as
+	// the process.runtime.version OTLP resource attribute.
+	RuntimeVersion string
 
 	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
 	// It is nil unless an enricher is configured and explicitly sets values.
@@ -132,7 +140,8 @@ type Process interface {
 	// GetProcessMeta returns process specific metadata.
 	GetProcessMeta([]MetaEnricher) Meta
 
-	// GetExe returns the executable path of the process.
+	// GetExe returns the executable path of the process, with the
+	// " (deleted)" suffix removed
 	GetExe() (libpf.String, error)
 
 	// IterateMappings parses process memory mappings and calls the
