@@ -9,6 +9,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -16,8 +17,10 @@ import (
 // ProbeContext bundles the tracer's shared state and provides helpers for building eBPF
 // collections inside Probe.Load() implementations.
 type ProbeContext struct {
-	maps    map[string]*cebpf.Map
-	sysVars SysConfigVars
+	maps             map[string]*cebpf.Map
+	sysVars          SysConfigVars
+	links            []link.Link
+	registerAttacher func(pm.ProbeAttacher)
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -222,6 +225,18 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
 }
 
+// AddLink registers a global link to be stored and closed by the tracer on shutdown.
+// Use this for system-wide hooks, like kprobes, perf events and tracepoints.
+func (c *ProbeContext) AddLink(lnk link.Link) {
+	c.links = append(c.links, lnk)
+}
+
+// AddAttacher registers a per-process attacher with the process manager.
+// ProcessManager calls Match/Attach as new mappings appear and Detach on process exit.
+func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
+	c.registerAttacher(a)
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
@@ -230,16 +245,16 @@ type ProbeRegistrar interface {
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
-	// Load attaches a probe that triggers stack unwinding.
-	// The probe calls reg.Register for each origin ID it needs, then uses
-	// those IDs when configuring its eBPF programs.
-	// Returns the link that keeps the probe attached; the caller owns its lifetime.
-	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) (link.Link, error)
+	// Load configures the probe. It registers one or more origin IDs via reg,
+	// then registers its kernel attachment via probeCtx: call AddLink for a
+	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
+	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
 }
 
-// Enable builds a ProbeContext from the tracer's current state and calls p.Load,
-// which is responsible for registering its own origin IDs via the supplied
-// ProbeRegistrar. The returned links are stored and closed when the tracer shuts down.
+// Enable builds a ProbeContext from the tracer's current state and calls p.Load.
+// Links registered via AddLink are stored and closed on tracer shutdown. Attachers
+// registered via AddAttacher receive per-process lifecycle callbacks from the
+// ProcessManager.
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
 // startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
@@ -258,22 +273,28 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
+		registerAttacher: func(a pm.ProbeAttacher) {
+			t.processManager.RegisterProbeAttacher(a)
+		},
 	}
 
-	lnk, err := p.Load(ctx, t.origins, probeCtx)
-	if err != nil {
+	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
-	if lnk != nil {
-		key := hookPoint{group: "probe", name: fmt.Sprintf("%p", p)}
+	if len(probeCtx.links) > 0 {
 		h := t.hooks.WLock()
 		if h.closed {
 			t.hooks.WUnlock(&h)
-			lnk.Close()
+			for _, lnk := range probeCtx.links {
+				lnk.Close()
+			}
 			return fmt.Errorf("tracer is already closed")
 		}
-		h.m[key] = lnk
+		for i, lnk := range probeCtx.links {
+			key := hookPoint{group: "probe", name: fmt.Sprintf("%p/%d", p, i)}
+			h.m[key] = lnk
+		}
 		t.hooks.WUnlock(&h)
 	}
 	return nil

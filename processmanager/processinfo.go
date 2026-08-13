@@ -224,6 +224,24 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
+// attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
+// for every attacher whose Match returns true for the given mapping.
+// Attach may therefore be called multiple times for the same attacher if the process
+// has more than one matching mapping. The caller must hold pm.mu for writing.
+func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
+	pid := pr.PID()
+	for _, a := range pm.probeAttachers {
+		if !a.Match(pr, m) {
+			continue
+		}
+		if err := a.Attach(pr); err != nil {
+			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
+			continue
+		}
+		pm.attachedProbes[pid] = append(pm.attachedProbes[pid], a)
+	}
+}
+
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
@@ -421,6 +439,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
+	pm.attachProbesForMapping(pr, m)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -494,6 +513,11 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	}
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
+
+	for _, a := range pm.attachedProbes[pid] {
+		a.Detach(pid)
+	}
+	delete(pm.attachedProbes, pid)
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter

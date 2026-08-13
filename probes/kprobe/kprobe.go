@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -80,51 +79,56 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	}
 }
 
-func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, ctx *tracer.ProbeContext) (link.Link, error) {
+func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("registering probe origin: %w", err)
+		return fmt.Errorf("registering probe origin: %w", err)
 	}
 
-	coll, err := ctx.CollectionSpecWith(
+	coll, err := probeCtx.CollectionSpecWith(
 		nil,
 		[]string{progName},
 		[]string{"origin_id_probe"},
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	v, ok := coll.Variables["origin_id_probe"]
 	if !ok {
-		return nil, fmt.Errorf("origin_id_probe variable not found in collection spec")
+		return fmt.Errorf("origin_id_probe variable not found in collection spec")
 	}
 	if err := v.Set(originID); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := ctx.RewriteMaps(coll, nil); err != nil {
-		return nil, err
+	if err := probeCtx.RewriteMaps(coll, nil); err != nil {
+		return err
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
-	if err := ctx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
+	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
 		{
 			Name:             progName,
 			NoTailCallTarget: true,
 			Enable:           true,
 		},
 	}, 0); err != nil {
-		return nil, err
+		return err
 	}
 
 	prog, ok := ebpfProgs[progName]
 	if !ok {
-		return nil, fmt.Errorf("program %q not found after loading", progName)
+		return fmt.Errorf("program %q not found after loading", progName)
 	}
 
-	return tracer.AttachProbe(prog, g.spec)
+	lnk, err := tracer.AttachProbe(prog, g.spec)
+	if err != nil {
+		return err
+	}
+	probeCtx.AddLink(lnk)
+	return nil
 }
