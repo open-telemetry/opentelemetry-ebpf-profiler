@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // ErrNoMappings is returned when no mappings can be extracted.
@@ -109,7 +110,20 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 	if err != nil {
 		return libpf.NullString, err
 	}
-	return libpf.Intern(str), nil
+	// Drop the kernel's deleted marker, as trimMappingPath does for mapping paths, so
+	// the executable stays comparable with /proc/<pid>/maps after a binary swap.
+	return libpf.Intern(strings.TrimSuffix(str, deletedSuffix)), nil
+}
+
+// GetExecutableFileIdentifier implements the Process interface. Stating the exe
+// symlink follows it to the executable, whose device and inode are the ones
+// /proc/<pid>/maps reports for the mappings backed by it.
+func (sp *systemProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	var st unix.Stat_t
+	if err := unix.Stat(sp.procBase+"exe", &st); err != nil {
+		return util.OnDiskFileIdentifier{}, fmt.Errorf("stat %sexe: %w", sp.procBase, err)
+	}
+	return fileIdentifierFromStat(&st), nil
 }
 
 func (sp *systemProcess) GetProcessMeta(enrichers []MetaEnricher) Meta {
@@ -276,10 +290,13 @@ func detectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 	return matched, selfIno, nil
 }
 
+// deletedSuffix is what the kernel appends to the path of a file that has been
+// unlinked while still mapped or open.
+// See path_with_deleted in linux/fs/d_path.c
+const deletedSuffix = " (deleted)"
+
 func trimMappingPath(path string) string {
-	// Trim the deleted indication from the path.
-	// See path_with_deleted in linux/fs/d_path.c
-	path = strings.TrimSuffix(path, " (deleted)")
+	path = strings.TrimSuffix(path, deletedSuffix)
 	if path == "/dev/zero" {
 		// Some JIT engines map JIT area from /dev/zero
 		// make it anonymous.

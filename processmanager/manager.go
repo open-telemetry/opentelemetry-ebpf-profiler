@@ -31,6 +31,7 @@ import (
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/procmeta"
+	"go.opentelemetry.io/ebpf-profiler/procmeta/runtimeinfo"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -98,7 +99,11 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
-	resourceEnrichers := slices.Clone(cfg.ResourceEnrichers)
+	// The built-in enricher is always on, and comes first so that a configured
+	// enricher can override what it contributed.
+	resourceEnrichers := append(
+		[]procmeta.ResourceEnricher{runtimeinfo.NewEnricher()},
+		cfg.ResourceEnrichers...)
 	mappingFilters := newMappingFilters(resourceEnrichers)
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,

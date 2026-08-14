@@ -185,6 +185,10 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	return pf, nil
 }
 
+func (i *phpInstance) RuntimeInfo() (string, string, bool) {
+	return "php", i.d.versionString(), true
+}
+
 func (i *phpInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	// With Symbolize() in opcacheInstance there is a dedicated function to symbolize JITTed
 	// PHP frames. But as we also attach phpInstance to PHP processes with JITTed frames, we

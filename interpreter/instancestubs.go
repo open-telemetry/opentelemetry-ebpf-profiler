@@ -40,3 +40,7 @@ func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
 func (is *InstanceStubs) ReleaseResources() error {
 	return nil
 }
+
+func (is *InstanceStubs) RuntimeInfo() (string, string, bool) {
+	return "", "", false
+}

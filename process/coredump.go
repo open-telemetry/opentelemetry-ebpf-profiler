@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // CoredumpProcess implements Process interface to ELF coredumps.
@@ -175,22 +176,44 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 	return cd, nil
 }
 
-// MainExecutable gets the file path from the mappings of the main executable.
-func (cd *CoredumpProcess) MainExecutable() string {
+// mainExecutableFile returns the coredump file holding the main executable, or
+// nil if the coredump does not identify one.
+func (cd *CoredumpProcess) mainExecutableFile() *CoredumpFile {
 	if cd.execPhdrPtr == 0 {
-		return ""
+		return nil
 	}
 
 	for _, file := range cd.files {
 		for _, mapping := range file.Mappings {
 			if cd.execPhdrPtr >= libpf.Address(mapping.Prog.Vaddr) &&
 				cd.execPhdrPtr <= libpf.Address(mapping.Prog.Vaddr+mapping.Prog.Memsz) {
-				return file.Name.String()
+				return file
 			}
 		}
 	}
 
+	return nil
+}
+
+// MainExecutable gets the file path from the mappings of the main executable.
+func (cd *CoredumpProcess) MainExecutable() string {
+	if file := cd.mainExecutableFile(); file != nil {
+		return file.Name.String()
+	}
 	return ""
+}
+
+// GetExecutableFileIdentifier implements the Process interface, returning the
+// synthesized identity parseMappings gave the executable's mappings.
+func (cd *CoredumpProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	file := cd.mainExecutableFile()
+	if file == nil {
+		return util.OnDiskFileIdentifier{}, errors.New("coredump has no main executable")
+	}
+	return util.OnDiskFileIdentifier{
+		DeviceID: coredumpFileDevice,
+		InodeNum: file.inode,
+	}, nil
 }
 
 // PID implements the Process interface.
@@ -271,6 +294,10 @@ func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	return nil, fmt.Errorf("ELF file `%s` not found", path)
 }
 
+// coredumpFileDevice is the synthetic device ID given to every file-backed
+// mapping in a coredump, so that they are recognized as file-backed at all.
+const coredumpFileDevice = 1
+
 // Global inode counter to generate unique inode for each coredump file
 var curInode atomic.Uint64
 
@@ -349,7 +376,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			mapping.Path = cf.Name.String()
 			mapping.FileOffset = entry.FileOffset * hdr.PageSize
 			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
-			mapping.Device = 1
+			mapping.Device = coredumpFileDevice
 			mapping.Inode = cf.inode
 		} else {
 			// This file backed mapping is not in the coredump LOAD tables
@@ -360,7 +387,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 				Length:     entry.End - entry.Start,
 				Flags:      elf.PF_R + elf.PF_X,
 				FileOffset: entry.FileOffset * hdr.PageSize,
-				Device:     1,
+				Device:     coredumpFileDevice,
 				Inode:      cf.inode,
 				Path:       cf.Name.String(),
 			})

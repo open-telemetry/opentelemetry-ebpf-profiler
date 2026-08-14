@@ -114,9 +114,14 @@ type perlData struct {
 	stateInTSD bool
 }
 
-func (d *perlData) String() string {
+// versionString renders the version as major.minor.release.
+func (d *perlData) versionString() string {
 	ver := d.version
-	return fmt.Sprintf("Perl %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+	return fmt.Sprintf("%d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+}
+
+func (d *perlData) String() string {
+	return "Perl " + d.versionString()
 }
 
 func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,

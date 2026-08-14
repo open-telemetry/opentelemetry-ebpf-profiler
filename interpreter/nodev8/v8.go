@@ -1810,9 +1810,20 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 	return nil
 }
 
-func (d *v8Data) String() string {
+// versionString renders the version as major.minor.build.
+func (d *v8Data) versionString() string {
 	ver := d.version
-	return fmt.Sprintf("V8 %d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff)
+	return fmt.Sprintf("%d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff)
+}
+
+func (d *v8Data) String() string {
+	return "V8 " + d.versionString()
+}
+
+func (i *v8Instance) RuntimeInfo() (string, string, bool) {
+	// The version read from the binary is V8's own, not the Node.js release that
+	// embeds it, so report the runtime as V8.
+	return "v8", i.d.versionString(), true
 }
 
 // mapFramePointerOffset converts the frame pointer offset in bytes to eBPF used

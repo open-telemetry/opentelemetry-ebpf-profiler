@@ -150,6 +150,9 @@ type testProcess struct {
 	pid      libpf.PID
 	exe      libpf.String
 	mappings []process.RawMapping
+	// exeID is what GetExecutableFileIdentifier reports; the zero value stands
+	// for an executable that could not be identified.
+	exeID util.OnDiskFileIdentifier
 }
 
 func (tp *testProcess) PID() libpf.PID {
@@ -170,6 +173,13 @@ func (tp *testProcess) GetProcessMeta(enrichers []process.MetaEnricher) process.
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
 	return tp.exe, nil
+}
+
+func (tp *testProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	if tp.exeID == (util.OnDiskFileIdentifier{}) {
+		return util.OnDiskFileIdentifier{}, errors.New("no executable")
+	}
+	return tp.exeID, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {

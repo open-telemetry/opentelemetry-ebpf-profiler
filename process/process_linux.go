@@ -10,6 +10,8 @@ import (
 	"os"
 
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // openInRoot securely opens a file within a given root directory using openat2
@@ -62,4 +64,10 @@ func checkInodeDeviceMapping(f *os.File, m *RawMapping) error {
 			m.Path, stat.Dev, stat.Ino, m.Device, m.Inode)
 	}
 	return nil
+}
+
+// fileIdentifierFromStat builds an OnDiskFileIdentifier from a stat result, so
+// that it is comparable with the identifier of a mapping backed by the same file.
+func fileIdentifierFromStat(stat *unix.Stat_t) util.OnDiskFileIdentifier {
+	return util.OnDiskFileIdentifier{DeviceID: stat.Dev, InodeNum: stat.Ino}
 }
