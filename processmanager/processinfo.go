@@ -485,6 +485,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 			log.Error(err)
 		}
 	}()
+
 	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

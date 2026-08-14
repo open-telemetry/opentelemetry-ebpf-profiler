@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/heap"
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -161,19 +162,27 @@ func (c *Controller) Start(ctx context.Context) error {
 		log.Info("Attached prctl monitor")
 	}
 
-	if err := c.startTraceHandling(ctx, trc); err != nil {
-		return fmt.Errorf("failed to start trace handling: %w", err)
+	if err := c.enableProbes(ctx, trc); err != nil {
+		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
-	if err := c.enableProbes(ctx, trc); err != nil {
-		c.cancelFunc() // stop the startTraceHandling goroutine
-		return fmt.Errorf("failed to enable probes: %w", err)
+	if err := c.startTraceHandling(ctx, trc); err != nil {
+		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
 	return nil
 }
 
 func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
+	// Enable heap profiling probe if configured via the dedicated flag.
+	if c.config.HeapProfiling {
+		p := heap.New(heap.Config{})
+		if err := trc.Enable(ctx, p); err != nil {
+			return fmt.Errorf("heap probe: %w", err)
+		}
+		log.Info("Enabled heap profiling probe")
+	}
+
 	for i, p := range c.config.Probes {
 		probe, err := createProbe(p.Type, p.Config)
 		if err != nil {

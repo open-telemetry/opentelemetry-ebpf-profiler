@@ -4,6 +4,8 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"cmp"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,12 +27,80 @@ const (
 	ExecutableCacheLifetime = 1 * time.Hour
 )
 
+// profileKind is a sub-profile discriminator used when a single origin
+// produces more than one OTLP Profile message from the same event set.
+// For example, TraceOriginHeapAlloc emits both an alloc_space (bytes) and
+// an alloc_objects (count) profile; the kind tells setProfile which
+// value-type semantics to apply. Origins that emit only one profile use
+// profileKindDefault. The type is intentionally generic so future origins
+// can extend it without changing the setProfile signature.
+type profileKind uint8
+
+const (
+	profileKindDefault profileKind = iota
+	profileKindHeapAllocObjects
+)
+
+// sampleKeys returns the sample keys of events. When sortKeys is true the
+// keys are returned in a deterministic order (via compareSampleKeys).
+//
+// Deterministic ordering matters when a single event map is rendered into
+// more than one Profile message (currently: alloc_space + alloc_objects).
+// Downstream consumers that want to correlate the two profiles (e.g. to
+// compute average object size = space[i]/objects[i]) can do so by index
+// only when both profiles list their samples in the same order. The sort
+// guarantees that property. It is NOT a general contract that arbitrary
+// profiles share index alignment; consumers must not assume it unless
+// the profiles are explicitly documented as paired.
+//
+// Origins that produce only a single profile (CPU, off-CPU, probe) pass
+// sortKeys=false to skip the sort entirely, so there is zero cost on
+// those hot paths.
+func sampleKeys(events samples.SampleToEvents, sortKeys bool) []samples.SampleKey {
+	keys := make([]samples.SampleKey, 0, len(events))
+	for sampleKey := range events {
+		keys = append(keys, sampleKey)
+	}
+	if sortKeys {
+		slices.SortFunc(keys, compareSampleKeys)
+	}
+	return keys
+}
+
+func compareSampleKeys(a, b samples.SampleKey) int {
+	if n := cmp.Compare(a.Comm.String(), b.Comm.String()); n != 0 {
+		return n
+	}
+	if a.Hash.Less(b.Hash) {
+		return -1
+	}
+	if b.Hash.Less(a.Hash) {
+		return 1
+	}
+	if n := cmp.Compare(a.TID, b.TID); n != 0 {
+		return n
+	}
+	if n := cmp.Compare(a.CPU, b.CPU); n != 0 {
+		return n
+	}
+	if n := slices.Compare(a.SpanID[:], b.SpanID[:]); n != 0 {
+		return n
+	}
+	if n := slices.Compare(a.TraceID[:], b.TraceID[:]); n != 0 {
+		return n
+	}
+	return cmp.Compare(fmt.Sprintf("%T:%#v", a.ExtraMeta, a.ExtraMeta),
+		fmt.Sprintf("%T:%#v", b.ExtraMeta, b.ExtraMeta))
+}
+
 // Generate generates a pdata request out of internal profiles data, to be
 // exported. The collectionStartTime and collectionEndTime define the time window
 // during which the profiler was actively collecting samples.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	agentName, agentVersion string,
 	collectionStartTime, collectionEndTime time.Time,
+	sourceProfiles []samples.SourceProfile,
+	processMeta func(libpf.PID) samples.ProcessMeta,
 ) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.Dictionary()
@@ -117,15 +187,38 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				continue
 			}
 
+			isHeapAlloc := profileType.SampleType == "alloc_space"
+
+			// For most origins this emits a single profile. Heap-alloc is
+			// special: it emits a paired alloc_space (bytes) + alloc_objects
+			// (count) from the same events. Both calls use the same sorted
+			// key order so their sample indices line up (see sampleKeys doc).
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, toEvents.Events[profileType], prof,
+				profileType, profileKindDefault, toEvents.Events[profileType], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
+
+			if isHeapAlloc {
+				prof := sp.Profiles().AppendEmpty()
+				if err := p.setProfile(dic, attrMgr,
+					stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
+					profileType, profileKindHeapAllocObjects, toEvents.Events[profileType], prof,
+					collectionStartTime, collectionEndTime); err != nil {
+					return profiles, err
+				}
+			}
 		}
 
+	}
+
+	// Append source profiles from probes (e.g. live heap inuse).
+	for _, sp := range sourceProfiles {
+		appendSourceProfile(profiles, dic, attrMgr, stringSet, funcSet, locationSet, mappingSet, stackSet,
+			agentName, agentVersion, collectionStartTime, collectionEndTime,
+			sp, processMeta)
 	}
 
 	// Populate the ProfilesDictionary tables.
@@ -161,6 +254,7 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
+	kind profileKind,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
@@ -173,14 +267,57 @@ func (p *Pdata) setProfile(
 	}
 
 	st := profile.SampleType()
-	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
+	if kind == profileKindHeapAllocObjects {
+		st.SetTypeStrindex(stringSet.Add("alloc_objects"))
+		st.SetUnitStrindex(stringSet.Add("count"))
+	} else {
+		st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
+		st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
+	}
 
-	for sampleKey, traceInfo := range events {
+	isHeapAlloc := profileType.SampleType == "alloc_space"
+
+	// Heap-alloc uses a deterministic key order so that the paired
+	// alloc_space and alloc_objects profiles list samples in the same
+	// sequence; downstream consumers that opt into correlating them by
+	// index rely on this. Other origins emit a single profile and skip
+	// the sort (no performance cost on the CPU/off-CPU/probe paths).
+	for _, sampleKey := range sampleKeys(events, isHeapAlloc) {
+		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if profileType.ReportValues {
+		if isHeapAlloc && kind == profileKindHeapAllocObjects {
+			// The profiler uses sampling: only a subset of allocations
+			// are observed, and for each observed allocation the eBPF
+			// probe reports:
+			//   weight = unbiased byte estimator (nsamples * interval)
+			//   size   = raw allocation size in bytes
+			//
+			// To derive an equally unbiased object-count estimator we
+			// compute weight/size: a sample representing `weight` bytes
+			// of `size`-byte objects represents weight/size objects.
+			// This is the standard convention used by tcmalloc, jemalloc,
+			// and Go's pprof runtime.
+			//
+			// We do this division here in userspace (rather than in the
+			// eBPF program) so that the raw size remains available for
+			// potential future use (e.g. allocation-size histograms) and
+			// so formula changes don't require an eBPF blob rebuild.
+			//
+			// Fall back to 1 if size is unknown/zero (malformed sampler
+			// output) rather than dividing by zero.
+			for i, weight := range traceInfo.Values {
+				objects := int64(1)
+				if i < len(traceInfo.AllocSizes) && traceInfo.AllocSizes[i] > 0 {
+					objects = weight / traceInfo.AllocSizes[i]
+					if objects < 1 {
+						objects = 1
+					}
+				}
+				sample.Values().Append(objects)
+			}
+		} else if profileType.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
@@ -199,78 +336,8 @@ func (p *Pdata) setProfile(
 			sample.SetLinkIndex(link)
 		}
 
-		locationIndices := make([]int32, 0, len(traceInfo.Frames))
-		// Walk every frame of the trace.
-		for _, uniqueFrame := range traceInfo.Frames {
-			frame := uniqueFrame.Value()
-			locInfo := locationInfo{
-				address:   uint64(frame.AddressOrLineno),
-				frameType: frame.Type,
-			}
-
-			index, ok := mappingSet.AddWithCheck(frame.Mapping)
-			if !ok {
-				m := frame.Mapping.Value()
-				mf := m.File.Value()
-
-				mapping := dic.MappingTable().AppendEmpty()
-				mapping.SetMemoryStart(uint64(m.Start))
-				mapping.SetMemoryLimit(uint64(m.End))
-				mapping.SetFileOffset(m.FileOffset)
-				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
-
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGNUKey,
-					mf.GnuBuildID)
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGoKey,
-					mf.GoBuildID)
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDHtlhashKey,
-					mf.FileID.StringNoQuotes())
-			}
-			locInfo.mappingIndex = index
-
-			if frame.FunctionName != libpf.NullString || frame.SourceFile != libpf.NullString {
-				// Store interpreted frame information as a Line message
-				locInfo.hasLine = true
-				locInfo.lineNumber = int64(frame.SourceLine)
-				locInfo.columnNumber = int64(frame.SourceColumn)
-				fi := funcInfo{
-					nameIdx:     stringSet.Add(frame.FunctionName.String()),
-					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
-				}
-				locInfo.functionIndex = funcSet.Add(fi)
-			}
-
-			idx, exists := locationSet.AddWithCheck(locInfo)
-			if !exists {
-				// Add a new Location to the dictionary
-				loc := dic.LocationTable().AppendEmpty()
-				loc.SetAddress(locInfo.address)
-				loc.SetMappingIndex(locInfo.mappingIndex)
-				if locInfo.hasLine {
-					line := loc.Lines().AppendEmpty()
-					line.SetLine(locInfo.lineNumber)
-					line.SetColumn(locInfo.columnNumber)
-					line.SetFunctionIndex(locInfo.functionIndex)
-				}
-				attrMgr.AppendOptionalString(loc.AttributeIndices(),
-					semconv.ProfileFrameTypeKey, locInfo.frameType.String())
-			}
-			locationIndices = append(locationIndices, idx)
-		} // End per-frame processing
-
-		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
-			locationIndicesHash: hashLocationIndices(locationIndices),
-		})
-		if !exists {
-			// Add a new Stack to the dictionary
-			stack := dic.StackTable().AppendEmpty()
-			for _, locIdx := range locationIndices {
-				stack.LocationIndices().Append(locIdx)
-			}
-		}
+		stackIdx := appendFramesAsStack(traceInfo.Frames, dic, attrMgr,
+			stringSet, funcSet, mappingSet, locationSet, stackSet)
 		sample.SetStackIndex(stackIdx)
 
 		for key, value := range traceInfo.Labels {

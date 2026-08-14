@@ -704,6 +704,15 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
+	// Number of heap allocs dropped in eBPF due to per-PID live-heap cap
+	IDHeapPerPIDLimitHit = 306
+
+	// Number of heap allocs dropped in eBPF due to global live-heap map full
+	IDHeapLiveMapFull = 307
+
+	// Number of PIDs that failed to be added to heap_live_pids (map full)
+	IDHeapLivePIDMapFull = 308
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 306
+	IDMax = 309
 )
