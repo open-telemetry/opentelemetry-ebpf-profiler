@@ -605,13 +605,8 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
 	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
-	if err != nil {
-		if classification != mcDynamic {
-			return nil, err
-		}
-		// Dynamic methods can belong to modules without a PE mapping. Preserve the
-		// recovered method name when no module information is available.
-		log.Debugf("failed to resolve module for dynamic method @%x: %v", methodDescPtr, err)
+	if err != nil && classification != mcDynamic {
+		return nil, err
 	}
 
 	method := &dotnetMethod{
