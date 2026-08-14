@@ -12,7 +12,7 @@ formatters:
       # put imports beginning with prefix after 3rd-party packages;
       # it's a comma-separated list of prefixes
       local-prefixes:
-        - github.com/open-telemetry/opentelemetry-ebpf-profiler
+        - go.opentelemetry.io/ebpf-profiler
 
 run:
   timeout: 10m
@@ -65,6 +65,7 @@ linters:
     - nilnil
     - nlreturn
     - noctx # might be worth fixing
+    - noinlineerr
     - nonamedreturns
     - paralleltest
     - protogetter
@@ -79,6 +80,7 @@ linters:
     - varnamelen
     - wastedassign
     - wsl
+    - wsl_v5
     - wrapcheck
     - prealloc # CI failure with golangci 2.10.1, worth fixing
     # we don't want to change code to Go 1.22+ yet
@@ -86,12 +88,25 @@ linters:
     - copyloopvar
 
   exclusions:
+    rules:
+      - linters:
+          - modernize
+        text: "importcomment" # conflicts with porto vanity-import-check
+      - linters:
+          - lll
+        source: '// import "' # vanity import comments enforced by porto
+      - linters:
+          - lll
+        source: 'https?://' # URLs cannot be shortened
+      - linters:
+          - lll
+        source: '`[^`]+`$' # struct tags cannot be split
     paths:
       - design-docs
       - doc
       - LICENSES
       - target
-      - go
+      - ^go/
 
   settings:
     goconst:
