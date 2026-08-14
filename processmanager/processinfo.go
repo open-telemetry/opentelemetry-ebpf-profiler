@@ -224,6 +224,27 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
 }
 
+// attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
+// for every attacher whose Match returns true for the given mapping.
+// Attach may be called multiple times for the same attacher if the process
+// has more than one matching mapping. The caller must hold pm.mu for writing.
+func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
+	pid := pr.PID()
+	for _, a := range pm.probeAttachers {
+		if !a.Match(pr, m) {
+			continue
+		}
+		if err := a.Attach(pr); err != nil {
+			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
+			continue
+		}
+		if pm.attachedProbes[pid] == nil {
+			pm.attachedProbes[pid] = make(map[ProbeAttacher]libpf.Void)
+		}
+		pm.attachedProbes[pid][a] = libpf.Void{}
+	}
+}
+
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
@@ -421,6 +442,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
+	pm.attachProbesForMapping(pr, m)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -494,12 +516,18 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	}
 	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
+
+	for a := range pm.attachedProbes[pid] {
+		a.Detach(pid)
+	}
+	delete(pm.attachedProbes, pid)
 }
 
 // isInterpreterMapping reports whether a mapping should be passed to interpreter
 // SynchronizeMappings when an attached interpreter has requested mapping updates.
 func isInterpreterMapping(m *process.RawMapping) bool {
-	return (m.IsExecutable() && m.IsAnonymous()) || strings.HasSuffix(m.Path, ".dll")
+	return (m.IsAnonymous() && (m.IsExecutable() || m.IsPrctlNamed())) ||
+		strings.HasSuffix(m.Path, ".dll")
 }
 
 type interpreterMappingCollector struct {
@@ -608,9 +636,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	// interpreterMappings collects the subset of mappings relevant to interpreters:
-	// executable anonymous mappings (JIT) and DLL file-backed mappings (.NET PE).
-	// Pending mappings are retained from the first /proc/PID/maps pass and flushed
-	// if an interpreter attaches later during the same synchronization.
+	// executable or prctl-named anonymous mappings (JIT) and DLL file-backed
+	// mappings (.NET PE). Pending mappings are retained from the first
+	// /proc/PID/maps pass and flushed if an interpreter attaches later during the
+	// same synchronization.
 	interpreterMappings := newInterpreterMappingCollector(8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
 	capHint := max(32, min(len(oldMappings), 256))
@@ -622,7 +651,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	start := time.Now()
 
 	// This callback processes each memory mapping, keeping only executable
-	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
+	// file-backed mappings and executable/prctl-named anonymous or DLL mappings
+	// needed by interpreters. Prctl-named mappings remain relevant when
+	// non-executable because a JIT reservation may be split across r-x/rw/--- VMAs.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {

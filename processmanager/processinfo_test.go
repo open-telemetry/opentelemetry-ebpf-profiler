@@ -506,6 +506,14 @@ func TestIsInterpreterMapping(t *testing.T) {
 			m:    process.RawMapping{Flags: elf.PF_R},
 		},
 		{
+			name: "prctl-named anonymous non-executable",
+			m: process.RawMapping{
+				Flags: elf.PF_R,
+				Path:  "[anon:Ruby:rb_jit_reserve_addr_space]",
+			},
+			want: true,
+		},
+		{
 			name: "dll",
 			m:    process.RawMapping{Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 			want: true,
@@ -527,7 +535,8 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 	collector := newInterpreterMappingCollector(8)
 	pending := []process.RawMapping{
 		{Vaddr: 0x1000, Flags: elf.PF_R | elf.PF_X},
-		{Vaddr: 0x2000, Flags: elf.PF_R},
+		{Vaddr: 0x2000, Flags: elf.PF_R, Path: "[anon:Ruby:rb_jit_reserve_addr_space]"},
+		{Vaddr: 0x2800, Flags: elf.PF_R},
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x4000, Flags: elf.PF_R | elf.PF_X, Path: "/tmp/interpreter"},
 	}
@@ -545,6 +554,7 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 
 	require.Equal(t, []process.RawMapping{
 		{Vaddr: 0x1000, Flags: elf.PF_R | elf.PF_X},
+		{Vaddr: 0x2000, Flags: elf.PF_R, Path: "[anon:Ruby:rb_jit_reserve_addr_space]"},
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x5000, Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 	}, collector.mappings())

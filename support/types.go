@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x72
+	MetricIDBeginCumulative = 0x75
 )
 
 const (
@@ -189,12 +189,14 @@ type DotnetProcInfo struct {
 }
 type GoRuntimeOffsets struct {
 	M_offset               uint32
+	M_gsignal              uint32
 	Curg                   uint32
 	Labels                 uint32
 	Hmap_count             uint32
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -281,6 +283,8 @@ type RubyProcInfo struct {
 	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
+	Jit_start                    uint64
+	Jit_end                      uint64
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
@@ -329,7 +333,7 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x48
+	sizeof_RubyProcInfo   = 0x60
 )
 
 const (
@@ -358,6 +362,7 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandGoAsmcgocall int32 = 0x5
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
@@ -394,6 +399,7 @@ const (
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
+	RubyFrameTypeJit      = 0x5
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -501,4 +507,7 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6f: metrics.IDSamplesSkippedProcessTooNew,
 	0x70: metrics.IDNumSyncsFromPrctl,
 	0x71: metrics.IDNumPriorityEventDeferred,
+	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

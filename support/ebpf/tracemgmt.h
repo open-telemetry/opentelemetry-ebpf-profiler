@@ -403,12 +403,13 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->rubyUnwindState.stack_ptr         = 0;
   record->rubyUnwindState.last_stack_frame  = 0;
   record->rubyUnwindState.cfunc_saved_frame = 0;
+  record->rubyUnwindState.jit_detected      = false;
   record->unwindersDone                     = 0;
   record->tailCalls                         = 0;
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
   record->customLabelsState.go_m_ptr        = NULL;
-  record->goOffsets.m_offset                = 0;
+  record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
   trace->frame_data_len    = 0;
