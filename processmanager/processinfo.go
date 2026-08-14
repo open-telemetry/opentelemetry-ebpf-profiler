@@ -34,7 +34,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -705,7 +704,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// process context unrefreshed. Detecting it needs a sched_process_exec
 	// tracepoint.
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	oldProcessContextInfo := info.meta.ProcessContextInfo
 
 	// Get existing info
 	oldMappings := info.mappings
@@ -755,20 +753,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		enricherMappings = make([][]process.RawMapping, len(pm.resourceEnrichers))
 	}
 
-	var processContextInfo processcontext.Info
-
 	// This callback processes each memory mapping, keeping only executable
 	// file-backed mappings and executable/prctl-named anonymous or DLL mappings
 	// needed by interpreters. Prctl-named mappings remain relevant when
 	// non-executable because a JIT reservation may be split across r-x/rw/--- VMAs.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
-		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
-			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
-			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
-			// PID resynchronization when the process names its context mapping "OTEL_CTX".
-		}
-
 		for _, f := range mappingFilters {
 			if f.want(&m) {
 				// Detach Path from the recycled scanner buffer before storing.
@@ -923,7 +913,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			// the old one.
 			info.resource = nil
 		}
-		info.meta.ProcessContextInfo = processContextInfo
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -1076,25 +1065,4 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
-}
-
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
-	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
-	if err == nil {
-		return ctxInfo
-	}
-	if errors.Is(err, processcontext.ErrNoUpdate) {
-		return oldProcessContextInfo
-	}
-	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearAttributes()
-		return oldProcessContextInfo
-	}
-
-	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
-	return processcontext.Info{}
 }

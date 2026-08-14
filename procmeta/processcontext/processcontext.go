@@ -1,7 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processcontext // import "go.opentelemetry.io/ebpf-profiler/processcontext"
+// Package processcontext implements the OpenTelemetry Process Context sharing
+// protocol for reading resource attributes from an external process.
+//
+// See [OTEP 4719].
+//
+// [OTEP 4719]: https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4719-process-ctx.md
+package processcontext // import "go.opentelemetry.io/ebpf-profiler/procmeta/processcontext"
 
 import (
 	"encoding/binary"
@@ -10,12 +16,15 @@ import (
 	"structs"
 	"unsafe"
 
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 	"google.golang.org/protobuf/proto"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 )
 
 const (
@@ -60,9 +69,17 @@ var (
 	ErrNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
+// Info is a snapshot of process context. The pointed-to Resource and
+// ExtraAttributes are shared by pointer across goroutines (process-manager
+// writer, reporter) without locking; once an Info is published they
+// MUST be treated as read-only by all holders.
 type Info struct {
-	Context       *processcontextpb.ProcessContext
-	PublishedAtNs uint64
+	Resource *pcommon.Resource
+	// ExtraAttributes holds the attributes a process publishes outside its resource.
+	// Decoded, but contributed nowhere yet: sample or resource scope is deliberately
+	// still open, so the enricher returns Resource alone.
+	ExtraAttributes *pcommon.Map
+	PublishedAtNs   uint64
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -145,6 +162,45 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	return ctx, nil
 }
 
+// Resolve reads the process context a process publishes in its context region,
+// returning (info, true) when the contribution changed and (_, false) to leave the
+// published one untouched.
+//
+// mappingAddr=0 means the region was not observed this sync; with
+// oldPublishedAtNs > 0 it disappeared, and the contribution is withdrawn.
+//
+// An exec needs no handling here: the caller drops oldPublishedAtNs with the
+// contribution, so a region republished at a lower timestamp is read afresh.
+func Resolve(
+	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
+	oldPublishedAtNs uint64,
+) (Info, bool) {
+	if mappingAddr == 0 {
+		// Withdraw a context whose region is gone; otherwise this process simply does
+		// not publish one.
+		return Info{}, oldPublishedAtNs != 0
+	}
+
+	// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
+	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
+
+	processCtx, err := Read(addr, rm, oldPublishedAtNs, 0)
+	switch {
+	case err == nil:
+		// New process context read successfully, publish it.
+		return processCtx, true
+	case errors.Is(err, ErrNoUpdate), errors.Is(err, ErrConcurrentUpdate):
+		// Payload unchanged, or a writer was mid-update: keep what was published
+		// before, which is nothing at all on the round following an exec.
+		return Info{}, false
+	default:
+		log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
+	}
+
+	// The payload could not be read: withdraw rather than keep a stale context.
+	return Info{}, true
+}
+
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
 	return !isExecutable && (mappingPath == ContextMappingMemfd ||
 		mappingPath == ContextMappingMemfdDeleted ||
@@ -200,11 +256,76 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
+	var resource *pcommon.Resource
+	if ctx.Resource != nil {
+		r := pcommon.NewResource()
+		for _, attr := range ctx.Resource.Attributes {
+			if v, ok := convertAnyValue(attr.Value); ok {
+				v.MoveTo(r.Attributes().PutEmpty(attr.Key))
+			}
+		}
+		resource = &r
+	}
+
+	var extraAttributes *pcommon.Map
+	if ctx.Attributes != nil {
+		m := pcommon.NewMap()
+		for _, attr := range ctx.Attributes {
+			if v, ok := convertAnyValue(attr.Value); ok {
+				v.MoveTo(m.PutEmpty(attr.Key))
+			}
+		}
+		extraAttributes = &m
+	}
+	return Info{Resource: resource, ExtraAttributes: extraAttributes, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
 
-func (p *Info) ClearAttributes() {
-	if p.Context != nil {
-		p.Context.Attributes = nil
+// convertAnyValue converts a commonpb.AnyValue to a pcommon.Value, including nested
+// maps and arrays. Returns (_, false) for nil inputs and unknown variants, so
+// callers skip them rather than emit phantom empty entries.
+func convertAnyValue(src *commonpb.AnyValue) (pcommon.Value, bool) {
+	if src == nil {
+		return pcommon.Value{}, false
+	}
+	switch v := src.Value.(type) {
+	case *commonpb.AnyValue_StringValue:
+		return pcommon.NewValueStr(v.StringValue), true
+	case *commonpb.AnyValue_BoolValue:
+		return pcommon.NewValueBool(v.BoolValue), true
+	case *commonpb.AnyValue_IntValue:
+		return pcommon.NewValueInt(v.IntValue), true
+	case *commonpb.AnyValue_DoubleValue:
+		return pcommon.NewValueDouble(v.DoubleValue), true
+	case *commonpb.AnyValue_BytesValue:
+		val := pcommon.NewValueBytes()
+		val.Bytes().FromRaw(v.BytesValue)
+		return val, true
+	case *commonpb.AnyValue_ArrayValue:
+		val := pcommon.NewValueSlice()
+		if v.ArrayValue != nil {
+			sl := val.Slice()
+			sl.EnsureCapacity(len(v.ArrayValue.Values))
+			for _, item := range v.ArrayValue.Values {
+				if itemVal, ok := convertAnyValue(item); ok {
+					itemVal.MoveTo(sl.AppendEmpty())
+				}
+			}
+		}
+		return val, true
+	case *commonpb.AnyValue_KvlistValue:
+		val := pcommon.NewValueMap()
+		if v.KvlistValue != nil {
+			m := val.Map()
+			m.EnsureCapacity(len(v.KvlistValue.Values))
+			for _, kv := range v.KvlistValue.Values {
+				if kvVal, ok := convertAnyValue(kv.Value); ok {
+					kvVal.MoveTo(m.PutEmpty(kv.Key))
+				}
+			}
+		}
+		return val, true
+	default:
+		log.Debugf("convertAnyValue: unknown AnyValue variant %T, skipping", v)
+		return pcommon.Value{}, false
 	}
 }

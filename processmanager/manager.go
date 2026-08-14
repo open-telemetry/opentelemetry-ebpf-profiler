@@ -32,6 +32,7 @@ import (
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/procmeta"
+	"go.opentelemetry.io/ebpf-profiler/procmeta/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -114,7 +115,11 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 			internalOnlyEnvVars[libpf.Intern(name)] = libpf.Void{}
 		}
 	}
-	resourceEnrichers := slices.Clone(cfg.ResourceEnrichers)
+	// The built-in enricher is always on, and comes first so that a configured
+	// enricher can override what it contributed.
+	resourceEnrichers := append(
+		[]procmeta.ResourceEnricher{processcontext.NewEnricher()},
+		cfg.ResourceEnrichers...)
 	mappingFilters := newMappingFilters(resourceEnrichers)
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
@@ -148,9 +153,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	if len(includeEnvVars) > 0 {
-		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
-	}
+	// includeEnvVars is never empty: it always holds the process context env vars.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
