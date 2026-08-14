@@ -161,13 +161,12 @@ func (c *Controller) Start(ctx context.Context) error {
 		log.Info("Attached prctl monitor")
 	}
 
-	if err := c.startTraceHandling(ctx, trc); err != nil {
-		return fmt.Errorf("failed to start trace handling: %w", err)
+	if err := c.enableProbes(ctx, trc); err != nil {
+		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
-	if err := c.enableProbes(ctx, trc); err != nil {
-		c.cancelFunc() // stop the startTraceHandling goroutine
-		return fmt.Errorf("failed to enable probes: %w", err)
+	if err := c.startTraceHandling(ctx, trc); err != nil {
+		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
 	return nil
