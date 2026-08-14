@@ -107,6 +107,7 @@ The agent loads the eBPF program and its maps, starts unwinding and reports
 captured traces to the backend.
 
 ## Open Source Backends
+
 As the OTel Profiles signal is still in development, mature production-ready
 backends have yet to emerge. The following open source projects can be used as backends:
 
@@ -119,17 +120,50 @@ backends have yet to emerge. The following open source projects can be used as b
 - [Pyroscope](https://github.com/grafana/pyroscope) — an open source continuous
   profiling database that natively supports ingesting OTel profiling data.
 
-## Development
-
-To understand how this project works and learn more about profiling, check out [Profiling internals](doc/internals.md)
-
 ## Contributing
+
+We welcome contributions of all kinds: bug reports, feature requests,
+documentation improvements and code. Everyone is welcome to open issues and
+send pull requests.
+
+Before contributing, please read the [contributing
+guidelines](CONTRIBUTING.md). They cover the development prerequisites, how to
+build and test your changes, the pull request workflow, and how PRs get
+reviewed and merged.
+
+To understand how this project works and learn more about profiling, check out
+[Profiling internals](doc/internals.md).
+
+This project is developed by the OpenTelemetry Profiling SIG, which meets
+regularly. See the OpenTelemetry
+[community repository](https://github.com/open-telemetry/community) for the
+meeting schedule, and join us in the
+[#otel-profiles](https://cloud-native.slack.com/archives/C03J794L0BV) channel
+on the [CNCF Slack](https://slack.cncf.io/) for discussions and questions.
+
+### Maintainers
+
+- [Felix Geisendörfer](https://github.com/felixge), Datadog
+- [Christos Kalkanis](https://github.com/christos68k), Elastic
+- [Timo Teräs](https://github.com/fabled)
+
+For more information about the maintainer role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
+
+### Approvers
+
+- [Roger Coll](https://github.com/rogercoll), Elastic
+- [Florian Lehner](https://github.com/florianl), Elastic
+- [Damien Mathieu](https://github.com/dmathieu), Elastic
+- [Tim Rühsen](https://github.com/rockdaboot)
+
+For more information about the approver role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
 
 ### Emeritus
 
 - [Dmitry Filimonov](https://github.com/petethepig), Maintainer
 - [Joel Höner](https://github.com/athre0z), Approver
-- [Tim Rühsen](https://github.com/rockdaboot), Approver
 
 For more information about the emeritus role, see the
 [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
