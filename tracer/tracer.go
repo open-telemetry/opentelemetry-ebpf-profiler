@@ -45,7 +45,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -1426,12 +1425,8 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
 	// Post-handlers receive the symbolized result (e.g. live-heap correlation).
-	// Hashing is deferred to here so we only pay the cost when handlers exist.
-	if len(t.postTraceHandlers) > 0 {
-		hash := traceutil.HashTrace(trace)
-		for _, h := range t.postTraceHandlers {
-			h.PostHandleTrace(bpfTrace, hash, trace.Frames)
-		}
+	for _, h := range t.postTraceHandlers {
+		h.PostHandleTrace(bpfTrace, trace)
 	}
 
 	// Reclaim the EbpfTrace
