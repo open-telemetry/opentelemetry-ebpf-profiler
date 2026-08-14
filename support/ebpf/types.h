@@ -355,6 +355,15 @@ enum {
   // number of priority PID events deferred (recorded but not signalled) due to rate limiting
   metricID_NumPriorityEventDeferred,
 
+  // number of attempted Go asmcgocall stack-switch unwinds
+  metricID_UnwindGoAsmcgocallAttempts,
+
+  // number of successful Go asmcgocall unwinds
+  metricID_UnwindGoAsmcgocallSuccess,
+
+  // number of Go asmcgocall unwind failures
+  metricID_UnwindGoAsmcgocallUnwindFailure,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -507,6 +516,9 @@ typedef struct RubyProcInfo {
 
   // is reading gc state from objspace supported for this version?
   bool has_objspace;
+
+  // JIT regions, for detecting if a native PC was JIT
+  u64 jit_start, jit_end;
 
   // Offsets and sizes of Ruby internal structs
 
@@ -761,6 +773,8 @@ typedef struct RubyUnwindState {
   void *last_stack_frame;
   // Frame for last cfunc before we switched to native unwinder
   u64 cfunc_saved_frame;
+  // Detect if JIT code ran in the process (at any time)
+  bool jit_detected;
 } RubyUnwindState;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
@@ -830,17 +844,26 @@ typedef struct GoMapBucket {
 
 typedef struct GoRuntimeOffsets {
   u32 m_offset;
+  u32 m_gsignal;
   u32 curg;
   u32 labels;
   u32 hmap_count;
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  u32 sched_bp_off;
 } GoRuntimeOffsets;
 
 typedef struct CustomLabelsState {
   void *go_m_ptr;
 } CustomLabelsState;
+
+// Container for additional scratch space needed by the Go unwinder.
+typedef struct GoUnwindScratchSpace {
+  // Max size for a single bpf_probe_read, so the larger of runtime.m[0:curg+8) and
+  // runtime.g[0:sched_bp_off+8). The m prefix is the larger one and needs 200 bytes.
+  u64 buf[25];
+} GoUnwindScratchSpace;
 
 // Per-CPU info for the stack being built. This contains the stack as well as
 // meta-data on the number of eBPF tail-calls used so far to construct it.
@@ -871,6 +894,8 @@ typedef struct PerCPURecord {
     V8UnwindScratchSpace v8UnwindScratch;
     // Scratch space for the Python unwinder
     PythonUnwindScratchSpace pythonUnwindScratch;
+    // Scratch space for the Go unwinder
+    GoUnwindScratchSpace goUnwindScratch;
     // Go labels scratch
     GoMapBucket goMapBucket;
     // Scratch for Go 1.24 labels
@@ -973,6 +998,9 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_SIGNAL        3
 // Unwind using standard frame pointer
 #define UNWIND_COMMAND_FRAME_POINTER 4
+// Cross the Go runtime.asmcgocall stack-switch boundary (arm64) by reading the
+// goroutine saved context from gobuf
+#define UNWIND_COMMAND_GO_ASMCGOCALL 5
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {

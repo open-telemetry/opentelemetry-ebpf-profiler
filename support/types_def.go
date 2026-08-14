@@ -164,6 +164,7 @@ const (
 	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
 	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
 	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
+	UnwindCommandGoAsmcgocall int32 = C.UNWIND_COMMAND_GO_ASMCGOCALL
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
@@ -203,6 +204,7 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+	RubyFrameTypeJit      = C.RUBY_FRAME_TYPE_JIT
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -310,4 +312,7 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_SamplesSkippedProcessTooNew:                metrics.IDSamplesSkippedProcessTooNew,
 	C.metricID_NumSyncsFromPrctl:                          metrics.IDNumSyncsFromPrctl,
 	C.metricID_NumPriorityEventDeferred:                   metrics.IDNumPriorityEventDeferred,
+	C.metricID_UnwindGoAsmcgocallAttempts:                 metrics.IDUnwindGoAsmcgocallAttempts,
+	C.metricID_UnwindGoAsmcgocallSuccess:                  metrics.IDUnwindGoAsmcgocallSuccess,
+	C.metricID_UnwindGoAsmcgocallUnwindFailure:            metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

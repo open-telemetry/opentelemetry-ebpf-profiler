@@ -7,7 +7,6 @@ package offcpu // import "go.opentelemetry.io/ebpf-profiler/probes/offcpu"
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 
@@ -43,14 +42,14 @@ func New(cfg Config) (*probe, error) {
 	return &probe{threshold: uint32(cfg.Threshold * math.MaxUint32)}, nil
 }
 
-func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) (link.Link, error) {
+func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType:   "off_cpu",
 		SampleUnit:   "nanoseconds",
 		ReportValues: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("registering off-CPU origin: %w", err)
+		return fmt.Errorf("registering off-CPU origin: %w", err)
 	}
 
 	coll, err := probeCtx.CollectionSpecWith(
@@ -59,14 +58,14 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := coll.Variables["off_cpu_threshold"].Set(p.threshold); err != nil {
-		return nil, fmt.Errorf("set off_cpu_threshold: %w", err)
+		return fmt.Errorf("set off_cpu_threshold: %w", err)
 	}
 	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
-		return nil, fmt.Errorf("set origin_id_off_cpu: %w", err)
+		return fmt.Errorf("set origin_id_off_cpu: %w", err)
 	}
 
 	// Resize sched_times proportionally to the capture probability so that
@@ -75,12 +74,12 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 	schedMap, err := cebpf.NewMap(coll.Maps["sched_times"])
 	if err != nil {
-		return nil, fmt.Errorf("creating sched_times map: %w", err)
+		return fmt.Errorf("creating sched_times map: %w", err)
 	}
 	defer schedMap.Close()
 
 	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{"sched_times": schedMap}); err != nil {
-		return nil, err
+		return err
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
@@ -88,74 +87,48 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		{Name: "finish_task_switch", NoTailCallTarget: true, Enable: true},
 		{Name: "tracepoint__sched_switch", NoTailCallTarget: true, Enable: true},
 	}, 0); err != nil {
-		return nil, err
+		return err
 	}
 
-	return attachPrograms(ebpfProgs)
+	return attachPrograms(ebpfProgs, probeCtx)
 }
 
 // attachPrograms attaches the loaded eBPF programs to the scheduler hooks and
 // returns a composite link that closes all attachments on Close.
-func attachPrograms(ebpfProgs map[string]*cebpf.Program) (link.Link, error) {
+func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeContext) error {
 	kprobeProg, ok := ebpfProgs["finish_task_switch"]
 	if !ok {
-		return nil, fmt.Errorf("finish_task_switch program not found after loading")
+		return fmt.Errorf("finish_task_switch program not found after loading")
 	}
 	tpProg, ok := ebpfProgs["tracepoint__sched_switch"]
 	if !ok {
-		return nil, fmt.Errorf("tracepoint__sched_switch program not found after loading")
+		return fmt.Errorf("tracepoint__sched_switch program not found after loading")
 	}
 
 	syms, err := finishTaskSwitchSymbols()
 	if err != nil {
-		return nil, fmt.Errorf("looking up finish_task_switch symbols: %w", err)
+		return fmt.Errorf("looking up finish_task_switch symbols: %w", err)
 	}
 	if len(syms) == 0 {
-		return nil, fmt.Errorf("no finish_task_switch symbols found in /proc/kallsyms")
+		return fmt.Errorf("no finish_task_switch symbols found in /proc/kallsyms")
 	}
 
-	var kprobeLinks []link.Link
 	for _, sym := range syms {
 		kl, err := link.Kprobe(string(sym.Name), kprobeProg, nil)
 		if err != nil {
 			log.Warnf("Failed to attach kprobe to %s: %v", sym.Name, err)
 			continue
 		}
-		kprobeLinks = append(kprobeLinks, kl)
-	}
-	if len(kprobeLinks) == 0 {
-		return nil, fmt.Errorf("failed to attach kprobe to any of %d finish_task_switch symbol(s)", len(syms))
+		probeCtx.AddLink(kl)
 	}
 
 	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
 	if err != nil {
-		for _, l := range kprobeLinks {
-			l.Close()
-		}
-		return nil, fmt.Errorf("attaching sched_switch tracepoint: %w", err)
+		return fmt.Errorf("attaching sched_switch tracepoint: %w", err)
 	}
+	probeCtx.AddLink(tpLink)
 
-	return &multiLink{Link: tpLink, extras: kprobeLinks}, nil
-}
-
-// multiLink embeds a primary link.Link and adds extra links that are closed
-// together with the primary. Embedding satisfies the link.Link interface
-type multiLink struct {
-	link.Link
-	extras []link.Link
-}
-
-func (m *multiLink) Close() error {
-	var e error
-	if err := m.Link.Close(); err != nil {
-		e = errors.Join(e, err)
-	}
-	for _, l := range m.extras {
-		if err := l.Close(); err != nil {
-			e = errors.Join(e, err)
-		}
-	}
-	return e
+	return nil
 }
 
 // finishTaskSwitchSymbols returns all kernel symbols whose name starts with
