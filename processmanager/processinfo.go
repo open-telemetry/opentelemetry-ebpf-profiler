@@ -485,6 +485,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 			log.Error(err)
 		}
 	}()
+
 	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -862,8 +863,9 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) process.Meta {
+// MetaForPID returns the process metadata for the given PID. If the PID is
+// not tracked, it returns a zero-value Meta.
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.Meta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {

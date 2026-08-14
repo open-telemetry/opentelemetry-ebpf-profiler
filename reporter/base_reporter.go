@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -46,6 +45,24 @@ func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
+func countHeapProfileEvents(tree samples.TraceEventsTree) (stacks, samplesCount int, valueSum int64) {
+	for _, resource := range tree {
+		for profileType, sampleEvents := range resource.Events {
+			if profileType.SampleType != "alloc_space" {
+				continue
+			}
+			for _, events := range sampleEvents {
+				stacks++
+				samplesCount += len(events.Timestamps)
+				for _, value := range events.Values {
+					valueSum += value
+				}
+			}
+		}
+	}
+	return stacks, samplesCount, valueSum
+}
+
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.ProfileType == nil {
 		return fmt.Errorf("skip reporting trace: %w", errUnknownProfileType)
@@ -62,8 +79,6 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
 	}
-	traceHash := traceutil.HashTrace(trace)
-
 	eventsTree := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&eventsTree)
 
@@ -80,7 +95,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	sampleKey := samples.SampleKey{
-		Hash:      traceHash,
+		Hash:      meta.TraceHash,
 		Comm:      meta.Comm,
 		TID:       int64(meta.TID),
 		CPU:       int64(meta.CPU),
@@ -91,14 +106,31 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.Values = append(events.Values, meta.Value)
+		if meta.ProfileType.SampleType == "alloc_space" {
+			events.AllocSizes = append(events.AllocSizes, meta.AllocSize)
+		}
 		return nil
 	}
 
-	rtp.Events[meta.ProfileType][sampleKey] = &samples.TraceEvents{
+	newEvents := &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		Values:     []int64{meta.Value},
 		Labels:     trace.CustomLabels,
 	}
+	if meta.ProfileType.SampleType == "alloc_space" {
+		newEvents.AllocSizes = []int64{meta.AllocSize}
+	}
+	rtp.Events[meta.ProfileType][sampleKey] = newEvents
 	return nil
+}
+
+// SetSampleSources sets the callback for collecting probe-produced profiles.
+func (b *baseReporter) SetSampleSources(fn func() []samples.SourceProfile) {
+	b.cfg.SampleSources = fn
+}
+
+// SetProcessMetaForPID sets the process metadata resolver for profile resource attributes.
+func (b *baseReporter) SetProcessMetaForPID(fn func(libpf.PID) samples.ProcessMeta) {
+	b.cfg.ProcessMetaForPID = fn
 }
