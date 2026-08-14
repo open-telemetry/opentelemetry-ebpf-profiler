@@ -168,6 +168,11 @@ For more information about the approver role, see the
 For more information about the emeritus role, see the
 [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
 
+### Become an Approver or a Maintainer
+
+See the [community membership document in OpenTelemetry community
+repo](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md).
+
 ## Legal
 
 ### Licensing Information
