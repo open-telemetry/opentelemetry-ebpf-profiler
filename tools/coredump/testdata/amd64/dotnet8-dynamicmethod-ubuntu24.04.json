@@ -11,7 +11,24 @@
         "libcoreclr.so+0x60dee8",
         "libcoreclr.so+0x2a39d7",
         "libcoreclr.so+0x2eddeb",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "System.Threading.Thread.Sleep+0 in System.Private.CoreLib.dll:0",
+        "Program.Main+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x49e436",
+        "libcoreclr.so+0x2d73dd",
+        "libcoreclr.so+0x1bec73",
+        "libcoreclr.so+0x1bf0e7",
+        "libcoreclr.so+0x1ebebb",
+        "libcoreclr.so+0x1a975f",
+        "libhostpolicy.so+0x2e9ed",
+        "libhostpolicy.so+0x2fb08",
+        "libhostfxr.so+0x1e312",
+        "libhostfxr.so+0x1d2ec",
+        "libhostfxr.so+0x19591",
+        "dotnet+0xff81",
+        "dotnet+0x1029e",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "dotnet+0x6ca8"
       ]
     },
     {

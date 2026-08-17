@@ -11,7 +11,24 @@
         "libcoreclr.so+0x6361a8",
         "libcoreclr.so+0x422d97",
         "libcoreclr.so+0x46f2fa",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "System.Threading.Thread.Sleep+0 in System.Private.CoreLib.dll:0",
+        "Program.Main+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x5fb0fb",
+        "libcoreclr.so+0x4596f0",
+        "libcoreclr.so+0x33fb83",
+        "libcoreclr.so+0x33ffeb",
+        "libcoreclr.so+0x36899d",
+        "libcoreclr.so+0x1ca2a5",
+        "libhostpolicy.so+0x2f01b",
+        "libhostpolicy.so+0x303e8",
+        "libhostfxr.so+0x213ba",
+        "libhostfxr.so+0x1ff12",
+        "libhostfxr.so+0x1a866",
+        "dotnet+0x7910",
+        "dotnet+0x7bee",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "dotnet+0x6bd9"
       ]
     },
     {
@@ -33,7 +50,15 @@
         "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
         "OwnerDynamicMethod+0 in dynamicmethod.dll:0",
         "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "System.Threading.Thread.StartCallback+0 in System.Private.CoreLib.dll:0",
+        "libcoreclr.so+0x5fb0fb",
+        "libcoreclr.so+0x458fc4",
+        "libcoreclr.so+0x46f7fa",
+        "libcoreclr.so+0x424d9b",
+        "libcoreclr.so+0x46da30",
+        "libcoreclr.so+0x63cc78",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
       ]
     },
     {
@@ -46,7 +71,15 @@
         "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
         "ModuleDynamicMethod+0 in dynamicmethod.dll:0",
         "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "System.Threading.Thread.StartCallback+0 in System.Private.CoreLib.dll:0",
+        "libcoreclr.so+0x5fb0fb",
+        "libcoreclr.so+0x458fc4",
+        "libcoreclr.so+0x46f7fa",
+        "libcoreclr.so+0x424d9b",
+        "libcoreclr.so+0x46da30",
+        "libcoreclr.so+0x63cc78",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
       ]
     },
     {
@@ -56,7 +89,15 @@
         "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
         "AnonymousDynamicMethod+0 in :0",
         "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "System.Threading.Thread.StartCallback+0 in System.Private.CoreLib.dll:0",
+        "libcoreclr.so+0x5fb0fb",
+        "libcoreclr.so+0x458fc4",
+        "libcoreclr.so+0x46f7fa",
+        "libcoreclr.so+0x424d9b",
+        "libcoreclr.so+0x46da30",
+        "libcoreclr.so+0x63cc78",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
       ]
     },
     {

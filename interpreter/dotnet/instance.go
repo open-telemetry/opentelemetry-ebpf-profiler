@@ -117,6 +117,10 @@ var stubFrameName = func() []libpf.String {
 	return names
 }()
 
+// stubDynamicFrameName is the fallback frame name for dynamic methods whose
+// friendly name cannot be resolved.
+var stubDynamicFrameName = stubFrameName[codeDynamic]
+
 // dotnetMapping reflects mapping of PE file to process.
 type dotnetMapping struct {
 	start, end uint64
@@ -565,7 +569,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
 	dynamicName := libpf.NullString
 	if classification == mcDynamic {
-		dynamicName = stubFrameName[codeDynamic]
+		dynamicName = stubDynamicFrameName
 		if vms.DynamicMethodDesc.MethodName != 0 {
 			if name := libpf.Intern(i.rm.StringPtr(methodDescPtr +
 				libpf.Address(vms.DynamicMethodDesc.MethodName))); name != libpf.NullString {
