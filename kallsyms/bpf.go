@@ -26,14 +26,15 @@ type bpfSymbolTable struct {
 
 // lookup returns the symbol containing addr, or ("", false) if none does.
 // A symbol covers [address, address+size).
-func (t *bpfSymbolTable) lookup(addr libpf.Address) (string, uint, bool) {
+func (t *bpfSymbolTable) lookup(addr libpf.Address) (name string, offset uint, ok bool) {
 	// Binary search for the last symbol whose address <= addr.
 	// BinarySearchFunc returns (index of exact match, true) or
 	// (insertion point, false). In both cases the candidate symbol
 	// is at the returned index when found, or at index-1 when not found.
-	idx, found := slices.BinarySearchFunc(t.symbols, addr, func(sym bpfSymbol, a libpf.Address) int {
-		return cmp.Compare(sym.address, a)
-	})
+	idx, found := slices.BinarySearchFunc(t.symbols, addr,
+		func(sym bpfSymbol, a libpf.Address) int {
+			return cmp.Compare(sym.address, a)
+		})
 
 	if !found {
 		// idx is the insertion point; the last symbol with address <= addr
@@ -68,7 +69,7 @@ type bpfSymbolizer struct {
 
 // LookupSymbol resolves addr to a BPF program symbol name and offset.
 // Returns ("", 0, false) if no BPF program covers addr.
-func (s *bpfSymbolizer) LookupSymbol(addr libpf.Address) (string, uint, bool) {
+func (s *bpfSymbolizer) LookupSymbol(addr libpf.Address) (name string, offset uint, ok bool) {
 	t := s.table.Load()
 	if t == nil {
 		return "", 0, false
@@ -86,9 +87,10 @@ func (s *bpfSymbolizer) addBPFSymbol(addr libpf.Address, name string, size uint3
 	}
 
 	// Check for a benign race: symbol already present with the same name.
-	idx, found := slices.BinarySearchFunc(oldSymbols, addr, func(sym bpfSymbol, a libpf.Address) int {
-		return cmp.Compare(sym.address, a)
-	})
+	idx, found := slices.BinarySearchFunc(oldSymbols, addr,
+		func(sym bpfSymbol, a libpf.Address) int {
+			return cmp.Compare(sym.address, a)
+		})
 	if found && oldSymbols[idx].name == name {
 		return
 	}
@@ -113,9 +115,10 @@ func (s *bpfSymbolizer) removeBPFSymbol(addr libpf.Address) {
 		return
 	}
 
-	idx, found := slices.BinarySearchFunc(old.symbols, addr, func(sym bpfSymbol, a libpf.Address) int {
-		return cmp.Compare(sym.address, a)
-	})
+	idx, found := slices.BinarySearchFunc(old.symbols, addr,
+		func(sym bpfSymbol, a libpf.Address) int {
+			return cmp.Compare(sym.address, a)
+		})
 	if !found {
 		return
 	}

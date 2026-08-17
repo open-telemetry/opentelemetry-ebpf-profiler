@@ -32,7 +32,7 @@ type stackInfo struct {
 // hashLocationIndices computes a hash for a slice of location indices.
 func hashLocationIndices(locationIndices []int32) uint64 {
 	h := fnv.New64a()
-	h.Write(pfunsafe.FromSlice(locationIndices))
+	h.Write(pfunsafe.FromSlice(locationIndices)) //nolint:gosec
 	return h.Sum64()
 }
 

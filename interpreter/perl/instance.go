@@ -11,6 +11,7 @@ import (
 
 	"github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -398,7 +399,9 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 	return c, nil
 }
 
-func (i *perlInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *perlInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.Perl) {
 		return interpreter.ErrMismatchInterpreterType
 	}

@@ -45,7 +45,7 @@ var dsoRegex = regexp.MustCompile(`.*/elastic-jvmti-linux-([\w-]*)\.so`)
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#process-storage-layout
 //
-//nolint:lll
+
 type apmProcessStorage struct {
 	ServiceName     string
 	TraceSocketPath string
@@ -147,9 +147,10 @@ func (d data) Unload(_ interpreter.EbpfHandler) {
 }
 
 type Instance struct {
+	interpreter.InstanceStubs
+
 	serviceName string
 	socket      *apmAgentSocket
-	interpreter.InstanceStubs
 }
 
 var _ interpreter.Instance = &Instance{}
@@ -199,7 +200,7 @@ func isPotentialAgentLib(path string) bool {
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#general-memory-layout
 //
-//nolint:lll
+
 func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (string, error) {
 	length := int(rm.Uint32(*addr))
 	*addr += 4
@@ -225,7 +226,7 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#process-storage-layout
 //
-//nolint:lll
+
 func readProcStorage(
 	rm remotememory.RemoteMemory,
 	procStorageAddr libpf.Address,

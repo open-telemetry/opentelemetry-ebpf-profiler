@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-type clear struct {
+type clear struct { //nolint:predeclared,gocritic
 	v    Expression
 	bits uint
 }

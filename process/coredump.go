@@ -33,7 +33,8 @@ type CoredumpProcess struct {
 	// pid is the original PID from which the coredump was generated.
 	pid libpf.PID
 
-	// fname is the the short name of the executable file that was running when the coredump was generated.
+	// fname is the short name of the executable file that was running when the coredump was
+	// generated.
 	fname libpf.String
 
 	// machineData contains the parsed machine data.
@@ -221,7 +222,7 @@ func (cd *CoredumpProcess) IterateMappings(callback func(m RawMapping) bool) (ui
 	return 0, nil
 }
 
-// GetThreadInfo implements the Process interface.
+// GetThreads implements the Process interface.
 func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
 }

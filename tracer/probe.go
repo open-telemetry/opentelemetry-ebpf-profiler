@@ -104,7 +104,8 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 
 	case ProbeModeUprobe, ProbeModeUretprobe:
 		if n != 3 || parts[2] == "" {
-			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
+			return nil, fmt.Errorf(
+				"invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
 			Mode:     probeType,
@@ -118,7 +119,8 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 	}
 }
 
-// AttachProbe attaches an eBPF program to the kernel or user-space based on the probe specification.
+// AttachProbe attaches an eBPF program to the kernel or user-space based on the probe
+// specification.
 //
 // It returns a link.Link that represents the attached probe, which can be used to
 // detach the probe later by calling Close() on the link.

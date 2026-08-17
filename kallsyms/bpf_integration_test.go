@@ -81,7 +81,7 @@ func findBPFSymbol(s *bpfSymbolizer, progName string) (string, libpf.Address) {
 
 // assertBPFSymbolFound polls the symbolizer until a BPF symbol matching progName
 // appears, then verifies the full symbolization path (address -> symbol).
-func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string, libpf.Address) {
+func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) string {
 	t.Helper()
 
 	var fullName string
@@ -105,7 +105,7 @@ func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string,
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(1), offset)
 
-	return fullName, progAddr
+	return fullName
 }
 
 // assertBPFSymbolRemoved polls the symbolizer until the BPF symbol matching
@@ -143,9 +143,9 @@ func TestBPFSymbolizerDynamic(t *testing.T) {
 
 	prog := loadSocketFilter(t, dynamicProgName)
 
-	fullName, _ := assertBPFSymbolFound(t, s, dynamicProgName)
+	fullName := assertBPFSymbolFound(t, s, dynamicProgName)
 
-	prog.Close()
+	prog.Close() //nolint:gosec
 	assertBPFSymbolRemoved(t, s, dynamicProgName)
 
 	t.Logf("Dynamic test passed: %q added and removed", fullName)
@@ -170,11 +170,11 @@ func TestBPFSymbolizerPreexisting(t *testing.T) {
 
 	// The program was loaded before the monitor started, so it must be
 	// discovered from /proc/kallsyms during the initial load.
-	fullName, _ := assertBPFSymbolFound(t, s, preexistingProgName)
+	fullName := assertBPFSymbolFound(t, s, preexistingProgName)
 	t.Logf("Preexisting program %q found from initial kallsyms load", fullName)
 
 	// Close the program and verify the symbol is removed via perf event.
-	prog.Close()
+	prog.Close() //nolint:gosec
 	assertBPFSymbolRemoved(t, s, preexistingProgName)
 	t.Logf("Preexisting program %q successfully removed", fullName)
 }

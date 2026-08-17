@@ -1,8 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// package pfelf implements functions for processing of ELF files and extracting data from
-// them. This file provides enumeration of ELF Notes and debug link handling
 package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
@@ -136,7 +134,6 @@ func GetBuildIDFromNotesFile(filePath string) (string, error) {
 	defer file.Close()
 
 	return getBuildIDFromNotesFile(file)
-
 }
 
 // ParseDebugLink parses the name and CRC32 of the debug info file from the provided section data.

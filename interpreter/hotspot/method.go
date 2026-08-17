@@ -11,7 +11,7 @@ import (
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 )
 
-// Constants for the JVM internals that have never changed
+// ConstMethod_has_linenumber_table is a JVM internal constant that has never changed
 const ConstMethod_has_linenumber_table = 0x0001
 
 // maxInlinedScopes bounds the number of inlined scopes expanded for a single
@@ -77,7 +77,6 @@ type hotspotJITInfo struct {
 // for each inlined method for given RIP.
 func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
 	frames *libpf.Frames) error {
-	//nolint:lll
 	// Unfortunately the data structures read here are not well documented in the JVM
 	// source, but for reference implementation you can look:
 	// https://hg.openjdk.java.net/jdk-updates/jdk14u/file/default/src/java.base/solaris/native/libjvm_db/libjvm_db.c
@@ -118,7 +117,8 @@ func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
 	// Found scope data. Expand the inlined scope information from it.
 	var err error
 	maxScopeOff := uint32(len(ji.scopesData))
-	for scopeNum := 0; scopeOff != 0 && scopeOff < maxScopeOff && scopeNum < maxInlinedScopes; scopeNum++ {
+	for scopeNum := 0; scopeOff != 0 && scopeOff < maxScopeOff &&
+		scopeNum < maxInlinedScopes; scopeNum++ {
 		// Keep track of the current scope offset, and use it as the next maximum
 		// offset. This makes sure the scope offsets decrease monotonically and
 		// this loop terminates. It has been verified empirically for this assumption

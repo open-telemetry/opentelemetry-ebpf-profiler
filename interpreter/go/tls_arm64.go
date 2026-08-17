@@ -6,13 +6,15 @@
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
+	"errors"
 	"fmt"
+
+	"golang.org/x/arch/arm64/arm64asm"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
-	"golang.org/x/arch/arm64/arm64asm"
 )
 
 // runtime.load_g starts by loading runtime.iscgo before deciding how to
@@ -38,11 +40,11 @@ import (
 // We decode emitted assembly for `MOVB runtime.iscgo(SB), R0` to recover the absolute address of
 // runtime.iscgo, then read that byte. A non-zero value means the runtime itself
 // would take the TLS path.
-func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, int, error) {
+func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (isCgo bool, consumed int, err error) {
 	const prologueSize = 2 * 4 // ADRP + LDRSB, one instruction each
 
 	if len(b) < prologueSize {
-		return false, 0, fmt.Errorf("code too short for runtime.iscgo prologue")
+		return false, 0, errors.New("code too short for runtime.iscgo prologue")
 	}
 
 	adrp, err := arm64asm.Decode(b[0:4])
@@ -63,7 +65,7 @@ func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, int, error) {
 
 	pcrel, ok := arm.DecodeImmediate(adrp.Args[1])
 	if !ok {
-		return false, 0, fmt.Errorf("failed to decode ADRP page address")
+		return false, 0, errors.New("failed to decode ADRP page address")
 	}
 	page := (pc + pcrel) & ^0xFFF
 
@@ -73,7 +75,7 @@ func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, int, error) {
 	}
 	offset, ok := arm.DecodeImmediate(mem)
 	if !ok {
-		return false, 0, fmt.Errorf("failed to decode LDRSB memory offset")
+		return false, 0, errors.New("failed to decode LDRSB memory offset")
 	}
 	addr := page + offset
 
@@ -138,7 +140,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		return 0, nil
 	}
 
-	for b := b[consumed:]; len(b) > 0; b = b[4:] {
+	for b = b[consumed:]; len(b) > 0; b = b[4:] {
 		i, err := arm64asm.Decode(b)
 		if err != nil {
 			return 0, err
@@ -150,12 +152,12 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 				return int32(imm.Imm), nil
 			}
 		case arm64asm.MOVK:
-			// when compiled with -buildmode=pie, mov instruction is split into two instructions: movz and movk
-			// movz is used to zero the register and set bits 16-31, while movk is used to set the lower 16 bits:
-			// movz x27, #0x0, lsl #16
-			// movk x27, #0x10
-			// For now, we'll just decode the immediate value from the movk instruction since the one from the movz
-			// instruction seems to always be 0.
+			// when compiled with -buildmode=pie, mov is split into movz and movk:
+			// movz is used to zero the register and set bits 16-31,
+			// while movk is used to set the lower 16 bits:
+			//   movz x27, #0x0, lsl #16
+			//   movk x27, #0x10
+			// We decode the immediate from movk; the movz value is always 0.
 			imm, ok := arm.DecodeImmediate(i.Args[1])
 			if ok {
 				return int32(imm), nil

@@ -54,7 +54,7 @@ import (
 )
 
 const (
-	// Scalar Value types (SVt)
+	// SVt_MASK defines Scalar Value types (SVt)
 	// https://github.com/Perl/perl5/blob/v5.32.0/sv.h#L132-L166
 	SVt_MASK uint32 = 0x1f
 	SVt_PVHV uint32 = 12

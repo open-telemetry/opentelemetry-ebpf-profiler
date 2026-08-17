@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	// This is used to check if the VM mode is the default one
+	// ZEND_VM_KIND_HYBRID is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
 	ZEND_VM_KIND_HYBRID = (1 << 2)
 )
@@ -104,8 +104,8 @@ func (d *phpData) String() string {
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}

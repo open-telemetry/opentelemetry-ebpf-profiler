@@ -106,7 +106,7 @@ func TestTextStart(t *testing.T) {
 	defer ef.Close()
 
 	var runtimeTextAddr uintptr
-	ef.VisitSymbols(func(sym libpf.Symbol) bool {
+	ef.VisitSymbols(func(sym libpf.Symbol) bool { //nolint:gosec
 		if sym.Name == "runtime.text" {
 			runtimeTextAddr = uintptr(sym.Address)
 			return false

@@ -98,7 +98,7 @@ func (s *apmAgentSocket) SendMessage(msg []byte) error {
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#cpu-profiler-trace-correlation-message
 //
-//nolint:lll
+
 type traceCorrMsg struct {
 	MessageType      uint16
 	MinorVersion     uint16

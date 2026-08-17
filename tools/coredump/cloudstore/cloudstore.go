@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// cloudstore provides access to the cloud based storage used in the tests.
+// Package cloudstore provides access to the cloud based storage used in the tests.
 package cloudstore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/cloudstore"
 
 import (

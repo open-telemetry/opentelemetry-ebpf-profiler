@@ -12,48 +12,51 @@ import (
 	"debug/elf"
 	"fmt"
 
+	"golang.org/x/arch/arm64/arm64asm"
+
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"golang.org/x/arch/arm64/arm64asm"
 )
 
 const (
-	// Aarch64 ABI
-	armRegX0  uleb128 = 0
-	armRegX1  uleb128 = 1
-	armRegX2  uleb128 = 2
-	armRegX3  uleb128 = 3
-	armRegX4  uleb128 = 4
-	armRegX5  uleb128 = 5
-	armRegX6  uleb128 = 6
-	armRegX7  uleb128 = 7
-	armRegX8  uleb128 = 8
-	armRegX9  uleb128 = 9
-	armRegX10 uleb128 = 10
-	armRegX11 uleb128 = 11
-	armRegX12 uleb128 = 12
-	armRegX13 uleb128 = 13
-	armRegX14 uleb128 = 14
-	armRegX15 uleb128 = 15
-	armRegX16 uleb128 = 16
-	armRegX17 uleb128 = 17
-	armRegX18 uleb128 = 18
-	armRegX19 uleb128 = 19
-	armRegX20 uleb128 = 20
-	armRegX21 uleb128 = 21
-	armRegX22 uleb128 = 22
-	armRegX23 uleb128 = 23
-	armRegX24 uleb128 = 24
-	armRegX25 uleb128 = 25
-	armRegX26 uleb128 = 26
-	armRegX27 uleb128 = 27
-	armRegX28 uleb128 = 28
-	armRegFP  uleb128 = 29
-	armRegLR  uleb128 = 30
-	armRegSP  uleb128 = 31
-	armRegPC  uleb128 = 32
+	// Aarch64 ABI (DWARF register numbers)
+	armRegX0 uleb128 = iota
+	armRegX1
+	armRegX2
+	armRegX3
+	armRegX4
+	armRegX5
+	armRegX6
+	armRegX7
+	armRegX8
+	armRegX9
+	armRegX10
+	armRegX11
+	armRegX12
+	armRegX13
+	armRegX14
+	armRegX15
+	armRegX16
+	armRegX17
+	armRegX18
+	armRegX19
+	armRegX20
+	armRegX21
+	armRegX22
+	armRegX23
+	armRegX24
+	armRegX25
+	armRegX26
+	armRegX27
+	armRegX28
+	armRegFP
+	armRegLR
+	armRegSP
+	armRegPC
+)
 
-	armLastReg uleb128 = iota
+const (
+	armLastReg uleb128 = armRegPC + 1
 )
 
 // newVMRegsARM initializes the vmRegs structure for aarch64.

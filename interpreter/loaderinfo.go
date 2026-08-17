@@ -25,7 +25,9 @@ type LoaderInfo struct {
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, intervals *sdtypes.IntervalData) *LoaderInfo {
+func NewLoaderInfo(
+	fileID host.FileID, elfRef *pfelf.Reference, intervals *sdtypes.IntervalData,
+) *LoaderInfo {
 	return &LoaderInfo{
 		fileID:    fileID,
 		elfRef:    elfRef,

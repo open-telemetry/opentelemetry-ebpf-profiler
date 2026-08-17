@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type Interpreter struct {
@@ -67,7 +68,9 @@ const (
 
 // maybeHandleLoadStore checks if an instruction is a load or store, processing it if so.
 // The first return value is true if we attempted to process the instruction.
-func (i *Interpreter) maybeHandleLoadStore(inst arm64asm.Inst, pc expression.Expression) (bool, error) {
+func (i *Interpreter) maybeHandleLoadStore(
+	inst arm64asm.Inst, pc expression.Expression, //nolint:gocritic
+) (bool, error) {
 	// TODO: There are tons of load/store instructions. Fill in new ones if/when we need them.
 	var isLoad bool
 	switch inst.Op {
@@ -117,14 +120,15 @@ func (i *Interpreter) maybeHandleLoadStore(inst arm64asm.Inst, pc expression.Exp
 				ext = idx
 			}
 
-			memAddr = expression.Add(base, expression.Multiply(ext, expression.Imm(uint64(1)<<uint64(src.Amount))))
+			memAddr = expression.Add(base,
+				expression.Multiply(ext, expression.Imm(uint64(1)<<uint64(src.Amount))))
 		case arm64asm.PCRel:
 			memAddr = expression.Add(pc, expression.Imm(uint64(src)))
 		}
 		if memAddr != nil {
 			if isLoad {
-				// NB: encoding the read as all 8 bytes is fine even if the register is W*; setArm64asm
-				// properly encodes that the higher order bytes should be zeroed in that case.
+				// NB: encoding the read as all 8 bytes is fine even if the register is W*;
+				// setArm64asm properly encodes that the higher order bytes should be zeroed.
 				i.Regs.setArm64asm(dst, expression.Mem8(memAddr))
 			} else {
 				// TODO: Our interpreter doesn't model memory contents yet,
@@ -137,7 +141,8 @@ func (i *Interpreter) maybeHandleLoadStore(inst arm64asm.Inst, pc expression.Exp
 			return true, nil
 		}
 	}
-	// either an instruction or an addressing mode that we didn't know how to handle; this isn't an error.
+	// either an instruction or an addressing mode that we didn't know how to handle;
+	// this isn't an error.
 	return false, nil
 }
 
@@ -152,7 +157,7 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 	oldPC := i.Regs.Get(PC)
 	i.pc += uint64(InstSz)
 	i.code = i.code[InstSz:]
-	i.Regs.setPC(expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
+	i.Regs.setPC(expression.Add(i.CodeAddress, expression.Imm(i.pc)))
 	if ok, err := i.maybeHandleLoadStore(inst, oldPC); ok {
 		return inst, err
 	}
@@ -220,7 +225,6 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 				pcPage := expression.Clear(oldPC, 12)
 				i.Regs.setArm64asm(dst, expression.Add(pcPage, expression.Imm(uint64(src))))
 			}
-
 		}
 	default:
 	}

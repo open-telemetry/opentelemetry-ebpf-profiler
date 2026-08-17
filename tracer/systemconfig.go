@@ -249,14 +249,17 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	return data.Code[:], data.Address, nil
 }
 
-func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
+func validateSystemAnalysisResult(
+	data support.SystemAnalysis, address libpf.SymbolValue, //nolint:gocritic
+) error {
 	if data.Pid != 0 {
 		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
 	}
 
 	if data.Err != 0 {
 		if data.Err < 0 {
-			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)", errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
+			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)",
+				errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
 		}
 
 		return fmt.Errorf("%w at 0x%x: helper err=%d", errSystemAnalysisFailed, address, data.Err)
@@ -333,38 +336,42 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 }
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
-func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
-	new := &cebpf.CollectionSpec{
+func prepareAnalysis(
+	orig *cebpf.CollectionSpec,
+) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
+	spec := &cebpf.CollectionSpec{
 		Maps:      make(map[string]*cebpf.MapSpec),
 		Programs:  make(map[string]*cebpf.ProgramSpec),
 		Variables: make(map[string]*cebpf.VariableSpec),
 	}
-	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
-	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
+	spec.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
+	spec.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
 	if rodata, ok := orig.Maps[".rodata"]; ok {
-		new.Maps[".rodata"] = rodata.Copy()
+		spec.Maps[".rodata"] = rodata.Copy()
 	}
 
-	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
-	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+	spec.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
+	spec.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
 	for name, variable := range orig.Variables {
-		new.Variables[name] = variable.Copy()
+		spec.Variables[name] = variable.Copy()
 	}
-	if err := syncVariablesToMapSpecs(new); err != nil {
+	if err := syncVariablesToMapSpecs(spec); err != nil {
 		return nil, nil, fmt.Errorf("failed to sync variables to map specs: %v", err)
 	}
 
 	maps := make(map[string]*cebpf.Map)
 
-	if err := loadAllMaps(new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
+	if err := loadAllMaps(
+		spec, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps,
+	); err != nil {
 		return nil, nil, err
 	}
 
-	if err := rewriteMaps(new, maps); err != nil {
+	if err := rewriteMaps(spec, maps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	return new, maps, nil
+	return spec, maps, nil
 }
 
 // getCurrentNS returns the device number and inode of the namespace file at filename
@@ -375,7 +382,7 @@ func getCurrentNS(filename string) (dev, ino uint64, err error) {
 	if err := unix.Stat(filename, &stat); err != nil {
 		return 0, 0, fmt.Errorf("stat %s: %w", filename, err)
 	}
-	return uint64(stat.Dev), uint64(stat.Ino), nil
+	return stat.Dev, stat.Ino, nil
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
@@ -388,7 +395,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		!interpretersConfig.Go.IsLabelsDisabled()
 	if err := parseBTF(vars, needTPBase, needProcessStartTime); err != nil {
 		if needProcessStartTime {
-			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
+			return fmt.Errorf(
+				"process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
 		}
 
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -423,8 +431,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 	}
 
-	log.Debugf(
-		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_time %#x",
+	log.Debugf("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x,"+
+		" vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_time %#x",
 		vars.task_stack_offset,
 		vars.stack_ptregs_offset,
 		vars.tpbase_offset,
@@ -447,7 +455,7 @@ func configureVMALookup(coll *cebpf.CollectionSpec, cfg *Config, vars *SysConfig
 	log.Infof("VMA lookup disabled: %s; patched %d instructions", reason, patched)
 }
 
-func probeVMALookupSupport(cfg *Config) (bool, string) {
+func probeVMALookupSupport(cfg *Config) (supported bool, reason string) {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return false, fmt.Sprintf("failed to adjust rlimit for VMA helper probe: %v", err)
@@ -481,7 +489,8 @@ func disableVMAHelperCalls(coll *cebpf.CollectionSpec) int {
 		vmaCallbackPatched := false
 		for i := range progSpec.Instructions {
 			ins := &progSpec.Instructions[i]
-			if ins.IsLoadOfFunctionPointer() && strings.HasPrefix(ins.Reference(), "find_vma_callback") {
+			if ins.IsLoadOfFunctionPointer() &&
+				strings.HasPrefix(ins.Reference(), "find_vma_callback") {
 				progSpec.Instructions[i] = asm.LoadImm(ins.Dst, 0, asm.DWord)
 				patched++
 				programPatched = true
@@ -559,7 +568,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	major, minor uint32, origins *originRegistry, out *SysConfigVars,
 ) error {
 	if cfg.FilterMinProcessAge < 0 {
-		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
+		return fmt.Errorf(
+			"filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
 	}
 
 	if cfg.VerboseMode {
@@ -582,7 +592,9 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
 			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
 		}
-		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
+		log.Infof("PID namespace translation enabled (dev=%d, ino=%d),"+
+			" only processes traces within the profiler namespace will be collected",
+			dev, ino)
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
@@ -616,11 +628,15 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set filter_idle_frames: %v", err)
 	}
 
-	if err := coll.Variables["ruby_skip_native_resume"].Set(cfg.InterpretersConfig.Ruby.SkipNativeResume); err != nil {
+	if err := coll.Variables["ruby_skip_native_resume"].Set(
+		cfg.InterpretersConfig.Ruby.SkipNativeResume,
+	); err != nil {
 		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
-	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
+	if err := coll.Variables["filter_min_process_age_ns"].Set(
+		uint64(cfg.FilterMinProcessAge.Nanoseconds()),
+	); err != nil {
 		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
 	}
 
@@ -654,22 +670,32 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if err := coll.Variables["task_stack_offset"].Set(rodataVars.task_stack_offset); err != nil {
 		return fmt.Errorf("failed to set task_stack_offset: %v", err)
 	}
-	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
+	if err := coll.Variables["stack_ptregs_offset"].Set(
+		rodataVars.stack_ptregs_offset,
+	); err != nil {
 		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
 	}
 	if err := coll.Variables["vma_lookup_enabled"].Set(rodataVars.vma_lookup_enabled); err != nil {
 		return fmt.Errorf("failed to set vma_lookup_enabled: %v", err)
 	}
-	if err := coll.Variables["vma_vm_file_offset"].Set(rodataVars.vma_vm_file_offset); err != nil {
+	if err := coll.Variables["vma_vm_file_offset"].Set(
+		rodataVars.vma_vm_file_offset,
+	); err != nil {
 		return fmt.Errorf("failed to set vma_vm_file_offset: %v", err)
 	}
-	if err := coll.Variables["vma_vm_flags_offset"].Set(rodataVars.vma_vm_flags_offset); err != nil {
+	if err := coll.Variables["vma_vm_flags_offset"].Set(
+		rodataVars.vma_vm_flags_offset,
+	); err != nil {
 		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
 	}
-	if err := coll.Variables["task_group_leader_offset"].Set(rodataVars.task_group_leader_offset); err != nil {
+	if err := coll.Variables["task_group_leader_offset"].Set(
+		rodataVars.task_group_leader_offset,
+	); err != nil {
 		return fmt.Errorf("failed to set task_group_leader_offset: %v", err)
 	}
-	if err := coll.Variables["task_start_time_offset"].Set(rodataVars.task_start_time_offset); err != nil {
+	if err := coll.Variables["task_start_time_offset"].Set(
+		rodataVars.task_start_time_offset,
+	); err != nil {
 		return fmt.Errorf("failed to set task_start_time_offset: %v", err)
 	}
 
@@ -706,7 +732,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		if err != nil {
 			return err
 		}
-		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
+		if err := coll.Variables["origin_id_off_cpu"].Set(offCPU); err != nil {
 			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
 		}
 	}

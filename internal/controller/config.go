@@ -8,12 +8,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 type Config struct {
 	config.Config
+
 	CollAgentAddr string
 	Copyright     bool
 	DisableTLS    bool
@@ -26,10 +28,13 @@ type Config struct {
 	ProcessMetaEnrichers []process.MetaEnricher
 	OnShutdown           func() error
 
-	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
-	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.
-	ReporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	Reporter        reporter.Reporter
+	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter
+	// field. Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory
+	// will be used.
+	ReporterFactory func(
+		cfg *reporter.Config, nextConsumer xconsumer.Profiles,
+	) (reporter.Reporter, error)
+	Reporter reporter.Reporter
 
 	Fs *flag.FlagSet
 }

@@ -86,7 +86,7 @@ func __bpf_probe_read_user_with_test_fault(
 var stackDeltaInnerMap = C.malloc(1)
 
 //export __bpf_map_lookup_elem
-func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointer) unsafe.Pointer {
+func __bpf_map_lookup_elem(id C.u64, mapdef, keyptr unsafe.Pointer) unsafe.Pointer {
 	ctx := ebpfContextMap[id]
 	switch mapdef {
 	case unsafe.Pointer(&C.pid_page_to_mapping_info):
@@ -131,11 +131,11 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		return stackDeltaInnerMap
 	case unsafe.Pointer(&C.unwind_info_array):
 		key := uintptr(*(*C.u32)(keyptr))
-		return unsafe.Pointer(uintptr(ctx.unwindInfoArray) + key*C.sizeof_UnwindInfo)
+		return unsafe.Add(ctx.unwindInfoArray, key*C.sizeof_UnwindInfo)
 	case stackDeltaInnerMap:
 		key := uintptr(*(*C.u32)(keyptr))
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
-			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
+			return unsafe.Add(deltas, key*C.sizeof_StackDelta)
 		}
 	}
 	return unsafe.Pointer(uintptr(0))

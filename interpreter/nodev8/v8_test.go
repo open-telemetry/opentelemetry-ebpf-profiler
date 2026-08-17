@@ -91,7 +91,7 @@ func TestExtractStringLengthLimit(t *testing.T) {
 	binary.LittleEndian.PutUint32(buf[4:], 0xFFFFFFFF)
 	i.rm = remotememory.RemoteMemory{ReaderAt: bytes.NewReader(buf)}
 
-	tag := uint16(i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag)
+	tag := i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag
 	calls := 0
 	_, err := i.extractString(0, tag, func(string) error { calls++; return nil },
 		maxMemoizedStringBytes, maxStringDepth)
@@ -106,7 +106,7 @@ func TestExtractStringValid(t *testing.T) {
 	copy(buf[8:], "abcdef")
 	i.rm = remotememory.RemoteMemory{ReaderAt: bytes.NewReader(buf)}
 
-	tag := uint16(i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag)
+	tag := i.d.vmStructs.Fixed.SeqStringTag | i.d.vmStructs.Fixed.OneByteStringTag
 	got := ""
 	_, err := i.extractString(0, tag, func(s string) error { got += s; return nil },
 		maxMemoizedStringBytes, maxStringDepth)
@@ -123,7 +123,7 @@ func TestExtractStringConsCycle(t *testing.T) {
 	buf := make([]byte, 0x3000)
 	putUint64(buf, int(A)+int(i.d.vmStructs.HeapObject.Map), uint64(M|HeapObjectTag))
 	putUint16(buf, int(M)+int(i.d.vmStructs.Map.InstanceType),
-		uint16(i.d.vmStructs.Fixed.ConsStringTag))
+		i.d.vmStructs.Fixed.ConsStringTag)
 	putUint64(buf, int(A)+int(i.d.vmStructs.ConsString.First), uint64(A|HeapObjectTag))
 	putUint64(buf, int(A)+int(i.d.vmStructs.ConsString.Second), uint64(A|HeapObjectTag))
 	i.rm = remotememory.RemoteMemory{ReaderAt: bytes.NewReader(buf)}

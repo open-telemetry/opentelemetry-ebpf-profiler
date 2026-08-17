@@ -26,6 +26,7 @@ import (
 	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
@@ -275,12 +276,14 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	origins := &originRegistry{}
 	var sysConfigVars SysConfigVars
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, origins, &sysConfigVars)
+	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(
+		kmod, cfg, origins, &sysConfigVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(
+		ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
@@ -658,7 +661,7 @@ func probeNoPrealloc() bool {
 	if err != nil {
 		return false
 	}
-	prog.Close()
+	prog.Close() //nolint:gosec
 	return true
 }
 
@@ -996,7 +999,8 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("Failed to batch lookup and delete entries from pid_events map: %v", err)
+			return fmt.Errorf(
+				"Failed to batch lookup and delete entries from pid_events map: %v", err)
 		}
 	}
 
@@ -1144,7 +1148,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		return fmt.Errorf("failed to get online cpus: %w", err)
 	}
 
-	if err := t.kernelSymbolizer.StartMonitor(ctx, onlineCPUs); err != nil {
+	if err = t.kernelSymbolizer.StartMonitor(ctx, onlineCPUs); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
 	eventMetricCollector, err := t.startEventMonitor(ctx)
@@ -1428,7 +1432,7 @@ type originRegistry struct {
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
-		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
+		return 0, errors.New("maximum number of origin registry entries exceeded")
 	}
 	id := uint16(r.lastID.Add(1))
 	r.types.Store(id, metadata)

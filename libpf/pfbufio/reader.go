@@ -150,10 +150,7 @@ func (r *Reader) fill() error {
 	}
 
 	r.pos = 0
-	toRead := int64(r.bufSize - preserve)
-	if toRead > r.limit-r.off {
-		toRead = r.limit - r.off
-	}
+	toRead := min(int64(r.bufSize-preserve), r.limit-r.off)
 
 	n, err := r.source.ReadAt(r.buf[preserve:preserve+int(toRead)], r.off)
 	r.nbuf = n + preserve
@@ -435,7 +432,7 @@ func (r *Reader) EndSection() {
 	r.sectionEnds = r.sectionEnds[:len(r.sectionEnds)-1]
 
 	if remaining := r.Remaining(); remaining > 0 {
-		r.Discard(int(remaining))
+		r.Discard(int(remaining)) //nolint:gosec
 	}
 	r.slimit = oldEnd
 	r.updateBufferLimit()

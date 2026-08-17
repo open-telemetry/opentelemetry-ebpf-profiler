@@ -1,7 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package periodiccaller allows periodic calls of functions.
 package periodiccaller
 
 import (
@@ -238,7 +237,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	stop := StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
 		require.True(t, manualTrigger)
 		n := counter.Add(1)
-		if n == int32(numTrigger) {
+		if n == numTrigger {
 			done <- true
 		}
 		return true
@@ -268,7 +267,7 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	stop := StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
 		func(manualTrigger bool) bool {
 			n := counter.Add(1)
-			if n == int32(numIters) {
+			if n == numIters {
 				done <- true
 				return false
 			}

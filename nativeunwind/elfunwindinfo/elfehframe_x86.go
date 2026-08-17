@@ -12,32 +12,36 @@ import (
 	"debug/elf"
 	"fmt"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 const (
 	// x86_64 abi (https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf, page 57)
-	x86RegRAX uleb128 = 0
-	x86RegRDX uleb128 = 1
-	x86RegRCX uleb128 = 2
-	x86RegRBX uleb128 = 3
-	x86RegRSI uleb128 = 4
-	x86RegRDI uleb128 = 5
-	x86RegRBP uleb128 = 6
-	x86RegRSP uleb128 = 7
-	x86RegR8  uleb128 = 8
-	x86RegR9  uleb128 = 9
-	x86RegR10 uleb128 = 10
-	x86RegR11 uleb128 = 11
-	x86RegR12 uleb128 = 12
-	x86RegR13 uleb128 = 13
-	x86RegR14 uleb128 = 14
-	x86RegR15 uleb128 = 15
-	x86RegRIP uleb128 = 16
+	// DWARF register numbers
+	x86RegRAX uleb128 = iota
+	x86RegRDX
+	x86RegRCX
+	x86RegRBX
+	x86RegRSI
+	x86RegRDI
+	x86RegRBP
+	x86RegRSP
+	x86RegR8
+	x86RegR9
+	x86RegR10
+	x86RegR11
+	x86RegR12
+	x86RegR13
+	x86RegR14
+	x86RegR15
+	x86RegRIP
+)
 
-	x86LastReg uleb128 = iota
+const (
+	x86LastReg uleb128 = x86RegRIP + 1
 )
 
 // newVMRegsX86 initializes the vmRegs structure for X86_64.

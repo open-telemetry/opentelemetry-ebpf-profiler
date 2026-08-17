@@ -4,10 +4,12 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 )
@@ -50,7 +52,7 @@ func (t *Tracer) AttachSchedMonitor() error {
 func (t *Tracer) AttachPrctlMonitor() error {
 	prog, ok := t.ebpfProgs["tracepoint__sys_exit_prctl"]
 	if !ok {
-		return fmt.Errorf("eBPF program tracepoint__sys_exit_prctl not found")
+		return errors.New("eBPF program tracepoint__sys_exit_prctl not found")
 	}
 	return t.attachToTracepoint("syscalls", "sys_exit_prctl", prog)
 }

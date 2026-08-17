@@ -22,6 +22,7 @@ import (
 
 type rubyTestEbpfHandler struct {
 	interpreter.EbpfHandler
+
 	calls             []string
 	procDataUpdates   []support.RubyProcInfo
 	mappingUpdates    int
@@ -47,6 +48,7 @@ func (h *rubyTestEbpfHandler) UpdatePidInterpreterMapping(_ libpf.PID, _ lpm.Pre
 
 type rubyTestProcess struct {
 	process.Process
+
 	pid libpf.PID
 }
 
@@ -207,7 +209,8 @@ func TestQualifiedMethodName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			qualified := qualifiedMethodName(libpf.Intern(tt.classPath), libpf.Intern(tt.methodName), tt.singleton)
+			qualified := qualifiedMethodName(
+				libpf.Intern(tt.classPath), libpf.Intern(tt.methodName), tt.singleton)
 			assert.Equal(t, libpf.Intern(tt.expected), qualified)
 		})
 	}
@@ -272,7 +275,10 @@ func TestProfileFrameFullLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fullLabel := profileFrameFullLabel(libpf.Intern(tt.classPath), libpf.Intern(tt.label), libpf.Intern(tt.baseLabel), libpf.Intern(tt.methodName), tt.singleton, false)
+			fullLabel := profileFrameFullLabel(
+				libpf.Intern(tt.classPath), libpf.Intern(tt.label),
+				libpf.Intern(tt.baseLabel), libpf.Intern(tt.methodName),
+				tt.singleton, false)
 			assert.Equal(t, libpf.Intern(tt.expected), fullLabel)
 		})
 	}
@@ -395,7 +401,8 @@ func TestFindJITRegion(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback spans production-like discontiguous anonymous executable mappings",
+			name: "heuristic fallback spans production-like discontiguous" +
+				" anonymous executable mappings",
 			mappings: []process.RawMapping{
 				execAnon(0x7a6b2ec00000, 0x800000),
 				execAnon(0x7a6b337fb000, 0x800000),
@@ -470,7 +477,7 @@ func TestSynchronizeMappingsPublishesJITRangeBeforePrefixes(t *testing.T) {
 	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
-	assert.Greater(t, handler.mappingUpdates, 0)
+	assert.Positive(t, handler.mappingUpdates)
 	require.Len(t, handler.procDataUpdates, 1)
 	assert.Equal(t, uint64(0x100000), handler.procDataUpdates[0].Jit_start)
 	assert.Equal(t, uint64(0x110000), handler.procDataUpdates[0].Jit_end)
@@ -494,7 +501,7 @@ func TestSynchronizeMappingsReportsPartialPublicationAfterMappingFailure(t *test
 
 	err := instance.SynchronizeMappings(handler, nil, pr, mappings)
 	require.ErrorIs(t, err, updateErr)
-	assert.ErrorContains(t, err, "JIT proc data was already published")
+	require.ErrorContains(t, err, "JIT proc data was already published")
 	assert.Equal(t, []string{"proc-data", "interpreter-mapping"}, handler.calls)
 	assert.Equal(t, uint64(0x100000), instance.procInfo.Jit_start)
 	assert.Equal(t, uint64(0x110000), instance.procInfo.Jit_end)
@@ -532,5 +539,5 @@ func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {
 	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
-	assert.Greater(t, handler.mappingUpdates, 0)
+	assert.Positive(t, handler.mappingUpdates)
 }

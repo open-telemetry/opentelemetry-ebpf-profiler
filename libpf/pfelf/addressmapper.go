@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// package pfelf implements functions for processing of ELF files and extracting data from
+// Package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file provides a cacheable file offset to virtual address mapping.
 package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
@@ -29,7 +29,6 @@ var pageSizeMinusOne = uint64(os.Getpagesize()) - 1
 // ELF virtual address where it would be mapped by default.
 func (am *AddressMapper) FileOffsetToVirtualAddress(fileOffset uint64) (uint64, bool) {
 	for _, p := range am.phdrs {
-		//nolint:lll
 		// fileOffset may not correspond to any file offset present in the ELF program headers.
 		// Indeed, mmap alignment constraints may have forced the ELF loader to start a segment
 		// mapping before the actual start of the ELF LOAD segment. Because of this, we must
@@ -52,7 +51,7 @@ func (am *AddressMapper) FileOffsetToVirtualAddress(fileOffset uint64) (uint64, 
 	return 0, false
 }
 
-// NewAddressMapper returns an address mapper for given ELF File
+// GetAddressMapper returns an address mapper for given ELF File
 func (f *File) GetAddressMapper() AddressMapper {
 	phdrs := make([]addressMapperPHDR, 0, 1)
 	for _, p := range f.Progs {

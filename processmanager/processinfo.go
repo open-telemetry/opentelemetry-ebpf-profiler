@@ -22,8 +22,9 @@ import (
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -194,8 +195,10 @@ func (pm *ProcessManager) updatePIDAnonymousMappingInterest(pid libpf.PID, enabl
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 // Returns the updated anonymous executable mapping interest state for the PID.
-func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool) (bool, error) {
+func (pm *ProcessManager) handleNewInterpreter(
+	pr process.Process, bias libpf.Address,
+	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool,
+) (bool, error) {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
@@ -352,7 +355,7 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 	}
 
 	fileID := host.FileIDFromLibpf(mf.File.Value().FileID)
-	pm.eim.DecRef(fileID)
+	pm.eim.DecRef(fileID) //nolint:gosec
 	return deleted
 }
 
@@ -687,8 +690,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			newMapping := false
 			if !fm.Valid() {
 				newMapping = true
-				// Error is expected for non-ELF files (e.g. PE DLL);
-				// fm will be invalid and the mapping skipped below but will enter the interpreter mappings block.
+				// Error is expected for non-ELF files (e.g. PE DLL); fm will be invalid and
+				// the mapping skipped below but will enter the interpreter mappings block.
 				previouslyCollectingInterpreterMappings := collectAnonymousMappings
 				fm, collectAnonymousMappings, _ = pm.newFrameMapping(
 					pr, &m, collectAnonymousMappings)
@@ -725,7 +728,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			// Defensive: the current callback does not stop early, but the
 			// IterateMappings contract allows it. Treat as non-fatal and
 			// continue with whatever mappings were collected so far.
-			err = nil
+			err = nil //nolint:ineffassign
 		case os.IsPermission(err):
 			// Ignore the synchronization completely in case of permission
 			// error. This implies the process is still alive, but we cannot
@@ -807,7 +810,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Synchronize all interpreters with updated mappings
 	for _, instance := range interpreters {
-		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
+		err := instance.SynchronizeMappings(
+			pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
 		if err != nil {
 			if alive, _ := isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
@@ -949,10 +953,14 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	}
 }
 
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
+func readProcessContext(
+	mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info,
+) processcontext.Info {
+	// Workaround to fix a CodeQL warning about potential for integer overflow when
+	// converting from uint64 to uintptr (libpf.Address)
 	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
+	ctxInfo, err := processcontext.Read(
+		addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
 	if err == nil {
 		return ctxInfo
 	}
@@ -960,8 +968,9 @@ func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContex
 		return oldProcessContextInfo
 	}
 	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
+		// If the context cannot be read because of a concurrent update, keep the resource
+		// and thread context since they are immutable, but discard extra attributes as
+		// they may be stale.
 		oldProcessContextInfo.ClearAttributes()
 		return oldProcessContextInfo
 	}

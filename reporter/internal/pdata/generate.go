@@ -11,8 +11,9 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/otel/attribute"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
@@ -118,14 +119,11 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 
 			prof := sp.Profiles().AppendEmpty()
-			if err := p.setProfile(dic, attrMgr,
+			p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
 				profileType, toEvents.Events[profileType], prof,
-				collectionStartTime, collectionEndTime); err != nil {
-				return profiles, err
-			}
+				collectionStartTime, collectionEndTime)
 		}
-
 	}
 
 	// Populate the ProfilesDictionary tables.
@@ -164,7 +162,7 @@ func (p *Pdata) setProfile(
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
-) error {
+) {
 	if profileType.PeriodType != "" {
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 		pt := profile.PeriodType()
@@ -194,7 +192,6 @@ func (p *Pdata) setProfile(
 				l := dic.LinkTable().AppendEmpty()
 				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
 				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
-
 			}
 			sample.SetLinkIndex(link)
 		}
@@ -287,7 +284,7 @@ func (p *Pdata) setProfile(
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.ThreadIDKey, sampleKey.TID)
 		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+			semconv.CPULogicalNumberKey, sampleKey.CPU)
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)
@@ -299,11 +296,11 @@ func (p *Pdata) setProfile(
 
 	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
 	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
-
-	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
+func setResourceAttributes(
+	attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String,
+) {
 	if resource.APMServiceName != "" {
 		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
 	}

@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 func BenchmarkPythonInterpreter(b *testing.B) {
@@ -242,7 +243,8 @@ func TestSub(t *testing.T) {
 func TestRIPRelativeAddressing(t *testing.T) {
 	// Test case: mov 0x10512121(%rip),%rcx
 	code := []byte{
-		0x48, 0x8b, 0xd, 0x21, 0x21, 0x51, 0x10, // mov    0x10512121(%rip),%rcx        # 16561fa8 <runtime.tlsg@@Base+0x16561fa8>
+		// mov 0x10512121(%rip),%rcx  # 16561fa8 <runtime.tlsg@@Base+0x16561fa8>
+		0x48, 0x8b, 0xd, 0x21, 0x21, 0x51, 0x10,
 		0x64, 0x48, 0x8b, 0x1, // mov    %fs:(%rcx),%rax
 		0x48, 0x39, 0x60, 0x8, // cmp    %rsp,0x8(%rax)
 		0x77, 0x5, // ja     604fe96 <runtime.stackcheck.abi0@@Base+0x16>

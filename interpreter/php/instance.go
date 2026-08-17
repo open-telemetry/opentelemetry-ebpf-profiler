@@ -22,11 +22,11 @@ import (
 )
 
 const (
-	// zend_function.type definitions from PHP sources
+	// ZEND_USER_FUNCTION and related values are zend_function.type definitions from PHP sources
 	ZEND_USER_FUNCTION = (1 << 1)
 	ZEND_EVAL_CODE     = (1 << 2)
 
-	// This is used to check if the symbolized frame belongs to
+	// ZEND_CALL_TOP_CODE is used to check if the symbolized frame belongs to
 	// top-level code.
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_compile.h#L542
 	ZEND_CALL_TOP_CODE = (1<<17 | 1<<16)
@@ -185,7 +185,9 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	return pf, nil
 }
 
-func (i *phpInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *phpInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	// With Symbolize() in opcacheInstance there is a dedicated function to symbolize JITTed
 	// PHP frames. But as we also attach phpInstance to PHP processes with JITTed frames, we
 	// use this function to symbolize all PHP frames, as the process to do so is the same.

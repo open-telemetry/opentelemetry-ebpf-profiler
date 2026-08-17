@@ -25,7 +25,7 @@ type LibcInfo struct {
 }
 
 // IsEqual checks if two LibcInfo instances are equal
-func (l LibcInfo) IsEqual(other LibcInfo) bool {
+func (l *LibcInfo) IsEqual(other LibcInfo) bool {
 	return l.TSDInfo == other.TSDInfo && l.DTVInfo == other.DTVInfo
 }
 
@@ -45,13 +45,13 @@ func (l *LibcInfo) Merge(other LibcInfo) {
 
 // HasTSDInfo returns true if the LibcInfo contains valid TSD information.
 // TSDInfo is considered valid when the Multiplier field is non-zero.
-func (l LibcInfo) HasTSDInfo() bool {
+func (l *LibcInfo) HasTSDInfo() bool {
 	return l.TSDInfo.Multiplier != 0
 }
 
 // HasDTVInfo returns true if the LibcInfo contains valid DTV information.
 // DTVInfo is considered valid when the Multiplier field is non-zero.
-func (l LibcInfo) HasDTVInfo() bool {
+func (l *LibcInfo) HasDTVInfo() bool {
 	return l.DTVInfo.Multiplier != 0
 }
 
@@ -175,7 +175,7 @@ func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
 
 	switch ef.Machine {
 	case elf.EM_AARCH64:
-		info, err = extractDTVInfoARM(code)
+		info = extractDTVInfoARM(code)
 	case elf.EM_X86_64:
 		info, err = extractDTVInfoX86(code)
 	default:

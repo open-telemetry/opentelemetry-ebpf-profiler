@@ -4,6 +4,7 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -24,7 +25,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 			return true
 		case 1:
 			// The bug fix was backported to the LTS kernel 6.1.36 with
-			//nolint:lll
+
 			// https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/mm/maccess.c?h=v6.1.36&id=2e7ad879e1b0256fb9e4703fd6cd2864d707dea7
 			if patch < 36 {
 				return true
@@ -32,7 +33,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 			return false
 		case 3:
 			// The bug fix was backported to the LTS kernel 6.3.10 with
-			//nolint:lll
+
 			// https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/mm/maccess.c?h=v6.3.10&id=3acb3dd3145b54933e88ae107e1288c1147d6d33
 			if patch < 10 {
 				return true
@@ -40,7 +41,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 			return false
 		default:
 			// The bug fix landed in 6.4 with
-			//nolint:lll
+
 			// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/mm/maccess.c?h=v6.4&id=d319f344561de23e810515d109c7278919bff7b0
 			// So newer versions of the Linux kernel are not affected.
 			return false
@@ -61,8 +62,8 @@ func getOnlineCPUIDs() ([]int, error) {
 	return ReadCPURange(string(buf))
 }
 
-// Since the format of online CPUs can contain comma-separated, ranges or a single value
-// we need to try and parse it in all its different forms.
+// ReadCPURange parses the format of online CPUs, which can contain comma-separated ranges or
+// a single value.
 // Reference: https://www.kernel.org/doc/Documentation/admin-guide/cputopology.rst
 func ReadCPURange(cpuRangeStr string) ([]int, error) {
 	if cpuRangeStr == "" {
@@ -109,7 +110,7 @@ func intersectCPURanges(onlineCPUs, targetCPUs []int) ([]int, error) {
 		}
 	}
 	if len(intersection) == 0 {
-		return nil, fmt.Errorf("no overlap between online and targeted CPU IDs")
+		return nil, errors.New("no overlap between online and targeted CPU IDs")
 	}
 	return intersection, nil
 }

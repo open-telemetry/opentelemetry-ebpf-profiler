@@ -212,7 +212,7 @@ func Open(name string) (*File, error) {
 // Close closes the File.
 func (f *File) Close() (err error) {
 	if f.mmapReader != nil {
-		f.mmapReader.Close()
+		f.mmapReader.Close() //nolint:gosec
 	}
 	if f.closer != nil {
 		err = f.closer.Close()
@@ -1189,7 +1189,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 	return nil, libpf.ErrSymbolNotFound
 }
 
-// LookupSymbol searches for a given symbol in the ELF
+// LookupSymbolAddress searches for a given symbol in the ELF and returns its address
 func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, error) {
 	s, err := f.LookupSymbol(symbol)
 	if err != nil {

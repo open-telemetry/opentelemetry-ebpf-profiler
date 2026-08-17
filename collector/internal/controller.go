@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
+
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
@@ -29,14 +30,16 @@ type Controller struct {
 	errorMode  config.ErrorMode
 }
 
-func NewController(cfg *controller.Config, rs receiver.Settings,
+func NewController(cfg *controller.Config, rs receiver.Settings, //nolint:gocritic
 	nextConsumer xconsumer.Profiles,
 ) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	if cfg.ReporterFactory == nil {
-		cfg.ReporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+		cfg.ReporterFactory = func(
+			cfg *reporter.Config, nextConsumer xconsumer.Profiles,
+		) (reporter.Reporter, error) {
 			return reporter.NewCollector(cfg, nextConsumer)
 		}
 	}

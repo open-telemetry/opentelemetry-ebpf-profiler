@@ -10,6 +10,7 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -104,8 +105,8 @@ func NewExecutableInfoManager(
 		loaders = append(loaders, python.GetLoader(interpretersConfig.Python))
 	}
 	if !interpretersConfig.PHP.IsDisabled() {
-		loaders = append(loaders, php.GetLoader(interpretersConfig.PHP))
-		loaders = append(loaders, php.GetOpcacheLoader(interpretersConfig.PHP))
+		loaders = append(loaders,
+			php.GetLoader(interpretersConfig.PHP), php.GetOpcacheLoader(interpretersConfig.PHP))
 	}
 	if !interpretersConfig.Hotspot.IsDisabled() {
 		loaders = append(loaders, hotspot.GetLoader(interpretersConfig.Hotspot))
@@ -287,7 +288,9 @@ func (mgr *ExecutableInfoManager) CleanupUnused(age time.Duration) error {
 
 		info, ok := state.executables[fileID]
 		if !ok {
-			return fmt.Errorf("FileID %v is in state.unusedExecutables, but not in state.executables", fileID)
+			return fmt.Errorf(
+				"FileID %v is in state.unusedExecutables, but not in state.executables",
+				fileID)
 		}
 
 		if info.rc != 0 {
@@ -325,8 +328,10 @@ func (mgr *ExecutableInfoManager) UpdateMetricSummary(summary metrics.Summary) {
 	mgr.state.RUnlock(&state)
 
 	deltaProviderStatistics := mgr.sdp.GetAndResetStatistics()
-	summary[metrics.IDStackDeltaProviderSuccess] = metrics.MetricValue(deltaProviderStatistics.Success)
-	summary[metrics.IDStackDeltaProviderExtractionError] = metrics.MetricValue(deltaProviderStatistics.ExtractionErrors)
+	summary[metrics.IDStackDeltaProviderSuccess] =
+		metrics.MetricValue(deltaProviderStatistics.Success)
+	summary[metrics.IDStackDeltaProviderExtractionError] =
+		metrics.MetricValue(deltaProviderStatistics.ExtractionErrors)
 }
 
 type executableInfoManagerState struct {
@@ -456,7 +461,8 @@ func (state *executableInfoManagerState) loadDeltas(
 			}
 
 			addr := block.Start + uint64(delta.Offset)
-			if unwindInfo.Flags&support.UnwindFlagCommand != 0 && unwindInfo.Param == support.UnwindCommandSignal {
+			if unwindInfo.Flags&support.UnwindFlagCommand != 0 &&
+				unwindInfo.Param == support.UnwindCommandSignal {
 				// EBPF code does a -1 fixup for return addresses.
 				// To match the signal handler function injected into
 				// stack, the signal handler stack delta must start one
@@ -474,7 +480,8 @@ func (state *executableInfoManagerState) loadDeltas(
 			}
 		}
 		// Check if blocks are far apart or last block
-		if blockIndex+1 == len(intervals.Blocks) || block.End+sdtypes.MinimumGap < intervals.Blocks[blockIndex+1].Start {
+		if blockIndex+1 == len(intervals.Blocks) ||
+			block.End+sdtypes.MinimumGap < intervals.Blocks[blockIndex+1].Start {
 			if err := addDelta(block.End, sdtypes.UnwindInfoInvalid); err != nil {
 				return mapRef{}, err
 			}
@@ -579,6 +586,7 @@ func (state *executableInfoManagerState) unloadDeltas(
 type entry struct {
 	// ExecutableInfo is the public portion of the EIM entry.
 	ExecutableInfo
+
 	// mapRef stores info for identifying associated data in BPF maps.
 	mapRef mapRef
 	// rc determines in how many processes this executable is currently loaded.

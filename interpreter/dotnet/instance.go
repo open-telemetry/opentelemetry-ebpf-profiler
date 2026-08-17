@@ -41,6 +41,9 @@ const (
 	mcInstantiated
 	mcComInterop
 	mcDynamic
+)
+
+const (
 	mdcClassificationMask = 7
 
 	// enum RangeSectionFlags
@@ -85,7 +88,9 @@ const (
 	// synthetic entries
 	codeDynamic
 	codeReadyToRun
+)
 
+const (
 	// keep these in sync with the dotnet_tracer.c
 	codeJIT      = 0x1f
 	codeFlagLeaf = 0x80
@@ -418,8 +423,8 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 		if !fresh {
 			break
 		}
-		if err := i.rm.Read(fragmentPtr, fragment); err != nil {
-			return fmt.Errorf("failed to read fragment: %v", err)
+		if readErr := i.rm.Read(fragmentPtr, fragment); readErr != nil {
+			return fmt.Errorf("failed to read fragment: %v", readErr)
 		}
 		// Remove collectible bit
 		fragmentPtr = npsr.Ptr(fragment, 0) &^ 1
@@ -541,7 +546,9 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	return info, nil
 }
 
-func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
+func (i *dotnetInstance) readMethod(
+	methodDescPtr, debugInfoPtr libpf.Address,
+) (*dotnetMethod, error) {
 	cdac := i.d.Get()
 	vms := &cdac.Types
 
@@ -577,7 +584,8 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 
 	// Merge the MethodDesc and MethodDescChunk bits of Token value
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L76-L80
-	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount + uint32(tokenRemainder)
+	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount +
+		uint32(tokenRemainder)
 	log.Debugf("methodchunk @%x: methodTablePtr %x: tokenRange %d, tokenRemainder %d -> index %d",
 		methodDescChunkPtr, methodTablePtr, tokenRange, tokenRemainder, index)
 
@@ -874,7 +882,9 @@ func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *dotnetInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType
 	}

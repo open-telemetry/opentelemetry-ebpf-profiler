@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -61,7 +62,8 @@ func TestExtractRuntimeIsCgo(t *testing.T) {
 			require.NoError(t, err)
 
 			runtimeCgo, consumed, err := extractRuntimeIsCgo(f, b, pc)
-			require.NoError(t, err, "runtime.load_g prologue decode failed; Go runtime layout may have changed")
+			require.NoError(t, err,
+				"runtime.load_g prologue decode failed; Go runtime layout may have changed")
 			require.Equal(t, 8, consumed)
 			require.Equal(t, tt.wantRuntimeCgo, runtimeCgo)
 		})

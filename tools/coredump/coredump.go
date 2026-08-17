@@ -177,14 +177,14 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 	C.initialize_rodata_variables(C.u64(inverse_pac_mask), rubySkipNativeResume)
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
-	traceReporter := traceReporter{}
+	reporter := traceReporter{}
 
 	manager, err := pm.New(todo, pm.Config{
 		InterpretersConfig:    interpretersConfig,
 		MonitorInterval:       monitorInterval,
 		ExecutableUnloadDelay: executableUnloadDelay,
 		EbpfHandler:           &coredumpEbpfMaps,
-		TraceReporter:         &traceReporter,
+		TraceReporter:         &reporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		FrameCacheSize:        pm.DefaultFrameCacheSize,
 		IncludeEnvVars:        libpf.Set[string]{},
@@ -213,7 +213,7 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 		manager.HandleTrace(&ebpfCtx.trace, nil)
 		info = append(info, ThreadInfo{
 			LWP:    thread.LWP,
-			Frames: traceReporter.frames,
+			Frames: reporter.frames,
 		})
 	}
 

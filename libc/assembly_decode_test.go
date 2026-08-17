@@ -222,7 +222,7 @@ func TestFSBase(t *testing.T) {
 			fsBase: 3632,
 		},
 		"Linux 6.5.11 compiled with LLVM-17": {
-			//nolint:lll
+
 			// https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?h=v6.5.11&id=799441832db16b99e400ccbec55db801e6992819
 			machine:  elf.EM_AARCH64,
 			funcName: "tls_set",

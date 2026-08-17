@@ -74,7 +74,7 @@ type IntervalData struct {
 	Blocks []*BasicBlock
 }
 
-// AddEx adds a new stack delta to the array.
+// Add adds a new stack delta to the array.
 func (deltas *StackDeltaArray) Add(offset uint32, info UnwindInfo) {
 	if info.Flags&support.UnwindFlagCommand != 0 {
 		// FP information is invalid/unused for command opcodes.
@@ -110,11 +110,12 @@ func (intervals *IntervalData) Add(bb BasicBlock) {
 	intervals.Blocks = append(intervals.Blocks, &bb)
 }
 
-// Find searches the matching basic block index from the interval data
+// FindIndex searches the matching basic block index from the interval data
 func (intervals *IntervalData) FindIndex(addr uint64) int {
-	idx, ok := slices.BinarySearchFunc(intervals.Blocks, addr, func(bb *BasicBlock, addr uint64) int {
-		return cmp.Compare(bb.Start, addr)
-	})
+	idx, ok := slices.BinarySearchFunc(intervals.Blocks, addr,
+		func(bb *BasicBlock, addr uint64) int {
+			return cmp.Compare(bb.Start, addr)
+		})
 	if !ok {
 		if idx == 0 {
 			return -1

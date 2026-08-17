@@ -16,9 +16,10 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/elastic/go-perf"
+	"golang.org/x/sys/unix"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"golang.org/x/sys/unix"
 )
 
 // bpfProgPrefix is the prefix the kernel uses for all JIT'd BPF program
@@ -57,7 +58,7 @@ func (s *bpfSymbolizer) loadBPFPrograms() error {
 		}
 
 		info, err := prog.Info()
-		prog.Close()
+		prog.Close() //nolint:gosec
 		if err != nil {
 			continue
 		}
@@ -121,7 +122,7 @@ func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) erro
 // subscribe subscribes to updates for bpf symbols via `PERF_RECORD_KSYMBOL`.
 func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 	attr := new(perf.Attr)
-	perf.Dummy.Configure(attr)
+	perf.Dummy.Configure(attr) //nolint:gosec
 	attr.Options.KSymbol = true
 	attr.SetWakeupWatermark(1)
 

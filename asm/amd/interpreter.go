@@ -8,8 +8,9 @@ import (
 	"io"
 	"math"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type CodeBlock struct {
@@ -80,7 +81,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	}
 	i.pc += uint64(inst.Len)
 	i.code = i.code[inst.Len:]
-	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
+	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(i.pc)))
 	switch inst.Op {
 	case x86asm.ADD, x86asm.SUB:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {

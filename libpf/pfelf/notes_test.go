@@ -15,7 +15,8 @@ import (
 )
 
 func TestGetBuildIDFromNotesFile(t *testing.T) {
-	r := bytes.NewReader([]byte("\x04\x00\x00\x00\x14\x00\x00\x00\x03\x00\x00\x00GNU\x00_notorious_build_id_"))
+	r := bytes.NewReader([]byte(
+		"\x04\x00\x00\x00\x14\x00\x00\x00\x03\x00\x00\x00GNU\x00_notorious_build_id_"))
 	buildID, err := getBuildIDFromNotesFile(r)
 	require.NoError(t, err)
 	assert.Equal(t, hex.EncodeToString([]byte("_notorious_build_id_")), buildID)
@@ -54,7 +55,9 @@ func TestVisitNotesReturnsNilWhenVisitorStops(t *testing.T) {
 		elfReader: bytes.NewReader(data),
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(first))}},
-			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second))}},
+			{ProgHeader: elf.ProgHeader{
+				Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second)),
+			}},
 		},
 	}
 
@@ -80,7 +83,9 @@ func TestGetBuildIDVisitsAllProgramNoteSegments(t *testing.T) {
 		elfReader: bytes.NewReader(data),
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(first))}},
-			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second))}},
+			{ProgHeader: elf.ProgHeader{
+				Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second)),
+			}},
 		},
 		notesError: errNotProcessed,
 	}
@@ -129,7 +134,9 @@ func TestGetBuildIDReadsNamedNoteSection(t *testing.T) {
 		elfReader: bytes.NewReader(data),
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(goNote))}},
-			{ProgHeader: elf.ProgHeader{Type: elf.PT_LOAD, Off: 0, Filesz: uint64(len(goNote) + len(gnuNote))}},
+			{ProgHeader: elf.ProgHeader{
+				Type: elf.PT_LOAD, Off: 0, Filesz: uint64(len(goNote) + len(gnuNote)),
+			}},
 		},
 		elfHeader: elf.Header64{
 			Shoff:    uint64(sectionHeaderOffset),
@@ -186,7 +193,9 @@ func TestGetBuildIDInsideCoreUsesProgramNotes(t *testing.T) {
 		elfReader:  bytes.NewReader(data),
 		InsideCore: true,
 		Progs: []Prog{
-			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(programNote))}},
+			{ProgHeader: elf.ProgHeader{
+				Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(programNote)),
+			}},
 		},
 		elfHeader: elf.Header64{
 			Shoff:    uint64(sectionHeaderOffset),

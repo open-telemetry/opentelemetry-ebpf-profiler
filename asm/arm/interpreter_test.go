@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 // TestLuaOffsets is based on armExtractor.findG2TracesOffsetFromChecktrace, which
@@ -23,8 +24,8 @@ import (
 // load from a pointer that was itself loaded from offset 0x10 from the first argument.
 //
 // To make thing slightly more complicated, the first argument has been moved out of x0 by
-// the time we read it, and the offset is computed in two steps (the `add x2, x2, #0x2a8` at 0x5dcb8 below,
-// and the `ldr x0, [x2, #0x174]` at 0x5dcbc. Thus the answer should be 0x2a8 + 0x174 = 0x41c.
+// the time we read it, and the offset is computed in two steps (the `add x2, x2, #0x2a8` at
+// 0x5dcb8 below, and the `ldr x0, [x2, #0x174]` at 0x5dcbc. The answer is 0x2a8 + 0x174 = 0x41c.
 func TestLuaOffsets(t *testing.T) {
 	// 0x5dc98: stp x19, x30, [sp, #-0x10]!
 	// 0x5dc9c: mov w1, #1

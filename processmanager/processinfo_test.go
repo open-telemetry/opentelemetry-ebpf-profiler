@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -27,12 +28,15 @@ import (
 
 type TestInstance struct {
 	interpreter.InstanceStubs
+
 	info                  libc.LibcInfo
 	syncMappings          []process.RawMapping
 	usesAnonymousMappings bool
 }
 
-func (ti *TestInstance) UpdateLibcInfo(_ interpreter.EbpfHandler, _ libpf.PID, info libc.LibcInfo) error {
+func (ti *TestInstance) UpdateLibcInfo(
+	_ interpreter.EbpfHandler, _ libpf.PID, info libc.LibcInfo,
+) error {
 	ti.info = info
 	return nil
 }
@@ -360,7 +364,9 @@ func TestProcessRemovedInterpretersClearsAnonymousMappingInterest(t *testing.T) 
 	require.False(anonymousMappingsWanted)
 }
 
-func TestProcessRemovedInterpretersKeepsAnonymousMappingInterestWhenInterpreterRemains(t *testing.T) {
+func TestProcessRemovedInterpretersKeepsAnonymousMappingInterestWhenInterpreterRemains(
+	t *testing.T,
+) {
 	require := require.New(t)
 	pid := libpf.PID(123)
 	keptOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}

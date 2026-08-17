@@ -7,6 +7,7 @@ package kprobe // import "go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -44,7 +45,7 @@ func New(cfg Config) (*probe, error) {
 		cfg.Mode = "kprobe"
 	}
 	if cfg.Symbol == "" {
-		return nil, fmt.Errorf("kprobe: symbol is required")
+		return nil, errors.New("kprobe: symbol is required")
 	}
 
 	probeMode, err := parseProbeMode(cfg.Mode)
@@ -52,7 +53,8 @@ func New(cfg Config) (*probe, error) {
 		return nil, err
 	}
 
-	if (probeMode == tracer.ProbeModeUprobe || probeMode == tracer.ProbeModeUretprobe) && cfg.Target == "" {
+	if (probeMode == tracer.ProbeModeUprobe || probeMode == tracer.ProbeModeUretprobe) &&
+		cfg.Target == "" {
 		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Mode)
 	}
 
@@ -75,11 +77,14 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	case "uretprobe":
 		return tracer.ProbeModeUretprobe, nil
 	default:
-		return 0, fmt.Errorf("unknown probe type %q: must be kprobe, kretprobe, uprobe, or uretprobe", s)
+		return 0, fmt.Errorf(
+			"unknown probe type %q: must be kprobe, kretprobe, uprobe, or uretprobe", s)
 	}
 }
 
-func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
+func (g *probe) Load(
+	_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext,
+) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
@@ -99,18 +104,18 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 	v, ok := coll.Variables["origin_id_probe"]
 	if !ok {
-		return fmt.Errorf("origin_id_probe variable not found in collection spec")
+		return errors.New("origin_id_probe variable not found in collection spec")
 	}
-	if err := v.Set(originID); err != nil {
+	if err = v.Set(originID); err != nil {
 		return err
 	}
 
-	if err := probeCtx.RewriteMaps(coll, nil); err != nil {
+	if err = probeCtx.RewriteMaps(coll, nil); err != nil {
 		return err
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
-	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
+	if err = probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
 		{
 			Name:             progName,
 			NoTailCallTarget: true,

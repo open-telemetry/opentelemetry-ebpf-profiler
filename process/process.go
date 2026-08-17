@@ -18,8 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -176,7 +177,7 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
 func cgroupRootInode(procBase string) (uint64, error) {
 	var st unix.Stat_t
-	if err := unix.Stat(filepath.Join(procBase, "root/sys/fs/cgroup"), &st); err != nil {
+	if err := unix.Stat(filepath.Join(procBase, "root", "sys", "fs", "cgroup"), &st); err != nil {
 		return 0, err
 	}
 	return st.Ino, nil
@@ -225,7 +226,8 @@ func NewSelfContainerIDEnricher() (MetaEnricher, error) {
 		if ino == selfCgroupIno {
 			meta.ContainerID = selfContainerID
 		} else {
-			log.Debugf("Process %s cgroup inode (%d) doesn't match profiler (%d)", procBase, ino, selfCgroupIno)
+			log.Debugf("Process %s cgroup inode (%d) doesn't match profiler (%d)",
+				procBase, ino, selfCgroupIno)
 		}
 	}), nil
 }
@@ -474,7 +476,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 			return numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-		numParseErrors, err := iterateMappings(mapsFileAlt, trackedCallback)
+		numParseErrors, err = iterateMappings(mapsFileAlt, trackedCallback)
 		if err != nil || !gotMappings {
 			return numParseErrors, ErrNoMappings
 		}

@@ -432,7 +432,7 @@ func TestExtractDTVOffset(t *testing.T) {
 				0x63, 0xec, 0x7c, 0xd3, // lsl     x3, x3, #4
 				0x23, 0x68, 0x63, 0xf8, // ldr     x3, [x1, x3]
 				0x7f, 0x04, 0x00, 0xb1, // cmn     x3, #0x1
-				0x00, 0x01, 0x00, 0x54, // b.eq    0xfffff7fce2c8 <__GI___tls_get_addr+88>  // b.none
+				0x00, 0x01, 0x00, 0x54, // b.eq    0xfffff7fce2c8 <__GI___tls_get_addr+88>
 				0x00, 0x04, 0x40, 0xf9, // ldr     x0, [x0, #8]
 				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
 				0x60, 0x00, 0x00, 0x8b, // add     x0, x3, x0
@@ -469,7 +469,7 @@ func TestExtractDTVOffset(t *testing.T) {
 				0x63, 0xec, 0x7c, 0xd3, // lsl     x3, x3, #4
 				0x23, 0x68, 0x63, 0xf8, // ldr     x3, [x1, x3]
 				0x7f, 0x04, 0x00, 0xb1, // cmn     x3, #0x1
-				0x20, 0x01, 0x00, 0x54, // b.eq    0xeebc52824284 <__GI___tls_get_addr+100>  // b.none
+				0x20, 0x01, 0x00, 0x54, // b.eq    0xeebc52824284 <__GI___tls_get_addr+100>
 				0x00, 0x04, 0x40, 0xf9, // ldr     x0, [x0, #8]
 				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
 				0xbf, 0x23, 0x03, 0xd5, // autiasp
@@ -491,25 +491,25 @@ func TestExtractDTVOffset(t *testing.T) {
 		"glibc / Fedora 33 / aarch64": {
 			machine: elf.EM_AARCH64,
 			code: []byte{
-				0x5f, 0x24, 0x03, 0xd5, //bti     c
-				0x41, 0xd0, 0x3b, 0xd5, //mrs     x1, tpidr_el0
-				0x62, 0x01, 0x00, 0xf0, //adrp    x2, 0xf58e5fcc1000 <_rtld_local+4072>
-				0x43, 0x60, 0x40, 0xf9, //ldr     x3, [x2, #192]
-				0x21, 0x00, 0x40, 0xf9, //ldr     x1, [x1]
-				0x24, 0x00, 0x40, 0xf9, //ldr     x4, [x1]
-				0x9f, 0x00, 0x03, 0xeb, //cmp     x4, x3
-				0x21, 0x01, 0x00, 0x54, //b.ne    0xf58e5fc921e0 <__GI___tls_get_addr+64>  // b.any
-				0x03, 0x00, 0x40, 0xf9, //ldr     x3, [x0]
-				0x63, 0xec, 0x7c, 0xd3, //lsl     x3, x3, #4
-				0x23, 0x68, 0x63, 0xf8, //ldr     x3, [x1, x3]
-				0x7f, 0x04, 0x00, 0xb1, //cmn     x3, #0x1
-				0xa0, 0x00, 0x00, 0x54, //b.eq    0xf58e5fc921e4 <__GI___tls_get_addr+68>  // b.none
-				0x00, 0x04, 0x40, 0xf9, //ldr     x0, [x0, #8]
-				0x60, 0x00, 0x00, 0x8b, //add     x0, x3, x0
-				0xc0, 0x03, 0x5f, 0xd6, //ret
-				0xd4, 0xff, 0xff, 0x17, //b       0xf58e5fc92130 <update_get_addr>
-				0x02, 0x00, 0x80, 0xd2, //mov     x2, #0x0                        // #0
-				0x7e, 0xfc, 0xff, 0x17, //b       0xf58e5fc913e0 <tls_get_addr_tail>
+				0x5f, 0x24, 0x03, 0xd5, // bti     c
+				0x41, 0xd0, 0x3b, 0xd5, // mrs     x1, tpidr_el0
+				0x62, 0x01, 0x00, 0xf0, // adrp    x2, 0xf58e5fcc1000 <_rtld_local+4072>
+				0x43, 0x60, 0x40, 0xf9, // ldr     x3, [x2, #192]
+				0x21, 0x00, 0x40, 0xf9, // ldr     x1, [x1]
+				0x24, 0x00, 0x40, 0xf9, // ldr     x4, [x1]
+				0x9f, 0x00, 0x03, 0xeb, // cmp     x4, x3
+				0x21, 0x01, 0x00, 0x54, // b.ne    0xf58e5fc921e0 <__GI___tls_get_addr+64>  // b.any
+				0x03, 0x00, 0x40, 0xf9, // ldr     x3, [x0]
+				0x63, 0xec, 0x7c, 0xd3, // lsl     x3, x3, #4
+				0x23, 0x68, 0x63, 0xf8, // ldr     x3, [x1, x3]
+				0x7f, 0x04, 0x00, 0xb1, // cmn     x3, #0x1
+				0xa0, 0x00, 0x00, 0x54, // b.eq    0xf58e5fc921e4 <__GI___tls_get_addr+68>
+				0x00, 0x04, 0x40, 0xf9, // ldr     x0, [x0, #8]
+				0x60, 0x00, 0x00, 0x8b, // add     x0, x3, x0
+				0xc0, 0x03, 0x5f, 0xd6, // ret
+				0xd4, 0xff, 0xff, 0x17, // b       0xf58e5fc92130 <update_get_addr>
+				0x02, 0x00, 0x80, 0xd2, // mov     x2, #0x0                        // #0
+				0x7e, 0xfc, 0xff, 0x17, // b       0xf58e5fc913e0 <tls_get_addr_tail>
 			},
 			info: DTVInfo{
 				Offset:     0,
@@ -542,7 +542,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			case elf.EM_X86_64:
 				info, err = extractDTVInfoX86(test.code)
 			case elf.EM_AARCH64:
-				info, err = extractDTVInfoARM(test.code)
+				info = extractDTVInfoARM(test.code)
 			}
 			if assert.NoError(t, err) {
 				assert.Equal(t, test.info, info)
@@ -600,16 +600,16 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 	nchain := uint32(numSyms)
 
 	// Now compute sizes for layout
-	ehdrSize := int(binary.Size(elf.Header64{}))
-	phdrSize := int(binary.Size(elf.Prog64{}))
+	ehdrSize := binary.Size(elf.Header64{})
+	phdrSize := binary.Size(elf.Prog64{})
 	numPhdrs := 2
 
 	strtabOff := ehdrSize + phdrSize*numPhdrs
 	symtabOff := strtabOff + strtab.Len()
-	hashOff := symtabOff + numSyms*int(binary.Size(elf.Sym64{}))
-	hashSize := int(4 + 4 + 4*int(nbucket) + 4*int(nchain)) // nbucket, nchain, buckets, chains
+	hashOff := symtabOff + numSyms*binary.Size(elf.Sym64{})
+	hashSize := 4 + 4 + 4*int(nbucket) + 4*int(nchain) // nbucket, nchain, buckets, chains
 	dynOff := hashOff + hashSize
-	dynSize := int(4 * binary.Size(elf.Dyn64{})) // STRTAB, SYMTAB, HASH, NULL
+	dynSize := 4 * binary.Size(elf.Dyn64{}) // STRTAB, SYMTAB, HASH, NULL
 	codeOff := dynOff + dynSize
 
 	// Place code for each symbol
@@ -628,7 +628,7 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 			Name:  nameOffsets[name],
 			Info:  byte(elf.STB_GLOBAL)<<4 | byte(elf.STT_FUNC),
 			Other: byte(elf.STV_DEFAULT),
-			Shndx: 1, // non-zero = defined
+			Shndx: 1, // non-zero marks the symbol as defined
 			Value: vaddr + uint64(codeOffsets[name]),
 			Size:  uint64(len(symbols[name])),
 		}
@@ -678,7 +678,9 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 
 	// ELF header
 	hdr := elf.Header64{
-		Ident:     [16]byte{0x7f, 'E', 'L', 'F', byte(elf.ELFCLASS64), byte(elf.ELFDATA2LSB), byte(elf.EV_CURRENT)},
+		Ident: [16]byte{
+			0x7f, 'E', 'L', 'F', byte(elf.ELFCLASS64), byte(elf.ELFDATA2LSB), byte(elf.EV_CURRENT),
+		},
 		Type:      uint16(elf.ET_DYN),
 		Machine:   uint16(machine),
 		Version:   uint32(elf.EV_CURRENT),
@@ -688,7 +690,7 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 		Phentsize: uint16(phdrSize),
 		Phnum:     uint16(numPhdrs),
 	}
-	binary.Encode(buf[0:], binary.LittleEndian, &hdr)
+	binary.Encode(buf[0:], binary.LittleEndian, &hdr) //nolint:gosec
 
 	// Program headers
 	phLoad := elf.Prog64{
@@ -701,7 +703,7 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 		Memsz:  uint64(totalSize),
 		Align:  0x1000,
 	}
-	binary.Encode(buf[ehdrSize:], binary.LittleEndian, &phLoad)
+	binary.Encode(buf[ehdrSize:], binary.LittleEndian, &phLoad) //nolint:gosec
 
 	phDyn := elf.Prog64{
 		Type:   uint32(elf.PT_DYNAMIC),
@@ -713,14 +715,15 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 		Memsz:  uint64(dynSize),
 		Align:  8,
 	}
-	binary.Encode(buf[ehdrSize+phdrSize:], binary.LittleEndian, &phDyn)
+	binary.Encode(buf[ehdrSize+phdrSize:], binary.LittleEndian, &phDyn) //nolint:gosec
 
 	// String table
 	copy(buf[strtabOff:], strtab.Bytes())
 
 	// Symbol table
 	for i, sym := range symtab {
-		binary.Encode(buf[symtabOff+i*int(binary.Size(elf.Sym64{})):], binary.LittleEndian, &sym)
+		sz := binary.Size(elf.Sym64{})
+		binary.Encode(buf[symtabOff+i*sz:], binary.LittleEndian, &sym) //nolint:gosec
 	}
 
 	// Hash table
@@ -728,7 +731,8 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 
 	// Dynamic table
 	for i, dyn := range dynEntries {
-		binary.Encode(buf[dynOff+i*int(binary.Size(elf.Dyn64{})):], binary.LittleEndian, &dyn)
+		sz := binary.Size(elf.Dyn64{})
+		binary.Encode(buf[dynOff+i*sz:], binary.LittleEndian, &dyn) //nolint:gosec
 	}
 
 	// Code sections
@@ -774,7 +778,7 @@ func TestExtractLibcInfoIndependence(t *testing.T) {
 	info, err := ExtractLibcInfo(ef)
 
 	// Should succeed (no error) because DTV extraction works even though TSD fails.
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, info, "ExtractLibcInfo should return non-nil LibcInfo")
 
 	// TSD should be empty (no pthread_getspecific symbol)

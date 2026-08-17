@@ -7,7 +7,7 @@ package collector
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +26,9 @@ import (
 // dummyReporter is a no-op reporter for testing.
 type dummyReporter struct{}
 
-func (d *dummyReporter) Start(context.Context) error                                  { return fmt.Errorf("dummy error") }
+func (d *dummyReporter) Start(context.Context) error {
+	return errors.New("dummy error")
+}
 func (d *dummyReporter) Stop()                                                        {}
 func (d *dummyReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error { return nil }
 

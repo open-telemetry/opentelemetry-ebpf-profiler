@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// remotememory provides access to memory space of a process. The ReaderAt
+// Package remotememory provides access to memory space of a process. The ReaderAt
 // interface is used for the basic access, and various convenience functions are
 // provided to help reading specific data types.
 package remotememory // import "go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -17,6 +17,7 @@ import (
 // RemoteMemory implements a set of convenience functions to access the remote memory
 type RemoteMemory struct {
 	io.ReaderAt
+
 	// Bias is the adjustment for pointers (used to unrelocate pointers in coredump)
 	Bias libpf.Address
 }

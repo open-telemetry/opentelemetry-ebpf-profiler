@@ -25,7 +25,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	input, err := os.ReadFile(os.Args[1])
+	input, err := os.ReadFile(os.Args[1]) //nolint:gosec
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading %s: %v", os.Args[1], err)
 		os.Exit(1)
@@ -63,7 +63,7 @@ func main() {
 		"\n\t// max number of ID values, keep this as *last entry*\n" +
 			fmt.Sprintf("\tIDMax = %d\n)\n", len(metricDefs)))
 
-	if err = os.WriteFile(os.Args[2], output.Bytes(), 0o600); err != nil {
+	if err = os.WriteFile(os.Args[2], output.Bytes(), 0o600); err != nil { //nolint:gosec
 		fmt.Fprintf(os.Stderr, "Error: %v", err)
 		os.Exit(1)
 	}

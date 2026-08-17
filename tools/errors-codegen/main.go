@@ -92,7 +92,7 @@ func generate(codeGenName, outputPath string) error {
 		return err
 	}
 
-	file, err := os.Create(outputPath)
+	file, err := os.Create(outputPath) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("failed to create bpf.h: %v", err)
 	}

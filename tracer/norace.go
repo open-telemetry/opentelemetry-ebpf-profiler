@@ -3,7 +3,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package tracer
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (

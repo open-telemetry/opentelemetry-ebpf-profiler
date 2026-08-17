@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/mdlayher/kobject"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -145,7 +146,7 @@ type Resolver interface {
 	Snapshot() Snapshot
 }
 
-func compareModule(a, b Module) int {
+func compareModule(a, b Module) int { //nolint:gocritic
 	if a.start > b.start {
 		return -1
 	}
@@ -817,7 +818,7 @@ func (s Snapshot) GetModuleByName(module string) (*Module, error) {
 
 // LookupBPFSymbol resolves addr to a BPF program symbol name and offset.
 // Returns ("", 0, false) if no BPF program covers addr.
-func (s Snapshot) LookupBPFSymbol(addr libpf.Address) (string, uint, bool) {
+func (s Snapshot) LookupBPFSymbol(addr libpf.Address) (name string, offset uint, ok bool) {
 	if s.bpf == nil {
 		return "", 0, false
 	}

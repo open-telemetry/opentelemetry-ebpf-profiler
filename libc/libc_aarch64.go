@@ -7,9 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	aa "golang.org/x/arch/arm64/arm64asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
-	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
 const (
@@ -46,7 +47,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 	for offs := 0; offs < len(code); offs += 4 {
 		if resetReg >= 0 {
 			// Reset register state if something unsupported happens on it
-			regs[resetReg] = regState{status: Unspec}
+			regs[resetReg] = regState{status: Unspec} //nolint:gosec
 		}
 
 		inst, err := aa.Decode(code[offs:])
@@ -269,7 +270,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 	}, nil
 }
 
-func extractDTVInfoARM(code []byte) (DTVInfo, error) {
+func extractDTVInfoARM(code []byte) DTVInfo {
 	// Track register states similar to extractTSDInfoARM
 	var regs [32]regState
 
@@ -285,7 +286,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 
 		if resetReg >= 0 {
 			// Reset register state if something unsupported happens on it
-			regs[resetReg] = regState{status: Unspec}
+			regs[resetReg] = regState{status: Unspec} //nolint:gosec
 		}
 
 		inst, err := aa.Decode(code[offs:])
@@ -408,5 +409,5 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 	return DTVInfo{
 		Offset:     dtvOffset,
 		Multiplier: uint8(entryWidth),
-	}, nil
+	}
 }

@@ -1,7 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// successfailurecounter provides a wrapper to atomically increment success or failure counters.
+// Package successfailurecounter provides a wrapper to atomically increment
+// success or failure counters.
 //
 // This package is **not** thread safe. Multiple increments to the same SuccessFailureCounter from
 // different threads can result in incorrect counter results.

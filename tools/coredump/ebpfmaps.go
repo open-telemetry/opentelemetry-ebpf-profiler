@@ -57,25 +57,35 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 	ptr unsafe.Pointer) error {
 	switch t {
 	case libpf.Dotnet:
-		emc.ctx.addMap(unsafe.Pointer(&C.dotnet_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_DotnetProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.dotnet_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_DotnetProcInfo))
 	case libpf.Perl:
-		emc.ctx.addMap(unsafe.Pointer(&C.perl_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_PerlProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.perl_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_PerlProcInfo))
 	case libpf.PHP:
-		emc.ctx.addMap(unsafe.Pointer(&C.php_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_PHPProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.php_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_PHPProcInfo))
 	case libpf.Python:
-		emc.ctx.addMap(unsafe.Pointer(&C.py_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_PyProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.py_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_PyProcInfo))
 	case libpf.HotSpot:
-		emc.ctx.addMap(unsafe.Pointer(&C.hotspot_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_HotspotProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.hotspot_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_HotspotProcInfo))
 	case libpf.Ruby:
-		emc.ctx.addMap(unsafe.Pointer(&C.ruby_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_RubyProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.ruby_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_RubyProcInfo))
 	case libpf.V8:
-		emc.ctx.addMap(unsafe.Pointer(&C.v8_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_V8ProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.v8_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_V8ProcInfo))
 	case libpf.BEAM:
-		emc.ctx.addMap(unsafe.Pointer(&C.beam_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_BEAMProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.beam_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_BEAMProcInfo))
 	case libpf.Go:
-		emc.ctx.addMap(unsafe.Pointer(&C.go_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_GoRuntimeOffsets))
+		emc.ctx.addMap(unsafe.Pointer(&C.go_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_GoRuntimeOffsets))
 	case libpf.LuaJIT:
-		emc.ctx.addMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_LuaJITProcInfo))
+		emc.ctx.addMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_LuaJITProcInfo))
 	}
 	return nil
 }
@@ -165,7 +175,7 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 			index, support.UnwindInfoMaxEntries)
 	}
 
-	cmd := (*support.UnwindInfo)(unsafe.Pointer(uintptr(emc.ctx.unwindInfoArray) +
+	cmd := (*support.UnwindInfo)(unsafe.Add(emc.ctx.unwindInfoArray,
 		uintptr(index)*C.sizeof_UnwindInfo))
 	*cmd = info
 	return nil
@@ -177,7 +187,7 @@ func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
 	entSize := C.sizeof_StackDelta
 	deltas := C.malloc(C.size_t(len(deltaArrays) * entSize))
 	for index, delta := range deltaArrays {
-		info := (*C.StackDelta)(unsafe.Pointer(uintptr(deltas) + uintptr(index*entSize)))
+		info := (*C.StackDelta)(unsafe.Add(deltas, uintptr(index*entSize)))
 		*info = C.StackDelta{
 			addrLow:    C.u16(delta.AddressLow),
 			unwindInfo: C.u16(delta.UnwindInfo),

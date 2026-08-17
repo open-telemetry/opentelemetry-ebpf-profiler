@@ -180,7 +180,7 @@ func (f EbpfFrame) Length() uint8 {
 }
 
 func (f EbpfFrame) Data() uint64 {
-	return uint64(f[0]) & 0xfffffffffffff
+	return f[0] & 0xfffffffffffff
 }
 
 func (f EbpfFrame) Variable(ndx int) uint64 {

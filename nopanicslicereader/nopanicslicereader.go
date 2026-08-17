@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// nopanicslicereader provides little convenience utilities to read "native" endian
+// Package nopanicslicereader provides little convenience utilities to read "native" endian
 // values from a slice at given offset. Zeroes are returned on out of bounds access
 // instead of panic.
 package nopanicslicereader // import "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"

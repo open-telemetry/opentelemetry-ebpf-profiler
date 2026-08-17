@@ -33,7 +33,7 @@ func openInRoot(rootPath, filePath string) (*os.File, error) {
 	defer unix.Close(fd)
 
 	var stat unix.Stat_t
-	if err := unix.Fstat(fd, &stat); err != nil {
+	if err = unix.Fstat(fd, &stat); err != nil {
 		return nil, fmt.Errorf("fstat %s: %w", filePath, err)
 	}
 	if stat.Mode&unix.S_IFMT != unix.S_IFREG {

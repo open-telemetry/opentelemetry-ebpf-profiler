@@ -18,13 +18,14 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
-	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 const (
@@ -99,9 +100,11 @@ func (m *mockReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return 0, io.EOF
 }
 
-func createHeader(signature string, version uint32, payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
+func createHeader(
+	signature string, version, payloadSize uint32, payloadPtr, publishedAt uint64,
+) []byte {
 	buf := make([]byte, headerSize)
-	copy(buf[0:8], []byte(signature))
+	copy(buf[0:8], signature)
 	binary.LittleEndian.PutUint32(buf[8:12], version)
 	binary.LittleEndian.PutUint32(buf[12:16], payloadSize)
 	binary.LittleEndian.PutUint64(buf[16:24], publishedAt)
@@ -110,7 +113,7 @@ func createHeader(signature string, version uint32, payloadSize uint32, payloadP
 }
 
 // createValidHeader creates a valid ProcessContext header
-func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
+func createValidHeader(payloadSize uint32, payloadPtr, publishedAt uint64) []byte {
 	return createHeader(headerSignature, supportedVersion, payloadSize, payloadPtr, publishedAt)
 }
 
@@ -202,7 +205,8 @@ func TestProcessContext_Read(t *testing.T) {
 			name: "payload size too large",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(headerSignature, supportedVersion, 1024*1024, 0x2000, 123456789)
+				header := createHeader(
+					headerSignature, supportedVersion, 1024*1024, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
 			expectedErr:    processcontext.ErrInvalidContext,
@@ -256,7 +260,7 @@ func TestProcessContext_Read(t *testing.T) {
 			} else {
 				assert.Nil(t, ctx.Context)
 				assert.Zero(t, ctx.PublishedAtNs)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
@@ -301,8 +305,8 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			var mem []byte
 			if tt.useMemfd {
 				// Create memfd with OTEL_CTX name
-				fd, err := unix.MemfdCreate(headerSignature, 0)
-				require.NoError(t, err)
+				fd, fdErr := unix.MemfdCreate(headerSignature, 0)
+				require.NoError(t, fdErr)
 				defer unix.Close(fd)
 
 				// Set size of memfd
@@ -316,7 +320,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 				)
 				require.NoError(t, err)
 				defer unix.Munmap(mem)
-				unix.Close(fd)
+				unix.Close(fd) //nolint:gosec
 			} else {
 				// Create  private anonymous memory mapping
 				mem, err = unix.Mmap(
@@ -363,12 +367,12 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			result, err := processcontext.Read(
+				libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
-
 		})
 	}
 }

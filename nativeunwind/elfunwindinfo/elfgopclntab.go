@@ -84,6 +84,7 @@ type pclntabHeader struct {
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
 type pclntabHeader116 struct {
 	pclntabHeader
+
 	nfiles         uint
 	funcnameOffset uintptr
 	cuOffset       uintptr
@@ -96,6 +97,7 @@ type pclntabHeader116 struct {
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
 type pclntabHeader118 struct {
 	pclntabHeader
+
 	nfiles         uint
 	textStart      uintptr
 	funcnameOffset uintptr
@@ -233,7 +235,7 @@ func getString(data []byte, offset int) string {
 }
 
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.
-func searchGoPclntab(ef *pfelf.File) ([]byte, int64, error) {
+func searchGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 	// The sections headers are not available for coredump testing, because they are
 	// not inside any PT_LOAD segment. And in the case ofwhere they might be available
 	// because of alignment they are likely not usable, e.g. the musl C-library will
@@ -309,7 +311,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 		// A full symbol table read is needed as these are not dynamic symbols.
 		// Consequently these symbols might be unavailable on a stripped binary.
 		var start, end libpf.SymbolValue
-		ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		ef.VisitSymbols(func(sym libpf.Symbol) bool { //nolint:gosec
 			if sym.Name == "runtime.pclntab" {
 				start = sym.Address
 			} else if sym.Name == "runtime.epclntab" {
@@ -333,7 +335,8 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 			}
 			p := ef.ProgByVirtualAddress(uint64(start))
 			if p == nil {
-				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
+				return nil, 0, errors.New(
+					"failed to load .gopclntab via symbols: unmappable virtual address")
 			}
 			offset = int64(p.Off) + int64(start) - int64(p.Vaddr)
 		}
@@ -468,7 +471,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		// With the change of the type of the first field of _func in Go 1.18, this
 		// value is now hard coded.
 		//
-		//nolint:lll
+
 		// See https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L376-L382
 		g.funcMapSize = 2 * 4
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
@@ -511,7 +514,6 @@ func (g *Gopclntab) Close() error {
 // getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
 func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 	if g.version >= go1_18 {
-		//nolint:lll
 		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
 		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
 		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
@@ -730,7 +732,6 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
@@ -766,7 +767,9 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	return cuStrategy, nil
 }
 
-func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
+func resolveFunctionUnwindInfo(
+	r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool,
+) (map[int32]*sdtypes.UnwindInfo, error) {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
@@ -858,7 +861,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		}
 
 		// First, check for functions with special handling.
-		if info, ok := funcUnwindInfo[int32(fun.nameOff)]; ok {
+		if info, ok := funcUnwindInfo[fun.nameOff]; ok {
 			bb.Deltas.Add(0, *info)
 			ee.intervals.Add(bb)
 			continue

@@ -14,8 +14,8 @@ var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
 // byte, or all of buf if no NUL is present. Suitable for fixed-size buffers
 // populated from eBPF.
 func CString(buf []byte) []byte {
-	if i := bytes.IndexByte(buf, 0); i >= 0 {
-		return buf[:i]
+	if before, _, ok := bytes.Cut(buf, []byte{0}); ok {
+		return before
 	}
 	return buf
 }
@@ -49,7 +49,7 @@ func FieldsN(s string, f []string) int {
 			return i
 		}
 
-		f[i] = s[fieldStart:si]
+		f[i] = s[fieldStart:si] //nolint:gosec
 	}
 
 	// Find the start of the next field.
@@ -81,14 +81,14 @@ func SplitN(s, sep string, f []string) int {
 	for ; i < n-1 && s != ""; i++ {
 		fieldEnd := strings.Index(s, sep)
 		if fieldEnd < 0 {
-			f[i] = s
+			f[i] = s //nolint:gosec
 			return i + 1
 		}
-		f[i] = s[:fieldEnd]
+		f[i] = s[:fieldEnd] //nolint:gosec
 		s = s[fieldEnd+len(sep):]
 	}
 
 	// Put the remainder of s as last element of f.
-	f[i] = s
+	f[i] = s //nolint:gosec
 	return i + 1
 }

@@ -80,8 +80,7 @@ func (t *Tracer) handleGenericPID() {
 // handler is invoked.
 func (t *Tracer) triggerReportEvent(data []byte) {
 	event := (*support.Event)(unsafe.Pointer(&data[0]))
-	switch event.Type {
-	case support.EventTypeGenericPID:
+	if event.Type == support.EventTypeGenericPID {
 		t.handleGenericPID()
 	}
 }
@@ -304,10 +303,11 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
 	eventMap, ok := t.ebpfMaps["report_events"]
 	if !ok {
-		return nil, fmt.Errorf("Map report_events is not available")
+		return nil, errors.New("Map report_events is not available")
 	}
 
-	getPerfErrorCounts, err := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
+	getPerfErrorCounts, err := startPerfEventMonitor(
+		ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
 	if err != nil {
 		return nil, err
 	}

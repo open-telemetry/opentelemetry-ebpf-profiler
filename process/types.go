@@ -107,7 +107,7 @@ type MachineData struct {
 // ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
 type ReadAtCloser = pfelf.ReadAtCloser
 
-// ProcessMeta contains metadata about a tracked process.
+// Meta contains metadata about a tracked process.
 type Meta struct {
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String

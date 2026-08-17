@@ -13,6 +13,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -75,7 +76,7 @@ type Config struct {
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
+func New(ctx context.Context, cfg Config) (*ProcessManager, error) { //nolint:gocritic
 	if cfg.ExecutableReporter == nil {
 		cfg.ExecutableReporter = executableReporterStub{}
 	}
@@ -95,15 +96,15 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
 
-	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
+	em, err := eim.NewExecutableInfoManager(
+		cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
 
 	periodiccaller.Start(ctx, cfg.ExecutableUnloadDelay, func() {
-		err := em.CleanupUnused(cfg.ExecutableUnloadDelay)
-		if err != nil {
-			log.Errorf("Failed to cleanup unused executables: %v", err)
+		if cleanupErr := em.CleanupUnused(cfg.ExecutableUnloadDelay); cleanupErr != nil {
+			log.Errorf("Failed to cleanup unused executables: %v", cleanupErr)
 		}
 	})
 
@@ -192,7 +193,8 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 			}
 		}
 
-		summary[metrics.IDHashmapPidPageToMappingInfo] = metrics.MetricValue(pm.pidPageToMappingInfoSize)
+		summary[metrics.IDHashmapPidPageToMappingInfo] =
+			metrics.MetricValue(pm.pidPageToMappingInfoSize)
 
 		summary[metrics.IDELFInfoCacheHit] = metrics.MetricValue(pm.elfInfoCacheHit.Swap(0))
 		summary[metrics.IDELFInfoCacheMiss] = metrics.MetricValue(pm.elfInfoCacheMiss.Swap(0))
@@ -200,13 +202,20 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary[metrics.IDTraceCacheHit] = metrics.MetricValue(pm.frameCacheHit.Swap(0))
 		summary[metrics.IDTraceCacheMiss] = metrics.MetricValue(pm.frameCacheMiss.Swap(0))
 
-		summary[metrics.IDErrProcNotExist] = metrics.MetricValue(pm.mappingStats.errProcNotExist.Swap(0))
-		summary[metrics.IDErrProcESRCH] = metrics.MetricValue(pm.mappingStats.errProcESRCH.Swap(0))
-		summary[metrics.IDErrProcPerm] = metrics.MetricValue(pm.mappingStats.errProcPerm.Swap(0))
-		summary[metrics.IDNumProcAttempts] = metrics.MetricValue(pm.mappingStats.numProcAttempts.Swap(0))
-		summary[metrics.IDMaxProcParseUsec] = metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
-		summary[metrics.IDTotalProcParseUsec] = metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
-		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
+		summary[metrics.IDErrProcNotExist] =
+			metrics.MetricValue(pm.mappingStats.errProcNotExist.Swap(0))
+		summary[metrics.IDErrProcESRCH] =
+			metrics.MetricValue(pm.mappingStats.errProcESRCH.Swap(0))
+		summary[metrics.IDErrProcPerm] =
+			metrics.MetricValue(pm.mappingStats.errProcPerm.Swap(0))
+		summary[metrics.IDNumProcAttempts] =
+			metrics.MetricValue(pm.mappingStats.numProcAttempts.Swap(0))
+		summary[metrics.IDMaxProcParseUsec] =
+			metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
+		summary[metrics.IDTotalProcParseUsec] =
+			metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
+		summary[metrics.IDErrProcParse] =
+			metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		summary.Add(dotnet.GetAndResetMetrics())
 		summary.Add(pm.ebpf.CollectMetrics())
@@ -219,7 +228,9 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 func (pm *ProcessManager) Close() {
 }
 
-func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping) error {
+func (pm *ProcessManager) symbolizeFrame(
+	pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping,
+) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -243,21 +254,23 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 		len(pm.interpreters[pid]), errSymbolizationNotSupported)
 }
 
-func (pm *ProcessManager) appendKernelFrames(addrs []uint64, dst *libpf.Frames) (uint64, uint64) {
-	var cacheHit, cacheMiss uint64
-
+func (pm *ProcessManager) appendKernelFrames(
+	addrs []uint64, dst *libpf.Frames,
+) (cacheHit, cacheMiss uint64) {
 	snapshot := pm.kernelSymbols.Snapshot()
 	for _, addr := range addrs {
 		address := libpf.Address(addr)
 		// Kernel/module symbols are the common case. BPF JIT addresses do not
 		// overlap module ranges, so cache probe order does not change
 		// ResolveAddress precedence.
-		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.KernelGeneration())); ok {
+		if cached, ok := pm.frameCache.Get(
+			kernelFrameCacheKey(address, snapshot.KernelGeneration())); ok {
 			cacheHit++
 			*dst = append(*dst, cached...)
 			continue
 		}
-		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.BPFGeneration())); ok {
+		if cached, ok := pm.frameCache.Get(
+			kernelFrameCacheKey(address, snapshot.BPFGeneration())); ok {
 			cacheHit++
 			*dst = append(*dst, cached...)
 			continue
@@ -267,7 +280,8 @@ func (pm *ProcessManager) appendKernelFrames(addrs []uint64, dst *libpf.Frames) 
 		frame, cacheable := symbolizeKernelFrame(address, resolution)
 		if resolved && cacheable {
 			cacheMiss++
-			pm.frameCache.Add(kernelFrameCacheKey(address, resolution.Generation), libpf.Frames{frame})
+			pm.frameCache.Add(
+				kernelFrameCacheKey(address, resolution.Generation), libpf.Frames{frame})
 		}
 
 		*dst = append(*dst, frame)
@@ -378,7 +392,9 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // due to frameCache not being synced. If the tracer is later updated to distribute
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
+func (pm *ProcessManager) HandleTrace(
+	bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata,
+) {
 	procMeta := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
@@ -408,7 +424,8 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 
 	numKernelFrames := int(bpfTrace.NumKernelFrames)
 	if numKernelFrames > len(bpfTrace.FrameData) {
-		log.Errorf("Kernel frame count %d exceeds frame data length %d", numKernelFrames, len(bpfTrace.FrameData))
+		log.Errorf("Kernel frame count %d exceeds frame data length %d",
+			numKernelFrames, len(bpfTrace.FrameData))
 		numKernelFrames = len(bpfTrace.FrameData)
 	}
 	if numKernelFrames > 0 {
@@ -417,8 +434,8 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		cacheMiss += misses
 	}
 
-	userFrameData := bpfTrace.FrameData[numKernelFrames:]
-	for frames := libpf.EbpfFrame(userFrameData); len(frames) > 0; frames = frames[frames.Length():] {
+	frames := libpf.EbpfFrame(bpfTrace.FrameData[numKernelFrames:])
+	for ; len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
 		if frame.Flags().Error() {
 			if !pm.filterErrorFrames {
@@ -440,12 +457,10 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)
-		} else {
+		} else if pm.convertFrame(pid, frame, &trace.Frames) {
 			// Slow path: convert trace.
-			if pm.convertFrame(pid, frame, &trace.Frames) {
-				cacheMiss++
-				pm.frameCache.Add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
-			}
+			cacheMiss++
+			pm.frameCache.Add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
 		}
 	}
 	if cacheMiss != 0 {

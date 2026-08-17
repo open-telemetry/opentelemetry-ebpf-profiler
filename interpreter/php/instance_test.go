@@ -36,7 +36,7 @@ func (m *mockMemory) writeAt(addr uint64, data []byte) {
 	m.regions = append(m.regions, memRegion{addr: addr, data: append([]byte{}, data...)})
 }
 
-func (m *mockMemory) writeUint64(addr uint64, val uint64) {
+func (m *mockMemory) writeUint64(addr, val uint64) {
 	buf := make([]byte, 8)
 	binary.LittleEndian.PutUint64(buf, val)
 	m.writeAt(addr, buf)
@@ -208,7 +208,7 @@ func TestGetFunction_NullPointer(t *testing.T) {
 	}
 
 	_, err = instance.getFunction(0, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "null pointer")
 }
 

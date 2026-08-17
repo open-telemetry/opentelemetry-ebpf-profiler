@@ -9,6 +9,7 @@ import "io"
 type ModuleReader struct {
 	io.ReaderAt
 	io.Closer
+
 	preferredReadSize uint
 	size              uint
 }

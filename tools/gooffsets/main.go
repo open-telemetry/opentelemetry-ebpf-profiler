@@ -168,7 +168,7 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 }
 
 func open(path string) (*elf.File, string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec
 	if err != nil {
 		return nil, "", err
 	}

@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
@@ -145,8 +146,8 @@ const (
 type ehFrameHdr struct {
 	version       uint8
 	ehFramePtrEnc encoding
-	fdeCountEnc   encoding
-	tableEnc      encoding
+	fdeCountEnc   encoding //nolint:unused
+	tableEnc      encoding //nolint:unused
 	// Continued with the following:
 	// ehFramePtr    ptr{ehFramePtrEnc}
 	// fdeCount      ptr{fdeCountEnc}
@@ -317,7 +318,7 @@ const (
 // This is needed to detect signal trampoline functions as the .eh_frame often
 // does not contain the proper unwind info due to various reasons.
 //
-//nolint:lll
+
 var sigretCodeMap = map[elf.Machine][]byte{
 	elf.EM_AARCH64: {
 		// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/arm64/kernel/vdso/sigreturn.S?h=v6.4#n71
@@ -521,7 +522,7 @@ func matchExpression(expr []dwarfExpression, template []expressionOpcode) bool {
 		return false
 	}
 	for i := range expr {
-		if expr[i].opcode != template[i] {
+		if expr[i].opcode != template[i] { //nolint:gosec
 			return false
 		}
 	}
@@ -621,7 +622,7 @@ func (st *state) step(r *reader) error {
 		case cfaValExpression:
 			// Not really supported, just mark the register undefined
 			st.rule(r.uleb(), regUndefined, 0)
-			r.Discard(int(r.uleb()))
+			r.Discard(int(r.uleb())) //nolint:gosec
 		case cfaGNUWindowSave:
 			// No handling needed
 		case cfaGNUArgsSize:
@@ -692,7 +693,7 @@ func (r *reader) parseLengthAndMarker() (en, ciePos int64, err error) {
 		return 0, 0, fmt.Errorf("unsupported header %#x/%#x", length, ciePos)
 	}
 
-	return int64(length) - size, ciePos, nil
+	return length - size, ciePos, nil
 }
 
 // parseCIE reads and processes one Common Information Entry
@@ -728,7 +729,7 @@ func (r *reader) parseCIE(length int64) (*cieInfo, error) {
 		// read them so the rest of the data is aligned correctly.
 
 		// Skip the address_size and segment_selector_size fields
-		r.Discard(2)
+		r.Discard(2) //nolint:gosec
 	}
 
 	cie.codeAlign = r.uleb()
@@ -740,7 +741,7 @@ func (r *reader) parseCIE(length int64) (*cieInfo, error) {
 	}
 
 	// A zero length string indicates that no augmentation data is present.
-	if len(augmentation) > 0 {
+	if augmentation != "" {
 		// Parse rest of CIE header based on augmentation string
 		if augmentation[0] != 'z' {
 			return nil, fmt.Errorf("too old augmentation string '%s'", augmentation)
@@ -748,7 +749,7 @@ func (r *reader) parseCIE(length int64) (*cieInfo, error) {
 		r.uleb()
 		cie.hasAugmentation = true
 
-		for _, ch := range string(augmentation[1:]) {
+		for _, ch := range augmentation[1:] {
 			switch ch {
 			case 'L':
 				cie.ldsaEnc = encoding(r.Uint8())
@@ -848,8 +849,8 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 		debugFrame: r.debugFrame,
 		vaddr:      r.vaddr,
 	}
-	cr.Seek(ciePos, io.SeekStart)
-	cr.SetBufferSize(256) // CIE entry is typically 20-80 bytes
+	cr.Seek(ciePos, io.SeekStart) //nolint:gosec
+	cr.SetBufferSize(256)         // CIE entry is typically 20-80 bytes
 
 	length, marker, err := cr.parseLengthAndMarker()
 	if err != nil {
@@ -871,7 +872,9 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 // The FDE format is described in:
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (r *reader) parseFDE(id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExtractor) (fdeInfo, error) {
+func (r *reader) parseFDE(
+	id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExtractor,
+) (fdeInfo, error) {
 	err := r.StartSection(n)
 	if err != nil {
 		return fdeInfo{}, err
@@ -898,7 +901,7 @@ func (r *reader) parseFDE(id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExt
 		return fde, err
 	}
 	if cie.hasAugmentation {
-		r.Discard(int(r.uleb()))
+		r.Discard(int(r.uleb())) //nolint:gosec
 	}
 
 	// Exit early if no stack delta extraction is done

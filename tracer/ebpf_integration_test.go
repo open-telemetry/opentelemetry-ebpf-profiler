@@ -21,13 +21,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/otel/metric/noop"
+
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func TestMain(m *testing.M) {
@@ -207,7 +208,8 @@ Loop:
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
 				numKernelFrames: int(ebpfTrace.NumKernelFrames),
-				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
+				frames: libpf.EbpfFrame(
+					slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
 			}
 		}
 	}
@@ -236,7 +238,6 @@ Loop:
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)

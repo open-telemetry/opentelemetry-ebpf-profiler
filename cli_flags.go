@@ -66,7 +66,8 @@ var (
 	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
 	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
 	reporterIntervalHelp = "Set the reporter's interval in seconds."
-	reporterJitterHelp   = fmt.Sprintf("Set the jitter applied to the reporter's interval as a fraction. "+
+	reporterJitterHelp   = fmt.Sprintf("Set the jitter applied to the reporter's interval "+
+		"as a fraction. "+
 		"Valid values are in the range [0..1]. "+
 		"Default is %.1f.",
 		defaultArgReporterJitter)
@@ -87,15 +88,21 @@ var (
 	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
 		"Default is %d.", defaultArgFrameCacheSize)
 	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
-		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
-	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
-		defaultBPFFSRoot)
-	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
-	pinnedCPUIDsHelp  = "Range of CPUs to profile in the format like \"0-15,20,31\". Only for on-CPU sampling. " +
-		"WARNING: This filter is effective only if your target workloads (processes, IRQ handlers, etc.) " +
+		"Expected format: probe_type:target[:symbol]. " +
+		"probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
+	bpffsHelp = "Set the root BPF FS path for pinned maps. " +
+		"Only used for OBI span/trace ID communication. Default is " + defaultBPFFSRoot
+	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context " +
+		"information with OBI."
+	pinnedCPUIDsHelp = "Range of CPUs to profile in the format like \"0-15,20,31\". " +
+		"Only for on-CPU sampling. " +
+		"WARNING: This filter is effective only if your target workloads " +
+		"(processes, IRQ handlers, etc.) " +
 		"are explicitly pinned to provided CPUs. " +
-		"In non-pinned environments, profiling a subset of CPUs will produce biased or incomplete results. " +
-		"For profiling specific applications, consider using sidecar deployments or custom probes instead."
+		"In non-pinned environments, profiling a subset of CPUs will produce " +
+		"biased or incomplete results. " +
+		"For profiling specific applications, consider using sidecar deployments " +
+		"or custom probes instead."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer

@@ -4,12 +4,13 @@
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 
 import (
-	"fmt"
+	"errors"
+
+	"golang.org/x/arch/x86/x86asm"
 
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 // ExtractTLSOffset scans through x86_64 assembly code looking for MOV instructions
@@ -68,7 +69,7 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 			}
 		}
 	}
-	return 0, fmt.Errorf("could not find FS-relative MOV instruction with valid TLS offset")
+	return 0, errors.New("could not find FS-relative MOV instruction with valid TLS offset")
 }
 
 // validateTLSOffset ensures that the extracted offset is within some boundaries.
@@ -79,5 +80,5 @@ func validateTLSOffset(offset int32) (int32, error) {
 	if (offset < 0 && offset > -4096) || (offset > 0 && offset < 4096) {
 		return offset, nil
 	}
-	return 0, fmt.Errorf("could not find valid FS-relative MOV instruction")
+	return 0, errors.New("could not find valid FS-relative MOV instruction")
 }

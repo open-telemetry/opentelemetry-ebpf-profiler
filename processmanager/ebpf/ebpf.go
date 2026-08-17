@@ -14,10 +14,11 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -82,8 +83,10 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 //
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
-func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
-	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
+func LoadMaps(
+	ctx context.Context, interpretersConfig interpreterconfig.Config,
+	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec,
+) (ebpfapi.EbpfHandler, error) {
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
 	}
@@ -324,7 +327,10 @@ func getPIDPageMappingInfo(fileID, biasAndUnwindProgram uint64) *support.PIDPage
 
 // probeMapOperations tests if the BPF syscall supports operations by running a supplied closure.
 // It returns nil if batch operations are supported for mapType or an error otherwise.
-func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType, probe func(*cebpf.Map, ptrCastMarshaler[T], ptrCastMarshaler[uint64]) error) error {
+func probeMapOperations[T constraints.Unsigned](
+	mapType cebpf.MapType,
+	probe func(*cebpf.Map, ptrCastMarshaler[T], ptrCastMarshaler[uint64]) error,
+) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		// In environment like github action runners, we can not adjust rlimit.
@@ -360,7 +366,9 @@ func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType, probe fun
 }
 
 // probeBatchOperationsInner is the inner check to be used by probeBatchOperations.
-func probeBatchOperationsInner[T constraints.Unsigned](probeMap *cebpf.Map, keys ptrCastMarshaler[T], values ptrCastMarshaler[uint64]) error {
+func probeBatchOperationsInner[T constraints.Unsigned](
+	probeMap *cebpf.Map, keys ptrCastMarshaler[T], values ptrCastMarshaler[uint64],
+) error {
 	n, err := probeMap.BatchUpdate(keys, values, nil)
 	if err != nil {
 		// Older kernel do not support batch operations on maps.
@@ -555,7 +563,6 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-
 }
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.
@@ -610,9 +617,9 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm
 	return impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes []lpm.Prefix) (uint64,
-	error,
-) {
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(
+	pid libpf.PID, prefixes []lpm.Prefix,
+) (uint64, error) {
 	cKey := &support.PIDPage{}
 	var deleted uint64
 	var combinedErrors error
@@ -628,9 +635,9 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 	return deleted, combinedErrors
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes []lpm.Prefix) (uint64,
-	error,
-) {
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(
+	pid libpf.PID, prefixes []lpm.Prefix,
+) (uint64, error) {
 	// Prepare all keys based on the given prefixes.
 	cKeys := make([]support.PIDPage, 0, len(prefixes))
 	for _, prefix := range prefixes {

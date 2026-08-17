@@ -12,22 +12,20 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 )
 
 const (
-	// OTel process context is published in a mapping:
-	// - based on a memfd file descriptor named "OTEL_CTX" when memfd_create is available.
-	// - based on an anonymous private mapping when memfd_create is not available
-	// In both cases, an attempt is made to name the mapping "OTEL_CTX" using prctl(PR_SET_VMA_ANON_NAME) which may fail depending on kernel version/configuration.
-	// Consequently the mapping can show up with 3 different names:
+	// ContextMappingMemfd and related constants define where the OTel process context is published.
+	// The mapping can show up with 3 different names:
 	// - "/memfd:OTEL_CTX": memfd-based mapping and prctl failed
 	// - "[anon_shmem:OTEL_CTX]": memfd-based mapping and prctl succeeded
 	// - "[anon:OTEL_CTX]": anonymous mapping and prctl succeeded
-	// Case where both memfd_create and prctl fail is considered a failure and is not supported.
+	// The case where both memfd_create and prctl fail is considered a failure and is not supported.
 	ContextMappingMemfd        = "/memfd:OTEL_CTX"
 	ContextMappingMemfdDeleted = "/memfd:OTEL_CTX (deleted)"
 	ContextMappingMemfdNamed   = "[anon_shmem:OTEL_CTX]"
@@ -50,7 +48,8 @@ const (
 )
 
 var (
-	// ErrInvalidContext indicates the ProcessContext has invalid format, signature, version, or size.
+	// ErrInvalidContext indicates the ProcessContext has invalid format, signature,
+	// version, or size.
 	ErrInvalidContext = errors.New("invalid ProcessContext")
 
 	// ErrConcurrentUpdate indicates the ProcessContext was updated during read.
@@ -67,19 +66,23 @@ type Info struct {
 
 // header represents the 32-byte memory region header per OTEP #4719.
 type header struct {
-	_                      structs.HostLayout
-	Signature              [8]byte // "OTEL_CTX"
-	Version                uint32  // Format version (2)
-	PayloadSize            uint32  // Size of protobuf payload in bytes
-	MonotonicPublishedAtNs uint64  // Monotonic clock timestamp from `CLOCK_BOOTTIME` of when the context was published, in nanoseconds
-	PayloadPtr             uint64  // Memory pointer to protobuf payload
+	_           structs.HostLayout
+	Signature   [8]byte // "OTEL_CTX"
+	Version     uint32  // Format version (2)
+	PayloadSize uint32  // Size of protobuf payload in bytes
+	// MonotonicPublishedAtNs is a monotonic clock timestamp from `CLOCK_BOOTTIME` of when
+	// the context was published, in nanoseconds.
+	MonotonicPublishedAtNs uint64
+	PayloadPtr             uint64 // Memory pointer to protobuf payload
 }
 
 // Read reads ProcessContext from remote process memory using the provided address.
 // Returns ErrInvalidContext if the process has no ProcessContext memory region.
 // Retries on concurrent updates, up to maxAttempts total attempts.
 // If maxAttempts is 0, the default value is used.
-func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+func Read(
+	addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int,
+) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
@@ -99,7 +102,9 @@ func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 }
 
 // readOnce performs a single attempt to read ProcessContext.
-func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
+func readOnce(
+	mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64,
+) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",

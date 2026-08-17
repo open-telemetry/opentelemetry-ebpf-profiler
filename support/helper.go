@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// support maps the definitions from headers in the C world into a nice go way
+// Package support maps the definitions from headers in the C world into a nice go way
 package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 import "fmt"

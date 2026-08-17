@@ -113,10 +113,10 @@ func OpenFile(f *os.File) (*ReaderAt, error) {
 		}, nil
 	}
 	if size < 0 {
-		return nil, fmt.Errorf("mmap: negative file size")
+		return nil, errors.New("mmap: negative file size")
 	}
 	if size != int64(int(size)) {
-		return nil, fmt.Errorf("mmap: too large file size")
+		return nil, errors.New("mmap: too large file size")
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
@@ -127,6 +127,6 @@ func OpenFile(f *os.File) (*ReaderAt, error) {
 	r := &ReaderAt{data: data}
 	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
-	r.setRandom()
+	r.setRandom() //nolint:gosec
 	return r, nil
 }

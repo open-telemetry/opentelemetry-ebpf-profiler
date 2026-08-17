@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"

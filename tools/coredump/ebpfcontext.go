@@ -88,8 +88,9 @@ func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfCon
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
 		maps:                  make(map[unsafe.Pointer]map[any]unsafe.Pointer),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
-		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(support.UnwindInfoMaxEntries)),
-		faultAddresses:        faultAddresses,
+		unwindInfoArray: C.malloc(
+			C.sizeof_UnwindInfo * C.ulong(support.UnwindInfoMaxEntries)),
+		faultAddresses: faultAddresses,
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx

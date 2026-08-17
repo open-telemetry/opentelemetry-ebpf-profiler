@@ -48,7 +48,8 @@ const (
 	// imageFileMachineDotnetX64 is an undocumented machine type seen in dotnet-internal x64 DLLs.
 	imageFileMachineDotnetX64 = 0xfd1d
 
-	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal ARM64 DLLs.
+	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal
+	// ARM64 DLLs.
 	imageFileMachineDotnetARM64 = 0xd11d
 
 	// TTL of entries in the LRU cache holding the .NET strings.
@@ -204,7 +205,7 @@ type ReadyToRunSection struct {
 // R2RFMT RUNTIME_FUNCTION on-disk record sizes for the RuntimeFunctions section.
 // Only the leading 4-byte StartRVA field is decoded; the remaining bytes are skipped
 // via the per-architecture stride.
-// See: https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md#readytorunsectiontyperuntimefunctions
+// See: dotnet/runtime readytorun-format.md#readytorunsectiontyperuntimefunctions
 const (
 	// x86_64 layout: {StartRVA, EndRVA, GCInfo} (3 x uint32).
 	r2rRuntimeFunctionSize = 12
@@ -343,11 +344,11 @@ type peInfo struct {
 
 // peParser contains the needed data when reading and parsing the dotnet data from a PE file.
 type peParser struct {
-	info    *peInfo
-	headers []byte
-
 	io.ReaderAt
 	io.ReadSeeker
+
+	info    *peInfo
+	headers []byte
 
 	peBase int64
 
@@ -530,7 +531,8 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevRVA := uint32(0)
 
 	stride := int64(r2rRuntimeFunctionSize)
-	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
+	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 ||
+		pp.nt.Machine == imageFileMachineDotnetARM64 {
 		stride = int64(r2rRuntimeFunctionSizeARM64)
 	}
 

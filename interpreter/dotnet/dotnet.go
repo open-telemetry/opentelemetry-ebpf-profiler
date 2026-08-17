@@ -6,7 +6,7 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 // Microsoft .Net Unwinder support code
 
 // The Microsoft dotnet is formally specified in ECMA-335. For the main references see:
-//nolint:lll
+
 // sources  https://github.com/dotnet/runtime/
 // ECMA-335 https://www.ecma-international.org/wp-content/uploads/ECMA-335_6th_edition_june_2012.pdf
 // R2RFMT   https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md
@@ -139,9 +139,7 @@ func dotnetVer(x, y, z uint32) uint32 {
 	return (x << 24) + (y << 16) + z
 }
 
-var dotnetGlobalInit = sync.OnceValue(func() error {
-	return globalPeCache.init()
-})
+var dotnetGlobalInit = sync.OnceValue(globalPeCache.init)
 
 func GetLoader(_ Config) interpreter.Loader {
 	return loader

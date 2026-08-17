@@ -157,14 +157,14 @@ func TestBaseReporterGenerate(t *testing.T) {
 	require.NotNil(t, profiles)
 
 	// Validate profile structure
-	assert.Greater(t, profiles.SampleCount(), 0,
+	assert.Positive(t, profiles.SampleCount(),
 		"Should have at least one sample")
 	assert.Equal(t, 2, profiles.ResourceProfiles().Len(),
 		"Should have exactly two resource profile")
 
 	// Check that we have scope profiles
 	resourceProfile := profiles.ResourceProfiles().At(0)
-	assert.Equal(t, 1, resourceProfile.ScopeProfiles().Len(), 0,
+	assert.Equal(t, 1, resourceProfile.ScopeProfiles().Len(),
 		"Should have exactly one scope profile")
 
 	// Verify scope profile metadata
@@ -173,7 +173,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	assert.Equal(t, reporter.version, scopeProfile.Scope().Version())
 
 	// Verify profiles exist
-	assert.Greater(t, scopeProfile.Profiles().Len(), 0,
+	assert.Positive(t, scopeProfile.Profiles().Len(),
 		"Should have at least one profile")
 }
 
@@ -182,14 +182,18 @@ func TestBaseReporterGenerate(t *testing.T) {
 // sample attribute, exercising the full enricher → TraceEventMeta → attribute pipeline.
 type processNameAttrProducer struct{}
 
-func (p *processNameAttrProducer) CollectExtraSampleMeta(_ *libpf.Trace, meta *samples.TraceEventMeta) any {
+func (p *processNameAttrProducer) CollectExtraSampleMeta(
+	_ *libpf.Trace, meta *samples.TraceEventMeta,
+) any {
 	if meta.ExtraMeta == nil {
 		return ""
 	}
 	return meta.ExtraMeta[libpf.Intern("process.name")]
 }
 
-func (p *processNameAttrProducer) ExtraSampleAttrs(attrMgr *samples.AttrTableManager, extraMeta any) []int32 {
+func (p *processNameAttrProducer) ExtraSampleAttrs(
+	attrMgr *samples.AttrTableManager, extraMeta any,
+) []int32 {
 	name, _ := extraMeta.(string)
 	if name == "" {
 		return nil

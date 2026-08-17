@@ -4,11 +4,12 @@
 package arm // import "go.opentelemetry.io/ebpf-profiler/asm/arm"
 
 import (
-	"fmt"
+	"errors"
+
+	aa "golang.org/x/arch/arm64/arm64asm"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
 // branchTarget represents a branch target to be analyzed
@@ -139,9 +140,9 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 	}
 
 	if !foundMRS {
-		return 0, fmt.Errorf("could not find MRS TPIDR_EL0 instruction")
+		return 0, errors.New("could not find MRS TPIDR_EL0 instruction")
 	}
-	return 0, fmt.Errorf("found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset")
+	return 0, errors.New("found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset")
 }
 
 // validateTLSOffset ensures that the extracted offset is within some boundaries.
@@ -152,5 +153,5 @@ func validateTLSOffset(offset int32) (int32, error) {
 	if (offset < 0 && offset > -4096) || (offset > 0 && offset < 4096) {
 		return offset, nil
 	}
-	return 0, fmt.Errorf("could not find valid FS-relative MOV instruction")
+	return 0, errors.New("could not find valid FS-relative MOV instruction")
 }

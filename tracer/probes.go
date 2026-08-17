@@ -5,10 +5,12 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -76,7 +78,8 @@ func (c *ProbeContext) CollectionSpecWith(
 	for _, s := range c.sysVarSetters() {
 		v, ok := full.Variables[s.name]
 		if !ok {
-			return nil, fmt.Errorf("mandatory system variable %q not found in collection spec", s.name)
+			return nil, fmt.Errorf(
+				"mandatory system variable %q not found in collection spec", s.name)
 		}
 		filtered.Variables[s.name] = v
 	}
@@ -143,7 +146,9 @@ func (c *ProbeContext) applySystemVars(coll *cebpf.CollectionSpec) error {
 // merged with probeMaps; probe map names must not shadow tracer-owned map names.
 // Only maps actually referenced by the probe's programs are rewritten; tracer-internal
 // maps that the probe does not use are silently skipped.
-func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map) error {
+func (c *ProbeContext) RewriteMaps(
+	coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map,
+) error {
 	// Build pool: shared tracer maps plus probe-specific maps.
 	// .rodata.var is excluded: each probe creates its own isolated RODATA map
 	// in LoadProbeUnwinders so that probe-specific variables (e.g. origin_id_probe)
@@ -207,19 +212,20 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	}
 	kprobeProgs := c.maps["kprobe_progs"]
 	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
+		return errors.New("kprobe_progs map not available;" +
+			" ensure the kprobe unwinder chain was loaded at startup")
 	}
 	perfProgs := c.maps["perf_progs"]
 	if perfProgs == nil {
-		return fmt.Errorf("perf_progs map not available")
+		return errors.New("perf_progs map not available")
 	}
 	perCPURecords := c.maps["per_cpu_records"]
 	if perCPURecords == nil {
-		return fmt.Errorf("per_cpu_records map not available")
+		return errors.New("per_cpu_records map not available")
 	}
 	perCPURecordsKp := c.maps["per_cpu_records_kp"]
 	if perCPURecordsKp == nil {
-		return fmt.Errorf("per_cpu_records_kp map not available")
+		return errors.New("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
 		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
@@ -282,9 +288,9 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		if h.closed {
 			t.hooks.WUnlock(&h)
 			for _, lnk := range probeCtx.links {
-				lnk.Close()
+				lnk.Close() //nolint:gosec
 			}
-			return fmt.Errorf("tracer is already closed")
+			return errors.New("tracer is already closed")
 		}
 		for i, lnk := range probeCtx.links {
 			key := hookPoint{group: "probe", name: fmt.Sprintf("%p/%d", p, i)}

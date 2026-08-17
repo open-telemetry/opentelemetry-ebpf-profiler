@@ -150,7 +150,7 @@ ffffffffc13cc770 t perf_trace_xfs_perag_class	[xfs]`))
 	assert.Equal(t, "xfs", kmod.Name())
 
 	_, err = snap2.GetModuleByAddress(0xffffffffc03cc610)
-	assert.ErrorIs(t, err, ErrNoModule)
+	require.ErrorIs(t, err, ErrNoModule)
 	kmod, err = snap2.GetModuleByAddress(0xffffffffc13cc610)
 	require.NoError(t, err)
 	assert.Equal(t, "xfs", kmod.Name())
@@ -181,10 +181,9 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`)
 	s := &Symbolizer{}
 
 	for b.Loop() {
-		r.Seek(0, io.SeekStart)
+		r.Seek(0, io.SeekStart) //nolint:gosec
 		if err := s.updateSymbolsFrom(r); err != nil {
 			b.Fail()
 		}
 	}
-
 }

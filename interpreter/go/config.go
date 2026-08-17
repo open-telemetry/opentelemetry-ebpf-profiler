@@ -16,11 +16,11 @@ type Config struct {
 
 	// Labels configures eBPF extraction of Go custom goroutine labels.
 	// Enabled by default.
-	Labels interpreter.BaseConfig `mapstructure:"labels" json:"labels,omitempty"`
+	Labels interpreter.BaseConfig `mapstructure:"labels" json:"labels,omitzero"`
 
 	// Symbolization configures userspace symbolization of Go frames via pclntab.
 	// Enabled by default.
-	Symbolization interpreter.BaseConfig `mapstructure:"symbolization" json:"symbolization,omitempty"`
+	Symbolization interpreter.BaseConfig `mapstructure:"symbolization" json:"symbolization,omitzero"`
 }
 
 var _ interpreter.Config = Config{}

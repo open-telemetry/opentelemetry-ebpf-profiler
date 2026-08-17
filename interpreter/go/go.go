@@ -38,6 +38,7 @@ type goData struct {
 
 type goInstance struct {
 	interpreter.InstanceStubs
+
 	d *goData
 
 	// Go symbolization metrics
