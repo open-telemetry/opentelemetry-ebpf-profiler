@@ -2260,7 +2260,9 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindV8), ProgName: "unwind_v8"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

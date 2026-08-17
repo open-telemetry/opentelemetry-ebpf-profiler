@@ -32,6 +32,7 @@ type Config struct {
 	Go      golang.Config  `mapstructure:"go" json:"go,omitempty"`
 	BEAM    beam.Config    `mapstructure:"beam" json:"beam,omitempty"`
 	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit,omitempty"`
+	APMInt  apmint.Config  `mapstructure:"apmint" json:"apmint,omitempty"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
@@ -51,7 +52,47 @@ func NoInterpreters() Config {
 		Go:      golang.Config{BaseConfig: disabled},
 		BEAM:    beam.Config{BaseConfig: disabled},
 		LuaJIT:  luajit.Config{BaseConfig: disabled},
+		APMInt:  apmint.Config{BaseConfig: disabled},
 	}
+}
+
+// Loaders returns active loaders for all enabled interpreters.
+func (cfg *Config) Loaders() []interpreter.Loader {
+	loaders := make([]interpreter.Loader, 0, 11)
+	if !cfg.Perl.IsDisabled() {
+		loaders = append(loaders, perl.GetLoader(cfg.Perl))
+	}
+	if !cfg.Python.IsDisabled() {
+		loaders = append(loaders, python.GetLoader(cfg.Python))
+	}
+	if !cfg.PHP.IsDisabled() {
+		loaders = append(loaders, php.GetLoader(cfg.PHP))
+	}
+	if !cfg.Hotspot.IsDisabled() {
+		loaders = append(loaders, hotspot.GetLoader(cfg.Hotspot))
+	}
+	if !cfg.Ruby.IsDisabled() {
+		loaders = append(loaders, ruby.GetLoader(cfg.Ruby))
+	}
+	if !cfg.V8.IsDisabled() {
+		loaders = append(loaders, nodev8.GetLoader(cfg.V8))
+	}
+	if !cfg.Dotnet.IsDisabled() {
+		loaders = append(loaders, dotnet.GetLoader(cfg.Dotnet))
+	}
+	if !cfg.BEAM.IsDisabled() {
+		loaders = append(loaders, beam.GetLoader(cfg.BEAM))
+	}
+	if !cfg.LuaJIT.IsDisabled() {
+		loaders = append(loaders, luajit.GetLoader(cfg.LuaJIT))
+	}
+	if !cfg.Go.IsDisabled() {
+		loaders = append(loaders, golang.GetLoader(cfg.Go))
+	}
+	if !cfg.APMInt.IsDisabled() {
+		loaders = append(loaders, apmint.GetLoader(cfg.APMInt))
+	}
+	return loaders
 }
 
 // IsMapEnabled returns true if for the given mapName the respective
@@ -78,7 +119,8 @@ func (cfg *Config) IsMapEnabled(mapName string) bool {
 		return !cfg.LuaJIT.IsDisabled()
 	case golang.BPFMapName, apmint.BPFMapName:
 		// go_procs is read from collect_trace (preloaded into the PerCPURecord)
-		// and apm_int_procs from unwind_stop, so both must always be loaded.
+		// and apm_int_procs from unwind_stop, so both must always be loaded
+		// regardless of interpreter configuration.
 		return true
 	default:
 		return true // Not an interpreter map, so it should be loaded

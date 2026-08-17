@@ -132,7 +132,9 @@ func NewExecutableInfoManager(
 		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
 	}
 
-	loaders = append(loaders, apmint.Loader)
+	if !interpretersConfig.APMInt.IsDisabled() {
+		loaders = append(loaders, apmint.GetLoader(interpretersConfig.APMInt))
+	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
@@ -367,7 +369,7 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 
 	// Ask all interpreter loaders whether they want to handle this executable.
 	for _, load := range state.interpreterLoaders {
-		data, err := load(state.ebpf, loaderInfo)
+		data, err := load.Load(state.ebpf, loaderInfo)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.
