@@ -132,6 +132,14 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
+	// reportEnvVars holds only the user-requested env vars that may be reported.
+	reportEnvVars libpf.Set[string]
+
+	// internalOnlyEnvVars holds the interned names of the env vars captured to
+	// build each process's base resource but not requested for reporting, so they
+	// are dropped from the process metadata once the base resource is built.
+	internalOnlyEnvVars libpf.Set[libpf.String]
+
 	metaEnrichers []process.MetaEnricher
 
 	// resourceEnrichers contribute OTel resource attributes on every process
@@ -191,8 +199,8 @@ type mappingFilter struct {
 type processInfo struct {
 	// process metadata, updated on executable changes
 	meta process.Meta
-	// resource is the merge of the contributions, published under ProcessManager.mu
-	// and immutable once it is. Nil until something contributes.
+	// resource is the merge of envResource and contributions, published under
+	// ProcessManager.mu and immutable once it is. Nil until something contributes.
 	resource *pcommon.Resource
 	// contributions holds each enricher's latest contribution, indexed by
 	// ProcessManager.resourceEnrichers. Entries are immutable once stored.
@@ -200,6 +208,9 @@ type processInfo struct {
 	// enricherState holds each enricher's per-process state, indexed the same way.
 	// Dropped, with no teardown call, when the process exits.
 	enricherState []any
+	// envResource holds what the process's environment declared, the base the
+	// contributions merge onto. Built with the metadata, immutable once published.
+	envResource *pcommon.Resource
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

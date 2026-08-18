@@ -642,14 +642,21 @@ func resourceAttrs(r *pcommon.Resource) map[string]string {
 func newTestProcessManager(metaEnrichers []process.MetaEnricher,
 	resourceEnrichers []procmeta.ResourceEnricher,
 ) *ProcessManager {
+	// As New does with an empty IncludeEnvVars: the base-resource env vars are
+	// captured, and reported to nobody.
+	internalOnlyEnvVars := make(libpf.Set[libpf.String])
+	for _, name := range procmeta.EnvVarNames() {
+		internalOnlyEnvVars[libpf.Intern(name)] = libpf.Void{}
+	}
 	return &ProcessManager{
-		ebpf:              &testEbpfHandler{},
-		interpreters:      make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
-		pidToProcessInfo:  make(map[libpf.PID]*processInfo),
-		exitEvents:        make(map[libpf.PID]times.KTime),
-		metaEnrichers:     metaEnrichers,
-		resourceEnrichers: resourceEnrichers,
-		mappingFilters:    newMappingFilters(resourceEnrichers),
+		ebpf:                &testEbpfHandler{},
+		interpreters:        make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo:    make(map[libpf.PID]*processInfo),
+		exitEvents:          make(map[libpf.PID]times.KTime),
+		metaEnrichers:       metaEnrichers,
+		resourceEnrichers:   resourceEnrichers,
+		mappingFilters:      newMappingFilters(resourceEnrichers),
+		internalOnlyEnvVars: internalOnlyEnvVars,
 	}
 }
 
@@ -907,6 +914,77 @@ func TestSynchronizeProcessMergesResourceContributions(t *testing.T) {
 	_, resource = pm.metaForPID(pid)
 	require.Equal(map[string]string{"shared": "second", "only.first": "1"},
 		resourceAttrs(resource))
+}
+
+// TestSynchronizeProcessPublishesEnvVarBaseResource verifies that the attributes
+// a process's environment declares are published even when no enricher
+// contributes anything, and that a contribution wins over them on key collisions.
+func TestSynchronizeProcessPublishesEnvVarBaseResource(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	// Stand in for the env-vars meta enricher, which reads /proc/<pid>/environ.
+	envEnricher := process.MetaEnricherFunc(func(_ string, meta *process.Meta) {
+		meta.EnvVariables = map[libpf.String]libpf.String{
+			libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("from-env"),
+			libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern(
+				"deployment.environment=prod"),
+		}
+	})
+
+	// Contributes nothing, so only the base resource can account for the result.
+	silent := &testResourceEnricher{
+		enrich: func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+			return nil, false
+		},
+	}
+	pm := newTestProcessManager([]process.MetaEnricher{envEnricher},
+		[]procmeta.ResourceEnricher{silent})
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	meta, resource := pm.metaForPID(pid)
+	require.Equal(map[string]string{
+		"service.name":           "from-env",
+		"deployment.environment": "prod",
+	}, resourceAttrs(resource))
+	// Captured for the base resource, but reported to nobody: the user asked for
+	// neither of them.
+	require.Nil(meta.EnvVariables)
+
+	// A contribution overrides the key it declares, and only that one.
+	pm = newTestProcessManager([]process.MetaEnricher{envEnricher},
+		[]procmeta.ResourceEnricher{&testResourceEnricher{
+			enrich: func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+				return resourceWithAttr("service.name", "from-context"), true
+			},
+		}})
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	_, resource = pm.metaForPID(pid)
+	require.Equal(map[string]string{
+		"service.name":           "from-context",
+		"deployment.environment": "prod",
+	}, resourceAttrs(resource))
+}
+
+// TestReadProcessMetaKeepsEnricherEnvVars verifies that only the env vars captured
+// for the profiler's own use are dropped from the reported metadata: what a
+// MetaEnricher put in EnvVariables stays, listed in IncludeEnvVars or not.
+func TestReadProcessMetaKeepsEnricherEnvVars(t *testing.T) {
+	own := libpf.Intern("ENRICHER_OWN")
+	enricher := process.MetaEnricherFunc(func(_ string, meta *process.Meta) {
+		meta.EnvVariables = map[libpf.String]libpf.String{
+			libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("from-env"),
+			own:                               libpf.Intern("kept"),
+		}
+	})
+	pm := newTestProcessManager([]process.MetaEnricher{enricher}, nil)
+
+	meta, resource := pm.readProcessMeta(&testProcess{
+		pid: libpf.PID(123), exe: libpf.Intern("foobar")})
+
+	assert.Equal(t, map[libpf.String]libpf.String{own: libpf.Intern("kept")}, meta.EnvVariables)
+	assert.Equal(t, map[string]string{"service.name": "from-env"}, resourceAttrs(resource))
 }
 
 // TestSynchronizeProcessResourceEnricherState verifies that per-process enricher

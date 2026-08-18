@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -98,6 +99,21 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
+	// Keep the user-requested reporting set separate from the full capture set.
+	reportEnvVars := maps.Clone(cfg.IncludeEnvVars)
+	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
+	if includeEnvVars == nil {
+		includeEnvVars = make(libpf.Set[string])
+	}
+	// The base resource's env vars are captured for every process; those the user did
+	// not ask for are dropped again once that resource is built.
+	internalOnlyEnvVars := make(libpf.Set[libpf.String])
+	for _, name := range procmeta.EnvVarNames() {
+		includeEnvVars[name] = libpf.Void{}
+		if _, report := reportEnvVars[name]; !report {
+			internalOnlyEnvVars[libpf.Intern(name)] = libpf.Void{}
+		}
+	}
 	resourceEnrichers := slices.Clone(cfg.ResourceEnrichers)
 	mappingFilters := newMappingFilters(resourceEnrichers)
 
@@ -132,8 +148,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	if len(cfg.IncludeEnvVars) > 0 {
-		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(cfg.IncludeEnvVars))
+	if len(includeEnvVars) > 0 {
+		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
 	}
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
@@ -158,6 +174,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
+		reportEnvVars:            reportEnvVars,
+		internalOnlyEnvVars:      internalOnlyEnvVars,
 		metaEnrichers:            metaEnrichers,
 		resourceEnrichers:        resourceEnrichers,
 		mappingFilters:           mappingFilters,
