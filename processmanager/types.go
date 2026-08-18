@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	lru "github.com/elastic/go-freelru"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -19,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -133,6 +135,16 @@ type ProcessManager struct {
 
 	metaEnrichers []process.MetaEnricher
 
+	// resourceEnrichers contribute OTel resource attributes on every process
+	// synchronization. Their index is the index into processInfo.contributions
+	// and processInfo.enricherState.
+	resourceEnrichers []procmeta.ResourceEnricher
+
+	// mappingFilters holds the non-nil WantMapping filters of resourceEnrichers,
+	// in the same order, so the mapping pass can dispatch without re-reading each
+	// enricher's config. Empty when no enricher wants mappings.
+	mappingFilters []mappingFilter
+
 	// probeAttachers is the set of per-process probe attachers registered via
 	// RegisterProbeAttacher. Protected by mu.
 	probeAttachers []ProbeAttacher
@@ -169,6 +181,12 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	}
 }
 
+// mappingFilter pairs a WantMapping predicate with the enricher that declared it.
+type mappingFilter struct {
+	enricher int
+	want     func(m *process.RawMapping) bool
+}
+
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
@@ -177,6 +195,15 @@ type processInfo struct {
 	// processContext is the resolved OTel process-context snapshot.
 	// Published under ProcessManager.mu.
 	processContext processcontext.Info
+	// resource is the merge of the contributions, published under ProcessManager.mu
+	// and immutable once it is. Nil until something contributes.
+	resource *pcommon.Resource
+	// contributions holds each enricher's latest contribution, indexed by
+	// ProcessManager.resourceEnrichers. Entries are immutable once stored.
+	contributions []*pcommon.Resource
+	// enricherState holds each enricher's per-process state, indexed the same way.
+	// Dropped, with no teardown call, when the process exits.
+	enricherState []any
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

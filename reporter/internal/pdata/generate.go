@@ -85,7 +85,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
 		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars,
-			toEvents.ResourceAttrs)
+			toEvents.ResourceAttrs, toEvents.Resource)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -284,9 +284,14 @@ func (p *Pdata) setProfile(
 }
 
 func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
-	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set) {
+	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set, res *pcommon.Resource) {
+	// Explicit process-context attributes and profiler metadata take precedence
+	// over resource-enricher contributions.
+	if res != nil {
+		res.Attributes().CopyTo(dst)
+	}
 	// service.name, container.id, process.pid, process.executable.{path,name}
-	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 5)
+	dst.EnsureCapacity(dst.Len() + resourceAttrs.Len() + len(envVars) + 5)
 	for iter := resourceAttrs.Iter(); iter.Next(); {
 		kv := iter.Attribute()
 		setAttributeValue(dst.PutEmpty(string(kv.Key)), kv.Value)
