@@ -8,6 +8,7 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -18,6 +19,7 @@ type Option interface {
 type controllerOption struct {
 	executableReporter   reporter.ExecutableReporter
 	processMetaEnrichers []process.MetaEnricher
+	resourceEnrichers    []procmeta.ResourceEnricher
 	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 	onShutdown           func() error
 }
@@ -59,6 +61,19 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 func WithProcessMetaEnricher(enrichers ...process.MetaEnricher) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
+		return option
+	})
+}
+
+// WithResourceEnricher registers a hook contributing OTel resource attributes to a
+// process. Unlike WithProcessMetaEnricher it runs on every mapping
+// resynchronization, so it can supply attributes that resolve after first
+// observation: a memory region published later, a runtime whose interpreter
+// attaches. It declares what it needs through procmeta.ResourceConfig, and its
+// contribution is merged into the resource of that process's profiles.
+func WithResourceEnricher(enrichers ...procmeta.ResourceEnricher) Option {
+	return optFunc(func(option *controllerOption) *controllerOption {
+		option.resourceEnrichers = append(option.resourceEnrichers, enrichers...)
 		return option
 	})
 }
