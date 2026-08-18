@@ -21,6 +21,7 @@ type ProbeContext struct {
 	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
+	reg              ProbeRegistrar
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -225,6 +226,124 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
 }
 
+// CollectTrampolineRef describes what an external probe's eBPF entry program needs
+// in order to trigger stack collection via the provided trampoline.
+type CollectTrampolineRef struct {
+	// CtxMap is the per-CPU array map (key=int, value=u64, max_entries=1) into
+	// which the external entry program writes its payload (slot 0) before tail-calling.
+	CtxMap *cebpf.Map
+
+	// TailCallDestinationID is the kernel program ID of the loaded trampoline.
+	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
+	// can bpf_tail_call into it.
+	TailCallDestinationID uint32
+}
+
+// RegisterCollectTrampoline prepares and loads the eBPF programs and maps
+// needed for external probes trigger stack trace collection.
+func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+	const (
+		trampolineProgName = "kprobe__external"
+		ctxMapName         = "ext_probe_value"
+		originVarName      = "origin_id_probe"
+	)
+
+	originID, err := c.reg.Register(meta)
+	if err != nil {
+		return nil, fmt.Errorf("registering collect trampoline origin: %w", err)
+	}
+
+	coll, err := c.CollectionSpecWith(
+		[]string{ctxMapName},
+		[]string{trampolineProgName},
+		[]string{originVarName},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	v, ok := coll.Variables[originVarName]
+	if !ok {
+		return nil, fmt.Errorf("variable %q missing after CollectionSpecWith", originVarName)
+	}
+	if err := v.Set(originID); err != nil {
+		return nil, fmt.Errorf("set %s: %w", originVarName, err)
+	}
+
+	mapSpec, ok := coll.Maps[ctxMapName]
+	if !ok {
+		return nil, fmt.Errorf("map %q missing after CollectionSpecWith", ctxMapName)
+	}
+	ctxMap, err := cebpf.NewMap(mapSpec)
+	if err != nil {
+		return nil, fmt.Errorf("creating %s: %w", ctxMapName, err)
+	}
+
+	// Build a combined map pool: start with tracer-owned maps, then override
+	// ext_probe_value with this probe's dedicated per-probe instance.
+	// kprobe__external references both tracer-shared maps (kprobe_progs, etc.)
+	// and ext_probe_value; both must be rewritten before the program can load.
+	pool := make(map[string]*cebpf.Map, len(c.maps)+1)
+	for k, v := range c.maps {
+		if k == ".rodata.var" {
+			continue
+		}
+		pool[k] = v
+	}
+	pool[ctxMapName] = ctxMap
+
+	toRewrite := make(map[string]*cebpf.Map, len(pool))
+	for name, m := range pool {
+	rewriteOuter:
+		for _, progSpec := range coll.Programs {
+			for _, ins := range progSpec.Instructions {
+				if ins.Reference() == name {
+					toRewrite[name] = m
+					break rewriteOuter
+				}
+			}
+		}
+	}
+	if err := rewriteMaps(coll, toRewrite); err != nil {
+		ctxMap.Close()
+		return nil, err
+	}
+
+	ebpfProgs := make(map[string]*cebpf.Program)
+	if err := c.LoadProbeUnwinders(coll, ebpfProgs, []ProgLoaderHelper{
+		{
+			Name:             trampolineProgName,
+			NoTailCallTarget: true,
+			Enable:           true,
+		},
+	}, 0); err != nil {
+		ctxMap.Close()
+		return nil, err
+	}
+
+	prog, ok := ebpfProgs[trampolineProgName]
+	if !ok {
+		ctxMap.Close()
+		return nil, fmt.Errorf("program %q not found after loading", trampolineProgName)
+	}
+
+	info, err := prog.Info()
+	if err != nil {
+		ctxMap.Close()
+		return nil, fmt.Errorf("querying trampoline program info: %w", err)
+	}
+	progID, ok := info.ID()
+	if !ok {
+		ctxMap.Close()
+		return nil, fmt.Errorf("trampoline program ID not available")
+	}
+
+	return &CollectTrampolineRef{
+		CtxMap:                ctxMap,
+		TailCallDestinationID: uint32(progID),
+	}, nil
+}
+
 // AddLink registers a global link to be stored and closed by the tracer on shutdown.
 // Use this for system-wide hooks, like kprobes, perf events and tracepoints.
 func (c *ProbeContext) AddLink(lnk link.Link) {
@@ -268,6 +387,7 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
+		reg:     t.origins,
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},
