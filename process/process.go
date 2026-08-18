@@ -115,14 +115,8 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 func (sp *systemProcess) GetProcessMeta(enrichers []MetaEnricher) Meta {
 	exePath, _ := sp.GetExe()
 
-	containerID, err := extractContainerID(sp.pid)
-	if err != nil {
-		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
-	}
-
 	pMeta := Meta{
-		Executable:  exePath,
-		ContainerID: containerID,
+		Executable: exePath,
 	}
 
 	for _, e := range enrichers {
@@ -161,17 +155,6 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 	return libpf.NullString
 }
 
-// extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
-func extractContainerID(pid libpf.PID) (libpf.String, error) {
-	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return libpf.NullString, err
-	}
-	defer cgroupFile.Close()
-
-	return parseContainerID(cgroupFile), nil
-}
-
 // cgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
 func cgroupRootInode(procBase string) (uint64, error) {
@@ -204,18 +187,50 @@ func NewEnvVarsEnricher(includeEnvVars libpf.Set[string]) MetaEnricher {
 	})
 }
 
-// NewSelfContainerIDEnricher returns a MetaEnricher that sets the container ID on
+// NewContainerIDEnricher returns a MetaEnricher that sets the container ID from the
+// process's cgroup file, falling back to the profiler's own container ID via inode
+// matching when cgroup-based detection returns no result.
+func NewContainerIDEnricher() MetaEnricher {
+	// Detect once at construction time; reused for every process.
+	selfEnricher, err := newSelfContainerIDEnricher()
+	if err != nil {
+		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	}
+
+	return MetaEnricherFunc(func(procBase string, meta *Meta) {
+		cgroupFile, err := os.Open(filepath.Join(procBase, "cgroup"))
+		if err != nil {
+			log.Debugf("Failed extracting containerID in cgroup file %s: %v", procBase, err)
+			meta.ContainerID = libpf.NullString
+			return
+		}
+		defer cgroupFile.Close()
+
+		meta.ContainerID = parseContainerID(cgroupFile)
+
+		if meta.ContainerID != libpf.NullString {
+			return
+		}
+
+		// Fallback: use profiler's own container ID if the process shares its cgroup root.
+		if selfEnricher != nil {
+			selfEnricher.EnrichMeta(procBase, meta)
+		}
+	})
+}
+
+// newSelfContainerIDEnricher returns a MetaEnricher that sets the container ID on
 // Meta when the process shares the profiler's cgroup root and standard cgroup-based
 // detection returned no result. The profiler's own container ID is detected once at
 // construction time and reused for every subsequent process. If detection fails the
 // returned enricher is a no-op.
-func NewSelfContainerIDEnricher() (MetaEnricher, error) {
+func newSelfContainerIDEnricher() (MetaEnricher, error) {
 	selfContainerID, selfCgroupIno, err := detectSelfContainerIDViaInode()
 	if err != nil {
 		return nil, err
 	}
 	return MetaEnricherFunc(func(procBase string, meta *Meta) {
-		if meta.ContainerID != libpf.NullString || selfContainerID == libpf.NullString {
+		if selfContainerID == libpf.NullString {
 			return
 		}
 		ino, err := cgroupRootInode(procBase)

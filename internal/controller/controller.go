@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -78,14 +77,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
-	envVars := libpf.Set[string]{}
-	for envVar := range strings.SplitSeq(c.config.IncludeEnvVars, ",") {
-		envVar = strings.TrimSpace(envVar)
-		if envVar != "" {
-			envVars[envVar] = libpf.Void{}
-		}
-	}
-
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:           c.reporter,
@@ -103,7 +94,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticInterval:   c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
 		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
-		IncludeEnvVars:          envVars,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,

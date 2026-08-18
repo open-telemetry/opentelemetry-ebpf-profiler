@@ -69,7 +69,6 @@ type Config struct {
 	KernelSymbolizer      *kallsyms.Symbolizer
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
-	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
 }
 
@@ -113,19 +112,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	if len(cfg.IncludeEnvVars) > 0 {
-		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(cfg.IncludeEnvVars))
-	}
-
-	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
-	if err != nil {
-		log.Debugf("Failed to detect self container ID via inode: %v", err)
-	} else {
-		metaEnrichers = append(metaEnrichers, selfContainerEnricher)
-	}
-	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
-
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
@@ -140,7 +126,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		metaEnrichers:            metaEnrichers,
+		metaEnrichers:            cfg.ProcessMetaEnrichers,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
