@@ -120,8 +120,10 @@ lint: generate vanity-import-check pprof-execs
 	# is no output (no violations). Inverting makes the recipe fail on violations and pass when clean.
 	! go tool $(GO_TOOLS) lll --maxlength 100 --tabwidth 4 --goonly --skiplist LICENSES types_def.go --exclude='https?://|0x[0-9a-fA-F]{2,}|`name:"[^"]{50,}"|^package .+ // import|metrics\.MetricValue|//lint:ignore' . | grep .
 	# modernize also reports rewrite suggestions for files it generates under GOCACHE; filter those
-	# out so only violations in the actual source tree cause a failure.
-	! CGO_ENABLED=1 go tool $(GO_TOOLS) modernize -importcomment=false ./... 2>&1 | grep -v "^$$(go env GOCACHE)/" | grep .
+	# out so only violations in the actual source tree cause a failure. The 2>&1 captures stderr so
+	# modernize's diagnostics are not lost, but "go: downloading ..." lines emitted on a cold module
+	# cache would pass through and trigger a false failure, so filter those out too.
+	! CGO_ENABLED=1 go tool $(GO_TOOLS) modernize -importcomment=false ./... 2>&1 | grep -v "^go: " | grep -v "^$$(go env GOCACHE)/" | grep .
 	CGO_ENABLED=1 go tool $(GO_TOOLS) staticcheck ./...
 
 format: format-go format-ebpf
