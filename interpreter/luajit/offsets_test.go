@@ -100,7 +100,7 @@ func TestOffsets(t *testing.T) {
 				require.NoError(t, err)
 
 				// Test that our chicanery for finding traceinfo checks out on symbolized builds.
-				if ti, ok := od.foundSymbols["lj_cf_jit_util_traceinfo"]; ok {
+				if ti, ok := od.foundSymbols[ljCFJitUtilTraceinfoSym]; ok {
 					ti2, err := od.findTraceInfoFromLuaOpen()
 					require.NoError(t, err)
 					require.Equal(t, ti.Address, ti2.Address)

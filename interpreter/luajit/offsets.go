@@ -15,14 +15,23 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
+const (
+	ljVMAsmBeginSym         libpf.SymbolName = "lj_vm_asm_begin"
+	jitChecktraceSym        libpf.SymbolName = "jit_checktrace"
+	ljCFJitUtilTraceinfoSym libpf.SymbolName = "lj_cf_jit_util_traceinfo"
+	luaPushCClosureSym      libpf.SymbolName = "lua_pushcclosure"
+	luaopenJitSym           libpf.SymbolName = "luaopen_jit"
+	luaCloseSym             libpf.SymbolName = "lua_close"
+)
+
 func scanSymbols(ef *pfelf.File) map[libpf.SymbolName]libpf.Symbol {
 	interestingSymbols := map[libpf.SymbolName]struct{}{
-		"lj_vm_asm_begin":          {},
-		"jit_checktrace":           {},
-		"lj_cf_jit_util_traceinfo": {},
-		"lua_pushcclosure":         {},
-		"luaopen_jit":              {},
-		"lua_close":                {},
+		ljVMAsmBeginSym:         {},
+		jitChecktraceSym:        {},
+		ljCFJitUtilTraceinfoSym: {},
+		luaPushCClosureSym:      {},
+		luaopenJitSym:           {},
+		luaCloseSym:             {},
 	}
 
 	foundSymbols := map[libpf.SymbolName]libpf.Symbol{}
@@ -109,7 +118,7 @@ func extractOffsets(ef *pfelf.File, ljd *luajitData, ir util.Range) error {
 	ljd.g2Dispatch = uint16(g2dispatch)
 
 	// If we have symbols we can check that the start address is correct.
-	if s, ok := oft.foundSymbols["lj_vm_asm_begin"]; ok && ir.Start != uint64(s.Address) {
+	if s, ok := oft.foundSymbols[ljVMAsmBeginSym]; ok && ir.Start != uint64(s.Address) {
 		return fmt.Errorf("lj: unexpected start address %x, expected %x", s.Address, ir.Start)
 	}
 
@@ -197,7 +206,7 @@ func (o *offsetData) init(ef *pfelf.File) error {
 
 	o.foundSymbols = scanSymbols(ef)
 	// Two extractors use luaopen_jit so cache it.
-	b, addr, err := o.readSymByName("luaopen_jit")
+	b, addr, err := o.readSymByName(luaopenJitSym)
 	if err != nil {
 		return err
 	}
@@ -207,7 +216,7 @@ func (o *offsetData) init(ef *pfelf.File) error {
 }
 
 func (o *offsetData) findCurLOffset() (uint16, error) {
-	b, _, err := o.readSymByName("lua_close")
+	b, _, err := o.readSymByName(luaCloseSym)
 	if err != nil {
 		return 0, err
 	}
@@ -248,7 +257,7 @@ func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 	}
 
 	// jit_checktrace could be inlined or we could be dealing with a stripped binary
-	if sym, ok := o.foundSymbols["lj_cf_jit_util_traceinfo"]; ok {
+	if sym, ok := o.foundSymbols[ljCFJitUtilTraceinfoSym]; ok {
 		// Inline case
 		b, er := o.readSym(sym)
 		if er != nil {
@@ -303,7 +312,7 @@ func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
 // which will be an argument to lj_lib_register.  Finally the lj_cf_jit_util_traceinfo function
 // will be the 4th element of that array.
 func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
-	pushCClosure, ok := o.foundSymbols["lua_pushcclosure"]
+	pushCClosure, ok := o.foundSymbols[luaPushCClosureSym]
 	if !ok {
 		return nil, libpf.ErrSymbolNotFound
 	}
@@ -377,7 +386,7 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	}
 
 	return &libpf.Symbol{
-		Name:    "lj_cf_jit_util_traceinfo",
+		Name:    ljCFJitUtilTraceinfoSym,
 		Address: libpf.SymbolValue(traceInfoAddr),
 		Size:    traceInfoSize}, nil
 }
@@ -395,8 +404,8 @@ func (o *offsetData) readSym(sym libpf.Symbol) ([]byte, error) {
 }
 
 //nolint:gocritic
-func (o *offsetData) readSymByName(name string) ([]byte, int64, error) {
-	sym, ok := o.foundSymbols[libpf.SymbolName(name)]
+func (o *offsetData) readSymByName(name libpf.SymbolName) ([]byte, int64, error) {
+	sym, ok := o.foundSymbols[name]
 	if !ok {
 		return nil, 0, libpf.ErrSymbolNotFound
 	}
