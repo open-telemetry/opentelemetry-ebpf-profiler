@@ -14,8 +14,6 @@ import (
 	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/kallsyms"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -105,10 +103,7 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 		return fmt.Errorf("tracepoint__sched_switch program not found after loading")
 	}
 
-	syms, err := finishTaskSwitchSymbols()
-	if err != nil {
-		return fmt.Errorf("looking up finish_task_switch symbols: %w", err)
-	}
+	syms := probeCtx.KernelModule.LookupSymbolsByPrefix("finish_task_switch")
 	if len(syms) == 0 {
 		return fmt.Errorf("no finish_task_switch symbols found in /proc/kallsyms")
 	}
@@ -129,20 +124,6 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 	probeCtx.AddLink(tpLink)
 
 	return nil
-}
-
-// finishTaskSwitchSymbols returns all kernel symbols whose name starts with
-// "finish_task_switch" by loading a fresh kallsyms snapshot.
-func finishTaskSwitchSymbols() ([]*libpf.Symbol, error) {
-	s, err := kallsyms.NewSymbolizer()
-	if err != nil {
-		return nil, err
-	}
-	kmod, err := s.Snapshot().GetModuleByName(kallsyms.Kernel)
-	if err != nil {
-		return nil, err
-	}
-	return kmod.LookupSymbolsByPrefix("finish_task_switch"), nil
 }
 
 // schedTimesSize calculates the size of the sched_times map based on the
