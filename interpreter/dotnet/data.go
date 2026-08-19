@@ -112,6 +112,10 @@ type dotnetCdac struct {
 			Flags                   uint
 			SizeOf                  uint `json:"!"`
 		}
+		// https://github.com/dotnet/runtime/blob/v9.0.0/src/coreclr/debug/runtimeinfo/datadescriptor.h#L332-L335
+		DynamicMethodDesc struct {
+			MethodName uint
+		}
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/method.hpp#L2163
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/method.hpp#L2344
 		MethodDescChunk struct {
