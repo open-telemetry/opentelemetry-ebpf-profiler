@@ -22,7 +22,7 @@ type ProbeContext struct {
 	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
-	KernelModule *kallsyms.Module
+	KernelModule     *kallsyms.Module
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
