@@ -95,6 +95,10 @@ type Tracer struct {
 	// ebpfProgs holds the currently loaded eBPF programs.
 	ebpfProgs map[string]*cebpf.Program
 
+	// monitorsStop stops and waits for the StartMapMonitors goroutines that
+	// use ebpfMaps, called by Close() before closing ebpfMaps/ebpfProgs.
+	monitorsStop []func()
+
 	// kernelSymbolizer does kernel fallback symbolization
 	kernelSymbolizer *kallsyms.Symbolizer
 
@@ -345,6 +349,27 @@ func (t *Tracer) Close() {
 		delete(h.m, hp)
 	}
 	t.hooks.WUnlock(&h)
+
+	// Stop the StartMapMonitors goroutines and wait for them to exit before
+	// touching the maps/programs they use.
+	for _, stop := range t.monitorsStop {
+		stop()
+	}
+	t.monitorsStop = nil
+
+	// Close the eBPF maps and programs still referenced by this Tracer.
+	for name, m := range t.ebpfMaps {
+		if err := m.Close(); err != nil {
+			log.Errorf("Failed to close map %q: %v", name, err)
+		}
+		delete(t.ebpfMaps, name)
+	}
+	for name, p := range t.ebpfProgs {
+		if err := p.Close(); err != nil {
+			log.Errorf("Failed to close program %q: %v", name, err)
+		}
+		delete(t.ebpfProgs, name)
+	}
 
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
@@ -1157,7 +1182,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	}
 
 	pidEvents := make([]libpf.PIDTID, 0)
-	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
+	stopPIDMonitor := periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMap(&pidEvents)
@@ -1185,12 +1210,16 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	// calculate and store delta values.
 	previousMetricValue := make([]metrics.MetricValue, len(translateIDs))
 
-	periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
+	stopMetricsMonitor := periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
 		metrics.AddSlice(eventMetricCollector())
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 		metrics.AddSlice(t.customLabels.getAndResetMetrics())
 	})
+
+	// Both goroutines read t.ebpfMaps on every tick; Close() must wait for
+	// them to exit before closing those maps.
+	t.monitorsStop = append(t.monitorsStop, stopPIDMonitor, stopMetricsMonitor)
 
 	return nil
 }
