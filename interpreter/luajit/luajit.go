@@ -11,8 +11,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
-type luajitData struct {
-}
+type luajitData struct{}
 
 type luajitInstance struct {
 	interpreter.InstanceStubs
@@ -24,7 +23,8 @@ var (
 )
 
 func (d *luajitData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	return &luajitInstance{}, nil
 }
 

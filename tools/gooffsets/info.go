@@ -71,7 +71,8 @@ func ReadField(e *dwarf.Entry, key dwarf.Attr) any {
 }
 
 func readType(r *dwarf.Reader, e *dwarf.Entry,
-	seen map[dwarf.Offset]struct{}) (*dwarf.Entry, error) {
+	seen map[dwarf.Offset]struct{},
+) (*dwarf.Entry, error) {
 	offset := e.Offset
 	if _, found := seen[offset]; found {
 		return nil, fmt.Errorf("infinite loop detected at %d", offset)

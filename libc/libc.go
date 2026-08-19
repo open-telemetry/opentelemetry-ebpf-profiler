@@ -12,8 +12,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-type TSDInfo = support.TSDInfo
-type DTVInfo = support.DTVInfo
+type (
+	TSDInfo = support.TSDInfo
+	DTVInfo = support.DTVInfo
+)
 
 // LibcInfo contains introspection information extracted from the C-library
 type LibcInfo struct {
@@ -55,10 +57,8 @@ func (l LibcInfo) HasDTVInfo() bool {
 	return l.DTVInfo.Multiplier != 0
 }
 
-var (
-	// regex for the libc
-	libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)
-)
+// regex for the libc
+var libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)
 
 // IsPotentialLibcDSO determines if the DSO filename potentially contains libc code
 func IsPotentialLibcDSO(filename string) bool {

@@ -3,9 +3,13 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-type APMSpanID [8]byte
-type APMTraceID [16]byte
-type APMTransactionID = APMSpanID
+type (
+	APMSpanID        [8]byte
+	APMTraceID       [16]byte
+	APMTransactionID = APMSpanID
+)
 
-var InvalidAPMSpanID = APMSpanID{0, 0, 0, 0, 0, 0, 0, 0}
-var InvalidAPMTraceID = APMTraceID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+var (
+	InvalidAPMSpanID  = APMSpanID{0, 0, 0, 0, 0, 0, 0, 0}
+	InvalidAPMTraceID = APMTraceID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+)

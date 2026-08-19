@@ -419,7 +419,7 @@ func getString(section []byte, start int) (string, bool) {
 type NoMmapCloser libpf.Void
 
 // Close implements io.Closer interface.
-func (_ NoMmapCloser) Close() error {
+func (NoMmapCloser) Close() error {
 	return nil
 }
 
@@ -761,7 +761,8 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 // bitmask and provides the relocation and symbol name to the visitor. The
 // visitor can return false to stop iteration.
 func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
-	relTypes RelocType) error {
+	relTypes RelocType,
+) error {
 	var classify func(ElfReloc) RelocType
 	switch f.Machine {
 	case elf.EM_AARCH64:

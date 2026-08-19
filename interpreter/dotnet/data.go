@@ -28,12 +28,12 @@ import (
 // https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/contract-descriptor.md
 type dotnetCdacHeader struct {
 	magic     uint64
-	flags     uint32
+	flags     uint32 //lint:ignore U1000 binary layout field
 	descrSize uint32
 	descrPtr  uint64
-	dataCount uint32
-	pad0      uint32
-	dataPtr   uint64
+	dataCount uint32 //lint:ignore U1000 binary layout field
+	pad0      uint32 //lint:ignore U1000 binary layout field
+	dataPtr   uint64 //lint:ignore U1000 binary layout field
 }
 
 // globalVar is a helper type to decode a Global definition from CDAC JSON contract
@@ -241,7 +241,9 @@ func (i *dotnetInstance) UsesAnonymousMappings() bool {
 	return true
 }
 
-func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address) (dotnetCdac, error) {
+func (d *dotnetData) newVMData(
+	rm remotememory.RemoteMemory, bias libpf.Address,
+) (dotnetCdac, error) {
 	cdac := dotnetCdac{}
 	vms := &cdac.Types
 
@@ -346,7 +348,8 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 
 	if d.cdacDescAddr != libpf.SymbolValueInvalid {
 		var hdr dotnetCdacHeader
-		if err := rm.Read(libpf.Address(d.cdacDescAddr)+bias, pfunsafe.FromPointer(&hdr)); err != nil {
+		if err := rm.Read(libpf.Address(d.cdacDescAddr)+bias,
+			pfunsafe.FromPointer(&hdr)); err != nil {
 			return dotnetCdac{}, err
 		}
 		if hdr.magic != 0x0043414443434e44 || hdr.descrSize > 64*1024 {
@@ -392,8 +395,9 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 	}
 
 	// Calculated masks
-	cdac.calculated.MethodDescTokenRemainderMask = (1 << cdac.Globals.MethodDescTokenRemainderBitCount) - 1
-	cdac.calculated.MethodDescChunkTokenRangeMask = (1 << (24 - cdac.Globals.MethodDescTokenRemainderBitCount)) - 1
+	remainderBits := cdac.Globals.MethodDescTokenRemainderBitCount
+	cdac.calculated.MethodDescTokenRemainderMask = (1 << remainderBits) - 1
+	cdac.calculated.MethodDescChunkTokenRangeMask = (1 << (24 - remainderBits)) - 1
 
 	return cdac, nil
 }

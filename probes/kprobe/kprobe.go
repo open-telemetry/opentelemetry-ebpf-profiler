@@ -52,7 +52,8 @@ func New(cfg Config) (*probe, error) {
 		return nil, err
 	}
 
-	if (probeMode == tracer.ProbeModeUprobe || probeMode == tracer.ProbeModeUretprobe) && cfg.Target == "" {
+	isUprobe := probeMode == tracer.ProbeModeUprobe || probeMode == tracer.ProbeModeUretprobe
+	if isUprobe && cfg.Target == "" {
 		return nil, fmt.Errorf("kprobe: target is required for %s", cfg.Mode)
 	}
 
@@ -75,11 +76,14 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	case "uretprobe":
 		return tracer.ProbeModeUretprobe, nil
 	default:
-		return 0, fmt.Errorf("unknown probe type %q: must be kprobe, kretprobe, uprobe, or uretprobe", s)
+		return 0, fmt.Errorf(
+			"unknown probe type %q: must be kprobe, kretprobe, uprobe, or uretprobe", s)
 	}
 }
 
-func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
+func (g *probe) Load(
+	_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext,
+) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",

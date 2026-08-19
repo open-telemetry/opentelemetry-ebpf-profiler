@@ -512,7 +512,8 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
 		// [speculations]	@ _immutable_data + nmethod._speculations_offset
 		// [end]		    @ _immutable_data + nmethod._immutable_data_size
-		// [end]            @ _immutable_data + min(_immutable_data_size, _immutable_data_ref_count_offset)  (JDK 26+)
+		// [end]            @ _immutable_data + min(_immutable_data_size,
+		//                   _immutable_data_ref_count_offset) (JDK 26+)
 		// ...
 		// speculations presence depends on JDK build, and is not used. Instead the scopes
 		// end is determined from immutable data size.
@@ -527,7 +528,8 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 			metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
 				npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
 			metadataPtr = addr + metadataOff
-			// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
+			// Actually the metadata only spans to `_jvmci_data_offset`,
+			// but that field isn't exposed
 			// through VMstructs, and the codeblob size is the next boundary after that.
 			metadataSize = npsr.PtrDiff32(nmethod, vms.CodeBlob.Size) - metadataOff
 		}
@@ -885,7 +887,9 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
 // process address and translates it to decorated frames expanding any inlined
 // frames to multiple new frames.
-func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (d *hotspotInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.HotSpot) {
 		return interpreter.ErrMismatchInterpreterType
 	}

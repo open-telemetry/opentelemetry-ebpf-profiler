@@ -15,7 +15,8 @@ import (
 )
 
 func assertSymbol(t *testing.T, s *Symbolizer, pc libpf.Address,
-	eModName, eFuncName string, eOffset uint) {
+	eModName, eFuncName string, eOffset uint,
+) {
 	kmod, err := s.Snapshot().GetModuleByAddress(pc)
 	if assert.NoError(t, err) && assert.Equal(t, kmod.Name(), eModName) {
 		funcName, offset, err := kmod.LookupSymbolByAddress(pc)
@@ -186,5 +187,4 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`)
 			b.Fail()
 		}
 	}
-
 }

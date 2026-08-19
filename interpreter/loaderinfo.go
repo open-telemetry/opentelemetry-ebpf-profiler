@@ -25,7 +25,9 @@ type LoaderInfo struct {
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, intervals *sdtypes.IntervalData) *LoaderInfo {
+func NewLoaderInfo(
+	fileID host.FileID, elfRef *pfelf.Reference, intervals *sdtypes.IntervalData,
+) *LoaderInfo {
 	return &LoaderInfo{
 		fileID:    fileID,
 		elfRef:    elfRef,
@@ -49,9 +51,11 @@ func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]util.Range, e
 		return nil, fmt.Errorf("symbol '%v' not found: %w", symbol, err)
 	}
 	start := uint64(sym.Address)
-	return []util.Range{{
-		Start: start,
-		End:   start + sym.Size},
+	return []util.Range{
+		{
+			Start: start,
+			End:   start + sym.Size,
+		},
 	}, nil
 }
 

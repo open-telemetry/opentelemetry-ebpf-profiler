@@ -96,7 +96,6 @@ type hotspotVMData struct {
 	// C++ class  and thus the expected value of .Sizeof member. This is mainly to
 	// indicate the classes for which uint8 is not enough to hold the offset values
 	// for the eBPF code.
-	//nolint:lll
 	vmStructs struct {
 		AbstractVMVersion struct {
 			Release         libpf.Address `name:"_s_vm_release"`
@@ -366,18 +365,18 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 	// Each function has four symbols: source filename, class name,
 	// method name and signature. However, most of them are shared across
 	// different methods, so assume about 2 unique symbols per function.
-	addrToSymbol, err := freelru.New[libpf.Address, libpf.String](2*interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToSymbol, err := freelru.New[libpf.Address, libpf.String](
+		2*interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
-	addrToMethod, err := freelru.New[libpf.Address, *hotspotMethod](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToMethod, err := freelru.New[libpf.Address, *hotspotMethod](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
-	addrToJITInfo, err := freelru.New[libpf.Address, *hotspotJITInfo](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToJITInfo, err := freelru.New[libpf.Address, *hotspotJITInfo](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -414,8 +413,6 @@ func (i *hotspotInstance) UsesAnonymousMappings() bool {
 //
 // https://github.com/openjdk/jdk/blob/jdk-9%2B181/hotspot/src/share/vm/jvmci/vmStructs_jvmci.cpp#L48
 // https://github.com/openjdk/jdk/blob/jdk-22%2B10/src/hotspot/share/jvmci/vmStructs_jvmci.cpp#L49
-//
-//nolint:lll
 func locateJvmciVMStructs(ef *pfelf.File) (libpf.Address, error) {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)

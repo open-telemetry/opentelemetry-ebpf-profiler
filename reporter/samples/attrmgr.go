@@ -43,7 +43,9 @@ type AttrTableManager struct {
 	attrTable pprofile.KeyValueAndUnitSlice
 }
 
-func NewAttrTableManager(strSet orderedset.OrderedSet[string], attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
+func NewAttrTableManager(
+	strSet orderedset.OrderedSet[string], attrTable pprofile.KeyValueAndUnitSlice,
+) *AttrTableManager {
 	return &AttrTableManager{
 		indices:   make(map[string]int32),
 		strSet:    strSet,

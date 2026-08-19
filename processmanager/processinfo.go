@@ -80,7 +80,7 @@ func (pm *ProcessManager) assignLibcInfo(pid libpf.PID, libcInfo *libc.LibcInfo)
 		return
 	}
 
-	var newLibcInfo = *libcInfo
+	newLibcInfo := *libcInfo
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		// This is guaranteed not to happen since assignLibcInfo is always called after
@@ -123,7 +123,8 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 // Returns nil on failure.
 // Caller must not hold the pm.mu lock.
 func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
-	pr process.Process) *processInfo {
+	pr process.Process,
+) *processInfo {
 	pm.mu.RLock()
 	info, ok := pm.pidToProcessInfo[pid]
 	pm.mu.RUnlock()
@@ -195,7 +196,8 @@ func (pm *ProcessManager) updatePIDAnonymousMappingInterest(pid libpf.PID, enabl
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 // Returns the updated anonymous executable mapping interest state for the PID.
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool) (bool, error) {
+	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool,
+) (bool, error) {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
@@ -359,7 +361,8 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 // Caller is responsible to hold pm.mu write lock to avoid race conditions.
 // Returns whether any remaining interpreter uses anonymous executable mappings.
 func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
-	interpretersValid libpf.Set[util.OnDiskFileIdentifier]) bool {
+	interpretersValid libpf.Set[util.OnDiskFileIdentifier],
+) bool {
 	if !pm.interpreterTracerEnabled {
 		return false
 	}
@@ -688,7 +691,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			if !fm.Valid() {
 				newMapping = true
 				// Error is expected for non-ELF files (e.g. PE DLL);
-				// fm will be invalid and the mapping skipped below but will enter the interpreter mappings block.
+				// fm will be invalid and the mapping skipped below but will enter
+				// the interpreter mappings block.
 				previouslyCollectingInterpreterMappings := collectAnonymousMappings
 				fm, collectAnonymousMappings, _ = pm.newFrameMapping(
 					pr, &m, collectAnonymousMappings)
@@ -807,7 +811,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Synchronize all interpreters with updated mappings
 	for _, instance := range interpreters {
-		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
+		err := instance.SynchronizeMappings(
+			pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
 		if err != nil {
 			if alive, _ := isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
@@ -874,7 +879,8 @@ func (pm *ProcessManager) metaForPID(pid libpf.PID) process.Meta {
 
 // findMappingForTrace locates the mapping for a given host trace.
 func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
-	addr libpf.Address) libpf.FrameMapping {
+	addr libpf.Address,
+) libpf.FrameMapping {
 	var maps []Mapping
 
 	pm.mu.RLock()
@@ -949,10 +955,14 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	}
 }
 
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
+func readProcessContext(
+	mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info,
+) processcontext.Info {
+	// Workaround to fix a CodeQL warning about potential for integer overflow
+	// when converting from uint64 to uintptr (libpf.Address).
 	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
+	ctxInfo, err := processcontext.Read(
+		addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
 	if err == nil {
 		return ctxInfo
 	}
@@ -960,7 +970,8 @@ func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContex
 		return oldProcessContextInfo
 	}
 	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
+		// If the context cannot be read because of a concurrent update,
+		// keep the resource and thread context since they are immutable,
 		// but discard the extra attributes as they may be stale.
 		oldProcessContextInfo.ClearAttributes()
 		return oldProcessContextInfo

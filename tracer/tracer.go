@@ -275,12 +275,15 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	origins := &originRegistry{}
 	var sysConfigVars SysConfigVars
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, origins, &sysConfigVars)
+	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(
+		kmod, cfg, origins, &sysConfigVars,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(
+		ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
@@ -664,7 +667,8 @@ func probeNoPrealloc() bool {
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map) error {
+	ebpfMaps map[string]*cebpf.Map,
+) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -996,7 +1000,8 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("Failed to batch lookup and delete entries from pid_events map: %v", err)
+			return fmt.Errorf(
+				"failed to batch lookup and delete entries from pid_events map: %v", err)
 		}
 	}
 

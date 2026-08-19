@@ -33,7 +33,8 @@ type CoredumpProcess struct {
 	// pid is the original PID from which the coredump was generated.
 	pid libpf.PID
 
-	// fname is the the short name of the executable file that was running when the coredump was generated.
+	// fname is the short name of the executable file that was running when the coredump was
+	// generated.
 	fname libpf.String
 
 	// machineData contains the parsed machine data.
@@ -304,7 +305,8 @@ type FileMappingEntry64 struct {
 
 // parseMappings processes a CORE/NT_FILE note with the description of memory mappings.
 func (cd *CoredumpProcess) parseMappings(desc []byte,
-	vaddrToMappings map[uint64]vaddrMappings) error {
+	vaddrToMappings map[uint64]vaddrMappings,
+) error {
 	hdrSize := uint64(unsafe.Sizeof(FileMappingHeader64{}))
 	entrySize := uint64(unsafe.Sizeof(FileMappingEntry64{}))
 

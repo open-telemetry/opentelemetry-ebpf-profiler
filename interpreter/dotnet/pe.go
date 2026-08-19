@@ -48,7 +48,7 @@ const (
 	// imageFileMachineDotnetX64 is an undocumented machine type seen in dotnet-internal x64 DLLs.
 	imageFileMachineDotnetX64 = 0xfd1d
 
-	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal ARM64 DLLs.
+	// imageFileMachineDotnetARM64 is an undocumented machine type in dotnet-internal ARM64 DLLs.
 	imageFileMachineDotnetARM64 = 0xd11d
 
 	// TTL of entries in the LRU cache holding the .NET strings.
@@ -530,7 +530,8 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevRVA := uint32(0)
 
 	stride := int64(r2rRuntimeFunctionSize)
-	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
+	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 ||
+		pp.nt.Machine == imageFileMachineDotnetARM64 {
 		stride = int64(r2rRuntimeFunctionSizeARM64)
 	}
 
@@ -737,7 +738,8 @@ func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 // out-of-bounds, read errors, empty strings) are not cached so a transient
 // read failure does not poison the entry permanently.
 func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uint64,
-	offs uint32) libpf.String {
+	offs uint32,
+) libpf.String {
 	if offs == 0 || offs >= pi.stringsHeapSize {
 		return libpf.NullString
 	}
@@ -966,21 +968,27 @@ func (pp *peParser) parseTables() error {
 	pp.indexSizes[indexHasConstant] = pp.getIndexSize(2,
 		[]uint{tableField, tableParam, tableProperty})
 	pp.indexSizes[indexHasCustomAttribute] = pp.getIndexSize(5,
-		[]uint{tableMethodDef, tableField, tableTypeRef, tableTypeDef, tableParam,
+		[]uint{
+			tableMethodDef, tableField, tableTypeRef, tableTypeDef, tableParam,
 			tableInterfaceImpl, tableMemberRef, tableModule, tableDeclSecurity,
 			tableProperty, tableEvent, tableStandAloneSig, tableModuleRef,
 			tableTypeSpec, tableAssembly, tableAssemblyRef, tableFile, tableExportedType,
 			tableManifestResource, tableGenericParam, tableGenericParamConstraint,
-			tableMethodSpec})
+			tableMethodSpec,
+		})
 	pp.indexSizes[indexCustomAttributeType] = pp.getIndexSize(3,
 		[]uint{tableMethodDef, tableMemberRef})
 	pp.indexSizes[indexHasFieldMarshal] = pp.getIndexSize(1, []uint{tableField, tableParam})
-	pp.indexSizes[indexHasDeclSecurity] = pp.getIndexSize(2, []uint{tableTypeDef, tableMethodDef,
-		tableAssembly})
+	pp.indexSizes[indexHasDeclSecurity] = pp.getIndexSize(2, []uint{
+		tableTypeDef, tableMethodDef,
+		tableAssembly,
+	})
 	pp.indexSizes[indexHasSemantics] = pp.getIndexSize(1, []uint{tableEvent, tableProperty})
 	pp.indexSizes[indexMemberForwarded] = pp.getIndexSize(1, []uint{tableField, tableMethodDef})
-	pp.indexSizes[indexImplementation] = pp.getIndexSize(2, []uint{tableFile, tableAssemblyRef,
-		tableExportedType})
+	pp.indexSizes[indexImplementation] = pp.getIndexSize(2, []uint{
+		tableFile, tableAssemblyRef,
+		tableExportedType,
+	})
 
 	pp.indexSizes[indexTypeDef] = pp.getIndexSize(0, []uint{tableTypeDef})
 	pp.indexSizes[indexField] = pp.getIndexSize(0, []uint{tableField})
@@ -1235,7 +1243,8 @@ func (pp *peParser) parse() error {
 }
 
 func (pi *peInfo) resolveMethodName(methodIdx uint32,
-	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64,
+) libpf.String {
 	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
 		return pi.typeSpecs[idx].methodIdx > methodIdx
 	}) - 1
@@ -1265,7 +1274,8 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32,
 }
 
 func (pi *peInfo) resolveR2RMethodName(pcRVA uint32,
-	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64,
+) libpf.String {
 	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
 		func(methodspec peMethodSpec, pcRVA uint32) int {
 			if pcRVA < methodspec.startRVA {

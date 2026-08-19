@@ -45,8 +45,10 @@ type goInstance struct {
 	failCount    atomic.Uint64
 }
 
-var errDecodeSymbol = errors.New("failed to decode symbol")
-var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
+var (
+	errDecodeSymbol            = errors.New("failed to decode symbol")
+	errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
+)
 
 func (d *goData) unref() {
 	if d.pclntab == nil {
@@ -62,7 +64,8 @@ func (d *goData) String() string {
 }
 
 func (d *goData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	_ libpf.Address, _ remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	if err := ebpf.UpdateProcData(libpf.Go, pid, unsafe.Pointer(&d.offsets)); err != nil {
 		return nil, err
 	}
@@ -84,7 +87,8 @@ func (d *goData) Unload(_ interpreter.EbpfHandler) {
 
 func GetLoader(cfg Config) interpreter.Loader {
 	return func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
-		interpreter.Data, error) {
+		interpreter.Data, error,
+	) {
 		return loader(cfg, info)
 	}
 }

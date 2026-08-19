@@ -145,8 +145,8 @@ const (
 type ehFrameHdr struct {
 	version       uint8
 	ehFramePtrEnc encoding
-	fdeCountEnc   encoding
-	tableEnc      encoding
+	fdeCountEnc   encoding //lint:ignore U1000 binary layout field
+	tableEnc      encoding //lint:ignore U1000 binary layout field
 	// Continued with the following:
 	// ehFramePtr    ptr{ehFramePtrEnc}
 	// fdeCount      ptr{fdeCountEnc}
@@ -316,8 +316,6 @@ const (
 // sigretCodeMap contains the per-machine trampoline to call rt_sigreturn syscall.
 // This is needed to detect signal trampoline functions as the .eh_frame often
 // does not contain the proper unwind info due to various reasons.
-//
-//nolint:lll
 var sigretCodeMap = map[elf.Machine][]byte{
 	elf.EM_AARCH64: {
 		// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/arm64/kernel/vdso/sigreturn.S?h=v6.4#n71
@@ -871,7 +869,9 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 // The FDE format is described in:
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (r *reader) parseFDE(id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExtractor) (fdeInfo, error) {
+func (r *reader) parseFDE(
+	id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExtractor,
+) (fdeInfo, error) {
 	err := r.StartSection(n)
 	if err != nil {
 		return fdeInfo{}, err

@@ -21,24 +21,32 @@ const MinimumGap = 15
 type UnwindInfo = support.UnwindInfo
 
 // UnwindInfoInvalid is the stack delta info indicating invalid or unsupported PC.
-var UnwindInfoInvalid = UnwindInfo{Flags: support.UnwindFlagCommand,
-	Param: support.UnwindCommandInvalid}
+var UnwindInfoInvalid = UnwindInfo{
+	Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandInvalid,
+}
 
 // UnwindInfoStop is the stack delta info indicating root function of a stack.
-var UnwindInfoStop = UnwindInfo{Flags: support.UnwindFlagCommand,
-	Param: support.UnwindCommandStop}
+var UnwindInfoStop = UnwindInfo{
+	Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandStop,
+}
 
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
-var UnwindInfoSignal = UnwindInfo{Flags: support.UnwindFlagCommand,
-	Param: support.UnwindCommandSignal}
+var UnwindInfoSignal = UnwindInfo{
+	Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandSignal,
+}
 
 // UnwindInfoFramePointer contains the description to unwind a frame pointer frame.
-var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
+var UnwindInfoFramePointer = UnwindInfo{
+	Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandFramePointer,
 }
 
 // UnwindInfoGoAsmcgocall is the stack delta info for runtime.asmcgocall on arm64.
-var UnwindInfoGoAsmcgocall = UnwindInfo{Flags: support.UnwindFlagCommand,
+var UnwindInfoGoAsmcgocall = UnwindInfo{
+	Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandGoAsmcgocall,
 }
 
@@ -112,9 +120,10 @@ func (intervals *IntervalData) Add(bb BasicBlock) {
 
 // Find searches the matching basic block index from the interval data
 func (intervals *IntervalData) FindIndex(addr uint64) int {
-	idx, ok := slices.BinarySearchFunc(intervals.Blocks, addr, func(bb *BasicBlock, addr uint64) int {
-		return cmp.Compare(bb.Start, addr)
-	})
+	idx, ok := slices.BinarySearchFunc(intervals.Blocks, addr,
+		func(bb *BasicBlock, addr uint64) int {
+			return cmp.Compare(bb.Start, addr)
+		})
 	if !ok {
 		if idx == 0 {
 			return -1

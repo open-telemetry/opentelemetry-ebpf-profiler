@@ -104,14 +104,30 @@ rust-tests: rust-targets
 
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
-	go tool $(GO_TOOLS) golangci-lint config verify
-	# tools/coredump tests require CGO_ENABLED
-	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	# lll --exclude patterns:
+	#   https?://             URLs cannot be broken across lines without changing meaning.
+	#   0x[0-9a-fA-F]{2,}    Long hex literals (addresses, masks) must stay on one line to remain readable.
+	#   `name:"[^"]{50,}"    Struct field tags with long `name:` values cannot be shortened.
+	#   ^package .+ // import Canonical import-path comments must appear on the package line.
+	#   metrics\.MetricValue  Metric summary assignments pair a long ID constant with a cast;
+	#                          splitting them obscures the one-to-one mapping.
+	#   //lint:ignore          Staticcheck suppression comments include a reason that may be long.
+	# lll --skiplist (space-separated basenames; each entry is matched via filepath.Base):
+	#   LICENSES              Third-party license files are not our code.
+	#   types_def.go          Auto-generated CGo metric-ID map; entries are C symbol names that
+	#                         cannot be shortened, and alignment is required for readability.
+	# ! inverts the exit code: lll/modernize print violations and exit 0; grep . exits 1 when there
+	# is no output (no violations). Inverting makes the recipe fail on violations and pass when clean.
+	! go tool $(GO_TOOLS) lll --maxlength 100 --tabwidth 4 --goonly --skiplist LICENSES types_def.go --exclude='https?://|0x[0-9a-fA-F]{2,}|`name:"[^"]{50,}"|^package .+ // import|metrics\.MetricValue|//lint:ignore' . | grep .
+	# modernize also reports rewrite suggestions for files it generates under GOCACHE; filter those
+	# out so only violations in the actual source tree cause a failure.
+	! CGO_ENABLED=1 go tool $(GO_TOOLS) modernize -importcomment=false ./... 2>&1 | grep -v "^$$(go env GOCACHE)/" | grep .
+	CGO_ENABLED=1 go tool $(GO_TOOLS) staticcheck ./...
 
 format: format-go format-ebpf
 
 format-go:
-	go tool $(GO_TOOLS) golangci-lint fmt
+	go tool $(GO_TOOLS) gofumpt -l -w .
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf

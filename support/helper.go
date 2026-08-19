@@ -13,7 +13,8 @@ const PIDPageMappingInfoFlagUsesAnonymousMappings = 1 << 0
 // This currently assumes a non-negative bias: this encoding may have to be changed if bias can be
 // negative.
 func EncodeBiasAndUnwindProgram(bias uint64,
-	unwindProgram uint8) (uint64, error) {
+	unwindProgram uint8,
+) (uint64, error) {
 	if (bias >> 56) > 0 {
 		return 0, fmt.Errorf("unsupported bias value (too large): 0x%x", bias)
 	}

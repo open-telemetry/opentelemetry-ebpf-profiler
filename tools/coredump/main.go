@@ -11,9 +11,8 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"os"
-
 	"log"
+	"os"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/cloudstore"

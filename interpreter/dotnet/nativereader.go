@@ -55,7 +55,8 @@ func (nr *nativeReader) Uint(offs int64) (value uint32, newOffs int64, err error
 
 // decodeBlock handles one bit of native sparse array block walking.
 func (nr *nativeReader) decodeBlock(offset int64, index, bitMask uint32,
-	cb func(uint32, int64) error) error {
+	cb func(uint32, int64) error,
+) error {
 	if bitMask == 0 {
 		return cb(index, offset)
 	}

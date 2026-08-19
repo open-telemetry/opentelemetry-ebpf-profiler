@@ -279,8 +279,8 @@ func (r *Registers) setPC(v expression.Expression) {
 	r.regs[PC] = v
 }
 
-// GetArm returns the expression.Expression value associated with the given arm64asm.Reg, zero-extended
-// to 64 bits if necessary.
+// GetArm returns the expression.Expression value associated with the given arm64asm.Reg,
+// zero-extended to 64 bits if necessary.
 func (r *Registers) GetArm(reg arm64asm.Reg) expression.Expression {
 	e := regMappingFor(reg)
 	if e.idx == XZR {
@@ -319,8 +319,8 @@ func (r *Registers) Get(reg Reg) expression.Expression {
 // NameRegisterArm discards information about the expression currently stored in `reg`,
 // replacing it with a name. This is useful if we want to track stores to the address
 // contained in the register (e.g. if we know that at some point a register contains
-// a pointer to an interesting variable, and later we want to find the offset at which something is stored
-// in that variable.
+// a pointer to an interesting variable, and later we want to find the offset at which
+// something is stored in that variable.
 //
 // It may not be called on SP/WSP; calling it on XZR/WZR has no effect.
 func (r *Registers) NameRegisterArm(reg arm64asm.Reg, name string) {

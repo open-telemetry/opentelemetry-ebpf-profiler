@@ -71,7 +71,6 @@ func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	return major, minor, nil
 }
 
-//nolint:lll
 type pythonData struct {
 	version uint16
 
@@ -151,8 +150,8 @@ func (d *pythonData) String() string {
 func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -233,8 +232,6 @@ func readSignedVarint(r io.ByteReader) int32 {
 // walkLocationTable implements the algorithm to read entries from the location table.
 // This was introduced in Python 3.11.
 // https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Objects/locations.md
-//
-//nolint:lll
 func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 	r := bytes.NewReader(m.lineTable)
 	curI := uint32(0)
@@ -251,7 +248,6 @@ func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 		curI += uint32(firstByte&7) + 1
 
 		// Handle the 16 possible different codes known as _PyCodeLocationInfoKind.
-		//nolint:lll
 		// https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Include/cpython/code.h#L219
 		switch code {
 		case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
@@ -400,7 +396,8 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	libcInfo libc.LibcInfo) error {
+	libcInfo libc.LibcInfo,
+) error {
 	d := p.d
 
 	// If we don't have a static TLS offset (Python < 3.13 or extraction failed),
@@ -596,7 +593,9 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
+	_ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -993,8 +992,8 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 ) (interpRanges []util.Range, err error) {
 	// The Python main interpreter loop history in CPython git is:
 	//
-	//nolint:lll
-	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
+	// 87af12bff33 v3.11 2022-02-15
+	//   _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
 	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
@@ -1027,7 +1026,9 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 // (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the .cold range.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
+func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte,
+	interp *libpf.Symbol,
+) (util.Range, error) {
 	if ef.Machine != elf.EM_X86_64 {
 		return util.Range{}, nil
 	}

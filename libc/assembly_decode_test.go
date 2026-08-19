@@ -40,8 +40,11 @@ func TestFSBase(t *testing.T) {
 		"GKE clang9": {
 			machine:  elf.EM_X86_64,
 			funcName: "aout_dump_debugregs",
-			//nolint:lll
-			// Linux version 4.19.112+ (builder@c9d55aaf8a8b) (Chromium OS 9.0_pre361749_p20190714-r4 clang version 9.0.0 (/var/cache/chromeos-cache/distfiles/host/egit-src/llvm-project c11de5eada2decd0a495ea02676b6f4838cd54fb) (based on LLVM 9.0.0svn)) #1 SMP Tue Dec 29 13:50:37 PST 2020
+			// Linux version 4.19.112+ (builder@c9d55aaf8a8b)
+			// (Chromium OS 9.0_pre361749_p20190714-r4 clang version 9.0.0
+			// (/var/cache/chromeos-cache/distfiles/host/egit-src/llvm-project
+			// c11de5eada2decd0a495ea02676b6f4838cd54fb) (based on LLVM 9.0.0svn))
+			// #1 SMP Tue Dec 29 13:50:37 PST 2020
 			//
 			// 55                            push   rbp
 			// 48 89 e5                      mov    rbp,rsp
@@ -222,7 +225,6 @@ func TestFSBase(t *testing.T) {
 			fsBase: 3632,
 		},
 		"Linux 6.5.11 compiled with LLVM-17": {
-			//nolint:lll
 			// https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?h=v6.5.11&id=799441832db16b99e400ccbec55db801e6992819
 			machine:  elf.EM_AARCH64,
 			funcName: "tls_set",

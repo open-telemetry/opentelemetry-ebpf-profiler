@@ -58,10 +58,12 @@ func TestHashTrace(t *testing.T) {
 	}{
 		"empty trace": {
 			trace:  &libpf.Trace{},
-			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d)},
+			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d),
+		},
 		"python trace": {
 			trace:  newTrace(),
-			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8)},
+			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8),
+		},
 	}
 
 	for name, testcase := range tests {

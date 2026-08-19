@@ -16,7 +16,8 @@ func RequireGeneratedTestFile(t *testing.T, path string) {
 
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("missing generated test fixture %q; run `make test-deps` from the repository root", path)
+		t.Fatalf("missing generated test fixture %q; run `make test-deps` from the repository root",
+			path)
 	}
 	if err != nil {
 		t.Fatalf("stat %q: %v", path, err)

@@ -99,7 +99,9 @@ func (m *mockReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return 0, io.EOF
 }
 
-func createHeader(signature string, version uint32, payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
+func createHeader(signature string, version uint32, payloadSize uint32,
+	payloadPtr uint64, publishedAt uint64,
+) []byte {
 	buf := make([]byte, headerSize)
 	copy(buf[0:8], []byte(signature))
 	binary.LittleEndian.PutUint32(buf[8:12], version)
@@ -363,12 +365,12 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			result, err := processcontext.Read(
+				libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
-
 		})
 	}
 }

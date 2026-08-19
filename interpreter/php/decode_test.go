@@ -125,38 +125,38 @@ func TestRetrieveExecuteExJumpLabelAddress(t *testing.T) {
 		},
 		{
 			code: []byte{
-				//4e4824:        d10243ff         sub     sp,  sp,  #0x90
-				//4e4828:        d00058c1         adrp    x1,  0xffe000
-				//4e482c:        f9477c21         ldr     x1,  [x1,  #3832]
-				//4e4830:        a9047bfd         stp     x29,  x30,  [sp,  #64]
-				//4e4834:        910103fd         add     x29,  sp,  #0x40
-				//4e4838:        a90553f3         stp     x19,  x20,  [sp,  #80]
-				//4e483c:        a9065bf5         stp     x21,  x22,  [sp,  #96]
-				//4e4840:        f9400022         ldr     x2,  [x1]
-				//4e4844:        f81f83a2         stur    x2,  [x29,  #-8]
-				//4e4848:        d2800002         mov     x2,  #0x0                        // #0
-				//4e484c:        a93defbc         stp     x28,  x27,  [x29,  #-40]
-				//4e4850:        aa0003fb         mov     x27,  x0
-				//4e4854:        b40001e0         cbz     x0,  0x4e4890
-				//4e4858:        f00058c1         adrp    x1,  0xfff000
-				//4e485c:        f940e021         ldr     x1,  [x1,  #448]
-				//4e4860:        f940001c         ldr     x28,  [x0]
-				//4e4864:        91085820         add     x0,  x1,  #0x216
-				//4e4868:        08dffc00         ldarb   w0,  [x0]
-				//4e486c:        72001c1f         tst     w0,  #0xff
-				//4e4870:        54014321         b.ne    0x4e70d4  // b.any
-				//4e4874:        f00058d3         adrp    x19,  0xfff000
-				//4e4878:        f940e273         ldr     x19,  [x19,  #448]
-				//4e487c:        f9411a60         ldr     x0,  [x19,  #560]
-				//4e4880:        eb1d001f         cmp     x0,  x29
-				//4e4884:        5405c5e2         b.cs    0x4f0140  // b.hs,  b.nlast
-				//4e4888:        f9400380         ldr     x0,  [x28]
-				//4e488c:        d61f0000         br      x0
-				//4e4890:        f00058c3         adrp    x3,  0xfff000 // <<<<
-				//4e4894:        f9459863         ldr     x3,  [x3,  #2864]
-				//4e4898:        f00059e4         adrp    x4,  0x1023000
-				//4e489c:        91224080         add     x0,  x4,  #0x890
-				//4e48a0:        90000002         adrp    x2,  0x4e4000
+				// 4e4824:        d10243ff         sub     sp,  sp,  #0x90
+				// 4e4828:        d00058c1         adrp    x1,  0xffe000
+				// 4e482c:        f9477c21         ldr     x1,  [x1,  #3832]
+				// 4e4830:        a9047bfd         stp     x29,  x30,  [sp,  #64]
+				// 4e4834:        910103fd         add     x29,  sp,  #0x40
+				// 4e4838:        a90553f3         stp     x19,  x20,  [sp,  #80]
+				// 4e483c:        a9065bf5         stp     x21,  x22,  [sp,  #96]
+				// 4e4840:        f9400022         ldr     x2,  [x1]
+				// 4e4844:        f81f83a2         stur    x2,  [x29,  #-8]
+				// 4e4848:        d2800002         mov     x2,  #0x0                        // #0
+				// 4e484c:        a93defbc         stp     x28,  x27,  [x29,  #-40]
+				// 4e4850:        aa0003fb         mov     x27,  x0
+				// 4e4854:        b40001e0         cbz     x0,  0x4e4890
+				// 4e4858:        f00058c1         adrp    x1,  0xfff000
+				// 4e485c:        f940e021         ldr     x1,  [x1,  #448]
+				// 4e4860:        f940001c         ldr     x28,  [x0]
+				// 4e4864:        91085820         add     x0,  x1,  #0x216
+				// 4e4868:        08dffc00         ldarb   w0,  [x0]
+				// 4e486c:        72001c1f         tst     w0,  #0xff
+				// 4e4870:        54014321         b.ne    0x4e70d4  // b.any
+				// 4e4874:        f00058d3         adrp    x19,  0xfff000
+				// 4e4878:        f940e273         ldr     x19,  [x19,  #448]
+				// 4e487c:        f9411a60         ldr     x0,  [x19,  #560]
+				// 4e4880:        eb1d001f         cmp     x0,  x29
+				// 4e4884:        5405c5e2         b.cs    0x4f0140  // b.hs,  b.nlast
+				// 4e4888:        f9400380         ldr     x0,  [x28]
+				// 4e488c:        d61f0000         br      x0
+				// 4e4890:        f00058c3         adrp    x3,  0xfff000 // <<<<
+				// 4e4894:        f9459863         ldr     x3,  [x3,  #2864]
+				// 4e4898:        f00059e4         adrp    x4,  0x1023000
+				// 4e489c:        91224080         add     x0,  x4,  #0x890
+				// 4e48a0:        90000002         adrp    x2,  0x4e4000
 				0xff, 0x43, 0x02, 0xd1, 0xc1, 0x58, 0x00, 0xd0, 0x21, 0x7c, 0x47, 0xf9, 0xfd, 0x7b,
 				0x04, 0xa9, 0xfd, 0x03, 0x01, 0x91, 0xf3, 0x53, 0x05, 0xa9, 0xf5, 0x5b, 0x06, 0xa9,
 				0x22, 0x00, 0x40, 0xf9, 0xa2, 0x83, 0x1f, 0xf8, 0x02, 0x00, 0x80, 0xd2, 0xbc, 0xef,
@@ -227,22 +227,22 @@ func TestRetrieveJITBufferPtr(t *testing.T) {
 		},
 		{
 			code: []byte{
-				//146720:        900005e1         adrp    x1,  0x202000
-				//146724:        91048021         add     x1,  x1,  #0x120
-				//146728:        d2802400         mov     x0,  #0x120                      // #288
-				//14672c:        f9400c22         ldr     x2,  [x1,  #24]
-				//146730:        ea00005f         tst     x2,  x0
-				//146734:        54000040         b.eq    0x14673c  // b.none
-				//146738:        d65f03c0         ret
-				//14673c:        a9be7bfd         stp     x29,  x30,  [sp,  #-32]!
-				//146740:        52800062         mov     w2,  #0x3                        // #3
-				//146744:        910003fd         mov     x29,  sp
-				//146748:        f941a820         ldr     x0,  [x1,  #848] // <<<<
-				//14674c:        f943a021         ldr     x1,  [x1,  #1856] // <<<<
-				//146750:        97fb1360         bl      0xb4d0
-				//146754:        35000060         cbnz    w0,  0x146760
-				//146758:        a8c27bfd         ldp     x29,  x30,  [sp],  #32
-				//14675c:        d65f03c0         ret
+				// 146720:        900005e1         adrp    x1,  0x202000
+				// 146724:        91048021         add     x1,  x1,  #0x120
+				// 146728:        d2802400         mov     x0,  #0x120                      // #288
+				// 14672c:        f9400c22         ldr     x2,  [x1,  #24]
+				// 146730:        ea00005f         tst     x2,  x0
+				// 146734:        54000040         b.eq    0x14673c  // b.none
+				// 146738:        d65f03c0         ret
+				// 14673c:        a9be7bfd         stp     x29,  x30,  [sp,  #-32]!
+				// 146740:        52800062         mov     w2,  #0x3                        // #3
+				// 146744:        910003fd         mov     x29,  sp
+				// 146748:        f941a820         ldr     x0,  [x1,  #848] // <<<<
+				// 14674c:        f943a021         ldr     x1,  [x1,  #1856] // <<<<
+				// 146750:        97fb1360         bl      0xb4d0
+				// 146754:        35000060         cbnz    w0,  0x146760
+				// 146758:        a8c27bfd         ldp     x29,  x30,  [sp],  #32
+				// 14675c:        d65f03c0         ret
 				0xe1, 0x05, 0x00, 0x90, 0x21, 0x80, 0x04, 0x91, 0x00, 0x24, 0x80, 0xd2, 0x22, 0x0c,
 				0x40, 0xf9, 0x5f, 0x00, 0x00, 0xea, 0x40, 0x00, 0x00, 0x54, 0xc0, 0x03, 0x5f, 0xd6,
 				0xfd, 0x7b, 0xbe, 0xa9, 0x62, 0x00, 0x80, 0x52, 0xfd, 0x03, 0x00, 0x91, 0x20, 0xa8,

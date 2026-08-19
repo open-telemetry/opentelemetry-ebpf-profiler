@@ -207,7 +207,8 @@ func TestQualifiedMethodName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			qualified := qualifiedMethodName(libpf.Intern(tt.classPath), libpf.Intern(tt.methodName), tt.singleton)
+			qualified := qualifiedMethodName(
+				libpf.Intern(tt.classPath), libpf.Intern(tt.methodName), tt.singleton)
 			assert.Equal(t, libpf.Intern(tt.expected), qualified)
 		})
 	}
@@ -272,7 +273,10 @@ func TestProfileFrameFullLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fullLabel := profileFrameFullLabel(libpf.Intern(tt.classPath), libpf.Intern(tt.label), libpf.Intern(tt.baseLabel), libpf.Intern(tt.methodName), tt.singleton, false)
+			fullLabel := profileFrameFullLabel(
+				libpf.Intern(tt.classPath), libpf.Intern(tt.label),
+				libpf.Intern(tt.baseLabel), libpf.Intern(tt.methodName),
+				tt.singleton, false)
 			assert.Equal(t, libpf.Intern(tt.expected), fullLabel)
 		})
 	}
@@ -395,7 +399,8 @@ func TestFindJITRegion(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback spans production-like discontiguous anonymous executable mappings",
+			name: "heuristic fallback spans production-like " +
+				"discontiguous anonymous executable mappings",
 			mappings: []process.RawMapping{
 				execAnon(0x7a6b2ec00000, 0x800000),
 				execAnon(0x7a6b337fb000, 0x800000),

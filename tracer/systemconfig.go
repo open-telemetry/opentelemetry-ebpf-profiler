@@ -256,7 +256,8 @@ func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.Sym
 
 	if data.Err != 0 {
 		if data.Err < 0 {
-			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)", errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
+			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)",
+				errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
 		}
 
 		return fmt.Errorf("%w at 0x%x: helper err=%d", errSystemAnalysisFailed, address, data.Err)
@@ -333,7 +334,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 }
 
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
-func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
+func prepareAnalysis(orig *cebpf.CollectionSpec) (
+	*cebpf.CollectionSpec, map[string]*cebpf.Map, error,
+) {
 	new := &cebpf.CollectionSpec{
 		Maps:      make(map[string]*cebpf.MapSpec),
 		Programs:  make(map[string]*cebpf.ProgramSpec),
@@ -356,7 +359,8 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	maps := make(map[string]*cebpf.Map)
 
-	if err := loadAllMaps(new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
+	if err := loadAllMaps(
+		new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
 		return nil, nil, err
 	}
 
@@ -388,7 +392,9 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		!interpretersConfig.Go.IsLabelsDisabled()
 	if err := parseBTF(vars, needTPBase, needProcessStartTime); err != nil {
 		if needProcessStartTime {
-			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
+			return fmt.Errorf(
+				"process age filter requires kernel BTF to resolve task_struct offsets: %w",
+				err)
 		}
 
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -424,7 +430,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	}
 
 	log.Debugf(
-		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_time %#x",
+		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, "+
+			"vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_time %#x",
 		vars.task_stack_offset,
 		vars.stack_ptregs_offset,
 		vars.tpbase_offset,
@@ -481,7 +488,8 @@ func disableVMAHelperCalls(coll *cebpf.CollectionSpec) int {
 		vmaCallbackPatched := false
 		for i := range progSpec.Instructions {
 			ins := &progSpec.Instructions[i]
-			if ins.IsLoadOfFunctionPointer() && strings.HasPrefix(ins.Reference(), "find_vma_callback") {
+			if ins.IsLoadOfFunctionPointer() &&
+				strings.HasPrefix(ins.Reference(), "find_vma_callback") {
 				progSpec.Instructions[i] = asm.LoadImm(ins.Dst, 0, asm.DWord)
 				patched++
 				programPatched = true
@@ -559,7 +567,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	major, minor uint32, origins *originRegistry, out *SysConfigVars,
 ) error {
 	if cfg.FilterMinProcessAge < 0 {
-		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
+		return fmt.Errorf(
+			"filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
 	}
 
 	if cfg.VerboseMode {
@@ -582,7 +591,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
 			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
 		}
-		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
+		log.Infof(
+			"PID namespace translation enabled (dev=%d, ino=%d), "+
+				"only processes traces within the profiler namespace will be collected",
+			dev, ino)
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
@@ -616,11 +628,13 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set filter_idle_frames: %v", err)
 	}
 
-	if err := coll.Variables["ruby_skip_native_resume"].Set(cfg.InterpretersConfig.Ruby.SkipNativeResume); err != nil {
+	if err := coll.Variables["ruby_skip_native_resume"].Set(
+		cfg.InterpretersConfig.Ruby.SkipNativeResume); err != nil {
 		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
-	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
+	if err := coll.Variables["filter_min_process_age_ns"].Set(
+		uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
 		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
 	}
 
@@ -654,22 +668,27 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if err := coll.Variables["task_stack_offset"].Set(rodataVars.task_stack_offset); err != nil {
 		return fmt.Errorf("failed to set task_stack_offset: %v", err)
 	}
-	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
+	if err := coll.Variables["stack_ptregs_offset"].Set(
+		rodataVars.stack_ptregs_offset); err != nil {
 		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
 	}
 	if err := coll.Variables["vma_lookup_enabled"].Set(rodataVars.vma_lookup_enabled); err != nil {
 		return fmt.Errorf("failed to set vma_lookup_enabled: %v", err)
 	}
-	if err := coll.Variables["vma_vm_file_offset"].Set(rodataVars.vma_vm_file_offset); err != nil {
+	if err := coll.Variables["vma_vm_file_offset"].Set(
+		rodataVars.vma_vm_file_offset); err != nil {
 		return fmt.Errorf("failed to set vma_vm_file_offset: %v", err)
 	}
-	if err := coll.Variables["vma_vm_flags_offset"].Set(rodataVars.vma_vm_flags_offset); err != nil {
+	if err := coll.Variables["vma_vm_flags_offset"].Set(
+		rodataVars.vma_vm_flags_offset); err != nil {
 		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
 	}
-	if err := coll.Variables["task_group_leader_offset"].Set(rodataVars.task_group_leader_offset); err != nil {
+	if err := coll.Variables["task_group_leader_offset"].Set(
+		rodataVars.task_group_leader_offset); err != nil {
 		return fmt.Errorf("failed to set task_group_leader_offset: %v", err)
 	}
-	if err := coll.Variables["task_start_time_offset"].Set(rodataVars.task_start_time_offset); err != nil {
+	if err := coll.Variables["task_start_time_offset"].Set(
+		rodataVars.task_start_time_offset); err != nil {
 		return fmt.Errorf("failed to set task_start_time_offset: %v", err)
 	}
 

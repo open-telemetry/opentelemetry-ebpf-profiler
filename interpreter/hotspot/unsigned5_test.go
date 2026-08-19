@@ -37,7 +37,8 @@ func TestJavaLineNumbers(t *testing.T) {
 	decoder := unsigned5Decoder{
 		r: bytes.NewReader([]byte{
 			255, 0, 252, 11, 41, 33, 81, 57, 57, 119,
-			255, 6, 9, 17, 52, 255, 6, 3, 17, 42, 0}),
+			255, 6, 9, 17, 52, 255, 6, 3, 17, 42, 0,
+		}),
 	}
 
 	var bci, line uint32

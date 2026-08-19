@@ -182,14 +182,18 @@ func TestBaseReporterGenerate(t *testing.T) {
 // sample attribute, exercising the full enricher → TraceEventMeta → attribute pipeline.
 type processNameAttrProducer struct{}
 
-func (p *processNameAttrProducer) CollectExtraSampleMeta(_ *libpf.Trace, meta *samples.TraceEventMeta) any {
+func (p *processNameAttrProducer) CollectExtraSampleMeta(
+	_ *libpf.Trace, meta *samples.TraceEventMeta,
+) any {
 	if meta.ExtraMeta == nil {
 		return ""
 	}
 	return meta.ExtraMeta[libpf.Intern("process.name")]
 }
 
-func (p *processNameAttrProducer) ExtraSampleAttrs(attrMgr *samples.AttrTableManager, extraMeta any) []int32 {
+func (p *processNameAttrProducer) ExtraSampleAttrs(
+	attrMgr *samples.AttrTableManager, extraMeta any,
+) []int32 {
 	name, _ := extraMeta.(string)
 	if name == "" {
 		return nil

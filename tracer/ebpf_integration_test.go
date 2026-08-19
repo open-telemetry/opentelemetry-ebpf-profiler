@@ -207,7 +207,8 @@ Loop:
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
 				numKernelFrames: int(ebpfTrace.NumKernelFrames),
-				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
+				frames: libpf.EbpfFrame(
+					slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
 			}
 		}
 	}

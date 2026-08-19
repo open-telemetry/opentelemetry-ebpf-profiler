@@ -17,7 +17,8 @@ type runLoop struct {
 }
 
 func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, jitter float64,
-	run, purge func()) {
+	run, purge func(),
+) {
 	go func() {
 		tick := time.NewTicker(reportInterval)
 		defer tick.Stop()

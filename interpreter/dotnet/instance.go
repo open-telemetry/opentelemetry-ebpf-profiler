@@ -312,7 +312,8 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 
 // addRangeSection processes a RangeSection structure and calls addRange as needed
 func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	rangeSection []byte) error {
+	rangeSection []byte,
+) error {
 	// Extract interesting fields
 	vms := &i.d.Get().Types
 	lowAddress := npsr.Ptr(rangeSection, vms.RangeSection.RangeBegin)
@@ -541,7 +542,9 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	return info, nil
 }
 
-func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
+func (i *dotnetInstance) readMethod(
+	methodDescPtr libpf.Address, debugInfoPtr libpf.Address,
+) (*dotnetMethod, error) {
 	cdac := i.d.Get()
 	vms := &cdac.Types
 
@@ -577,7 +580,8 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 
 	// Merge the MethodDesc and MethodDescChunk bits of Token value
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L76-L80
-	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount + uint32(tokenRemainder)
+	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount +
+		uint32(tokenRemainder)
 	log.Debugf("methodchunk @%x: methodTablePtr %x: tokenRange %d, tokenRemainder %d -> index %d",
 		methodDescChunkPtr, methodTablePtr, tokenRange, tokenRemainder, index)
 
@@ -874,7 +878,9 @@ func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *dotnetInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType
 	}

@@ -26,9 +26,11 @@ import (
 // dummyReporter is a no-op reporter for testing.
 type dummyReporter struct{}
 
-func (d *dummyReporter) Start(context.Context) error                                  { return fmt.Errorf("dummy error") }
-func (d *dummyReporter) Stop()                                                        {}
-func (d *dummyReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error { return nil }
+func (d *dummyReporter) Start(context.Context) error { return fmt.Errorf("dummy error") }
+func (d *dummyReporter) Stop()                       {}
+func (d *dummyReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error {
+	return nil
+}
 
 // TestStartErrorMode tests the error_mode config option on controller Start().
 // dummyReporter.Start() always returns an error to simulate startup failure.

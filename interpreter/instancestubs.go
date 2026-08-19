@@ -13,15 +13,15 @@ import (
 
 // InstanceStubs provides empty implementations of Instance hooks that are
 // not mandatory for a Instance implementation.
-type InstanceStubs struct {
-}
+type InstanceStubs struct{}
 
 func (is *InstanceStubs) UsesAnonymousMappings() bool {
 	return false
 }
 
 func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
-	process.Process, []process.RawMapping) error {
+	process.Process, []process.RawMapping,
+) error {
 	return nil
 }
 

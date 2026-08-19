@@ -14,6 +14,7 @@ SymblibStatus rangeVisitorWrapper(void* user_data, SymblibRange* range);
 SymblibStatus retPadVisitorWrapper(void* user_data, SymblibReturnPad* ret_pad);
 */
 import "C"
+
 import (
 	"fmt"
 	"os"

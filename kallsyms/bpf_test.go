@@ -99,7 +99,9 @@ func setBPFSymbols(s *bpfSymbolizer, symbols []bpfSymbol) {
 
 // assertBPFSymbol checks that the BPF symbolizer resolves addr to the expected
 // function name and offset.
-func assertBPFSymbol(t *testing.T, s *Symbolizer, addr libpf.Address, eFuncName string, eOffset uint) {
+func assertBPFSymbol(
+	t *testing.T, s *Symbolizer, addr libpf.Address, eFuncName string, eOffset uint,
+) {
 	t.Helper()
 	funcName, off, ok := s.Snapshot().LookupBPFSymbol(addr)
 	if assert.True(t, ok, "expected BPF symbol at 0x%x", addr) {

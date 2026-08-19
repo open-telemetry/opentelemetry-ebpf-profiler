@@ -31,8 +31,9 @@ func newRebaseCmd(store *modulestore.Store) *ffcli.Command {
 		Name:       "rebase",
 		Exec:       args.exec,
 		ShortUsage: "rebase [testCaseJsonFiles]",
-		ShortHelp:  "Update all test cases (or a subset of them) by running them and saving the current unwinding",
-		FlagSet:    set,
+		ShortHelp: "Update all test cases (or a subset of them) by running them" +
+			" and saving the current unwinding",
+		FlagSet: set,
 	}
 }
 

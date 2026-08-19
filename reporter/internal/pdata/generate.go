@@ -303,7 +303,9 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
+func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey,
+	envVars map[libpf.String]libpf.String,
+) {
 	if resource.APMServiceName != "" {
 		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
 	}

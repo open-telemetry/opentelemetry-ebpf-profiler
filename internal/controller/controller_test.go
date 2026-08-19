@@ -27,7 +27,9 @@ func TestCreateProbe(t *testing.T) {
 		{
 			name:      "kprobe uprobe with target",
 			probeType: "kprobe",
-			cfg:       map[string]any{"mode": "uprobe", "symbol": "main", "target": "/usr/bin/myapp"},
+			cfg: map[string]any{
+				"mode": "uprobe", "symbol": "main", "target": "/usr/bin/myapp",
+			},
 		},
 		{
 			name:      "kprobe missing symbol",
@@ -59,7 +61,8 @@ func TestCreateProbe(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			probe, err := createProbe(tc.probeType, tc.cfg)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("createProbe(%q, %v): wantErr=%v, got err=%v", tc.probeType, tc.cfg, tc.wantErr, err)
+				t.Errorf("createProbe(%q, %v): wantErr=%v, got err=%v",
+					tc.probeType, tc.cfg, tc.wantErr, err)
 				return
 			}
 			if !tc.wantErr && probe == nil {

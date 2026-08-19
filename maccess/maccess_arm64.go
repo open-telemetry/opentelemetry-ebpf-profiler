@@ -28,15 +28,14 @@ const (
 //
 // [0] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 // [1] https://github.com/torvalds/linux/blob/8bc9e6515183935fa0cccaf67455c439afe4982b/include/asm-generic/tlb.h#L26
-//
-//nolint:lll
 func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 	if len(codeblob) == 0 {
 		return false, errors.New("empty code blob")
 	}
 
-	// With the patch [0] of copy_from_user_nofault, access_ok() got replaced with __access_ok() [1].
-	// __access_ok() is an inlined function and returns '(size <= limit) && (addr <= (limit - size))' [2].
+	// With the patch [0] of copy_from_user_nofault, access_ok() got replaced with
+	// __access_ok() [1]. __access_ok() is an inlined function and returns
+	// '(size <= limit) && (addr <= (limit - size))' [2].
 	// This function tries to identify the following sequence of instructions in the codeblob:
 	// MOV X2, #0x1000000000000
 	// CMP X19, X2
@@ -47,10 +46,11 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 	// [1] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L20-L41
 	// [2] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L40
 
-	// In the set of expected assembly instructions, one argument register is used by all instructions.
-	var trackedReg = -1
+	// In the set of expected assembly instructions, one argument register is used by
+	// all instructions.
+	trackedReg := -1
 	// Statemachine to keep track of the previously encountered and expected instructions.
-	var expectedInstructionTracker = stepNone
+	expectedInstructionTracker := stepNone
 
 	for offs := 0; offs < len(codeblob); offs += 4 {
 		inst, err := aa.Decode(codeblob[offs:])

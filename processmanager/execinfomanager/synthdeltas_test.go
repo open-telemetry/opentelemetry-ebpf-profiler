@@ -30,39 +30,39 @@ func TestVDSOArm64(t *testing.T) {
 					Start: 0,
 					End:   0x7d0,
 					Deltas: sdtypes.StackDeltaArray{
-						{0, sdtypes.UnwindInfoLR},
+						{Offset: 0, Info: sdtypes.UnwindInfoLR},
 					},
 				},
 				{
 					Start: 0x7d0,
 					End:   0x7d0 + 40,
 					Deltas: sdtypes.StackDeltaArray{
-						{0, sdtypes.UnwindInfoLR},
-						{8, frameSize16},
-						{20, sdtypes.UnwindInfoLR},
+						{Offset: 0, Info: sdtypes.UnwindInfoLR},
+						{Offset: 8, Info: frameSize16},
+						{Offset: 20, Info: sdtypes.UnwindInfoLR},
 					},
 				},
 				{
 					Start: 0x7f8,
 					End:   0x7f8 + 40,
 					Deltas: sdtypes.StackDeltaArray{
-						{0, sdtypes.UnwindInfoLR},
-						{8, frameSize16},
-						{20, sdtypes.UnwindInfoLR},
+						{Offset: 0, Info: sdtypes.UnwindInfoLR},
+						{Offset: 8, Info: frameSize16},
+						{Offset: 20, Info: sdtypes.UnwindInfoLR},
 					},
 				},
 				{
 					Start: 0x820,
 					End:   0x820 + 172,
 					Deltas: sdtypes.StackDeltaArray{
-						{0, sdtypes.UnwindInfoLR},
+						{Offset: 0, Info: sdtypes.UnwindInfoLR},
 					},
 				},
 				{
 					Start: 0x8f8,
 					End:   0x8f8 + 8,
 					Deltas: sdtypes.StackDeltaArray{
-						{0, sdtypes.UnwindInfoSignal},
+						{Offset: 0, Info: sdtypes.UnwindInfoSignal},
 					},
 				},
 			},

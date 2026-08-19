@@ -151,7 +151,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Slice off the null-terminator before parsing
 	otpRelease, err := strconv.ParseUint(string(otpReleaseString[:len(otpReleaseString)-1]), 10, 32)
 	if err != nil || otpRelease > 255 {
-		return nil, fmt.Errorf("Invalid OTP Release: %v", otpReleaseString)
+		return nil, fmt.Errorf("invalid OTP release: %v", otpReleaseString)
 	}
 
 	_, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)
@@ -287,7 +287,8 @@ func hashMFA(key beamMfa) uint32 {
 }
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	log.Debugf("BEAM attaching, OTP %d, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
@@ -297,7 +298,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.sizeOf),
 	}
 
-	// If this value is zero, it means that frame pointer support is not included in the runtime binary
+	// If this value is zero, frame pointer support is not included in the runtime binary.
 	if d.ertsFrameLayout != 0 {
 		ertsFrameLayout := rm.Uint64(bias + libpf.Address(d.ertsFrameLayout))
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
@@ -346,7 +347,9 @@ func (i *beamInstance) UsesAnonymousMappings() bool {
 	return true
 }
 
-func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
+func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping,
+) error {
 	pid := pr.PID()
 	i.mappingGeneration++
 	for idx := range mappings {
@@ -392,7 +395,9 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 	return nil
 }
 
-func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *beamInstance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -418,8 +423,9 @@ func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		}
 
 		if strings.HasPrefix(moduleName.String(), "Elixir.") {
-			// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
-			mfaName = libpf.Intern(fmt.Sprintf("%s.%s/%d", moduleName.String()[7:], functionName, mfa.arity))
+			// Elixir module: format using Elixir syntax (no "Elixir." prefix).
+			mfaName = libpf.Intern(
+				fmt.Sprintf("%s.%s/%d", moduleName.String()[7:], functionName, mfa.arity))
 		} else {
 			// Assume it's Erlang and format it using Erlang syntax
 			mfaName = libpf.Intern(fmt.Sprintf("%s:%s/%d", moduleName, functionName, mfa.arity))
@@ -448,7 +454,9 @@ func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 	return nil
 }
 
-func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (functionIndex uint64, mfa beamMfa, err error) {
+func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (
+	functionIndex uint64, mfa beamMfa, err error,
+) {
 	vms := i.data.vmStructs
 
 	numFunctions := i.rm.Uint32(codeHeader + libpf.Address(vms.beamCodeHeader.numFunctions))
@@ -468,7 +476,9 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 		midIdx := lowIdx + (highIdx-lowIdx)/2
 		err := i.rm.Read(functions+libpf.Address(midIdx*8), midBuffer)
 		if err != nil {
-			return 0, beamMfa{}, fmt.Errorf("BEAM unable to read codeHeader.functions[%d] for codeHeader 0x%x", midIdx, codeHeader)
+			return 0, beamMfa{}, fmt.Errorf(
+				"BEAM unable to read codeHeader.functions[%d] for codeHeader 0x%x",
+				midIdx, codeHeader)
 		}
 		midStart := npsr.Ptr(midBuffer, 0)
 		midEnd := npsr.Ptr(midBuffer, 8)
@@ -483,7 +493,8 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 			data := make([]byte, vms.ertsCodeMfa.sizeOf)
 			err = i.rm.Read(ertsCodeInfo+libpf.Address(vms.ertsCodeInfo.mfa), data)
 			if err != nil {
-				return 0, beamMfa{}, fmt.Errorf("BEAM unable to look up MFA at for ertsCodeInfo 0x%x", ertsCodeInfo)
+				return 0, beamMfa{}, fmt.Errorf(
+					"BEAM unable to look up MFA at for ertsCodeInfo 0x%x", ertsCodeInfo)
 			}
 			mfa.module = npsr.Uint32(data, uint(vms.ertsCodeMfa.module))
 			mfa.function = npsr.Uint32(data, uint(vms.ertsCodeMfa.function))
@@ -493,10 +504,13 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 		}
 	}
 
-	return 0, beamMfa{}, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range", pc)
+	return 0, beamMfa{}, fmt.Errorf(
+		"BEAM unable to find the MFA for PC 0x%x in expected code range", pc)
 }
 
-func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) (fileName libpf.String, lineNumber uint64, err error) {
+func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64,
+	pc libpf.Address,
+) (fileName libpf.String, lineNumber uint64, err error) {
 	vms := i.data.vmStructs
 
 	lineTable := i.rm.Ptr(codeHeader + libpf.Address(vms.beamCodeHeader.lineTable))
@@ -575,7 +589,8 @@ func (i *beamInstance) lookupAtom(index uint32) (libpf.String, error) {
 	case 27:
 		err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(vms.atom.name)), name)
 		if err != nil {
-			return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
+			return libpf.NullString, fmt.Errorf(
+				"BEAM Unable to lookup atom with index %d: %v", index, err)
 		}
 	case 28:
 		// Implementation based on https://github.com/erlang/otp/blob/OTP-28.0.2/erts/etc/unix/etp-commands.in#L657-L674
@@ -585,10 +600,14 @@ func (i *beamInstance) lookupAtom(index uint32) (libpf.String, error) {
 		if subtag == uint64(i.data.etpHeapBitsSubtag) {
 			err := i.rm.Read(unboxed+libpf.Address(vms.erlHeapBits.data), name)
 			if err != nil {
-				return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d (ErlHeapBits tag): %v", index, err)
+				return libpf.NullString, fmt.Errorf(
+					"BEAM Unable to lookup atom with index %d (ErlHeapBits tag): %v", index, err)
 			}
 		} else {
-			return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d: expected boxed value subtag 0x%x, found 0x%x", index, i.data.etpHeapBitsSubtag, subtag)
+			return libpf.NullString, fmt.Errorf(
+				"BEAM Unable to lookup atom with index %d: "+
+					"expected boxed value subtag 0x%x, found 0x%x",
+				index, i.data.etpHeapBitsSubtag, subtag)
 		}
 	}
 

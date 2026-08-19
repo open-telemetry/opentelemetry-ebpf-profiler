@@ -44,8 +44,6 @@ var dsoRegex = regexp.MustCompile(`.*/elastic-jvmti-linux-([\w-]*)\.so`)
 // APM process storage.
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#process-storage-layout
-//
-//nolint:lll
 type apmProcessStorage struct {
 	ServiceName     string
 	TraceSocketPath string
@@ -84,7 +82,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		}
 		return true
 	}); err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
+		return nil, fmt.Errorf("failed to visit TLS descriptor: %v", err)
 	}
 
 	if tlsDescElfAddr == 0 {
@@ -198,8 +196,6 @@ func isPotentialAgentLib(path string) bool {
 // nextString reads the next `utf8-str` from memory and updates addr accordingly.
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#general-memory-layout
-//
-//nolint:lll
 func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (string, error) {
 	length := int(rm.Uint32(*addr))
 	*addr += 4
@@ -224,8 +220,6 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 // readProcStorage reads the APM process storage from memory.
 //
 // https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#process-storage-layout
-//
-//nolint:lll
 func readProcStorage(
 	rm remotememory.RemoteMemory,
 	procStorageAddr libpf.Address,

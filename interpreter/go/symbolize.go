@@ -27,7 +27,8 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
-	mapping libpf.FrameMapping) error {
+	mapping libpf.FrameMapping,
+) error {
 	// pclntab is nil when symbolization is disabled.
 	if g.d.pclntab == nil {
 		return interpreter.ErrMismatchInterpreterType

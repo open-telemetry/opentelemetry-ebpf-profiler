@@ -114,7 +114,8 @@ func TestParseGoBuildinfoFallback(t *testing.T) {
 		require.NoError(t, err)
 
 		i := bytes.Index(raw, goBuildInfoMagic)
-		require.GreaterOrEqualf(t, i, 0, "test fixture no longer contains the buildinfo magic %q", goBuildInfoMagic)
+		require.GreaterOrEqualf(t, i, 0,
+			"test fixture no longer contains the buildinfo magic %q", goBuildInfoMagic)
 		corrupted := append([]byte(nil), raw...)
 		clear(corrupted[i : i+len(goBuildInfoMagic)])
 

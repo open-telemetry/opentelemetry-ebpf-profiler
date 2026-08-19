@@ -13,7 +13,8 @@ func TestFrameTypeFromString(t *testing.T) {
 	// Simple check whether all FrameType values can be converted to string and back.
 	for _, ft := range []FrameType{
 		UnknownFrame, PHPFrame, PythonFrame, NativeFrame, KernelFrame, HotSpotFrame, RubyFrame,
-		PerlFrame, V8Frame, DotnetFrame, LuaJITFrame} {
+		PerlFrame, V8Frame, DotnetFrame, LuaJITFrame,
+	} {
 		t.Run(ft.String(), func(t *testing.T) {
 			name := ft.String()
 			result := FrameTypeFromString(name)

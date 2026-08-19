@@ -235,7 +235,6 @@ var (
 	_ interpreter.Instance = &v8Instance{}
 )
 
-//nolint:lll
 type v8Data struct {
 	// vmStructs reflects the V8 internal class names and the offsets of named fields.
 	// The V8 name is in the tag 'name' if it differs from our Go name.
@@ -290,11 +289,13 @@ type v8Data struct {
 		// submitted upstream: https://chromium-review.googlesource.com/c/v8/v8/+/3902524
 		DeoptimizationDataIndex struct {
 			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code.h#912
-			InlinedFunctionCount      uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
-			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
-			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
-			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
-			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
+			InlinedFunctionCount uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
+			LiteralArray         uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
+			SharedFunctionInfo   uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
+
+			SFIWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+
+			InliningPositions uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code-kind.h#18
@@ -341,17 +342,21 @@ type v8Data struct {
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/tools/gen-postmortem-metadata.py#709
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#75
 		Type struct {
-			BaselineData              uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
-			ByteArray                 uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
-			BytecodeArray             uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
-			Code                      uint16 `name:"Code__CODE_TYPE"`
-			CodeWrapper               uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
-			FixedArray                uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
-			WeakFixedArray            uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
-			TrustedByteArray          uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
-			TrustedFixedArray         uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
-			TrustedWeakFixedArray     uint16 `name:"TrustedFixedArray__TRUSTED_WEAK_FIXED_ARRAY_TYPE" zero:""`
-			ProtectedFixedArray       uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+			BaselineData   uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
+			ByteArray      uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
+			BytecodeArray  uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
+			Code           uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper    uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
+			FixedArray     uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
+			WeakFixedArray uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+
+			TrustedByteArray  uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
+			TrustedFixedArray uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+
+			TrustedWeakFA uint16 `name:"TrustedFixedArray__TRUSTED_WEAK_FIXED_ARRAY_TYPE" zero:""`
+
+			ProtectedFA uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+
 			JSFunction                uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
 			Map                       uint16 `name:"Map__MAP_TYPE"`
 			Script                    uint16 `name:"Script__SCRIPT_TYPE"`
@@ -421,9 +426,10 @@ type v8Data struct {
 		Code struct {
 			DeoptimizationData  uint16 `name:"deoptimization_data__FixedArray,deoptimization_data__Tagged_FixedArray_"`
 			SourcePositionTable uint16 `name:"source_position_table__ByteArray,source_position_table__Tagged_ByteArray_"`
-			InstructionStart    uint16 `name:"instruction_start__uintptr_t,instruction_start__Address"`
-			InstructionSize     uint16 `name:"instruction_size__int"`
-			Flags               uint16 `name:"flags__uint32_t"`
+
+			InstructionStart uint16 `name:"instruction_start__uintptr_t,instruction_start__Address"`
+			InstructionSize  uint16 `name:"instruction_size__int"`
+			Flags            uint16 `name:"flags__uint32_t"`
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/deoptimization-data.h#266
@@ -951,7 +957,6 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
 	// data can be in the array before function name and line numbers. The exact
 	// number varies V8 version to version. Counting the actual slot number
 	// would require tracking lot of V8 bitfields that have changed a lot, see:
-	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/scope-info.tq#50
 	const numSlots = 16
 	const slotSize = pointerSize
@@ -1012,7 +1017,8 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
 		prev = cur
 	}
 	if !isOld {
-		// even if we didn't find name, we can be reasonably sure start/end are right, so return them
+		// even if we didn't find name, we can be reasonably sure start/end are right,
+		// so return them
 		return name, startPos, endPos
 	}
 	return name, 0, 0
@@ -1142,7 +1148,6 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	}
 
 	// Function data
-	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.cc#76
 	fdAddr, fdType, _ := i.readObjectPtr(addr + libpf.Address(vms.SharedFunctionInfo.FunctionData))
 	switch fdType {
@@ -1254,9 +1259,10 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	// Read the deoptimization data
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
 	if vms.DeoptimizationData.ProtectedFixedArray {
-		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFixedArray)
+		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFA)
 	} else if vms.DeoptimizationData.TrustedFixedArray {
-		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
+		deoptimizationDataPtr, err = i.getTypedObject(
+			deoptimizationDataPtr, vms.Type.TrustedFixedArray)
 	} else {
 		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
 	}
@@ -1279,9 +1285,9 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	if sfi == nil {
 		// Read the Code's SFI
 		var sfiPtr libpf.Address
-		if vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper != 0 {
+		if vms.DeoptimizationDataIndex.SFIWrapper != 0 {
 			sfiWrapperPtr := npsr.Ptr(deoptimizationData,
-				uint(vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper*pointerSize))
+				uint(vms.DeoptimizationDataIndex.SFIWrapper*pointerSize))
 			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr, vms.Type.SharedFunctionInfoWrapper)
 			if err != nil {
 				return nil, fmt.Errorf("sfi wrapper pointer read: %w", err)
@@ -1313,7 +1319,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// inlined function's SFI structures
 		expectedTag := vms.Type.FixedArray
 		if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray {
-			expectedTag = vms.Type.TrustedWeakFixedArray
+			expectedTag = vms.Type.TrustedWeakFA
 		} else if vms.DeoptimizationLiteralArray.WeakFixedArray {
 			expectedTag = vms.Type.WeakFixedArray
 		}
@@ -1421,8 +1427,6 @@ func decodeUVLQ(r io.ByteReader) (uint64, error) {
 // decodeVLQ reads and decodes one signed Variable Length Quantity
 // https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/base/vlq.h#110
 // https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position-table.cc#90
-//
-//nolint:lll
 func decodeVLQ(r io.ByteReader) (int64, error) {
 	decoded, err := decodeUVLQ(r)
 	if err != nil {
@@ -1444,8 +1448,6 @@ func decodeVLQ(r io.ByteReader) (int64, error) {
 //	  script_offset   30 bits
 //	}
 //	inlining_id       16 bits
-//
-//nolint:lll
 type sourcePosition uint64
 
 func (pos sourcePosition) isExternal() bool {
@@ -1472,7 +1474,6 @@ func decodePosition(table []byte, delta uint64) sourcePosition {
 	// delta from previous entry.
 
 	r := bytes.NewReader(table)
-	//nolint:lll
 	// Initialize implicit base values:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position-table.h#26
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/common/globals.h#480
@@ -1529,10 +1530,11 @@ func mapPositionToLine(lineEnds []uint32, pos int32) (libpf.SourceLineno, libpf.
 }
 
 // scriptOffsetToLine maps a sourcePosition to a line and column number in the corresponding source
-func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) (libpf.SourceLineno, libpf.SourceColumn) {
+func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) (
+	libpf.SourceLineno, libpf.SourceColumn,
+) {
 	scriptOffset := position.scriptOffset()
 	// The scriptOffset is offset by one, to make kNoSourcePosition zero.
-	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position.h#93
 	if scriptOffset == 0 {
 		return sfi.funcStartLine, 0
@@ -1541,7 +1543,10 @@ func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) (libpf.SourceLinen
 }
 
 // appendFrame adds a new frame to frames.
-func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.SourceLineno, column libpf.SourceColumn) {
+func (i *v8Instance) appendFrame(
+	frames *libpf.Frames, sfi *v8SFI,
+	lineNo libpf.SourceLineno, column libpf.SourceColumn,
+) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
@@ -1590,7 +1595,6 @@ func (i *v8Instance) symbolizeSFI(pointer libpf.Address, delta uint64, frames *l
 	}
 
 	// Adjust the bytecode pointer as needed
-	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/execution/frames.cc#1793
 	bytecodeDelta := int64(delta & support.V8LineDeltaMask)
 	bytecodeDelta -= int64(vms.BytecodeArray.Data) - HeapObjectTag
@@ -1608,7 +1612,6 @@ func (i *v8Instance) symbolizeSFI(pointer libpf.Address, delta uint64, frames *l
 // getBytecodeLength decodes the length at the start of bytecode array
 func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	// Bytecode has one optional scaling prefix opcode, followed with the meaningful opcode.
-	//nolint:lll
 	// The list of these opcodes is at:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#46
 	opcode, err := r.ReadByte()
@@ -1617,7 +1620,6 @@ func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	}
 
 	// The scaling opcodes have not changed since V8 6.8.141. So hard code them here.
-	//nolint:lll
 	// Map scaling opcodes to their offset in the decoding table:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#612
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#892
@@ -1639,7 +1641,6 @@ func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	}
 
 	// Get the length from kBytecodeSizes
-	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#893
 	if opcode <= 0x03 && opcode > d.bytecodeCount {
 		// Invalid opcode
@@ -1661,7 +1662,6 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 		return 0
 	}
 
-	//nolint:lll
 	// The algorithm to do the mapping:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/baseline/bytecode-offset-iterator.h#45
 	// The baseline position table is a series of unsigned VLQs:
@@ -1765,7 +1765,9 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 	return nil
 }
 
-func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *v8Instance) Symbolize(
+	ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.V8) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -2005,7 +2007,6 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		vms.FramePointer.BytecodeOffset = vms.FramePointer.BytecodeArray - pointerSize
 	}
 	if vms.Fixed.FirstJSFunctionType == 0 {
-		//nolint:lll
 		// The V8 InstaceTypes tags are defined at:
 		//   https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#124
 		// which in turn is generated from the data at:
@@ -2017,12 +2018,10 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		switch {
 		case d.version >= v8Ver(9, 6, 138):
 			// Class constructor special case
-			//nolint:lll
 			// https://chromium.googlesource.com/v8/v8.git/+/1cd7a5822374a49ab6767185e69119d0d3076840
 			numJSFuncTypes = 15
 		case d.version >= v8Ver(9, 0, 14):
 			// Several constructor special cases added
-			//nolint:lll
 			// https://chromium.googlesource.com/v8/v8.git/+/624030e975cb4384f877b65070b4e650a6acb1ef
 			numJSFuncTypes = 14
 		}
@@ -2100,7 +2099,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		vms.DeoptimizationDataIndex.LiteralArray = val
 	}
 	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
-		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
+		vms.DeoptimizationDataIndex.SFIWrapper == 0 {
 		vms.DeoptimizationDataIndex.SharedFunctionInfo = 6
 	}
 	if vms.DeoptimizationDataIndex.InliningPositions == 0 {
@@ -2204,7 +2203,8 @@ type relevantSymbols struct {
 
 const (
 	defaultSnapshotBlobSymbol libpf.SymbolName = "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"
-	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"
+	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9" +
+		"Bytecodes14kBytecodeSizesE"
 )
 
 // scanForRelevantSymbols gets the symbols needed for Node unwinding

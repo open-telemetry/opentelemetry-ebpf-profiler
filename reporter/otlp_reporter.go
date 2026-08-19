@@ -174,14 +174,13 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error
 
 // setupGrpcConnection sets up a gRPC connection instrumented with our auth interceptor
 func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn, error) {
-	//nolint:staticcheck
 	opts := []grpc.DialOption{
-		grpc.WithBlock(),
+		grpc.WithBlock(), //lint:ignore SA1019 required for connection-timeout semantics
 		grpc.WithUnaryInterceptor(cfg.GRPCClientInterceptor),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(cfg.MaxRPCMsgSize),
 			grpc.MaxCallSendMsgSize(cfg.MaxRPCMsgSize)),
-		grpc.WithReturnConnectionError(),
+		grpc.WithReturnConnectionError(), //lint:ignore SA1019 required for connection-timeout semantics
 	}
 
 	if cfg.DisableTLS {
@@ -199,6 +198,5 @@ func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn,
 
 	ctx, cancel := context.WithTimeout(parent, cfg.GRPCConnectionTimeout)
 	defer cancel()
-	//nolint:staticcheck
-	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)
+	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...) //lint:ignore SA1019 required for connection-timeout semantics
 }

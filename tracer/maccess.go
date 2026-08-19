@@ -16,7 +16,8 @@ import (
 // checkForMmaccessPatch validates if a Linux kernel function is patched by
 // extracting the kernel code of the function and analyzing it.
 func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module) error {
+	kmod *kallsyms.Module,
+) error {
 	faultyFunc, err := kmod.LookupSymbol("copy_from_user_nofault")
 	if err != nil {
 		return fmt.Errorf("failed to lookup 'copy_from_user_nofault': %v", err)

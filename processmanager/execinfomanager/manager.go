@@ -287,7 +287,9 @@ func (mgr *ExecutableInfoManager) CleanupUnused(age time.Duration) error {
 
 		info, ok := state.executables[fileID]
 		if !ok {
-			return fmt.Errorf("FileID %v is in state.unusedExecutables, but not in state.executables", fileID)
+			return fmt.Errorf(
+				"FileID %v is in state.unusedExecutables, but not in state.executables",
+				fileID)
 		}
 
 		if info.rc != 0 {
@@ -456,7 +458,8 @@ func (state *executableInfoManagerState) loadDeltas(
 			}
 
 			addr := block.Start + uint64(delta.Offset)
-			if unwindInfo.Flags&support.UnwindFlagCommand != 0 && unwindInfo.Param == support.UnwindCommandSignal {
+			if unwindInfo.Flags&support.UnwindFlagCommand != 0 &&
+				unwindInfo.Param == support.UnwindCommandSignal {
 				// EBPF code does a -1 fixup for return addresses.
 				// To match the signal handler function injected into
 				// stack, the signal handler stack delta must start one
@@ -474,7 +477,8 @@ func (state *executableInfoManagerState) loadDeltas(
 			}
 		}
 		// Check if blocks are far apart or last block
-		if blockIndex+1 == len(intervals.Blocks) || block.End+sdtypes.MinimumGap < intervals.Blocks[blockIndex+1].Start {
+		if blockIndex+1 == len(intervals.Blocks) ||
+			block.End+sdtypes.MinimumGap < intervals.Blocks[blockIndex+1].Start {
 			if err := addDelta(block.End, sdtypes.UnwindInfoInvalid); err != nil {
 				return mapRef{}, err
 			}

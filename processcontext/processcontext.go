@@ -22,7 +22,8 @@ const (
 	// OTel process context is published in a mapping:
 	// - based on a memfd file descriptor named "OTEL_CTX" when memfd_create is available.
 	// - based on an anonymous private mapping when memfd_create is not available
-	// In both cases, an attempt is made to name the mapping "OTEL_CTX" using prctl(PR_SET_VMA_ANON_NAME) which may fail depending on kernel version/configuration.
+	// In both cases, an attempt is made to name the mapping "OTEL_CTX" using
+	// prctl(PR_SET_VMA_ANON_NAME) which may fail depending on kernel version/configuration.
 	// Consequently the mapping can show up with 3 different names:
 	// - "/memfd:OTEL_CTX": memfd-based mapping and prctl failed
 	// - "[anon_shmem:OTEL_CTX]": memfd-based mapping and prctl succeeded
@@ -50,7 +51,8 @@ const (
 )
 
 var (
-	// ErrInvalidContext indicates the ProcessContext has invalid format, signature, version, or size.
+	// ErrInvalidContext indicates the ProcessContext has invalid format,
+	// signature, version, or size.
 	ErrInvalidContext = errors.New("invalid ProcessContext")
 
 	// ErrConcurrentUpdate indicates the ProcessContext was updated during read.
@@ -71,7 +73,7 @@ type header struct {
 	Signature              [8]byte // "OTEL_CTX"
 	Version                uint32  // Format version (2)
 	PayloadSize            uint32  // Size of protobuf payload in bytes
-	MonotonicPublishedAtNs uint64  // Monotonic clock timestamp from `CLOCK_BOOTTIME` of when the context was published, in nanoseconds
+	MonotonicPublishedAtNs uint64  // CLOCK_BOOTTIME timestamp when context was published, in ns
 	PayloadPtr             uint64  // Memory pointer to protobuf payload
 }
 
@@ -79,7 +81,9 @@ type header struct {
 // Returns ErrInvalidContext if the process has no ProcessContext memory region.
 // Retries on concurrent updates, up to maxAttempts total attempts.
 // If maxAttempts is 0, the default value is used.
-func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+func Read(addr libpf.Address, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64, maxAttempts int,
+) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
@@ -99,7 +103,9 @@ func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 }
 
 // readOnce performs a single attempt to read ProcessContext.
-func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
+func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64,
+) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",

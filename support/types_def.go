@@ -97,33 +97,37 @@ const (
 	HSTSIDSegMapMask      = C.HS_TSID_SEG_MAP_MASK
 )
 
-type ApmSpanID C.ApmSpanID
-type ApmTraceID C.ApmTraceID
-type CustomLabel C.CustomLabel
-type CustomLabelsArray C.CustomLabelsArray
-type Event C.Event
-type OffsetRange C.OffsetRange
-type PIDPage C.PIDPage
-type PIDPageMappingInfo C.PIDPageMappingInfo
-type StackDelta C.StackDelta
-type StackDeltaPageInfo C.StackDeltaPageInfo
-type StackDeltaPageKey C.StackDeltaPageKey
-type SystemAnalysis C.SystemAnalysis
-type TSDInfo C.TSDInfo
-type DTVInfo C.DTVInfo
-type Trace C.Trace
-type UnwindInfo C.UnwindInfo
+type (
+	ApmSpanID          C.ApmSpanID
+	ApmTraceID         C.ApmTraceID
+	CustomLabel        C.CustomLabel
+	CustomLabelsArray  C.CustomLabelsArray
+	Event              C.Event
+	OffsetRange        C.OffsetRange
+	PIDPage            C.PIDPage
+	PIDPageMappingInfo C.PIDPageMappingInfo
+	StackDelta         C.StackDelta
+	StackDeltaPageInfo C.StackDeltaPageInfo
+	StackDeltaPageKey  C.StackDeltaPageKey
+	SystemAnalysis     C.SystemAnalysis
+	TSDInfo            C.TSDInfo
+	DTVInfo            C.DTVInfo
+	Trace              C.Trace
+	UnwindInfo         C.UnwindInfo
+)
 
-type ApmIntProcInfo C.ApmIntProcInfo
-type BEAMProcInfo C.BEAMProcInfo
-type DotnetProcInfo C.DotnetProcInfo
-type GoRuntimeOffsets C.GoRuntimeOffsets
-type HotspotProcInfo C.HotspotProcInfo
-type PHPProcInfo C.PHPProcInfo
-type PerlProcInfo C.PerlProcInfo
-type PyProcInfo C.PyProcInfo
-type RubyProcInfo C.RubyProcInfo
-type V8ProcInfo C.V8ProcInfo
+type (
+	ApmIntProcInfo   C.ApmIntProcInfo
+	BEAMProcInfo     C.BEAMProcInfo
+	DotnetProcInfo   C.DotnetProcInfo
+	GoRuntimeOffsets C.GoRuntimeOffsets
+	HotspotProcInfo  C.HotspotProcInfo
+	PHPProcInfo      C.PHPProcInfo
+	PerlProcInfo     C.PerlProcInfo
+	PyProcInfo       C.PyProcInfo
+	RubyProcInfo     C.RubyProcInfo
+	V8ProcInfo       C.V8ProcInfo
+)
 
 const (
 	Sizeof_StackDelta = C.sizeof_StackDelta

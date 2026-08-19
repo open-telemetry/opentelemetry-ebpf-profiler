@@ -150,12 +150,14 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 				return int32(imm.Imm), nil
 			}
 		case arm64asm.MOVK:
-			// when compiled with -buildmode=pie, mov instruction is split into two instructions: movz and movk
-			// movz is used to zero the register and set bits 16-31, while movk is used to set the lower 16 bits:
+			// when compiled with -buildmode=pie, mov instruction is split into two
+			// instructions: movz and movk
+			// movz is used to zero the register and set bits 16-31, while movk is used to
+			// set the lower 16 bits:
 			// movz x27, #0x0, lsl #16
 			// movk x27, #0x10
-			// For now, we'll just decode the immediate value from the movk instruction since the one from the movz
-			// instruction seems to always be 0.
+			// For now, we'll just decode the immediate value from the movk instruction since
+			// the one from the movz instruction seems to always be 0.
 			imm, ok := arm.DecodeImmediate(i.Args[1])
 			if ok {
 				return int32(imm), nil

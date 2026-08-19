@@ -76,7 +76,8 @@ func (c *ProbeContext) CollectionSpecWith(
 	for _, s := range c.sysVarSetters() {
 		v, ok := full.Variables[s.name]
 		if !ok {
-			return nil, fmt.Errorf("mandatory system variable %q not found in collection spec", s.name)
+			return nil, fmt.Errorf(
+				"mandatory system variable %q not found in collection spec", s.name)
 		}
 		filtered.Variables[s.name] = v
 	}
@@ -143,7 +144,9 @@ func (c *ProbeContext) applySystemVars(coll *cebpf.CollectionSpec) error {
 // merged with probeMaps; probe map names must not shadow tracer-owned map names.
 // Only maps actually referenced by the probe's programs are rewritten; tracer-internal
 // maps that the probe does not use are silently skipped.
-func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map) error {
+func (c *ProbeContext) RewriteMaps(
+	coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map,
+) error {
 	// Build pool: shared tracer maps plus probe-specific maps.
 	// .rodata.var is excluded: each probe creates its own isolated RODATA map
 	// in LoadProbeUnwinders so that probe-specific variables (e.g. origin_id_probe)
@@ -207,7 +210,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	}
 	kprobeProgs := c.maps["kprobe_progs"]
 	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
+		return fmt.Errorf("kprobe_progs map not available; " +
+			"ensure the kprobe unwinder chain was loaded at startup")
 	}
 	perfProgs := c.maps["perf_progs"]
 	if perfProgs == nil {

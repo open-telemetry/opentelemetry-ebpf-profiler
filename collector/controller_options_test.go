@@ -40,7 +40,7 @@ func TestWithOnShutdown(t *testing.T) {
 func TestWithProcessMetaEnricher(t *testing.T) {
 	// Simulate a /proc/<pid>/ directory with a loginuid file.
 	procBase := t.TempDir() + "/"
-	require.NoError(t, os.WriteFile(filepath.Join(procBase, "loginuid"), []byte("1000\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(procBase, "loginuid"), []byte("1000\n"), 0o600))
 
 	loginUIDEnricher := process.MetaEnricherFunc(func(procBase string, meta *process.Meta) {
 		data, err := os.ReadFile(filepath.Join(procBase, "loginuid"))
@@ -63,7 +63,9 @@ func TestWithProcessMetaEnricher(t *testing.T) {
 }
 
 func TestWithReporterFactory(t *testing.T) {
-	reporterFactory := func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+	reporterFactory := func(
+		cfg *reporter.Config, nextConsumer xconsumer.Profiles,
+	) (reporter.Reporter, error) {
 		return nil, nil
 	}
 	option := WithReporterFactory(reporterFactory)

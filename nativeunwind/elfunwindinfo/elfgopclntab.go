@@ -333,7 +333,8 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 			}
 			p := ef.ProgByVirtualAddress(uint64(start))
 			if p == nil {
-				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
+				return nil, 0, fmt.Errorf(
+					"failed to load .gopclntab via symbols: unmappable virtual address")
 			}
 			offset = int64(p.Off) + int64(start) - int64(p.Vaddr)
 		}
@@ -468,7 +469,6 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		// With the change of the type of the first field of _func in Go 1.18, this
 		// value is now hard coded.
 		//
-		//nolint:lll
 		// See https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L376-L382
 		g.funcMapSize = 2 * 4
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
@@ -511,7 +511,6 @@ func (g *Gopclntab) Close() error {
 // getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
 func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 	if g.version >= go1_18 {
-		//nolint:lll
 		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
 		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
 		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
@@ -729,8 +728,8 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 }
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
-	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-
+	getSourceFileStrategy func(sourceFile string) strategy,
+) (map[int]strategy, error) {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
@@ -766,7 +765,9 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	return cuStrategy, nil
 }
 
-func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
+func resolveFunctionUnwindInfo(
+	r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool,
+) (map[int32]*sdtypes.UnwindInfo, error) {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 

@@ -73,7 +73,8 @@ func hashCOPKey(k copKey) uint32 {
 }
 
 func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	libcInfo libc.LibcInfo) error {
+	libcInfo libc.LibcInfo,
+) error {
 	// Perl requires TSDInfo to access thread state. If stateInTSD is true,
 	// we need valid TSDInfo to proceed. If it's false, we can proceed without it.
 	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
@@ -398,7 +399,9 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 	return c, nil
 }
 
-func (i *perlInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
+func (i *perlInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
+	_ libpf.FrameMapping,
+) error {
 	if !ef.Type().IsInterpType(libpf.Perl) {
 		return interpreter.ErrMismatchInterpreterType
 	}

@@ -12,7 +12,8 @@ import (
 // decodeStubArgumentARM64 disassembles arm64 code and decodes the assumed value
 // of requested argument.
 func decodeStubArgumentARM64(code []byte,
-	addrBase libpf.SymbolValue) libpf.SymbolValue {
+	addrBase libpf.SymbolValue,
+) libpf.SymbolValue {
 	const argNumber uint8 = 0
 	// The concept is to track the latest load offset for all X0..X30 registers.
 	// These registers are used as the function arguments. Once the first branch

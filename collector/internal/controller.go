@@ -36,7 +36,9 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	if cfg.ReporterFactory == nil {
-		cfg.ReporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+		cfg.ReporterFactory = func(
+			cfg *reporter.Config, nextConsumer xconsumer.Profiles,
+		) (reporter.Reporter, error) {
 			return reporter.NewCollector(cfg, nextConsumer)
 		}
 	}

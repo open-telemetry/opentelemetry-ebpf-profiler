@@ -32,7 +32,9 @@ type TestInstance struct {
 	usesAnonymousMappings bool
 }
 
-func (ti *TestInstance) UpdateLibcInfo(_ interpreter.EbpfHandler, _ libpf.PID, info libc.LibcInfo) error {
+func (ti *TestInstance) UpdateLibcInfo(
+	_ interpreter.EbpfHandler, _ libpf.PID, info libc.LibcInfo,
+) error {
 	ti.info = info
 	return nil
 }
@@ -360,7 +362,9 @@ func TestProcessRemovedInterpretersClearsAnonymousMappingInterest(t *testing.T) 
 	require.False(anonymousMappingsWanted)
 }
 
-func TestProcessRemovedInterpretersKeepsAnonymousMappingInterestWhenInterpreterRemains(t *testing.T) {
+func TestProcessRemovedInterpretersKeepsAnonymousMappingInterestWhenInterpreterRemains(
+	t *testing.T,
+) {
 	require := require.New(t)
 	pid := libpf.PID(123)
 	keptOID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}

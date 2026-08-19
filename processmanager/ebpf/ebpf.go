@@ -83,7 +83,8 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
 func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
-	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
+	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec,
+) (ebpfapi.EbpfHandler, error) {
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
 	}
@@ -102,7 +103,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 			if !interpretersConfig.IsMapEnabled(nameTag) {
 				continue
 			}
-			return nil, fmt.Errorf("Map %v is not available", nameTag)
+			return nil, fmt.Errorf("map %v is not available", nameTag)
 		}
 		implRefVal.Field(i).Set(reflect.ValueOf(mapVal))
 	}
@@ -113,7 +114,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 		deltasMapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		deltasMap, ok := maps[deltasMapName]
 		if !ok {
-			return nil, fmt.Errorf("Map %v is not available", deltasMapName)
+			return nil, fmt.Errorf("map %v is not available", deltasMapName)
 		}
 		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
 	}
@@ -139,7 +140,7 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 	if err := impl.InterpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 		cebpf.UpdateAny); err != nil {
 		// TODO: Used to be log.Fatalf, revisit if needed
-		return fmt.Errorf("Failed to place interpreter range in map: %v", err)
+		return fmt.Errorf("failed to place interpreter range in map: %v", err)
 	}
 
 	return nil
@@ -324,7 +325,9 @@ func getPIDPageMappingInfo(fileID, biasAndUnwindProgram uint64) *support.PIDPage
 
 // probeMapOperations tests if the BPF syscall supports operations by running a supplied closure.
 // It returns nil if batch operations are supported for mapType or an error otherwise.
-func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType, probe func(*cebpf.Map, ptrCastMarshaler[T], ptrCastMarshaler[uint64]) error) error {
+func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType,
+	probe func(*cebpf.Map, ptrCastMarshaler[T], ptrCastMarshaler[uint64]) error,
+) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		// In environment like github action runners, we can not adjust rlimit.
@@ -360,7 +363,9 @@ func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType, probe fun
 }
 
 // probeBatchOperationsInner is the inner check to be used by probeBatchOperations.
-func probeBatchOperationsInner[T constraints.Unsigned](probeMap *cebpf.Map, keys ptrCastMarshaler[T], values ptrCastMarshaler[uint64]) error {
+func probeBatchOperationsInner[T constraints.Unsigned](
+	probeMap *cebpf.Map, keys ptrCastMarshaler[T], values ptrCastMarshaler[uint64],
+) error {
 	n, err := probeMap.BatchUpdate(keys, values, nil)
 	if err != nil {
 		// Older kernel do not support batch operations on maps.
@@ -555,7 +560,6 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-
 }
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.
@@ -610,9 +614,9 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm
 	return impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes []lpm.Prefix) (uint64,
-	error,
-) {
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(
+	pid libpf.PID, prefixes []lpm.Prefix,
+) (uint64, error) {
 	cKey := &support.PIDPage{}
 	var deleted uint64
 	var combinedErrors error
@@ -628,9 +632,9 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 	return deleted, combinedErrors
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes []lpm.Prefix) (uint64,
-	error,
-) {
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(
+	pid libpf.PID, prefixes []lpm.Prefix,
+) (uint64, error) {
 	// Prepare all keys based on the given prefixes.
 	cKeys := make([]support.PIDPage, 0, len(prefixes))
 	for _, prefix := range prefixes {

@@ -116,14 +116,16 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
-	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int) ([]ThreadInfo, error) {
+	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int,
+) ([]ThreadInfo, error) {
 	return ExtractTracesWithInterpreters(ctx, pr, debug, lwpFilter, faultAddresses,
 		interpreterconfig.AllInterpreters())
 }
 
 func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int,
-	interpretersConfig interpreterconfig.Config) ([]ThreadInfo, error) {
+	interpretersConfig interpreterconfig.Config,
+) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
 	defer cancel()
 

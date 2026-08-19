@@ -5,7 +5,6 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 
 // Java HotSpot Unwinder support code (works also with Scala using HotSpot)
 
-//nolint:lll
 // The code here and in hotspot_tracer.ebpf.c is based on the Java Serviceability Agent (SA) code,
 // and the Java DTrace helper code (libjvm_db). Additional insight is taken from
 // https://github.com/jvm-profiling-tools/async-profiler/ unwinding parts, as well as various other
@@ -38,8 +37,10 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 // unwinding (incomplete list). The list items are changes done between the release major versions.
 //
 //  JDK7 - Tested ok
-//   - renamed multiple C++ class names: methodOopDesc -> Method, constMethodOopDesc -> ConstMethod, etc.
-//   - due to the above some pointers are not including the sizeof OopDesc, and need to be explicitly added
+//   - renamed multiple C++ class names: methodOopDesc -> Method,
+//     constMethodOopDesc -> ConstMethod, etc.
+//   - due to the above some pointers are not including the sizeof OopDesc, and need
+//     to be explicitly added
 //   - InstanceKlass._source_file_name (Symbol*) -> _source_file_name_index
 //   - nmethod._oops_offset renamed to _metadata_offset
 //  JDK8 - Tested ok
@@ -107,8 +108,9 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 // The above approach is selected because the process of symbolizing a JVM Method requires unbounded
 // loops to parse the lineNumber tables and cannot be done in the eBPF code. The implication is that
 // the frame values are specific to the process (as it has a pointer in it). Meaning the Trace IDs
-// will be different if there's multiple VM instances running same Java application. But the overhead
-// is not huge here. This also has the implication that in the very unlikely even of two different
+// will be different if there's multiple VM instances running same Java application. But
+// the overhead is not huge here. This also has the implication that in the very unlikely
+// even of two different
 // JVM instances producing identical trace (highly unlikely due to ASLR and the address cookie) the
 // count aggregation might incorrectly produce wrong expansion. However, it's more likely that there
 // will be trace hash collision due to other factors where the same issue would happen.

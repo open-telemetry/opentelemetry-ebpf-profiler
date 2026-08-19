@@ -68,9 +68,6 @@
       ],
     },
   ],
-  ignoreDeps: [
-    'golangci/golangci-lint-action',
-  ],
   labels: [
     'dependencies',
   ],

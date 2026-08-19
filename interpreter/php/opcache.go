@@ -3,7 +3,6 @@
 
 package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
-//nolint:lll
 // PHP8+ JIT compiler unwinder.
 // This file contains the code necessary for unwinding PHP code that has been JIT compiled.
 //
@@ -20,7 +19,8 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 // 1) https://github.com/php/php-src/blob/PHP-8.0/ext/opcache/jit/zend_jit.h
 // 2) https://github.com/php/php-src/blob/PHP-8.0/ext/opcache/jit/zend_jit.c (if you have a while)
 //
-// It might also be useful to know how Zend Extensions work (or, at least be aware of their existence)
+// It might also be useful to know how Zend Extensions work
+// (or, at least be aware of their existence)
 // It turns out the way these have been structured implies almost everything you need to know about
 // why the JIT compiler is the way it is. This is a useful resource for understanding them
 // https://www.phpinternalsbook.com/php7/extensions_design/zend_extensions.html
@@ -32,7 +32,8 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 //
 // Before we begin it's illustrative to understand how PHP works internally.
 // PHP belongs to the class of interpreted languages that use bytecode: each PHP function is
-// decomposed into a sequence of bytecode instructions that are then executed by the PHP interpreter.
+// decomposed into a sequence of bytecode instructions that are then executed by the PHP
+// interpreter.
 // These instructions are known as zend_ops in the Zend compiler, and their internal structure
 // looks like this:
 //  struct _zend_op {
@@ -46,7 +47,8 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 // Here the "handler" member is a pointer to some function that is executed when the
 // zend_op is evaluated. Typically this is a PHP function of some kind that has already been
 // pre-built.  You can imagine this as a function pointer to some function that
-// accepts two arguments and produces a singular result. Note that znode_ops can refer to other _zend_ops,
+// accepts two arguments and produces a singular result. Note that znode_ops can refer to
+// other _zend_ops,
 // which allows you to build a AST.
 // A good resource on this (with far more detail, if you need it) is
 // https://www.npopov.com/2017/04/14/PHP-7-Virtual-machine.html
@@ -59,19 +61,24 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 // This means that when the zend_op is evaluated native code is used
 // rather than the PHP function, which enables the code to be much faster.
 //
-// The implication of this is that the PHP unwinder doesn't actually need to be changed at all (beyond a few offsets)
-// since the executor_globals is still the primary point of execution[1]. This means that all we have to do
+// The implication of this is that the PHP unwinder doesn't actually need to be changed at
+// all (beyond a few offsets)
+// since the executor_globals is still the primary point of execution[1]. This means that
+// all we have to do
 // is tell the eBPF code to unwind PHP when JIT'd code is encountered.
 //
 // However, getting the JIT memory regions inside the base PHP interpreter is difficult.
-// It turns out that PHP's JIT compiler is a bit strange: the memory for the JIT'd code lives inside a
+// It turns out that PHP's JIT compiler is a bit strange: the memory for the JIT'd code
+// lives inside a
 // Zend extension called the OPCache.
 //
-// As justification: older versions of PHP (e.g before PHP 5.5) had a problem: each time a script was executed
+// As justification: older versions of PHP (e.g before PHP 5.5) had a problem: each time
+// a script was executed
 // the script needed to be parsed into opcodes, compiled on the virtual machine and then
 // executed. This is rather inefficient for frequently called scripts: so, PHP 5.5 introduced
 // the OPcache, which caches frequently used scripts and the corresponding opcodes.
-// It turns out that the makers of the Zend engine reasoned that if you wanted the JIT you'd also want the Opcache.
+// It turns out that the makers of the Zend engine reasoned that if you wanted the JIT
+// you'd also want the Opcache.
 //
 // It's natural to ask where the Opcache lives in memory. Since PHP supports
 // both thread and process-level parallelism, this memory needs to be shared across all PHP
@@ -79,13 +86,16 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 // allocated in shared memory.
 //
 // The implication of this are:
-// a) JIT'd code lives in shared memory, which means that all of the process-local work that the host-agent normally does doesn't really apply for PHP.
+// a) JIT'd code lives in shared memory, which means that all of the process-local work
+//    that the host-agent normally does doesn't really apply for PHP.
 // b) The PHP JIT doesn't even live in the same shared object as the PHP interpreter, so we can't
 //    find the JIT information from the PHP interpreter.
-// c) Even if we could, PHP hides symbols by default and so recovering the relevant information isn't easy in this form[2].
+// c) Even if we could, PHP hides symbols by default and so recovering the relevant
+//    information isn't easy in this form[2].
 //
 // Note that we also can't use the approach used in the V8 interpreter
-// because the JIT'd PHP code doesn't ever get loaded as an anonymous mapping (the JIT region is just
+// because the JIT'd PHP code doesn't ever get loaded as an anonymous mapping
+// (the JIT region is just
 // marked as executable and it's never loaded into the executable directly).
 // In a sense this is more like how the Hotspot Interpreter works.
 //
@@ -94,25 +104,36 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 // a) The OPcache contains symbols for the externally-exposed JIT functions.
 // b) At least one of those functions sets a both a pointer to the JIT memory and a variable
 //    that contains the size of the buffer.
-// c) The OPcache is the shared object that actually allocates the memory: when the OPcache extension
+// c) The OPcache is the shared object that actually allocates the memory: when the
+//    OPcache extension
 //    is initialized the memory is allocated. This also just makes everything a bit neater.
 //
-// This means that we can inform the eBPF code that the PHP unwinder should be used whenever JIT'd PHP code is encountered.
+// This means that we can inform the eBPF code that the PHP unwinder should be used
+// whenever JIT'd PHP code is encountered.
 //
 // The design of this interpreter is therefore as follows: we don't do _any_ PHP unwinding in
-// this interpreter at all. This interpreter is solely meant to allow the PHP unwinder to be triggered
+// this interpreter at all. This interpreter is solely meant to allow the PHP unwinder
+// to be triggered
 // when appropriate. This means that the interpreter is really basic compared to all of the other
 // interpreters.
 //
 // Footnotes:
-// (1) In different modes there are other approaches that you can use to do this sort of unwinding. For example, in Debug mode the Zend compiler stores
-//     information about each JIT'd frames in a jit_globals structure. This is probably really useful if the client is running in Debug mode (or if they've
-//     compiled PHP with HAVE_GDB enabled or similar) but this isn't guaranteed to work across all deployments (whereas this version should).
-// (2) The original version (i.e pre-PR) code tried to do this. You can (in theory) walk the module registry that PHP provides to find the JIT info at runtime
-//     and then you can do this all inside interpreterphp. However, this turned out to be really complicated, brittle and less efficient than this approach (there were
-//     far more memory reads from the particular process during the initial loading than with this approach).
-// (3) Note that this code should also work with PHP's thread-safe resource management mechanism. Since the JIT buffer is shared across all processes anyway clients who
-//     use the TSRM shouldn't encounter any issues here. There are other uncommon ways to build PHP, but these also shouldn't affect how this code works.
+// (1) In different modes there are other approaches that you can use to do this sort of
+//     unwinding. For example, in Debug mode the Zend compiler stores information about
+//     each JIT'd frames in a jit_globals structure. This is probably really useful if the
+//     client is running in Debug mode (or if they've compiled PHP with HAVE_GDB enabled
+//     or similar) but this isn't guaranteed to work across all deployments (whereas this
+//     version should).
+// (2) The original version (i.e pre-PR) code tried to do this. You can (in theory) walk
+//     the module registry that PHP provides to find the JIT info at runtime
+//     and then you can do this all inside interpreterphp. However, this turned out to be
+//     really complicated, brittle and less efficient than this approach (there were
+//     far more memory reads from the particular process during the initial loading
+//     than with this approach).
+// (3) Note that this code should also work with PHP's thread-safe resource management
+//     mechanism. Since the JIT buffer is shared across all processes anyway clients who
+//     use the TSRM shouldn't encounter any issues here. There are other uncommon ways to
+//     build PHP, but these also shouldn't affect how this code works.
 
 import (
 	"debug/elf"

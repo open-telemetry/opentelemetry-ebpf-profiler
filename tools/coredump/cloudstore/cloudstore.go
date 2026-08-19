@@ -20,9 +20,8 @@ const moduleStoreRegion = "us-sanjose-1"
 const moduleStoreObjectNamespace = "axtwf1hkrwcy"
 
 // modulePublicReadUrl defines the S3 bucket OCI public read only base path.
-//
-//nolint:lll
-const modulePublicReadURL = "sm-wftyyzHJkBghWeexmK1o5ArimNwZC-5eBej5Lx4e46sLVHtO_y7Zf7FZgoIu_/n/axtwf1hkrwcy"
+const modulePublicReadURL = "sm-wftyyzHJkBghWeexmK1o5ArimNwZC-5eBej5Lx4e46sLVHtO_y7Zf7FZgoIu_" +
+	"/n/axtwf1hkrwcy"
 
 // moduleStoreS3Bucket defines the S3 bucket used for the module store.
 const moduleStoreS3Bucket = "ebpf-profiling-coredumps"

@@ -46,15 +46,18 @@ const (
 	taskSource      = "[0-9a-f]{32}-\\d+"
 )
 
-//nolint:lll
 var (
-	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last element (path), which contains the container ID. Supports both cgroup v1 and v2.
+	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last
+	// element (path), which contains the container ID. Supports both cgroup v1 and v2.
 	expLine = regexp.MustCompile(`^\d+:[^:]*:(.+)$`)
 
 	// Inspired from https://github.com/DataDog/dd-otel-host-profiler/blob/1e50a36d4c3a8a87f0cc828f37b48455ec436e55/containermetadata/container.go#L32-L47 with the following changes to handle unit tests in process_test.go:
-	// - support prefix after `scope` to handle "0::/system.slice/docker-b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df.scope/init"
-	// - remove uuidSource to doesn't match "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-868f9513-eee8-457d-8e36-1b37ae8ae622.scope"
-	expContainerID = regexp.MustCompile(fmt.Sprintf(`(%s|%s)(?:\.scope)?(?:/[a-z]+)?$`, containerSource, taskSource))
+	// - support prefix after `scope` to handle paths like
+	//   "0::/system.slice/docker-<container-id>.scope/init"
+	// - remove uuidSource to not match UUID-based scopes like
+	//   "0::/user.slice/.../vte-spawn-<uuid>.scope"
+	expContainerID = regexp.MustCompile(
+		fmt.Sprintf(`(%s|%s)(?:\.scope)?(?:/[a-z]+)?$`, containerSource, taskSource))
 )
 
 // systemProcess provides an implementation of the Process interface for a
@@ -225,7 +228,8 @@ func NewSelfContainerIDEnricher() (MetaEnricher, error) {
 		if ino == selfCgroupIno {
 			meta.ContainerID = selfContainerID
 		} else {
-			log.Debugf("Process %s cgroup inode (%d) doesn't match profiler (%d)", procBase, ino, selfCgroupIno)
+			log.Debugf("Process %s cgroup inode (%d) doesn't match profiler (%d)",
+				procBase, ino, selfCgroupIno)
 		}
 	}), nil
 }

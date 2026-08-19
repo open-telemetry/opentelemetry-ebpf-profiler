@@ -45,7 +45,9 @@ var (
 )
 
 // testGenerate is a helper that calls Generate with the standard test collection window
-func testGenerate(p *Pdata, tree samples.TraceEventsTree, name, version string) (pprofile.Profiles, error) {
+func testGenerate(
+	p *Pdata, tree samples.TraceEventsTree, name, version string,
+) (pprofile.Profiles, error) {
 	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd)
 }
 
@@ -84,7 +86,9 @@ func TestGetDummyMappingIndex(t *testing.T) {
 				fileID: 0,
 			},
 			wantMappingTable: []int32{0},
-			wantStringSet:    orderedset.OrderedSet[string]{"": 0, "process.executable.build_id.htlhash": 1},
+			wantStringSet: orderedset.OrderedSet[string]{
+				"": 0, "process.executable.build_id.htlhash": 1,
+			},
 		},
 		{
 			name: "with an index not yet in the file id mapping and a filename in the string table",
@@ -98,7 +102,9 @@ func TestGetDummyMappingIndex(t *testing.T) {
 				fileID: 0,
 			},
 			wantMappingTable: []int32{42},
-			wantStringSet:    orderedset.OrderedSet[string]{"": 42, "process.executable.build_id.htlhash": 1},
+			wantStringSet: orderedset.OrderedSet[string]{
+				"": 42, "process.executable.build_id.htlhash": 1,
+			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -259,25 +265,29 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "samples within collection window",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
-					profileTypeSampling: {
-						{}: {
-							// Timestamps within the collection window (1000-1060)
-							Timestamps: []uint64{
-								uint64(time.Unix(1010, 0).UnixNano()),
-								uint64(time.Unix(1020, 0).UnixNano()),
-								uint64(time.Unix(1030, 0).UnixNano()),
+				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileTypeSampling: {
+							{}: {
+								// Timestamps within the collection window (1000-1060)
+								Timestamps: []uint64{
+									uint64(time.Unix(1010, 0).UnixNano()),
+									uint64(time.Unix(1020, 0).UnixNano()),
+									uint64(time.Unix(1030, 0).UnixNano()),
+								},
 							},
 						},
 					},
-				}},
-				samples.ResourceKey{PID: 2}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
-					profileTypeSampling: {
-						{}: {
-							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
+				},
+				samples.ResourceKey{PID: 2}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileTypeSampling: {
+							{}: {
+								Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
+							},
 						},
 					},
-				}},
+				},
 			},
 			expectedTime:     testProfileTime,
 			expectedDuration: testProfileDuration,
@@ -285,15 +295,17 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted start time for buffered samples",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
-					profileTypeSampling: {
-						{}: {
-							Frames: newTestFrames(false),
-							// Sample before collection start (990 vs 1000)
-							Timestamps: []uint64{uint64(time.Unix(990, 0).UnixNano())},
+				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileTypeSampling: {
+							{}: {
+								Frames: newTestFrames(false),
+								// Sample before collection start (990 vs 1000)
+								Timestamps: []uint64{uint64(time.Unix(990, 0).UnixNano())},
+							},
 						},
 					},
-				}},
+				},
 			},
 			expectedTime:     pcommon.Timestamp(time.Unix(990, 0).UnixNano()),
 			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(990, 0)).Nanoseconds()),
@@ -301,24 +313,32 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted across multiple containers",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
-					profileTypeSampling: {
-						{}: {
-							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
-							// Oldest sample at 985
-							Timestamps: []uint64{uint64(time.Unix(985, 0).UnixNano())},
+				samples.ResourceKey{
+					PID: 1, ContainerID: libpf.Intern("container1"),
+				}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileTypeSampling: {
+							{}: {
+								Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
+								// Oldest sample at 985
+								Timestamps: []uint64{uint64(time.Unix(985, 0).UnixNano())},
+							},
 						},
 					},
-				}},
-				samples.ResourceKey{PID: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
-					profileTypeSampling: {
-						{}: {
-							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
-							// Newer old sample at 995
-							Timestamps: []uint64{uint64(time.Unix(995, 0).UnixNano())},
+				},
+				samples.ResourceKey{
+					PID: 2, ContainerID: libpf.Intern("container2"),
+				}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileTypeSampling: {
+							{}: {
+								Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
+								// Newer old sample at 995
+								Timestamps: []uint64{uint64(time.Unix(995, 0).UnixNano())},
+							},
 						},
 					},
-				}},
+				},
 			},
 			expectedTime:     pcommon.Timestamp(time.Unix(985, 0).UnixNano()),
 			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(985, 0)).Nanoseconds()),
@@ -612,8 +632,10 @@ func TestGenerate_NativeFrame(t *testing.T) {
 				TID:    42,
 				CPU:    73,
 				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
-				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
+				TraceID: libpf.APMTraceID{
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+				},
 			}: &samples.TraceEvents{
 				Frames: singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
 				Timestamps: []uint64{
@@ -692,11 +714,14 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// Verify SpanID and TraceID are set via Link
 	linkIndex := sample.LinkIndex()
-	assert.Greater(t, linkIndex, int32(0), "Sample should have a link set (index > 0, since 0 is dummy)")
+	assert.Greater(t, linkIndex, int32(0),
+		"Sample should have a link set (index > 0, since 0 is dummy)")
 	link := dic.LinkTable().At(int(linkIndex))
 	expectedSpanID := pcommon.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}
-	expectedTraceID := pcommon.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27}
+	expectedTraceID := pcommon.TraceID{
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+	}
 	assert.Equal(t, expectedSpanID, link.SpanID())
 	assert.Equal(t, expectedTraceID, link.TraceID())
 
@@ -732,7 +757,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundComm, "Sample should have Comm attribute set")
 	assert.True(t, foundTID, "Sample should have TID attribute set")
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
-
 }
 
 func TestStackTableOrder(t *testing.T) {
@@ -801,7 +825,8 @@ func TestStackTableOrder(t *testing.T) {
 			// order, so compare stacks as a set rather than by index.
 			var gotStackTable [][]int32
 			for i := 0; i < dic.StackTable().Len(); i++ {
-				gotStackTable = append(gotStackTable, dic.StackTable().At(i).LocationIndices().AsRaw())
+				gotStackTable = append(
+					gotStackTable, dic.StackTable().At(i).LocationIndices().AsRaw())
 			}
 			assert.ElementsMatch(t, tt.wantStackTable, gotStackTable)
 		})
@@ -833,8 +858,10 @@ func TestGenerate_Validate(t *testing.T) {
 				TID:    42,
 				CPU:    73,
 				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
-				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
+				TraceID: libpf.APMTraceID{
+					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
+				},
 			}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
 					funcName, filePath, 123),
@@ -863,6 +890,7 @@ func TestGenerate_Validate(t *testing.T) {
 
 	err = (profcheck.ConformanceChecker{
 		CheckDictionaryDuplicates: true,
-		CheckSampleTimestampShape: true}).Check(&data)
+		CheckSampleTimestampShape: true,
+	}).Check(&data)
 	require.NoError(t, err)
 }

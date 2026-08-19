@@ -104,9 +104,11 @@ func (r *Reader) Remaining() int64 {
 	return r.slimit - r.off + int64(r.nbuf-r.pos)
 }
 
-var errNegativeCount = errors.New("negative count")
-var errWhence = errors.New("Seek: invalid whence")
-var errOffset = errors.New("Seek: invalid offset")
+var (
+	errNegativeCount = errors.New("negative count")
+	errWhence        = errors.New("Seek: invalid whence")
+	errOffset        = errors.New("Seek: invalid offset")
+)
 
 // Seek adjusts the current position in the stream.
 func (r *Reader) Seek(offset int64, whence int) (int64, error) {
@@ -150,10 +152,7 @@ func (r *Reader) fill() error {
 	}
 
 	r.pos = 0
-	toRead := int64(r.bufSize - preserve)
-	if toRead > r.limit-r.off {
-		toRead = r.limit - r.off
-	}
+	toRead := min(int64(r.bufSize-preserve), r.limit-r.off)
 
 	n, err := r.source.ReadAt(r.buf[preserve:preserve+int(toRead)], r.off)
 	r.nbuf = n + preserve

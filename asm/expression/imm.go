@@ -4,8 +4,10 @@
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 import "fmt"
 
-var zero Expression = &immediate{0}
-var one Expression = &immediate{1}
+var (
+	zero Expression = &immediate{0}
+	one  Expression = &immediate{1}
+)
 
 func Imm(v uint64) Expression {
 	switch v {

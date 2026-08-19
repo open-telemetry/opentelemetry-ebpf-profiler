@@ -104,8 +104,8 @@ func (d *phpData) String() string {
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}

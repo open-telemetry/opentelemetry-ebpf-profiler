@@ -93,7 +93,7 @@ type Config struct {
 }
 
 // Validate validates the config.
-// This is automatically called by the config parser as it implements the confmap.Validator interface.
+// This is automatically called by the config parser as it implements confmap.Validator.
 func (cfg *Config) Validate() error {
 	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
 		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
