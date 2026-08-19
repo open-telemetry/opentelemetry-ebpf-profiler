@@ -352,13 +352,13 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		}
 		major, err := strconv.ParseUint(devs[0], 16, 32)
 		if err != nil {
-			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			log.Debugf("major device: failed to convert %s to uint32: %v", devs[0], err)
 			numParseErrors++
 			continue
 		}
 		minor, err := strconv.ParseUint(devs[1], 16, 32)
 		if err != nil {
-			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			log.Debugf("minor device: failed to convert %s to uint32: %v", devs[1], err)
 			numParseErrors++
 			continue
 		}
