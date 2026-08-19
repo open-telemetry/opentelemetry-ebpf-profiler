@@ -7,6 +7,8 @@ import (
 	"context"
 	"debug/dwarf"
 	"debug/elf"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
@@ -19,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -137,18 +140,28 @@ func cacheLibrary(t *testing.T, tag, platform, libFile string) (string, bool) {
 	return target, false
 }
 
+// getFrameSpace gets the expected value of cframeSize for the given
+// architecture.
+func getFrameSpace(machine elf.Machine) (int32, error) {
+	switch machine {
+	case elf.EM_AARCH64:
+		return support.LJCframeSpaceArm, nil
+	case elf.EM_X86_64:
+		return support.LJCframeSpaceX86, nil
+	default:
+		return 0, fmt.Errorf("unsupported machine type: %s", machine)
+	}
+}
+
 func extractStackDeltas(target string, ef *pfelf.File) (sdtypes.IntervalData, int32, error) {
 	intervals, err := elfunwindinfo.Extract(target)
 	if err != nil {
 		return *intervals, 0, err
 	}
 
-	var param int32
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		param = 208
-	case elf.EM_X86_64:
-		param = 80
+	param, err := getFrameSpace(ef.Machine)
+	if err != nil {
+		return *intervals, 0, err
 	}
 	return *intervals, param, nil
 }
