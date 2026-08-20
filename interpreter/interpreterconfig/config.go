@@ -67,6 +67,7 @@ func (cfg *Config) Loaders() []interpreter.Loader {
 	}
 	if !cfg.PHP.IsDisabled() {
 		loaders = append(loaders, php.GetLoader(cfg.PHP))
+		loaders = append(loaders, php.GetOpcacheLoader(cfg.PHP))
 	}
 	if !cfg.Hotspot.IsDisabled() {
 		loaders = append(loaders, hotspot.GetLoader(cfg.Hotspot))
