@@ -284,13 +284,14 @@ python_step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_fra
 }
 
 // python_step_native processes one native frame at an interpreter boundary
-// and updates *unwinder. Go frames are handed to PROG_UNWIND_NATIVE via *delegate_go.
+// and updates *unwinder. Native-only commands are handed to PROG_UNWIND_NATIVE via
+// *delegate_command.
 static EBPF_INLINE ErrorCode
-python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_go)
+python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_command)
 {
-  Trace *trace = &record->trace;
-  *unwinder    = PROG_UNWIND_STOP;
-  *delegate_go = false;
+  Trace *trace      = &record->trace;
+  *unwinder         = PROG_UNWIND_STOP;
+  *delegate_command = false;
 
   increment_metric(metricID_UnwindNativeAttempts);
   // ra is read before unwinding, which marks the frame non-leaf and overwrites it. The push
@@ -301,8 +302,8 @@ python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_go)
   bool ra  = record->state.return_address;
 
   bool stop;
-  ErrorCode error = unwind_one_frame(record, &stop, delegate_go);
-  if (*delegate_go) {
+  ErrorCode error = unwind_one_frame(record, &stop, delegate_command);
+  if (*delegate_command) {
     *unwinder = PROG_UNWIND_NATIVE;
     return ERR_OK;
   }
@@ -365,9 +366,9 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
         error = python_step_python(record, pyinfo, &py_frame, &unwinder);
         break;
       case PROG_UNWIND_NATIVE: {
-        bool delegate_go = false;
-        error = python_step_native(record, &unwinder, &delegate_go);
-        if (delegate_go) {
+        bool delegate_command = false;
+        error = python_step_native(record, &unwinder, &delegate_command);
+        if (delegate_command) {
           goto save_python_cursor;
         }
         break;
