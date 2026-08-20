@@ -53,7 +53,9 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 	}
 
 	// Read the gobuf offset within g and the bp offset within gobuf, reported as a single
-	// bp offset within g.
+	// bp offset within g. lr is read only to assert it sits in the slot right ahead of bp:
+	// go_unwind_morestack derives lr from sched_bp_off instead of carrying its own offset,
+	// so a gobuf reshuffle that breaks the adjacency has to fail here.
 	r.Seek(g.Offset)
 	_, err = r.Next()
 	if err != nil {
@@ -71,6 +73,19 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 	_, schedBpOff, err := ReadChildTypeAndOffset(r, "bp")
 	if err != nil {
 		return nil, err
+	}
+	r.Seek(schedType.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
+	_, schedLrOff, err := ReadChildTypeAndOffset(r, "lr")
+	if err != nil {
+		return nil, err
+	}
+	if schedLrOff+8 != schedBpOff {
+		return nil, fmt.Errorf("gobuf lr is at %d and bp at %d: they are no longer adjacent, "+
+			"so go_unwind_morestack can no longer derive lr from sched_bp_off", schedLrOff, schedBpOff)
 	}
 	r.Seek(schedType.Offset)
 	_, err = r.Next()
