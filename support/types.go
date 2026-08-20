@@ -362,8 +362,8 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
-	UnwindCommandGoAsmcgocall int32 = 0x5
-	UnwindCommandGoMorestack  int32 = 0x6
+	UnwindCommandGoAsmcgocall int32 = 0x4005
+	UnwindCommandGoMorestack  int32 = 0x4006
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
