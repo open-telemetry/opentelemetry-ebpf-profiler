@@ -33,6 +33,7 @@
         "main.fib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:9",
         "main.fib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:9",
         "main.fib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:9",
+        "main.fib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:9",
         "main.deepfib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:19",
         "main.deepfib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:17",
         "main.deepfib+0 in go.opentelemetry.io/ebpf-profiler/tools/coredump/testsources/go/morestack/morestack.go:17",
