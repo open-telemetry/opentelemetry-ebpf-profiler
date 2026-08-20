@@ -125,6 +125,142 @@ static inline EBPF_INLINE ErrorCode go_runtime_load_ctx(
   return ERR_OK;
 }
 
+// go_unwind_morestack recovers the caller frame when the unwinder is inside
+// runtime.morestack.
+//
+// morestack switches to g0 and zeroes the frame pointer before calling newstack,
+// so the FP chain is cut. It first saves the caller's sp/pc/bp into the user
+// goroutine's gobuf, which is where the caller frame is recovered from:
+// https://github.com/golang/go/blob/7b60d06739/src/runtime/asm_amd64.s#L680
+//
+// gobuf layout (sp, pc, g, ctxt, [ret,] lr, bp):
+// https://github.com/golang/go/blob/go1.25.0/src/runtime/runtime2.go#L309
+// sp and pc are read at fixed offsets from the start of gobuf; bp moves between
+// releases and comes from GoRuntimeOffsets.
+static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, UnwindState *state)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  ErrorCode err          = go_validate_runtime_offsets(offs);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+  u8 *scratch      = (u8 *)record->goUnwindScratch.buf;
+  GoRuntimeCtx ctx = {};
+
+  err = go_runtime_load_ctx(offs, state, scratch, &ctx);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+  if (!ctx.m_curg) {
+    // This m has no user goroutine attached: it parked on g0 after handing the g
+    // off (newstack -> goschedImpl -> schedule). There is no saved context to
+    // unwind to, so end the stack cleanly instead of reporting a read error: a
+    // zero PC makes get_next_unwinder_after_native_frame() emit
+    // ERR_NATIVE_ZERO_PC.
+    DEBUG_PRINT("morestack: m.curg is nil, terminal frame");
+    state->pc = 0;
+    return ERR_OK;
+  }
+
+  // The read is anchored at curg, so one read of the g prefix covers the curg.m
+  // check, g.sched.sp, g.sched.pc, g.sched.lr and g.sched.bp. g.sched sits right
+  // after g.m, and sched_bp_off is bp's offset within g. bp is the last of them,
+  // so the read is sized from it.
+  //
+  // max_off is the highest offset a u64 can be read from, so a bound of
+  // "off > max_off" already accounts for the 8 bytes read there. m_off needs two
+  // slots on top of that, because g.sched.sp and g.sched.pc are read at m_off+8
+  // and m_off+16. lr is read just below bp, so bp_off's bound covers it.
+  const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u64 m_off         = offs->m_offset;
+  u64 bp_off        = offs->sched_bp_off;
+  if (m_off + 2 * sizeof(u64) > max_off || bp_off > max_off) {
+    DEBUG_PRINT("morestack: unusable g offsets");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  if (bpf_probe_read_user(scratch, bp_off + sizeof(u64), (void *)ctx.m_curg)) {
+    DEBUG_PRINT("morestack: failed to read curg gobuf");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  u64 curg_m = *((u64 *)(scratch + m_off));
+  // Safety guard to ensure m.curg still points at a g bound to this m before we
+  // trust gobuf. morestack does not call dropg, so this holds for the goroutine
+  // that grew its stack.
+  if (curg_m != ctx.m) {
+    DEBUG_PRINT("morestack: stale curg (curg.m != m)");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  u8 *gobuf    = scratch + m_off + sizeof(u64);
+  u64 saved_sp = *((u64 *)gobuf);
+  u64 saved_pc = *((u64 *)(gobuf + sizeof(u64)));
+
+  state->sp = saved_sp;
+  state->pc = saved_pc;
+  state->fp = *((u64 *)(scratch + bp_off));
+  // gobuf.pc is the address morestack will return to, that is the return address
+  // of the call into it, so the frame is a non-leaf one.
+  unwinder_mark_nonleaf_frame(state);
+
+  DEBUG_PRINT(
+    "morestack: sp 0x%lx, pc 0x%lx, fp 0x%lx",
+    (unsigned long)state->sp,
+    (unsigned long)state->pc,
+    (unsigned long)state->fp);
+
+  // The recovered frame is stopped in the stack check that runs ahead of its
+  // prologue, so it has neither pushed its return address nor set up its own
+  // frame pointer: gobuf.bp is already its caller's. Unwinding it by its own
+  // stack delta would therefore land in the caller's caller and drop a frame.
+  // Emit it here and step straight to its caller instead.
+  u64 caller_pc;
+  u64 caller_sp;
+#if defined(__aarch64__)
+  // The return address never reached the stack; morestack saved it into gobuf.lr,
+  // the slot ahead of bp (tools/gooffsets and TestSchedOffsets guard the adjacency).
+  caller_pc = *((u64 *)(scratch + bp_off - sizeof(u64)));
+  // aarch64 calls do not push, so the recovered sp is already the caller's.
+  caller_sp = saved_sp;
+#else
+  // The call pushed the return address, and gobuf.sp points at it.
+  if (bpf_probe_read_user(&caller_pc, sizeof(caller_pc), (void *)saved_sp)) {
+    DEBUG_PRINT("morestack: failed to read caller return address");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  caller_sp = saved_sp + sizeof(u64);
+#endif
+  if (!caller_pc) {
+    DEBUG_PRINT("morestack: caller pc not populated");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  int unwinder;
+  err = resolve_unwind_mapping(record, &unwinder);
+  if (err != ERR_OK) {
+    return err;
+  }
+  err = push_native(
+    state,
+    &record->trace,
+    state->text_section_id,
+    state->text_section_offset,
+    state->return_address);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+  state->pc = caller_pc;
+  state->sp = caller_sp;
+  // state->fp is gobuf.bp, which already is this frame's frame pointer.
+  unwinder_mark_nonleaf_frame(state);
+  DEBUG_PRINT(
+    "morestack: caller sp 0x%lx, pc 0x%lx", (unsigned long)state->sp, (unsigned long)state->pc);
+  return ERR_OK;
+}
+
 #if defined(__aarch64__)
 
 // go_asmcgocall_is_nosave mirrors the nosave tests in runtime.asmcgocall

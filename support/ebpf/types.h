@@ -988,6 +988,14 @@ typedef struct StackDelta {
 // the unwind info array.
 #define STACK_DELTA_COMMAND_FLAG 0x8000
 
+// Commands carrying this bit are implemented by the native unwinder only. The combined
+// interpreter+native programs report such a frame to their caller instead of unwinding it
+// themselves, so that the implementation is not inlined into them. Keeping this a property
+// of the command means a new native-only command cannot forget to opt in.
+// Only meaningful when STACK_DELTA_COMMAND_FLAG is set, so it does not reduce the index
+// space of the unwind info array.
+#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000
+
 // Unsupported or no value for the register
 #define UNWIND_COMMAND_INVALID       0
 // For CFA: stop unwinding, this function is a stack root function
@@ -1000,7 +1008,10 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_FRAME_POINTER 4
 // Cross the Go runtime.asmcgocall stack-switch boundary (arm64) by reading the
 // goroutine saved context from gobuf
-#define UNWIND_COMMAND_GO_ASMCGOCALL 5
+#define UNWIND_COMMAND_GO_ASMCGOCALL (STACK_DELTA_NATIVE_COMMAND_BIT | 5)
+// Unwind past Go runtime.morestack by reading the caller registers it saved
+// into the goroutine's gobuf
+#define UNWIND_COMMAND_GO_MORESTACK  (STACK_DELTA_NATIVE_COMMAND_BIT | 6)
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {

@@ -42,6 +42,11 @@ var UnwindInfoGoAsmcgocall = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandGoAsmcgocall,
 }
 
+// UnwindInfoGoMorestack is the stack delta info for runtime.morestack.
+var UnwindInfoGoMorestack = UnwindInfo{Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandGoMorestack,
+}
+
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	BaseReg:    support.UnwindRegSp,
