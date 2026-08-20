@@ -134,7 +134,7 @@ func NewExecutableInfoManager(
 
 	if !interpretersConfig.APMInt.IsDisabled() {
 		loaders = append(loaders, apmint.GetLoader(interpretersConfig.APMInt))
-	}
+loaders := interpretersConfig.Loaders()
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
