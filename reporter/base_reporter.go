@@ -75,6 +75,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	rtp := (*eventsTree)[key]
+	// Refresh so a resource resolved late applies to the samples already collected
+	// for this PID this period. Only non-nil overwrites, so a process whose
+	// attributes become unreadable keeps what it had; the next period starts from an
+	// empty tree, which is where a withdrawal takes effect.
+	if meta.Resource != nil && meta.Resource != rtp.Resource {
+		rtp.Resource = meta.Resource
+		(*eventsTree)[key] = rtp
+	}
 	if _, exists := rtp.Events[meta.ProfileType]; !exists {
 		rtp.Events[meta.ProfileType] = make(samples.SampleToEvents)
 	}
