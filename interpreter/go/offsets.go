@@ -35,7 +35,8 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 		// Offset of the sched gobuf bp within g, that is g.sched at 56, right after the g.m
 		// pointer, plus the offset of bp within gobuf. bp is at offset 48 within gobuf in
 		// go1.24 and earlier. In go1.25 and later, it is at offset 40 because of ret field
-		// removal.
+		// removal. gobuf.lr is always the slot ahead of bp, and go_unwind_morestack derives
+		// it from this offset rather than carrying a second one; TestSchedOffsets guards that.
 		// go1.25: https://github.com/golang/go/blob/6e676ab2b809d46623acb5988248d95d1eb7939c/src/runtime/runtime2.go#L315
 		Sched_bp_off: 104,
 	}
