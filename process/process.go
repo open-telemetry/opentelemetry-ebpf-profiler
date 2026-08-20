@@ -350,19 +350,21 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			numParseErrors++
 			continue
 		}
-		major, err := strconv.ParseUint(devs[0], 16, 64)
+		major, err := strconv.ParseUint(devs[0], 16, 32)
 		if err != nil {
-			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			log.Debugf("major device: failed to convert %s to uint32: %v", devs[0], err)
 			numParseErrors++
 			continue
 		}
-		minor, err := strconv.ParseUint(devs[1], 16, 64)
+		minor, err := strconv.ParseUint(devs[1], 16, 32)
 		if err != nil {
-			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			log.Debugf("minor device: failed to convert %s to uint32: %v", devs[1], err)
 			numParseErrors++
 			continue
 		}
-		device := major<<8 + minor
+		// Encode like stat(2) st_dev: the legacy major<<8|minor neither matches an
+		// fstat result nor stays unique once the minor exceeds 8 bits.
+		device := unix.Mkdev(uint32(major), uint32(minor))
 
 		var path string
 		if inode == 0 {

@@ -87,12 +87,12 @@ The profiler expects a target process to emit the following USDTs from a single 
 
 | Probe | Args | When fired | Scope |
 | :---- | :---- | :---- | :---- |
-| `otel_memory:alloc(user, size, w)` | `user` = user-visible pointer, `size` = bytes, `w` = unbiased weight | On a **sampled** allocation | Initial release |
+| `otel_memory:alloc(user, size, weighted_bytes)` | `user` = user-visible pointer, `size` = bytes, `weighted_bytes` = unbiased byte estimate | On a **sampled** allocation | Initial release |
 | `otel_memory:free(ptr)` | `ptr` = pointer being freed | On free of a previously-sampled allocation | Initial release |
 | `otel_memory:mmap(address, size)` | `address` = mapped region start pointer, `size` = mapped region size in bytes | On successful `mmap` | Subsequent work; build on top of lessons from the initial release |
 | `otel_memory:munmap(address, size)` | `address` = unmapped region start pointer, `size` = unmapped region size in bytes | On successful `munmap` | Subsequent work; build on top of lessons from the initial release |
 
-`weight` is `nsamples * sampling_interval`, already computed by the in-process sampler (see **Background** below for the sampling algorithm). `nsamples` counts the number of sampling-interval boundaries the allocation's byte range crossed: 1 for a typical allocation, more for a single allocation large enough to span several intervals. The profiler uses `weight` directly as the value for `alloc_space` samples; it does not need to know how the sampler computed it. We pass weight pre-combined rather than as separate `(nsamples, interval)` arguments because some existing allocator sampling hooks (e.g. jemalloc) already provide the combined result, and in practice the profiler never needs to decompose it. Note that these USDT signatures generalise across all allocator paths - `malloc`, `calloc`, `aligned_alloc`, etc.
+`weighted_bytes` is the unbiased estimate of allocated bytes represented by this sampled allocation, computed by the in-process sampler from the allocation's inclusion probability. For the random-interval byte sampling described below, an allocation of size S with mean sampling interval R is sampled with probability `p = 1 - exp(-S / R)` and the emitted `weighted_bytes` value is `S / p`. The profiler consumes `weighted_bytes` directly and does not need to know the sampling interval or how the producer computed it; the essential contract is `E[sum(weighted_bytes)] = actual allocated bytes`. `size` is separately provided because the profiler derives object counts as `weighted_bytes / size` (see Reporting below). Note that these USDT signatures generalise across all allocator paths - `malloc`, `calloc`, `aligned_alloc`, etc.
 
 For the initial support in the profiler we plan to support `alloc` and `free` only and add `mmap` support subsequently as this is more nuanced. We expect the `mmap`/`munmap` probes to be unweighted, as they fire infrequently enough to capture every call without sampling. They are USDTs rather than syscall hooks because userspace can filter before firing (e.g. only anonymous mappings, suppressing allocator-internal mmaps that would double-count a user-facing allocation).
 
@@ -107,7 +107,7 @@ The profiler's design only makes sense against a rough sketch of what it consume
 The in-process sampler should follow the existing model converged upon by allocators such as [**jemalloc**](https://github.com/jemalloc/jemalloc/blob/dev/doc_internal/PROFILING_INTERNALS.md) and [**tcmalloc**](https://github.com/google/tcmalloc/blob/master/docs/sampling.md):
 
 - **Random interval sampling over allocated bytes**: the sampler draws the byte distance to the next sample from a geometric distribution, or from an exponential approximation, with mean equal to the configured sampling interval (default ~512 KiB of allocated bytes). Equivalently, this models sampled allocations as a Poisson process over allocation volume.
-- A **per-thread byte counter** decremented on every allocation; the fast path is a thread-local add and a branch-predicted-taken comparison. When the counter reaches zero a sample fires and a new geometric interval is drawn.
+- A **per-thread byte counter** decremented on every allocation; the fast path is a thread-local add and a branch-predicted-taken comparison. When the counter reaches zero the allocation is selected; the sampler computes `weighted_bytes = S / (1 - exp(-S / R))`, fires the USDT, and draws a new geometric interval. At most one event is emitted per sampled allocation regardless of how many sampling points the allocation spans.
 - For live-heap profiling, the sampler also tracks which pointers were sampled (mechanism is its own concern - see Producing the USDTs in userspace) and fires the `free` USDT only for those pointers. This cannot be done efficiently on the profiler side, as the unsampled free path should add as little overhead as possible.
 
 We provide an [example implementation for the above contract](https://github.com/DataDog/libdatadog/tree/main/libdd-profiling-heap-sampler), with the intention of validating the eBPF profiler-side implementation.
@@ -158,7 +158,7 @@ We are exploring dynamic sample distance adjustment on the client side, where th
 
 #### Memory Overhead
 
-The primary profiler-side memory cost is the BPF hash map used for live-heap correlation. In our sample implementation, each entry is 24 bytes (PID + pointer as the key, allocation weight as the value) and the map is capped at 65,536 entries. With BPF hash-map per-entry kernel overhead this puts the worst-case pinned memory for the correlation map at roughly 5-6 MiB. When only allocation profiling is enabled (no live-heap tracking), no entries are inserted into the correlation map; alloc events flow through the existing per-CPU trace records and `trace_events` ringbuf shared with on-CPU/off-CPU profiling, so no additional memory is required.
+The primary profiler-side memory cost is the BPF hash map used for live-heap correlation. In our sample implementation, each entry is 24 bytes (PID + pointer as the key, allocation `weighted_bytes` as the value) and the map is capped at 65,536 entries. With BPF hash-map per-entry kernel overhead this puts the worst-case pinned memory for the correlation map at roughly 5-6 MiB. When only allocation profiling is enabled (no live-heap tracking), no entries are inserted into the correlation map; alloc events flow through the existing per-CPU trace records and `trace_events` ringbuf shared with on-CPU/off-CPU profiling, so no additional memory is required.
 
 Because the map size is fixed at creation time, it acts as a hard cap: once full (or once a per-PID limit is hit), new allocations are simply not tracked for `inuse_*` profiles (see **Live heap state bounds**). The `alloc_space`/`alloc_objects` output is unaffected.
 
@@ -187,7 +187,7 @@ Detach happens in `processPIDExit` alongside the existing interpreter teardown.
 Two new eBPF programs, `uprobe_heap_alloc` and `uprobe_heap_free`. They:
 
 1. Read USDT arguments out of `pt_regs` via a small arch-specific helper.
-2. Tail-call into the existing native unwinder via `collect_trace`, tagging the trace with a new origin (`TRACE_HEAP_ALLOC`) and passing `weight` through as the trace value. This is the same shape used by the off-CPU entry program.
+2. Tail-call into the existing native unwinder via `collect_trace`, tagging the trace with a new origin (`TRACE_HEAP_ALLOC`) and passing `weighted_bytes` through as the trace value. This is the same shape used by the off-CPU entry program.
 3. For free: on the eBPF side, short-circuit if `(pid, ptr)` is not in our sampled allocation correlation map. Although the userspace sampler only fires `free` for pointers it previously sampled, the eBPF side may have dropped the corresponding alloc (for instance, because a tracking limit has been hit) so this check is a necessary defensive guard against that desync. It's cheap (single hash lookup, almost always hits).
 
 The `uprobe_heap_free` program is loaded into the kernel only when `-live-heap-profiling` is enabled. When only `-allocation-profiling` is on, the program isn't loaded and the `free` USDT isn't attached, so plain allocation profiling pays only the alloc-side cost.
@@ -196,15 +196,15 @@ The `uprobe_heap_free` program is loaded into the kernel only when `-live-heap-p
 
 Two sibling profiles share the alloc call stacks and timestamps:
 
-- `sample_type = alloc_space/bytes` - values are USDT `weight`.
-- `sample_type = alloc_objects/count` - value is `1` per event; aggregation gives the number of allocation events captured.
+- `sample_type = alloc_space/bytes` - value is USDT `weighted_bytes`.
+- `sample_type = alloc_objects/count` - value is `weighted_bytes / size` (for `size > 0`), i.e. the estimated number of allocations represented by the sample.
 
-When live-heap profiling is enabled, the userspace tracker maintains a live set keyed by `(pid, ptr)`, recording each allocation's trace hash and weight. Alloc events insert; free events remove. Periodic snapshots aggregate remaining entries by call stack. This lives in userspace rather than eBPF because producing inuse profiles requires grouping by call stack, and the trace hash is only known after the unwind chain completes and userspace symbolizes the trace. The eBPF-side correlation map exists purely for the free hot path.
+When live-heap profiling is enabled, the userspace tracker maintains a live set keyed by `(pid, ptr)`, recording each allocation's trace hash, size, and `weighted_bytes`. Alloc events insert; free events remove. Periodic snapshots aggregate remaining entries by call stack. This lives in userspace rather than eBPF because producing inuse profiles requires grouping by call stack, and the trace hash is only known after the unwind chain completes and userspace symbolizes the trace. The eBPF-side correlation map exists purely for the free hot path.
 
 We additionally emit:
 
-- `sample_type = inuse_space/bytes`
-- `sample_type = inuse_objects/count`
+- `sample_type = inuse_space/bytes` - value is allocation `weighted_bytes`.
+- `sample_type = inuse_objects/count` - value is allocation `weighted_bytes / size`.
 
 These four sample types follow standard pprof / OTLP profile conventions.
 
@@ -212,7 +212,7 @@ These four sample types follow standard pprof / OTLP profile conventions.
 
 Allocation USDTs are expected to fire more frequently than perf samples even after in-process sampling. Back-pressure is layered at two points:
 
-- **In-process: open-loop random-interval sampling** (see Background: assumed in-process contract for the mechanism). This is open-loop - the application has no idea what the profiler is currently doing - and gives an unbiased estimator via `weight`. Cheap, simple, and the primary cost of the book-keeping is accessing the TLS to track state. This is also the approach used by samplers such as jemalloc and tcmalloc in their own observability infrastructure; by supporting the ecosystem where it is, we increase the chances of being able to influence allocators to include sampling hooks by default when this method shows adoption.
+- **In-process: open-loop random-interval sampling** (see Background: assumed in-process contract for the mechanism). This is open-loop - the application has no idea what the profiler is currently doing - and gives an unbiased estimator via `weighted_bytes`. Cheap, simple, and the primary cost of the book-keeping is accessing the TLS to track state. This is also the approach used by samplers such as jemalloc and tcmalloc in their own observability infrastructure; by supporting the ecosystem where it is, we increase the chances of being able to influence allocators to include sampling hooks by default when this method shows adoption.
 - **eBPF / collector side: closed-loop rate limiting.** The profiler maintains a global target rate of memory events (expressed as a fraction of the overall sample budget) and runs a rate limiter in user space that adjusts a drop probability applied inside the `uprobe_heap_alloc` eBPF program. The limiter observes the measured event rate, compares it against the target, and updates the threshold so that memory events occupy a bounded share of the payload regardless of workload spikes. Candidate implementations include a PID (Proportional-Integral-Derivative) controller or a token bucket; the choice will be informed by empirical tuning (see Plan to Acquire Missing Data). Note that because the limiter is global (not per-process), a single high-allocation process could consume most of the memory event budget, starving others. This is an intentional design decision to keep the interface to userspace simple; see **Per-process backpressure from profiler to sampler** in Alternatives Considered for why we chose not to feed rate adjustments back to individual processes. The per-process live-heap state cap (described below) bounds the resource impact of this, but it does not guarantee fair event-rate distribution across processes.
 
 We also anticipate a future in-process addition: dynamic interval adjustment, where the sampler targets a fixed samples-per-second rate and self-adjusts its interval to hit it. This is purely a sampler-side concern - it doesn't change the USDT contract and the profiler doesn't need to know it's happening.
@@ -221,7 +221,7 @@ Notes on the rate limiter:
 
 - The controlled variable is a per-CPU drop threshold read by the eBPF program at the top of `uprobe_heap_alloc`; the eBPF side does one compare-and-bail.
 - The setpoint is `target_memory_events_per_sec`, derived from the existing sample budget multiplied by a configurable memory fraction. Memory events cannot starve on-CPU profiling because the budget is apportioned, not shared.
-- Dropped events are still counted (so we can surface drop ratios as a metric and ultimately fold the drop probability back into `weight` for unbiased totals).
+- Dropped events are counted so we can surface the drop ratio as a metric and correct accepted events: if the profiler accepts with probability `q`, final `weighted_bytes` values become `producer_weighted_bytes / q`. This correction is required for unbiased totals while rate limiting is active.
 - Tuning constants and the target memory fraction are to be determined empirically; see Plan to Acquire Missing Data.
 - The rate limiter bounds memory-event throughput, but it does not by itself bound the amount of live allocation state retained for `inuse_*` profiles. Live heap tracking therefore also requires explicit global and per-process state limits, described below.
 
