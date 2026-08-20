@@ -34,7 +34,5 @@ jobs:
         with:
           targets: ${{ matrix.rust_target }}
           toolchain: 1.97.1
-      - name: Install protoc
-        uses: ./.github/workflows/protoc
       - name: Tests
         run: make rust-tests

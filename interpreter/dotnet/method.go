@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 )
@@ -16,6 +17,9 @@ import (
 type dotnetMethod struct {
 	// module is the PE DLL defining this method
 	module *peInfo
+	// dynamicName is the symbol name of a dynamic method, set to the stub fallback
+	// when the friendly name is unavailable.
+	dynamicName libpf.String
 	// boundInfo is the extracted boundary debug information from coreclr vm.
 	boundsInfo []byte
 	// methodIndex is the index to MethodDef metadata table defining this method.
