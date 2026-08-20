@@ -368,7 +368,7 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	var matches []interpreter.Data //nolint:prealloc
 
 	// Ask all interpreter loaders whether they want to handle this executable.
-	for _, load := range state.interpreterLoaders {
+	for _, loader := range state.interpreterLoaders {
 		data, err := load.Load(state.ebpf, loaderInfo)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
