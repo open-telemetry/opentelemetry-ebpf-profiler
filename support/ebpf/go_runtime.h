@@ -197,10 +197,6 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   u8 *gobuf    = scratch + m_off + sizeof(u64);
   u64 saved_sp = *((u64 *)gobuf);
   u64 saved_pc = *((u64 *)(gobuf + sizeof(u64)));
-  if (!saved_sp || !saved_pc) {
-    DEBUG_PRINT("morestack: gobuf sp/pc not populated");
-    return ERR_GO_RUNTIME_LOAD_FAILURE;
-  }
 
   state->sp = saved_sp;
   state->pc = saved_pc;
