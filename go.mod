@@ -21,9 +21,9 @@ require (
 	github.com/klauspost/compress v1.19.2
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260817054934-fbcf1b85d1c2
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260820055258-94bfcd1a1841
 	github.com/peterbourgon/ff/v3 v3.4.0
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.65.0
 	go.opentelemetry.io/collector/component/componenttest v0.159.0
@@ -42,11 +42,11 @@ require (
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.30.0
-	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297
+	golang.org/x/exp v0.0.0-20260820142414-ca536658362e
 	golang.org/x/mod v0.40.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
-	google.golang.org/grpc v1.83.0
+	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -101,5 +101,4 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720211330-0afa2a65878a // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
