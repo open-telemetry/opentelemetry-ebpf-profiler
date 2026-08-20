@@ -13,20 +13,6 @@
 // The number of native frames to unwind per frame-unwinding eBPF program.
 #define NATIVE_FRAMES_PER_PROGRAM 5
 
-// Record a native frame
-static EBPF_INLINE ErrorCode
-push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
-{
-  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
-
-  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
-  if (!data) {
-    return ERR_STACK_LENGTH_EXCEEDED;
-  }
-  data[0] = file;
-  return ERR_OK;
-}
-
 // A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
 // step, built in a way to update the value of *lo and *hi. This function will be called repeatedly
 // (since we cannot do loops). The return value signals whether the bsearch came to an end / found
