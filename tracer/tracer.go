@@ -152,8 +152,7 @@ type Tracer struct {
 	preTraceHandlers map[uint16][]PreTraceHandler
 
 	// postTraceHandlers maps origin ID to post-trace handlers registered for
-	// that origin. Only traces with a matching origin are dispatched,
-	// avoiding hash computation on the hot path for unrelated traces.
+	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
 	// done is closed when the tracer encounters an unrecoverable error.
@@ -1425,15 +1424,14 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		}
 	}
 
-	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+	origin := bpfTrace.Origin
+	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))
+	t.tracePool.Put(bpfTrace)
 
 	// Post-handlers gated by origin receive the symbolized result.
-	for _, h := range t.postTraceHandlers[bpfTrace.Origin] {
+	for _, h := range t.postTraceHandlers[origin] {
 		h.PostHandleTrace(trace)
 	}
-
-	// Reclaim the EbpfTrace
-	t.tracePool.Put(bpfTrace)
 }
 
 // originRegistry is the tracer-wide registry origin IDs are assigned from
