@@ -234,7 +234,7 @@ func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.
 		if !a.Match(pr, m) {
 			continue
 		}
-		if err := a.Attach(pr); err != nil {
+		if err := a.Attach(pr, m); err != nil {
 			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
 			continue
 		}

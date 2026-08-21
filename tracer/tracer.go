@@ -147,6 +147,15 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
+	// preTraceHandlers maps origin ID to pre-trace handlers registered for
+	// that origin. Only traces with a matching origin are dispatched.
+	preTraceHandlers map[uint16][]PreTraceHandler
+
+	// postTraceHandlers maps origin ID to post-trace handlers registered for
+	// that origin. Only traces with a matching origin are dispatched,
+	// avoiding hash computation on the hot path for unrelated traces.
+	postTraceHandlers map[uint16][]PostTraceHandler
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -322,6 +331,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
+		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
+		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
 
 	return tracer, nil
@@ -1406,7 +1417,20 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+	// Pre-handlers gated by origin may consume traces before symbolization.
+	for _, h := range t.preTraceHandlers[bpfTrace.Origin] {
+		if !h.PreHandleTrace(bpfTrace) {
+			t.tracePool.Put(bpfTrace)
+			return
+		}
+	}
+
+	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+
+	// Post-handlers gated by origin receive the symbolized result.
+	for _, h := range t.postTraceHandlers[bpfTrace.Origin] {
+		h.PostHandleTrace(trace)
+	}
 
 	// Reclaim the EbpfTrace
 	t.tracePool.Put(bpfTrace)
@@ -1424,7 +1448,7 @@ type originRegistry struct {
 	types sync.Map
 }
 
-// register hands out a fresh origin ID and stores metadata for it, keyed by
+// Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
 	if last := r.lastID.Load(); last >= math.MaxUint16 {

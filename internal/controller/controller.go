@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
+	"go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -161,13 +162,12 @@ func (c *Controller) Start(ctx context.Context) error {
 		log.Info("Attached prctl monitor")
 	}
 
-	if err := c.startTraceHandling(ctx, trc); err != nil {
-		return fmt.Errorf("failed to start trace handling: %w", err)
+	if err := c.enableProbes(ctx, trc); err != nil {
+		return fmt.Errorf("failed to enable probes: %w", err)
 	}
 
-	if err := c.enableProbes(ctx, trc); err != nil {
-		c.cancelFunc() // stop the startTraceHandling goroutine
-		return fmt.Errorf("failed to enable probes: %w", err)
+	if err := c.startTraceHandling(ctx, trc); err != nil {
+		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
 	return nil
@@ -198,6 +198,12 @@ func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
 			return nil, fmt.Errorf("decoding kprobe config: %w", err)
 		}
 		return kprobe.New(kcfg)
+	case "uprobe":
+		var ucfg uprobe.Config
+		if err := confmap.NewFromStringMap(cfg).Unmarshal(&ucfg); err != nil {
+			return nil, fmt.Errorf("decoding uprobe config: %w", err)
+		}
+		return uprobe.New(ucfg)
 	default:
 		return nil, fmt.Errorf("unknown probe type %q", probeType)
 	}
