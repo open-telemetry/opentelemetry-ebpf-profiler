@@ -10,16 +10,17 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe/internal/metadata"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 // NewFactory returns an extension.Factory for the kprobe extension.
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
-		Type,
+		metadata.Type,
 		func() component.Config { return &Config{} },
 		createExtension,
-		stability,
+		metadata.ExtensionsStability,
 	)
 }
 

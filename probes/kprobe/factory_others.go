@@ -11,17 +11,18 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/ebpf-profiler/probes/kprobe/internal/metadata"
 )
 
 // NewFactory returns an extension.Factory for the kprobe extension.
 // The kprobe extension is only functional on Linux amd64/arm64.
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
-		Type,
+		metadata.Type,
 		func() component.Config { return &Config{} },
 		func(_ context.Context, _ extension.Settings, _ component.Config) (extension.Extension, error) {
 			return nil, errors.New("kprobe extension is only supported on Linux amd64/arm64")
 		},
-		stability,
+		metadata.ExtensionsStability,
 	)
 }
