@@ -147,6 +147,14 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
+	// preTraceHandlers are probes that implement PreTraceHandler and may
+	// consume traces before symbolization.
+	preTraceHandlers []PreTraceHandler
+
+	// postTraceHandlers are probes that implement PostTraceHandler and
+	// receive traces after symbolization and reporting.
+	postTraceHandlers []PostTraceHandler
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -1406,7 +1414,20 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+	// Pre-handlers may consume traces before symbolization (e.g. free events).
+	for _, h := range t.preTraceHandlers {
+		if !h.PreHandleTrace(bpfTrace) {
+			t.tracePool.Put(bpfTrace)
+			return
+		}
+	}
+
+	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
+
+	// Post-handlers receive the symbolized result (e.g. live-heap correlation).
+	for _, h := range t.postTraceHandlers {
+		h.PostHandleTrace(bpfTrace, trace)
+	}
 
 	// Reclaim the EbpfTrace
 	t.tracePool.Put(bpfTrace)
@@ -1424,7 +1445,7 @@ type originRegistry struct {
 	types sync.Map
 }
 
-// register hands out a fresh origin ID and stores metadata for it, keyed by
+// Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
