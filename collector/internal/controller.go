@@ -92,29 +92,12 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	meter := rs.MeterProvider.Meter(metadata.ScopeName)
 	metrics.Start(meter)
 
-	extIDs, err := parseExtensionIDs(cfg.Probes)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Controller{
 		onShutdown:   cfg.OnShutdown,
 		ctlr:         controller.New(cfg),
 		errorMode:    cfg.ErrorMode,
-		extensionIDs: extIDs,
+		extensionIDs: cfg.Probes,
 	}, nil
-}
-
-// parseExtensionIDs converts the string slice from the receiver config to
-// typed component IDs, returning an error on the first malformed entry.
-func parseExtensionIDs(ids []string) ([]component.ID, error) {
-	result := make([]component.ID, len(ids))
-	for i, s := range ids {
-		if err := result[i].UnmarshalText([]byte(s)); err != nil {
-			return nil, fmt.Errorf("invalid probes entry %q: %w", s, err)
-		}
-	}
-	return result, nil
 }
 
 // Start the receiver.

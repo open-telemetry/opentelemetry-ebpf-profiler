@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -72,7 +73,7 @@ type Config struct {
 	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
 	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
-	Probes                  []string                 `mapstructure:"probes"`
+	Probes                  []component.ID           `mapstructure:"probes"`
 
 	// Configuration options that users can not set directly:
 	//
