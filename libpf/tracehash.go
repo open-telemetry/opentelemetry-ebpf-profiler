@@ -16,7 +16,7 @@ type TraceHash struct {
 }
 
 // InvalidTraceHash represents the absence of a computed hash.
-// A zero output should be extremely rare making collisions highly unlikely.
+// A zero output should be extremely rare, making collisions highly unlikely.
 var InvalidTraceHash = TraceHash{}
 
 func NewTraceHash(hi, lo uint64) TraceHash {
@@ -53,8 +53,8 @@ func (TraceHash) EncodedLen() int {
 	return ((16)*8)/6 + 1
 }
 
-// Hash32 returns a 32 bits hash of the input.
-// It's main purpose is to be used for LRU caching.
+// Hash32 returns a 32-bit hash of the input.
+// Its main purpose is to be used for LRU caching.
 func (h TraceHash) Hash32() uint32 {
 	return uint32(h.Lo())
 }
