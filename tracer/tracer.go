@@ -1418,22 +1418,18 @@ func (t *Tracer) AttachProbes(probes []string) error {
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	// Pre-handlers gated by origin may consume traces before symbolization.
-	if handlers := t.preTraceHandlers[bpfTrace.Origin]; len(handlers) > 0 {
-		for _, h := range handlers {
-			if !h.PreHandleTrace(bpfTrace) {
-				t.tracePool.Put(bpfTrace)
-				return
-			}
+	for _, h := range t.preTraceHandlers[bpfTrace.Origin] {
+		if !h.PreHandleTrace(bpfTrace) {
+			t.tracePool.Put(bpfTrace)
+			return
 		}
 	}
 
 	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
 	// Post-handlers gated by origin receive the symbolized result.
-	if handlers := t.postTraceHandlers[bpfTrace.Origin]; len(handlers) > 0 {
-		for _, h := range handlers {
-			h.PostHandleTrace(trace)
-		}
+	for _, h := range t.postTraceHandlers[bpfTrace.Origin] {
+		h.PostHandleTrace(trace)
 	}
 
 	// Reclaim the EbpfTrace

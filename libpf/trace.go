@@ -130,7 +130,7 @@ type Trace struct {
 	Frames       Frames
 
 	// cachedHash memoizes the result of Hash().
-	// InvalidTraceHash means the hash has not been computed yet.
+	// invalidTraceHash means the hash has not been computed yet.
 	cachedHash TraceHash
 }
 
@@ -138,11 +138,11 @@ type Trace struct {
 // The result is memoized: mutating Frames after the first call is not
 // reflected in subsequent calls. This method is not thread-safe.
 func (t *Trace) Hash() TraceHash {
-	if t.cachedHash != InvalidTraceHash {
+	if t.cachedHash != invalidTraceHash {
 		return t.cachedHash
 	}
 	var buf [24]byte
-	// Review and maybe update InvalidTraceHash if hash function changes from FNV128A
+	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
 	h := fnv.New128a()
 	for _, uniqueFrame := range t.Frames {
 		frame := uniqueFrame.Value()

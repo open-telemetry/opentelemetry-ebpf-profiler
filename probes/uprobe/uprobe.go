@@ -7,12 +7,14 @@
 // An OTel config using this approach could look like this:
 //
 //	receivers:
-//	  profiling:
+//	  ebpf_profiler:
 //	    probes:
-//	      - kind: uprobe
-//	        config:
-//	          target: /usr/lib/x86_64-linux-gnu/libc.so.6
-//	          symbol: malloc
+//	      - uprobe/malloc
+//
+//	extensions:
+//	  uprobe/malloc:
+//	    target: /usr/lib/x86_64-linux-gnu/libc.so.6
+//	    symbol: malloc
 package uprobe // import "go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 import (
@@ -37,6 +39,17 @@ type Config struct {
 	Symbol string `mapstructure:"symbol"`
 }
 
+// Validate implements confmap.Validator.
+func (c *Config) Validate() error {
+	if c.Target == "" {
+		return fmt.Errorf("uprobe: missing target")
+	}
+	if c.Symbol == "" {
+		return fmt.Errorf("uprobe: missing symbol")
+	}
+	return nil
+}
+
 type probe struct {
 	target string
 	symbol string
@@ -53,11 +66,8 @@ func (p *probe) String() string {
 }
 
 func New(cfg Config) (tracer.Probe, error) {
-	if cfg.Target == "" {
-		return nil, fmt.Errorf("uprobe: missing target")
-	}
-	if cfg.Symbol == "" {
-		return nil, fmt.Errorf("uprobe: missing symbol")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 	return &probe{
 		target: cfg.Target,
