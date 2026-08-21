@@ -777,7 +777,9 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindPython), ProgName: "unwind_python"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

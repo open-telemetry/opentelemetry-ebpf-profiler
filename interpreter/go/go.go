@@ -83,10 +83,18 @@ func (d *goData) Unload(_ interpreter.EbpfHandler) {
 }
 
 func GetLoader(cfg Config) interpreter.Loader {
-	return func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
-		interpreter.Data, error) {
-		return loader(cfg, info)
+	resources := []interpreter.InterpreterResource{{MapName: BPFMapName}}
+	if !cfg.IsLabelsDisabled() {
+		resources = append(resources, interpreter.InterpreterResource{
+			ProgID: uint32(support.ProgGoLabels), ProgName: "go_labels",
+		})
 	}
+	return interpreter.NewLoader(
+		func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+			return loader(cfg, info)
+		},
+		resources,
+	)
 }
 
 func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {

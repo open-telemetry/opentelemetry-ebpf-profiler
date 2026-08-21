@@ -429,66 +429,19 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	}
 
 	tailCallProgs := []ProgLoaderHelper{
-		{
-			ProgID: uint32(support.ProgUnwindStop),
-			Name:   "unwind_stop",
-			Enable: true,
-		},
-		{
-			ProgID: uint32(support.ProgUnwindNative),
-			Name:   "unwind_native",
-			Enable: true,
-		},
-		{
-			ProgID: uint32(support.ProgUnwindHotspot),
-			Name:   "unwind_hotspot",
-			Enable: !cfg.InterpretersConfig.Hotspot.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindPerl),
-			Name:   "unwind_perl",
-			Enable: !cfg.InterpretersConfig.Perl.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindPHP),
-			Name:   "unwind_php",
-			Enable: !cfg.InterpretersConfig.PHP.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindPython),
-			Name:   "unwind_python",
-			Enable: !cfg.InterpretersConfig.Python.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindRuby),
-			Name:   "unwind_ruby",
-			Enable: !cfg.InterpretersConfig.Ruby.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindV8),
-			Name:   "unwind_v8",
-			Enable: !cfg.InterpretersConfig.V8.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindDotnet),
-			Name:   "unwind_dotnet",
-			Enable: !cfg.InterpretersConfig.Dotnet.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindDotnet10),
-			Name:   "unwind_dotnet10",
-			Enable: !cfg.InterpretersConfig.Dotnet.IsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgGoLabels),
-			Name:   "go_labels",
-			Enable: !cfg.InterpretersConfig.Go.IsLabelsDisabled(),
-		},
-		{
-			ProgID: uint32(support.ProgUnwindBEAM),
-			Name:   "unwind_beam",
-			Enable: !cfg.InterpretersConfig.BEAM.IsDisabled(),
-		},
+		{ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop", Enable: true},
+		{ProgID: uint32(support.ProgUnwindNative), Name: "unwind_native", Enable: true},
+	}
+	for _, l := range cfg.InterpretersConfig.Loaders() {
+		for _, r := range l.Resources() {
+			if r.ProgName != "" {
+				tailCallProgs = append(tailCallProgs, ProgLoaderHelper{
+					ProgID: r.ProgID,
+					Name:   r.ProgName,
+					Enable: true,
+				})
+			}
+		}
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,

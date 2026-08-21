@@ -109,16 +109,45 @@ type EbpfHandler interface {
 	DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error
 }
 
-// Loader is a function to detect and load data from given interpreter ELF file.
-// ProcessManager will call each configured Loader in order to see if additional handling and data
-// is needed to unwind interpreter frames.
-//
-// A Loader can return one of the following value combinations:
+// InterpreterResource describes an eBPF resource owned by a Loader.
+type InterpreterResource struct {
+	// MapName is the eBPF map owned by this resource entry or "" otherwise.
+	MapName string
+	// ProgID is the tail-call slot ID for the unwinder program or
+	// 0 if this entry carries no unwinder program.
+	ProgID uint32
+	// ProgName is the eBPF object name of the unwinder program or
+	// "" if this entry carries no unwinder program.
+	ProgName string
+}
+
+// Loader detects and loads data from a given interpreter ELF file.
+// ProcessManager calls each configured Loader to see whether additional handling is
+// needed to unwind interpreter frames.
+type Loader struct {
+	load      func(ebpf EbpfHandler, info *LoaderInfo) (Data, error)
+	resources []InterpreterResource
+}
+
+// NewLoader creates a Loader that invokes fn and declares ownership of the given resources.
+func NewLoader(fn func(EbpfHandler, *LoaderInfo) (Data, error), resources []InterpreterResource) Loader {
+	return Loader{load: fn, resources: resources}
+}
+
+// Load attempts to detect and load data from the given ELF file.
+// Load can return one of the following value combinations:
 //
 //   - `nil, nil`, indicating that it didn't detect the interpreter to belong to it
 //   - `data, nil`, indicating that it wants to handle the executable
 //   - `nil, error`, indicating that a permanent failure occurred during interpreter detection
-type Loader func(ebpf EbpfHandler, info *LoaderInfo) (Data, error)
+func (l Loader) Load(ebpf EbpfHandler, info *LoaderInfo) (Data, error) {
+	return l.load(ebpf, info)
+}
+
+// Resources returns all eBPF resources declared by this loader.
+func (l Loader) Resources() []InterpreterResource {
+	return l.resources
+}
 
 // Data is the interface to operate on per-ELF DSO data.
 type Data interface {

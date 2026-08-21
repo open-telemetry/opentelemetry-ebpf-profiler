@@ -35,7 +35,9 @@ func (l *luajitInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) err
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
