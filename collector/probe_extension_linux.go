@@ -6,7 +6,7 @@
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
-	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/extension"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
