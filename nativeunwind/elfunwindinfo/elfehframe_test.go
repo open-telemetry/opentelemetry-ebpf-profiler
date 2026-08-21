@@ -185,7 +185,7 @@ func TestParseCIE(t *testing.T) {
 			}
 			length, marker, err := fakeReader.parseLengthAndMarker()
 			require.NoError(t, err)
-			require.Equal(t, marker, int64(-1))
+			require.Equal(t, int64(-1), marker)
 
 			extracted, err := fakeReader.parseCIE(length)
 			require.NoError(t, err)
