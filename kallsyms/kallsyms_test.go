@@ -16,6 +16,7 @@ import (
 
 func assertSymbol(t *testing.T, s *Symbolizer, pc libpf.Address,
 	eModName, eFuncName string, eOffset uint) {
+	t.Helper()
 	kmod, err := s.Snapshot().GetModuleByAddress(pc)
 	if assert.NoError(t, err) && assert.Equal(t, kmod.Name(), eModName) {
 		funcName, offset, err := kmod.LookupSymbolByAddress(pc)

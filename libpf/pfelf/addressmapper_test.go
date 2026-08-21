@@ -13,6 +13,7 @@ import (
 )
 
 func assertFileToVA(t *testing.T, mapper AddressMapper, fileAddress, virtualAddress uint64) {
+	t.Helper()
 	mappedAddress, ok := mapper.FileOffsetToVirtualAddress(fileAddress)
 	assert.True(t, ok)
 	assert.Equal(t, virtualAddress, mappedAddress)
