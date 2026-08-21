@@ -68,13 +68,13 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 }
 
 func TestCollectorReporterShutdown(t *testing.T) {
-	var cancelled atomic.Bool
+	var canceled atomic.Bool
 	consumerStarted := make(chan struct{})
 	next, err := xconsumer.NewProfiles(func(ctx context.Context, _ pprofile.Profiles) error {
 		close(consumerStarted)
 		select {
 		case <-ctx.Done():
-			cancelled.Store(true)
+			canceled.Store(true)
 			return nil
 		}
 	})
@@ -111,6 +111,6 @@ func TestCollectorReporterShutdown(t *testing.T) {
 	<-consumerStarted
 	cancelFn()
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.True(collect, cancelled.Load())
+		assert.True(collect, canceled.Load())
 	}, 5*time.Second, 100*time.Millisecond, "consumer did not exit after context cancellation")
 }

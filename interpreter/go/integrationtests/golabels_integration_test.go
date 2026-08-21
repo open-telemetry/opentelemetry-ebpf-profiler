@@ -127,7 +127,7 @@ func Test_Golabels(t *testing.T) {
 				err := exec.CommandContext(ctx, exe.Name()).Run()
 				select {
 				case <-ctx.Done():
-					t.Log("Test program cancelled (run complete)")
+					t.Log("Test program canceled (run complete)")
 					select {
 					case <-trc.Done():
 						t.Error("map monitoring ended with unrecoverable errors")
