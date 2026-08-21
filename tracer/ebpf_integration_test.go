@@ -236,7 +236,7 @@ Loop:
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
+
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
