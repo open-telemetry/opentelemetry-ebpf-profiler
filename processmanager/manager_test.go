@@ -65,6 +65,36 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	require.Equal(t, 1, pm.frameCache.Len())
 }
 
+func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
+	requestedEnvVars := libpf.Set[string]{"FOO": {}}
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		IncludeEnvVars:        requestedEnvVars,
+	})
+	require.NoError(t, err)
+
+	// Only the user-requested env vars may be reported.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, pm.reportEnvVars)
+
+	// The env vars used to derive process context are captured for internal use only.
+	internalNames := make([]string, 0, len(pm.internalEnvVars))
+	for _, name := range pm.internalEnvVars {
+		internalNames = append(internalNames, name.String())
+	}
+	assert.ElementsMatch(t,
+		[]string{"OTEL_SERVICE_NAME", "OTEL_RESOURCE_ATTRIBUTES"}, internalNames)
+
+	// New must not add the internal env vars to the caller's set.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, requestedEnvVars)
+
+	// Later mutations of the caller's set must not affect the reported set.
+	requestedEnvVars["BAR"] = libpf.Void{}
+	assert.NotContains(t, pm.reportEnvVars, "BAR")
+}
+
 func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
