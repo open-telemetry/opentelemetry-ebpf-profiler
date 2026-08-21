@@ -47,9 +47,9 @@ func TestTraceHash(t *testing.T) {
 
 	for name, testcase := range tests {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, testcase.result, testcase.trace.Hash())
+			assert.Equal(t, testcase.result, testcase.trace.APMHash())
 			// The memoized result must match the first computation.
-			assert.Equal(t, testcase.result, testcase.trace.Hash())
+			assert.Equal(t, testcase.result, testcase.trace.APMHash())
 		})
 	}
 }
