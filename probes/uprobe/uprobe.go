@@ -9,10 +9,9 @@
 //	receivers:
 //	  profiling:
 //	    probes:
-//	      - kind: uprobe
-//	        config:
-//	          target: /usr/lib/x86_64-linux-gnu/libc.so.6
-//	          symbol: malloc
+//	      - type: uprobe
+//	        target: /usr/lib/x86_64-linux-gnu/libc.so.6
+//	        symbol: malloc
 package uprobe // import "go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 import (

@@ -36,6 +36,29 @@ func TestCreateProbe(t *testing.T) {
 			wantErr:   true,
 		},
 		{
+			name:      "uprobe valid",
+			probeType: "uprobe",
+			cfg:       map[string]any{"target": "/usr/lib/libc.so.6", "symbol": "malloc"},
+		},
+		{
+			name:      "uprobe missing target",
+			probeType: "uprobe",
+			cfg:       map[string]any{"symbol": "malloc"},
+			wantErr:   true,
+		},
+		{
+			name:      "uprobe missing symbol",
+			probeType: "uprobe",
+			cfg:       map[string]any{"target": "/usr/lib/libc.so.6"},
+			wantErr:   true,
+		},
+		{
+			name:      "uprobe unknown field",
+			probeType: "uprobe",
+			cfg:       map[string]any{"target": "/usr/lib/libc.so.6", "symbol": "malloc", "no_such_field": true},
+			wantErr:   true,
+		},
+		{
 			name:      "kprobe unknown mode",
 			probeType: "kprobe",
 			cfg:       map[string]any{"mode": "tracepoint", "symbol": "vfs_open"},
