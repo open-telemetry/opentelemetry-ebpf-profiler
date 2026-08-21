@@ -320,9 +320,14 @@ unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
 
     if (info->flags & UNWIND_FLAG_REGISTER_RA) {
       // RA was recovered from a register (e.g. __vfork stores RA in %rdi).
-      // FP is not preserved across such calls, clear it for the next frame.
+      // The FDE leaves RBP unspecified, which for a callee-saved register means
+      // same-value, so carry the caller's FP into the next frame; clearing it
+      // breaks CFA=FP rules like fork_exec's. The exception is RBP itself
+      // holding the RA, where it is a return address and not a frame pointer.
       state->pc = aux;
-      state->fp = 0;
+      if (info->auxBaseReg == UNWIND_REG_FP) {
+        state->fp = 0;
+      }
       goto nonleaf_frame_ok;
     }
 
