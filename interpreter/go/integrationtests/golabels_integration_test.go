@@ -121,9 +121,7 @@ func Test_Golabels(t *testing.T) {
 			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
 
 			wg := sync.WaitGroup{}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				err := exec.CommandContext(ctx, exe.Name()).Run()
 				select {
 				case <-ctx.Done():
@@ -141,7 +139,7 @@ func Test_Golabels(t *testing.T) {
 					// the backtrace what the tracer is doing.
 					panic("failed to capture golabel frames")
 				}
-			}()
+			})
 
 			ok := false
 			for trace := range traceCh {

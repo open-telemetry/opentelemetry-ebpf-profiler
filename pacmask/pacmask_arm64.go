@@ -50,7 +50,7 @@ func GetPACMask() uint64 {
 	// [1]: https://www.kernel.org/doc/html/latest/arm64/pointer-authentication.html
 
 	var mask uint64
-	for i := 0; i < 64; i++ {
+	for range 64 {
 		// The stack pointer on aarch64 needs to be aligned to 8 bytes at all
 		// times. The `<< 3` ensures that this is always the case for our fake
 		// pointers that will temporarily be placed as a fake stack pointer.
