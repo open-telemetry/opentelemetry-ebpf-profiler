@@ -732,7 +732,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundComm, "Sample should have Comm attribute set")
 	assert.True(t, foundTID, "Sample should have TID attribute set")
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
-
 }
 
 func TestStackTableOrder(t *testing.T) {
