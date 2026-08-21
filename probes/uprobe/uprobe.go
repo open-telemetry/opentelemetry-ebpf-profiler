@@ -128,12 +128,23 @@ func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
 
 // Attach implements processmanager.ProbeAttacher. Opens a PID-restricted uprobe
 // for the given process and stores the link for later cleanup.
-func (p *probe) Attach(pr process.Process) error {
+func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	pid := pr.PID()
-
-	ex, err := link.OpenExecutable(p.target)
+	mappingFile, err := pr.OpenMappingFile(mapping)
 	if err != nil {
-		return fmt.Errorf("%s: open executable: %w", p, err)
+		return fmt.Errorf("%s: open mapping %s: %w", p, mapping.Path, err)
+	}
+	defer mappingFile.Close()
+
+	fdFile, ok := mappingFile.(interface{ Fd() uintptr })
+	if !ok {
+		return fmt.Errorf("%s: mapping %s has no file descriptor", p, mapping.Path)
+	}
+	mappingPath := fmt.Sprintf("/proc/self/fd/%d", fdFile.Fd())
+
+	ex, err := link.OpenExecutable(mappingPath)
+	if err != nil {
+		return fmt.Errorf("%s: open mapping %s: %w", p, mapping.Path, err)
 	}
 
 	lnk, err := ex.Uprobe(p.symbol, p.prog, &link.UprobeOptions{PID: int(pid)})
