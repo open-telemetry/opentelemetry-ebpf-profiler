@@ -104,6 +104,7 @@ var (
 func parseArgs() (*controller.Config, error) {
 	var args controller.Config
 	var tracers string
+	var offCPUThreshold float64
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
@@ -167,7 +168,7 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
-	fs.Float64Var(&args.OffCPUThreshold, "off-cpu-threshold",
+	fs.Float64Var(&offCPUThreshold, "off-cpu-threshold",
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
@@ -210,6 +211,13 @@ func parseArgs() (*controller.Config, error) {
 		ff.WithAllowMissingConfigFile(true),
 	); err != nil {
 		return nil, err
+	}
+
+	if offCPUThreshold != 0 {
+		args.Probes = append(args.Probes, config.Probe{
+			Type:   "offcpu",
+			Config: map[string]any{"threshold": offCPUThreshold},
+		})
 	}
 
 	interpreters, err := parseTracers(tracers)
