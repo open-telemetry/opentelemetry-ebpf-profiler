@@ -25,6 +25,7 @@ linters:
   enable:
     - copyloopvar
     - decorder
+    - misspell
     - nolintlint
     - reassign
     - revive
