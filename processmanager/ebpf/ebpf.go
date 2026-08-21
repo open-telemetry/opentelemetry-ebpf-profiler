@@ -555,7 +555,6 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-
 }
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.

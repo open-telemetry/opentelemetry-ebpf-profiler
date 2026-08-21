@@ -731,7 +731,6 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 

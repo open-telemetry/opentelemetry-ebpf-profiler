@@ -35,6 +35,7 @@ linters:
     - thelper
     - usestdlibvars
     - usetesting
+    - whitespace
 
   exclusions:
     paths:

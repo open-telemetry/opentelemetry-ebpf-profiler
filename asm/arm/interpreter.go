@@ -220,7 +220,6 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 				pcPage := expression.Clear(oldPC, 12)
 				i.Regs.setArm64asm(dst, expression.Add(pcPage, expression.Imm(uint64(src))))
 			}
-
 		}
 	default:
 	}

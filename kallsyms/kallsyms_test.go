@@ -187,5 +187,4 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`)
 			b.Fail()
 		}
 	}
-
 }

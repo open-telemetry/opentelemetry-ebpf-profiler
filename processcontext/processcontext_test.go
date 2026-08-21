@@ -368,7 +368,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
-
 		})
 	}
 }
