@@ -347,12 +347,17 @@ func (d *hotspotData) newUnsigned5Decoder(r io.ByteReader) *unsigned5Decoder {
 	}
 }
 
+// versionString renders the version as feature.interim.update, leaving out the
+// build number that follows it in the JVM's own version string.
+func (v *hotspotVMData) versionString() string {
+	return fmt.Sprintf("%d.%d.%d",
+		(v.version>>24)&0xff, (v.version>>16)&0xff, (v.version>>8)&0xff)
+}
+
 func (d *hotspotData) String() string {
 	if vmd := d.Get(); vmd != nil {
-		return fmt.Sprintf("Java HotSpot VM %d.%d.%d+%d (%v)",
-			(vmd.version>>24)&0xff, (vmd.version>>16)&0xff,
-			(vmd.version>>8)&0xff, vmd.version&0xff,
-			vmd.versionStr)
+		return fmt.Sprintf("Java HotSpot VM %s+%d (%v)",
+			vmd.versionString(), vmd.version&0xff, vmd.versionStr)
 	}
 	return "<unintrospected JVM>"
 }

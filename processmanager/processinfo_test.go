@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -19,6 +20,7 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -148,6 +150,9 @@ type testProcess struct {
 	pid      libpf.PID
 	exe      libpf.String
 	mappings []process.RawMapping
+	// exeID is what GetExecutableFileIdentifier reports; the zero value stands
+	// for an executable that could not be identified.
+	exeID util.OnDiskFileIdentifier
 }
 
 func (tp *testProcess) PID() libpf.PID {
@@ -161,13 +166,20 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 func (tp *testProcess) GetProcessMeta(enrichers []process.MetaEnricher) process.Meta {
 	meta := process.Meta{Executable: tp.exe}
 	for _, e := range enrichers {
-		e.EnrichMeta(fmt.Sprintf("/proc/%d", tp.pid), &meta)
+		e.EnrichMeta(fmt.Sprintf("/proc/%d/", tp.pid), &meta)
 	}
 	return meta
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
 	return tp.exe, nil
+}
+
+func (tp *testProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	if tp.exeID == (util.OnDiskFileIdentifier{}) {
+		return util.OnDiskFileIdentifier{}, errors.New("no executable")
+	}
+	return tp.exeID, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {
@@ -570,22 +582,17 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	enricherCalls := 0
 	enricher := process.MetaEnricherFunc(func(procBase string, meta *process.Meta) {
 		enricherCalls++
-		require.Equal(fmt.Sprintf("/proc/%d", pid), procBase)
+		require.Equal(fmt.Sprintf("/proc/%d/", pid), procBase)
 		meta.ExtraMeta = map[libpf.String]string{key: meta.Executable.String()}
 	})
 
-	pm := &ProcessManager{
-		ebpf:             &testEbpfHandler{},
-		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
-		pidToProcessInfo: make(map[libpf.PID]*processInfo),
-		exitEvents:       make(map[libpf.PID]times.KTime),
-		metaEnrichers:    []process.MetaEnricher{enricher},
-	}
+	pm := newTestProcessManager([]process.MetaEnricher{enricher}, nil)
 
 	// Process first seen: gather and enrich metadata.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
 	require.Equal(1, enricherCalls)
-	require.Equal("foobar", pm.metaForPID(pid).ExtraMeta[key])
+	meta, _ := pm.metaForPID(pid)
+	require.Equal("foobar", meta.ExtraMeta[key])
 
 	// Unchanged executable: don't refetch metadata, don't enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
@@ -594,5 +601,405 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Executable changed: refetch metadata and enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
 	require.Equal(2, enricherCalls)
-	require.Equal("foobarbaz", pm.metaForPID(pid).ExtraMeta[key])
+	meta, _ = pm.metaForPID(pid)
+	require.Equal("foobarbaz", meta.ExtraMeta[key])
+}
+
+// testResourceEnricher is a ResourceEnricher whose behaviour each test controls
+// through enrich.
+type testResourceEnricher struct {
+	cfg    procmeta.ResourceConfig
+	calls  int
+	reqs   []procmeta.ResourceRequest
+	enrich func(req *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool)
+}
+
+func (e *testResourceEnricher) ResourceConfig() procmeta.ResourceConfig {
+	return e.cfg
+}
+
+func (e *testResourceEnricher) EnrichResource(req *procmeta.ResourceRequest) (
+	*pcommon.Resource, bool,
+) {
+	e.calls++
+	e.reqs = append(e.reqs, *req)
+	if e.enrich == nil {
+		return nil, false
+	}
+	return e.enrich(req, e.calls)
+}
+
+// resourceWithAttr builds a single-attribute resource.
+func resourceWithAttr(key, value string) *pcommon.Resource {
+	r := pcommon.NewResource()
+	r.Attributes().PutStr(key, value)
+	return &r
+}
+
+// resourceAttrs flattens a resource's string attributes, or returns nil.
+func resourceAttrs(r *pcommon.Resource) map[string]string {
+	if r == nil {
+		return nil
+	}
+	attrs := make(map[string]string, r.Attributes().Len())
+	r.Attributes().Range(func(k string, v pcommon.Value) bool {
+		attrs[k] = v.Str()
+		return true
+	})
+	return attrs
+}
+
+func newTestProcessManager(metaEnrichers []process.MetaEnricher,
+	resourceEnrichers []procmeta.ResourceEnricher,
+) *ProcessManager {
+	return &ProcessManager{
+		ebpf:              &testEbpfHandler{},
+		interpreters:      make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo:  make(map[libpf.PID]*processInfo),
+		exitEvents:        make(map[libpf.PID]times.KTime),
+		metaEnrichers:     metaEnrichers,
+		resourceEnrichers: resourceEnrichers,
+		mappingFilters:    newMappingFilters(resourceEnrichers),
+	}
+}
+
+// TestSynchronizeProcessRunsResourceEnrichers verifies that resource enrichers run
+// on every synchronization, unlike meta enrichers, so attributes resolving after
+// first observation are still picked up.
+func TestSynchronizeProcessRunsResourceEnrichers(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	// Contributes nothing on the first call, then an attribute on the second, as a
+	// late-resolving enricher would.
+	enricher := &testResourceEnricher{
+		enrich: func(_ *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool) {
+			if call == 1 {
+				return nil, false
+			}
+			return resourceWithAttr("late.attr", "resolved"), true
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(1, enricher.calls)
+	_, resource := pm.metaForPID(pid)
+	require.Nil(resource)
+	require.Equal(pid, enricher.reqs[0].Process.PID())
+
+	// Same executable: the meta enrichers would not run, but this one does.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(2, enricher.calls)
+	_, resource = pm.metaForPID(pid)
+	require.Equal(map[string]string{"late.attr": "resolved"}, resourceAttrs(resource))
+
+	// Reporting no change keeps the published contribution.
+	enricher.enrich = func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+		return nil, false
+	}
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(3, enricher.calls)
+	_, resource = pm.metaForPID(pid)
+	require.Equal(map[string]string{"late.attr": "resolved"}, resourceAttrs(resource))
+
+	// Reporting a change with a nil resource withdraws it.
+	enricher.enrich = func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+		return nil, true
+	}
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	_, resource = pm.metaForPID(pid)
+	require.Nil(resource)
+}
+
+// TestSynchronizeProcessResourceEnricherStateKeptUntilExec verifies that derived
+// state is kept across synchronizations of one program and dropped on the one after
+// an exec — an empty slot being the whole signal an enricher gets, and needs.
+func TestSynchronizeProcessResourceEnricherStateKeptUntilExec(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	exe := libpf.Intern("/bin/foobar")
+
+	// The state each call was handed, which is how the exec handling is observable.
+	var seen []any
+	enricher := &testResourceEnricher{
+		enrich: func(req *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool) {
+			seen = append(seen, *req.State)
+			*req.State = call
+			return nil, false
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+
+	// Seed a known process with a mapping the sync below can match and reuse, which
+	// keeps it out of the ELF-parsing path that needs a fuller ProcessManager.
+	rawMapping := process.RawMapping{
+		Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		Device: 7, Inode: 8, Path: exe.String(),
+	}
+	pm.pidToProcessInfo[pid] = &processInfo{
+		meta: process.Meta{Executable: exe},
+		mappings: []Mapping{{
+			Vaddr:  libpf.Address(rawMapping.Vaddr),
+			Length: rawMapping.Length,
+			Device: rawMapping.Device,
+			Inode:  rawMapping.Inode,
+			FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+				File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+					FileID:   libpf.NewFileID(1, 0),
+					FileName: libpf.Intern("foobar"),
+				}),
+				Start: 0,
+				End:   libpf.Address(rawMapping.Length),
+			}),
+		}},
+		contributions: make([]*pcommon.Resource, 1),
+		enricherState: make([]any, 1),
+	}
+
+	// Known process, unchanged executable: what the previous call stored is still
+	// there, the seeded record included.
+	proc := &testProcess{pid: pid, exe: exe, mappings: []process.RawMapping{rawMapping}}
+	pm.SynchronizeProcess(proc)
+	pm.SynchronizeProcess(proc)
+	require.Equal([]any{nil, 1}, seen)
+
+	// Executable changed: the state derived from the program that is gone goes too.
+	pm.SynchronizeProcess(&testProcess{
+		pid: pid, exe: libpf.Intern("/bin/other"),
+		mappings: []process.RawMapping{rawMapping},
+	})
+	require.Equal([]any{nil, 1, nil}, seen)
+}
+
+// TestSynchronizeProcessResourceEnricherStateKeptWithoutMappings verifies that a
+// process retaining no mapping keeps its derived state all the same. Retained
+// mappings say nothing about the lifecycle — a fully JIT-compiled process keeps
+// none — and looking execed every sync would resolve fill-once enrichers forever.
+func TestSynchronizeProcessResourceEnricherStateKeptWithoutMappings(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	exe := libpf.Intern("/bin/foobar")
+
+	var seen []any
+	enricher := &testResourceEnricher{
+		enrich: func(req *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool) {
+			seen = append(seen, *req.State)
+			*req.State = call
+			return nil, false
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+
+	// Non-executable, so no mapping is retained for the process.
+	proc := &testProcess{pid: pid, exe: exe, mappings: []process.RawMapping{{
+		Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R,
+		Device: 7, Inode: 8, Path: exe.String(),
+	}}}
+
+	pm.SynchronizeProcess(proc)
+	pm.SynchronizeProcess(proc)
+	pm.SynchronizeProcess(proc)
+
+	pm.mu.RLock()
+	mappings := pm.pidToProcessInfo[pid].mappings
+	pm.mu.RUnlock()
+	require.Empty(mappings)
+
+	// New once, on first observation, and never again.
+	require.Equal([]any{nil, 1, 2}, seen)
+}
+
+// TestSynchronizeProcessResourceEnricherExecDropsContributions verifies that an exec
+// drops what the enrichers derived from the previous program. Otherwise an enricher
+// resolving nothing for the new executable — runtime info once a Python process
+// execs a native binary — would keep the old attributes indefinitely.
+func TestSynchronizeProcessResourceEnricherExecDropsContributions(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	enricher := &testResourceEnricher{
+		enrich: func(req *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool) {
+			if call == 1 {
+				*req.State = "resolved"
+				return resourceWithAttr("process.runtime.name", "cpython"), true
+			}
+			// Nothing to report for the new executable.
+			return nil, false
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("/usr/bin/python3")})
+	_, resource := pm.metaForPID(pid)
+	require.Equal(map[string]string{"process.runtime.name": "cpython"}, resourceAttrs(resource))
+
+	// Exec: the contribution and the state derived from the old program go.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("/usr/bin/native")})
+	_, resource = pm.metaForPID(pid)
+	require.Nil(resource)
+	require.Nil(*enricher.reqs[1].State)
+}
+
+// TestSynchronizeProcessExecDoesNotPairNewMetaWithOldResource verifies that a
+// replaced program's resource is never readable beside the new executable's
+// metadata, which is published before the enrichers run and the resource after. An
+// enricher runs in exactly that window, so it can observe what a trace would see.
+func TestSynchronizeProcessExecDoesNotPairNewMetaWithOldResource(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	type observation struct {
+		exe      string
+		resource *pcommon.Resource
+	}
+	var observed []observation
+
+	enricher := &testResourceEnricher{}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+	enricher.enrich = func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+		meta, resource := pm.metaForPID(pid)
+		observed = append(observed, observation{meta.Executable.String(), resource})
+		// Identify the program, so a contribution carried across the exec shows up.
+		return resourceWithAttr("exe", meta.Executable.String()), true
+	}
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("/usr/bin/python3")})
+	_, resource := pm.metaForPID(pid)
+	require.Equal(map[string]string{"exe": "/usr/bin/python3"}, resourceAttrs(resource))
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("/usr/bin/native")})
+	_, resource = pm.metaForPID(pid)
+	require.Equal(map[string]string{"exe": "/usr/bin/native"}, resourceAttrs(resource))
+
+	require.Len(observed, 2)
+	// First observation: the process has no resource yet.
+	require.Equal("/usr/bin/python3", observed[0].exe)
+	require.Nil(observed[0].resource)
+	// Second: metadata is already the new program's, so the old resource is gone.
+	require.Equal("/usr/bin/native", observed[1].exe)
+	require.Nil(observed[1].resource)
+}
+
+// TestSynchronizeProcessMergesResourceContributions verifies that contributions
+// from several enrichers are merged, with later enrichers winning on key
+// collisions, and that each enricher's contribution is tracked independently.
+func TestSynchronizeProcessMergesResourceContributions(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	first := &testResourceEnricher{
+		enrich: func(_ *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+			r := pcommon.NewResource()
+			r.Attributes().PutStr("shared", "first")
+			r.Attributes().PutStr("only.first", "1")
+			return &r, true
+		},
+	}
+	second := &testResourceEnricher{
+		enrich: func(_ *procmeta.ResourceRequest, call int) (*pcommon.Resource, bool) {
+			// Contribute only on the first call, to check the stored contribution
+			// still takes part in later merges.
+			if call > 1 {
+				return nil, false
+			}
+			return resourceWithAttr("shared", "second"), true
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{first, second})
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	_, resource := pm.metaForPID(pid)
+	require.Equal(map[string]string{"shared": "second", "only.first": "1"},
+		resourceAttrs(resource))
+
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	_, resource = pm.metaForPID(pid)
+	require.Equal(map[string]string{"shared": "second", "only.first": "1"},
+		resourceAttrs(resource))
+}
+
+// TestSynchronizeProcessResourceEnricherState verifies that per-process enricher
+// state survives across synchronizations and is dropped, and closed, on exit.
+func TestSynchronizeProcessResourceEnricherState(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	var seen []int
+	enricher := &testResourceEnricher{
+		enrich: func(req *procmeta.ResourceRequest, _ int) (*pcommon.Resource, bool) {
+			state, _ := (*req.State).(*testEnricherState)
+			if state == nil {
+				state = &testEnricherState{}
+				*req.State = state
+			}
+			state.counter++
+			seen = append(seen, state.counter)
+			return nil, false
+		},
+	}
+	pm := newTestProcessManager(nil, []procmeta.ResourceEnricher{enricher})
+
+	proc := &testProcess{pid: pid, exe: libpf.Intern("foobar")}
+	pm.SynchronizeProcess(proc)
+	pm.SynchronizeProcess(proc)
+	pm.SynchronizeProcess(proc)
+	require.Equal([]int{1, 2, 3}, seen)
+
+	pm.mu.RLock()
+	state, _ := pm.pidToProcessInfo[pid].enricherState[0].(*testEnricherState)
+	pm.mu.RUnlock()
+	require.NotNil(state)
+
+	// Process exit drops the state along with the processInfo holding it.
+	pm.processPIDExit(pid)
+	pm.ProcessedUntil(times.GetKTime())
+
+	pm.mu.RLock()
+	_, tracked := pm.pidToProcessInfo[pid]
+	pm.mu.RUnlock()
+	require.False(tracked)
+
+	// A process observed again under the same PID starts from empty state.
+	pm.SynchronizeProcess(proc)
+	require.Equal([]int{1, 2, 3, 1}, seen)
+}
+
+type testEnricherState struct {
+	counter int
+}
+
+// TestSynchronizeProcessResourceEnricherMappings verifies that only the mappings
+// an enricher's WantMapping filter selects are delivered to it, and that each
+// enricher gets its own selection.
+func TestSynchronizeProcessResourceEnricherMappings(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+
+	wantsNamed := &testResourceEnricher{
+		cfg: procmeta.ResourceConfig{
+			WantMapping: func(m *process.RawMapping) bool { return m.Path == "[anon:MY_REGION]" },
+		},
+	}
+	wantsNothing := &testResourceEnricher{}
+	pm := newTestProcessManager(nil,
+		[]procmeta.ResourceEnricher{wantsNamed, wantsNothing})
+
+	pm.SynchronizeProcess(&testProcess{
+		pid: pid,
+		exe: libpf.Intern("foobar"),
+		mappings: []process.RawMapping{
+			{Vaddr: 0x1000, Flags: elf.PF_R, Path: "/bin/foobar"},
+			{Vaddr: 0x2000, Flags: elf.PF_R | elf.PF_W, Path: "[anon:MY_REGION]"},
+			{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_W},
+		},
+	})
+
+	require.Len(wantsNamed.reqs, 1)
+	require.Equal([]process.RawMapping{
+		{Vaddr: 0x2000, Flags: elf.PF_R | elf.PF_W, Path: "[anon:MY_REGION]"},
+	}, wantsNamed.reqs[0].Mappings)
+
+	require.Len(wantsNothing.reqs, 1)
+	require.Empty(wantsNothing.reqs[0].Mappings)
 }

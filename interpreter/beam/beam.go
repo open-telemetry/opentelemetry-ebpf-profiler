@@ -281,6 +281,12 @@ func (d *beamData) String() string {
 	return fmt.Sprintf("BEAM OTP %d, ERTS %s", d.otpRelease, d.ertsVersion)
 }
 
+func (i *beamInstance) RuntimeInfo() (string, string, bool) {
+	// The OTP release (e.g. 26) keys the erlang/otp source and not the finer ERTS
+	// version (i.data.ertsVersion)
+	return "erlang", fmt.Sprintf("%d", i.data.otpRelease), true
+}
+
 func hashMFA(key beamMfa) uint32 {
 	mfhash := uint32(hash.Uint64(uint64(key.module)<<32 | uint64(key.function)))
 	return uint32(hash.Uint64(uint64(mfhash)<<32 | uint64(key.arity)))

@@ -96,9 +96,14 @@ type phpData struct {
 	}
 }
 
-func (d *phpData) String() string {
+// versionString renders the version as major.minor.release.
+func (d *phpData) versionString() string {
 	ver := d.version
-	return fmt.Sprintf("PHP %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+	return fmt.Sprintf("%d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+}
+
+func (d *phpData) String() string {
+	return "PHP " + d.versionString()
 }
 
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,

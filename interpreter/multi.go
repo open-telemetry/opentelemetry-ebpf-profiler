@@ -162,3 +162,14 @@ func (m *MultiInstance) ReleaseResources() error {
 	}
 	return errors.Join(errs...)
 }
+
+// RuntimeInfo returns the runtime info of the first wrapped instance that
+// reports one (ok=true), or ok=false if none do.
+func (m *MultiInstance) RuntimeInfo() (string, string, bool) {
+	for _, instance := range m.instances {
+		if name, version, ok := instance.RuntimeInfo(); ok {
+			return name, version, true
+		}
+	}
+	return "", "", false
+}
