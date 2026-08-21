@@ -276,21 +276,21 @@ type PreTraceHandler interface {
 
 // PostTraceHandler is an optional interface that Probe implementations may
 // satisfy to receive traces after symbolization and reporting. This allows
-// probes to perform post-processing that requires the symbolized trace hash
-// (e.g. feeding alloc events into a live-heap correlator).
+// probes to perform post-processing on the symbolized trace (e.g. feeding
+// alloc events into a live-heap correlator).
 //
 // The tracer checks whether a Probe satisfies PostTraceHandler after Enable
 // and registers it for the origins returned by PostOrigins(). The handler is
-// only invoked for traces whose origin matches one of the registered values,
-// avoiding unnecessary hash computation on the hot path.
+// only invoked for traces whose origin matches one of the registered values.
 type PostTraceHandler interface {
 	// PostOrigins returns the set of origin IDs this handler wants to receive.
 	// The tracer dispatches only traces with a matching origin to this handler.
 	PostOrigins() []uint16
 
 	// PostHandleTrace is called after symbolization and reporting for traces
-	// with a matching origin.
-	PostHandleTrace(trace *libpf.Trace, hash libpf.TraceHash)
+	// with a matching origin. Handlers that need the trace hash should call
+	// trace.Hash(), which memoizes the result across callers.
+	PostHandleTrace(trace *libpf.Trace)
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
