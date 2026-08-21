@@ -14,6 +14,7 @@ import (
 )
 
 func testVariant(t *testing.T, fileSize, granularity, cacheSize uint) {
+	t.Helper()
 	file := testsupport.GenerateTestInputFile(255, fileSize)
 	rawReader := bytes.NewReader(file)
 	cachingReader, err := readatbuf.New(rawReader, granularity, cacheSize)

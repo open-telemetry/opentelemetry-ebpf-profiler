@@ -126,7 +126,7 @@ func (i *Interpreter) maybeHandleLoadStore(inst arm64asm.Inst, pc expression.Exp
 				// NB: encoding the read as all 8 bytes is fine even if the register is W*; setArm64asm
 				// properly encodes that the higher order bytes should be zeroed in that case.
 				i.Regs.setArm64asm(dst, expression.Mem8(memAddr))
-			} else {
+			} else { //nolint:staticcheck
 				// TODO: Our interpreter doesn't model memory contents yet,
 				// so stores are currently a no-op (except that we will properly update
 				// the register for writebacks below)
@@ -220,7 +220,6 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 				pcPage := expression.Clear(oldPC, 12)
 				i.Regs.setArm64asm(dst, expression.Add(pcPage, expression.Imm(uint64(src))))
 			}
-
 		}
 	default:
 	}

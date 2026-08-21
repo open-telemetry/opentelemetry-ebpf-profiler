@@ -256,7 +256,7 @@ func TestProcessContext_Read(t *testing.T) {
 			} else {
 				assert.Nil(t, ctx.Context)
 				assert.Zero(t, ctx.PublishedAtNs)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
@@ -368,7 +368,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
-
 		})
 	}
 }

@@ -63,6 +63,7 @@ func forceContextSwitch() {
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
+	t.Helper()
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
 
@@ -236,7 +237,6 @@ Loop:
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)

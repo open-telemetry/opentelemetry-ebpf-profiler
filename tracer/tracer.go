@@ -996,7 +996,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("Failed to batch lookup and delete entries from pid_events map: %v", err)
+			return fmt.Errorf("failed to batch lookup and delete entries from pid_events map: %v", err)
 		}
 	}
 

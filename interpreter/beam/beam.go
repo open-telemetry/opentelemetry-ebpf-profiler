@@ -151,7 +151,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Slice off the null-terminator before parsing
 	otpRelease, err := strconv.ParseUint(string(otpReleaseString[:len(otpReleaseString)-1]), 10, 32)
 	if err != nil || otpRelease > 255 {
-		return nil, fmt.Errorf("Invalid OTP Release: %v", otpReleaseString)
+		return nil, fmt.Errorf("invalid OTP Release: %v", otpReleaseString)
 	}
 
 	_, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)

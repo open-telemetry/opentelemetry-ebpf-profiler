@@ -22,16 +22,16 @@ import (
 // Config holds configuration for all interpreters.
 // By default all interpreters are enabled.
 type Config struct {
-	Python  python.Config  `mapstructure:"python" json:"python,omitempty"`
-	Perl    perl.Config    `mapstructure:"perl" json:"perl,omitempty"`
-	PHP     php.Config     `mapstructure:"php" json:"php,omitempty"`
-	Hotspot hotspot.Config `mapstructure:"hotspot" json:"hotspot,omitempty"`
-	Ruby    ruby.Config    `mapstructure:"ruby" json:"ruby,omitempty"`
-	V8      nodev8.Config  `mapstructure:"v8" json:"v8,omitempty"`
-	Dotnet  dotnet.Config  `mapstructure:"dotnet" json:"dotnet,omitempty"`
-	Go      golang.Config  `mapstructure:"go" json:"go,omitempty"`
-	BEAM    beam.Config    `mapstructure:"beam" json:"beam,omitempty"`
-	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit,omitempty"`
+	Python  python.Config  `mapstructure:"python" json:"python"`
+	Perl    perl.Config    `mapstructure:"perl" json:"perl"`
+	PHP     php.Config     `mapstructure:"php" json:"php"`
+	Hotspot hotspot.Config `mapstructure:"hotspot" json:"hotspot"`
+	Ruby    ruby.Config    `mapstructure:"ruby" json:"ruby"`
+	V8      nodev8.Config  `mapstructure:"v8" json:"v8"`
+	Dotnet  dotnet.Config  `mapstructure:"dotnet" json:"dotnet"`
+	Go      golang.Config  `mapstructure:"go" json:"go"`
+	BEAM    beam.Config    `mapstructure:"beam" json:"beam"`
+	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
