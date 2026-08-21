@@ -1078,7 +1078,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		cframe = true
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for cfunc")
+			return fmt.Errorf("unable to read method definition for cfunc")
 		}
 
 		originalId := r.rm.Uint64(methodDefinition + libpf.Address(vms.rb_method_definition_struct.original_id))
@@ -1096,7 +1096,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for CME")
+			return fmt.Errorf("unable to read method definition for CME")
 		}
 
 		methodBody := r.rm.Ptr(methodDefinition + libpf.Address(vms.rb_method_definition_struct.body))
@@ -1154,7 +1154,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		})
 		return nil
 	default:
-		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d)", frameAddrType)
+		return fmt.Errorf("unable to get CME or ISEQ from frame address (%d)", frameAddrType)
 	}
 
 	if cme && r.r.hasClassPath {

@@ -595,7 +595,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Get current executable name
 	exe, exeErr := pr.GetExe()
-	if exeErr != nil && !os.IsNotExist(exeErr) {
+	if exeErr != nil && !os.IsNotExist(exeErr) { //nolint:staticcheck
 		// The /proc/PID/exe returns "not exists" error also in
 		// the case of main thread exit. Ignore it.
 	}

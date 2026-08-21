@@ -72,11 +72,9 @@ func TestCollectorReporterShutdown(t *testing.T) {
 	consumerStarted := make(chan struct{})
 	next, err := xconsumer.NewProfiles(func(ctx context.Context, _ pprofile.Profiles) error {
 		close(consumerStarted)
-		select {
-		case <-ctx.Done():
-			canceled.Store(true)
-			return nil
-		}
+		<-ctx.Done()
+		canceled.Store(true)
+		return nil
 	})
 	require.NoError(t, err)
 

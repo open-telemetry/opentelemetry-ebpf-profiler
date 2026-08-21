@@ -84,7 +84,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		}
 		return true
 	}); err != nil {
-		return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
+		return nil, fmt.Errorf("failed to visit TLS descriptor: %v", err)
 	}
 
 	if tlsDescElfAddr == 0 {
