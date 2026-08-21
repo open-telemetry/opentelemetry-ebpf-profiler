@@ -45,7 +45,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -1431,11 +1430,9 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(bpfTrace.Origin))
 
 	// Post-handlers gated by origin receive the symbolized result.
-	// Hashing is deferred and only computed when a matching handler exists.
 	if handlers := t.postTraceHandlers[bpfTrace.Origin]; len(handlers) > 0 {
-		hash := traceutil.HashTrace(trace)
 		for _, h := range handlers {
-			h.PostHandleTrace(trace, hash)
+			h.PostHandleTrace(trace)
 		}
 	}
 

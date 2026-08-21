@@ -15,6 +15,10 @@ type TraceHash struct {
 	basehash.Hash128
 }
 
+// InvalidTraceHash represents the absence of a computed hash.
+// A zero output should be extremely rare making collisions highly unlikely.
+var InvalidTraceHash = TraceHash{}
+
 func NewTraceHash(hi, lo uint64) TraceHash {
 	return TraceHash{basehash.New128(hi, lo)}
 }
