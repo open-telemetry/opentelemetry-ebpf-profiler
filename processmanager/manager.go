@@ -33,7 +33,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -334,22 +333,23 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 func (pm *ProcessManager) maybeNotifyAPMAgent(
 	rawTrace *libpf.EbpfTrace, trace *libpf.Trace, count uint16,
 ) string {
+	traceHash := libpf.InvalidTraceHash
+
 	pm.mu.RLock()
 	// Keeping the lock until end of the function is needed because inner map can be modified
 	// concurrently (by synchronizeMappings/newFrameMapping).
 	defer pm.mu.RUnlock()
+
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
 	if !ok {
 		return ""
 	}
+
 	var serviceName string
-	var traceHash libpf.TraceHash
-	traceHashComputed := false
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
-			if !traceHashComputed {
-				traceHash = traceutil.HashTrace(trace)
-				traceHashComputed = true
+			if traceHash == libpf.InvalidTraceHash {
+				traceHash = trace.APMHash()
 			}
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
 			if serviceName != "" {
@@ -378,7 +378,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // due to frameCache not being synced. If the tracer is later updated to distribute
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
 	procMeta := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
@@ -468,4 +468,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
+
+	return trace
 }

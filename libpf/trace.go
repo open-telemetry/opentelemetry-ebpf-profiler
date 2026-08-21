@@ -4,8 +4,11 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"hash/fnv"
+	"strconv"
 	"unique"
 
+	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
@@ -126,6 +129,73 @@ func (frames *Frames) Append(frame *Frame) {
 type Trace struct {
 	CustomLabels map[String]String
 	Frames       Frames
+
+	// cachedHash memoizes the result of Hash().
+	// InvalidTraceHash means the hash has not been computed yet.
+	cachedHash TraceHash
+}
+
+// APMHash returns the trace's hash required by the APM Agent for correlation.
+// The result is not memoized.
+func (t *Trace) APMHash() TraceHash {
+	var buf [24]byte
+	// Review and maybe update InvalidTraceHash if hash function changes from FNV128A
+	h := fnv.New128a()
+	for _, uniqueFrame := range t.Frames {
+		frame := uniqueFrame.Value()
+		fileID := FileID{}
+		if frame.Mapping.Valid() {
+			fileID = frame.Mapping.Value().File.Value().FileID
+		}
+		_, _ = h.Write(fileID.Bytes())
+		// Using FormatUint() or putting AppendUint() into a function leads
+		// to escaping to heap (allocation).
+		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
+	}
+	// make instead of nil avoids a heap allocation
+	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	t.cachedHash = traceHash
+	return traceHash
+}
+
+// Hash returns the trace's hash for agent internal use only,
+// computing and caching it on the first call.
+// The result is memoized: mutating Frames after the first call is not
+// reflected in subsequent calls.
+func (t *Trace) Hash() TraceHash {
+	if t.cachedHash != InvalidTraceHash {
+		return t.cachedHash
+	}
+	var buf [24]byte
+	// Review and maybe update InvalidTraceHash if hash function changes from FNV128A
+	h := xxh3.New128()
+	for _, uniqueFrame := range t.Frames {
+		frame := uniqueFrame.Value()
+		fileID := FileID{}
+		if frame.Mapping.Valid() {
+			fileID = frame.Mapping.Value().File.Value().FileID
+		}
+		_, _ = h.Write(fileID.Bytes())
+		// Using FormatUint() or putting AppendUint() into a function leads
+		// to escaping to heap (allocation).
+		n := putUint64(buf[:], uint64(frame.AddressOrLineno))
+		_, _ = h.Write(buf[:n])
+	}
+	// make instead of nil avoids a heap allocation
+	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	t.cachedHash = traceHash
+	return traceHash
+}
+
+func putUint64(b []byte, v uint64) int {
+	for i := range 8 {
+		b[i] = byte(v)
+		v >>= 8
+		if v == 0 {
+			return i + 1
+		}
+	}
+	return 8
 }
 
 // EbpfTrace holds data sourced from eBPF.
