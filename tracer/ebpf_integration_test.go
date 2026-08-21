@@ -63,6 +63,7 @@ func forceContextSwitch() {
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
+	t.Helper()
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
 
