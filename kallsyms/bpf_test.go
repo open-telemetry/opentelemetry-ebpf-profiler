@@ -207,7 +207,7 @@ func TestBPFUpdates(t *testing.T) {
 
 	// checking for lost symbols triggering full reload
 	err = s.bpf.handleBPFUpdate(nil)
-	assert.NotNil(t, err)
+	require.Error(t, err)
 
 	// trampolines and non-bpf_prog_ symbols are silently ignored
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
@@ -253,7 +253,7 @@ func TestBPFSnapshotGenerations(t *testing.T) {
 	assertBPFSymbol(t, s, addr, "bpf_prog_00354c172d366337_sd_devices", 0)
 
 	err := s.bpf.handleBPFUpdate(nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 	snapAfterLost := s.Snapshot()
 	require.NotNil(t, snapAfterLost.bpf)
 	assert.Equal(t, bpfGen1, snapAfterLost.bpf.generation)

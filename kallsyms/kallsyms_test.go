@@ -150,7 +150,7 @@ ffffffffc13cc770 t perf_trace_xfs_perag_class	[xfs]`))
 	assert.Equal(t, "xfs", kmod.Name())
 
 	_, err = snap2.GetModuleByAddress(0xffffffffc03cc610)
-	assert.ErrorIs(t, err, ErrNoModule)
+	require.ErrorIs(t, err, ErrNoModule)
 	kmod, err = snap2.GetModuleByAddress(0xffffffffc13cc610)
 	require.NoError(t, err)
 	assert.Equal(t, "xfs", kmod.Name())
