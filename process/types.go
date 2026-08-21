@@ -12,7 +12,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -115,8 +114,6 @@ type Meta struct {
 	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
 	ContainerID libpf.String
-	// process context
-	ProcessContextInfo processcontext.Info
 
 	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
 	// It is nil unless an enricher is configured and explicitly sets values.

@@ -6,6 +6,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
@@ -24,7 +25,12 @@ type Config struct {
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery and executable change time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
-	OnShutdown           func() error
+	// ResourceEnrichers are optional hooks for contributing OTel resource
+	// attributes to a process. They are called on every process synchronization,
+	// so they can supply attributes that resolve later than process discovery.
+	// Multiple enrichers are called in order.
+	ResourceEnrichers []procmeta.ResourceEnricher
+	OnShutdown        func() error
 
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.

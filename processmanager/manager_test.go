@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -63,6 +64,36 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
 	require.Equal(t, 1, pm.frameCache.Len())
+}
+
+func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
+	requestedEnvVars := libpf.Set[string]{"FOO": {}}
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		IncludeEnvVars:        requestedEnvVars,
+	})
+	require.NoError(t, err)
+
+	// Only the user-requested env vars may be reported.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, pm.reportEnvVars)
+
+	// The env vars the base resource is derived from are captured for internal use
+	// only, so each is dropped again once that resource is built.
+	internalNames := make([]string, 0, len(pm.internalOnlyEnvVars))
+	for name := range pm.internalOnlyEnvVars {
+		internalNames = append(internalNames, name.String())
+	}
+	assert.ElementsMatch(t, procmeta.EnvVarNames(), internalNames)
+
+	// New must not add the internal env vars to the caller's set.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, requestedEnvVars)
+
+	// Later mutations of the caller's set must not affect the reported set.
+	requestedEnvVars["BAR"] = libpf.Void{}
+	assert.NotContains(t, pm.reportEnvVars, "BAR")
 }
 
 func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {

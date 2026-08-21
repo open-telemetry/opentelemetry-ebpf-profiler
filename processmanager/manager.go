@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -30,6 +31,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
+	"go.opentelemetry.io/ebpf-profiler/procmeta/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -71,6 +74,20 @@ type Config struct {
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
+	ResourceEnrichers     []procmeta.ResourceEnricher
+}
+
+// newMappingFilters resolves each enricher's mapping requirements once, so the
+// mapping pass need not re-read them, pairing every non-nil filter with the index of
+// the enricher that declared it — the index the selected mappings are delivered by.
+func newMappingFilters(enrichers []procmeta.ResourceEnricher) []mappingFilter {
+	var filters []mappingFilter
+	for i, e := range enrichers {
+		if want := e.ResourceConfig().WantMapping; want != nil {
+			filters = append(filters, mappingFilter{enricher: i, want: want})
+		}
+	}
+	return filters
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -82,6 +99,28 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	if cfg.FrameCacheSize == 0 {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
+
+	// Keep the user-requested reporting set separate from the full capture set.
+	reportEnvVars := maps.Clone(cfg.IncludeEnvVars)
+	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
+	if includeEnvVars == nil {
+		includeEnvVars = make(libpf.Set[string])
+	}
+	// The base resource's env vars are captured for every process; those the user did
+	// not ask for are dropped again once that resource is built.
+	internalOnlyEnvVars := make(libpf.Set[libpf.String])
+	for _, name := range procmeta.EnvVarNames() {
+		includeEnvVars[name] = libpf.Void{}
+		if _, report := reportEnvVars[name]; !report {
+			internalOnlyEnvVars[libpf.Intern(name)] = libpf.Void{}
+		}
+	}
+	// The built-in enricher is always on, and comes first so that a configured
+	// enricher can override what it contributed.
+	resourceEnrichers := append(
+		[]procmeta.ResourceEnricher{processcontext.NewEnricher()},
+		cfg.ResourceEnrichers...)
+	mappingFilters := newMappingFilters(resourceEnrichers)
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
@@ -114,9 +153,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	if len(cfg.IncludeEnvVars) > 0 {
-		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(cfg.IncludeEnvVars))
-	}
+	// includeEnvVars is never empty: it always holds the process context env vars.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
@@ -140,7 +178,11 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
+		reportEnvVars:            reportEnvVars,
+		internalOnlyEnvVars:      internalOnlyEnvVars,
 		metaEnrichers:            metaEnrichers,
+		resourceEnrichers:        resourceEnrichers,
+		mappingFilters:           mappingFilters,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
@@ -379,7 +421,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
-	procMeta := pm.metaForPID(bpfTrace.PID)
+	procMeta, resource := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -392,6 +434,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        procMeta.EnvVariables,
+		Resource:       resource,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,

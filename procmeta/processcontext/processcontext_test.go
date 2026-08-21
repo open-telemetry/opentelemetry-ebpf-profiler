@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build amd64 || arm64
+//go:build linux && (amd64 || arm64)
 
 package processcontext_test
 
@@ -15,12 +15,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/procmeta/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
@@ -41,6 +42,70 @@ var testContext = processcontextpb.ProcessContext{
 				Value: &commonpb.AnyValue{
 					Value: &commonpb.AnyValue_StringValue{
 						StringValue: "test-service",
+					},
+				},
+			},
+			{
+				Key: "service.version",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_IntValue{
+						IntValue: 42,
+					},
+				},
+			},
+			{
+				Key: "service.active",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_BoolValue{
+						BoolValue: true,
+					},
+				},
+			},
+			{
+				Key: "service.weight",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_DoubleValue{
+						DoubleValue: 3.14,
+					},
+				},
+			},
+			{
+				Key: "service.tags",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_ArrayValue{
+						ArrayValue: &commonpb.ArrayValue{
+							Values: []*commonpb.AnyValue{
+								{Value: &commonpb.AnyValue_StringValue{StringValue: "tag1"}},
+								{Value: &commonpb.AnyValue_IntValue{IntValue: 2}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Key: "service.metadata",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_KvlistValue{
+						KvlistValue: &commonpb.KeyValueList{
+							Values: []*commonpb.KeyValue{
+								{
+									Key: "nested.key",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_StringValue{
+											StringValue: "nested-value",
+										},
+									},
+								},
+								{
+									Key: "nested.count",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_IntValue{
+											IntValue: 7,
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -146,7 +211,11 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+			expectedResult: processcontext.Info{
+				Resource:        expectedResource(),
+				ExtraAttributes: expectedExtraAttributes(),
+				PublishedAtNs:   123456789,
+			},
 		},
 		{
 			name: "read error",
@@ -254,7 +323,8 @@ func TestProcessContext_Read(t *testing.T) {
 				require.NotNil(t, ctx)
 				require.EqualExportedValues(t, &tt.expectedResult, &ctx)
 			} else {
-				assert.Nil(t, ctx.Context)
+				assert.Nil(t, ctx.Resource)
+				assert.Nil(t, ctx.ExtraAttributes)
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -366,9 +436,37 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
-				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+				processcontext.Info{
+					Resource:        expectedResource(),
+					ExtraAttributes: expectedExtraAttributes(),
+					PublishedAtNs:   123456789,
+				},
 				result)
 
 		})
 	}
+}
+
+func expectedResource() *pcommon.Resource {
+	r := pcommon.NewResource()
+	r.Attributes().PutStr("service.name", "test-service")
+	r.Attributes().PutInt("service.version", 42)
+	r.Attributes().PutBool("service.active", true)
+	r.Attributes().PutDouble("service.weight", 3.14)
+
+	tags := r.Attributes().PutEmptySlice("service.tags")
+	tags.AppendEmpty().SetStr("tag1")
+	tags.AppendEmpty().SetInt(2)
+
+	metadata := r.Attributes().PutEmptyMap("service.metadata")
+	metadata.PutStr("nested.key", "nested-value")
+	metadata.PutInt("nested.count", 7)
+
+	return &r
+}
+
+func expectedExtraAttributes() *pcommon.Map {
+	m := pcommon.NewMap()
+	m.PutStr("custom.attribute", "custom-value")
+	return &m
 }
