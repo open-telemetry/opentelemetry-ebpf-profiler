@@ -40,7 +40,7 @@ func TestParseProbeMode(t *testing.T) {
 	}
 }
 
-func TestNew(t *testing.T) {
+func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     Config
@@ -63,7 +63,7 @@ func TestNew(t *testing.T) {
 			cfg:  Config{Mode: "uretprobe", Symbol: "main", Target: "/usr/bin/myapp"},
 		},
 		{
-			name: "default to type kprobe",
+			name: "default mode kprobe",
 			cfg:  Config{Symbol: "vfs_open"},
 		},
 		{
@@ -72,7 +72,7 @@ func TestNew(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "unknown type",
+			name:    "unknown mode",
 			cfg:     Config{Mode: "tracepoint", Symbol: "vfs_open"},
 			wantErr: true,
 		},
@@ -93,13 +93,9 @@ func TestNew(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			p, err := New(tc.cfg)
+			err := tc.cfg.Validate()
 			if (err != nil) != tc.wantErr {
-				t.Errorf("New(%+v): wantErr=%v, got err=%v", tc.cfg, tc.wantErr, err)
-				return
-			}
-			if !tc.wantErr && p == nil {
-				t.Errorf("New(%+v): got nil probe without error", tc.cfg)
+				t.Errorf("Config.Validate(%+v): wantErr=%v, got err=%v", tc.cfg, tc.wantErr, err)
 			}
 		})
 	}

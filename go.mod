@@ -30,6 +30,7 @@ require (
 	go.opentelemetry.io/collector/confmap v1.65.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.159.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.159.0
+	go.opentelemetry.io/collector/extension v1.65.0
 	go.opentelemetry.io/collector/pdata v1.65.0
 	go.opentelemetry.io/collector/pdata/pprofile v0.159.0
 	go.opentelemetry.io/collector/receiver v1.65.0
