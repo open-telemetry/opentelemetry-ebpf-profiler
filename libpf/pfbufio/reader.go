@@ -150,10 +150,7 @@ func (r *Reader) fill() error {
 	}
 
 	r.pos = 0
-	toRead := int64(r.bufSize - preserve)
-	if toRead > r.limit-r.off {
-		toRead = r.limit - r.off
-	}
+	toRead := min(int64(r.bufSize-preserve), r.limit-r.off)
 
 	n, err := r.source.ReadAt(r.buf[preserve:preserve+int(toRead)], r.off)
 	r.nbuf = n + preserve

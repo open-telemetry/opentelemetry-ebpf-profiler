@@ -51,8 +51,7 @@ func isPIDLive(pid libpf.PID) (bool, error) {
 		return true, nil
 	}
 
-	var errno unix.Errno
-	if errors.As(err, &errno) {
+	if errno, ok := errors.AsType[unix.Errno](err); ok {
 		switch errno {
 		case unix.ESRCH:
 			return false, nil

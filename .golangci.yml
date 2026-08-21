@@ -26,6 +26,7 @@ linters:
     - copyloopvar
     - decorder
     - misspell
+    - modernize
     - nolintlint
     - reassign
     - revive
@@ -89,6 +90,9 @@ linters:
       locale: US
       ignore-rules:
         - rela
+    modernize:
+      disable:
+        - importcomment
     revive:
       rules:
         - name: unexported-naming
