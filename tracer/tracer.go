@@ -201,9 +201,6 @@ type Config struct {
 	ProbabilisticThreshold uint
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
-	// IncludeEnvVars holds a list of environment variables that should be captured and reported
-	// from processes
-	IncludeEnvVars libpf.Set[string]
 	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
@@ -296,7 +293,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
-		IncludeEnvVars:        cfg.IncludeEnvVars,
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
 	})
 	if err != nil {

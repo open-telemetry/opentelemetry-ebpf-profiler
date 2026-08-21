@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
@@ -23,6 +24,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 )
 
@@ -51,6 +54,7 @@ func defaultConfig() component.Config {
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
+		ResourceAttributes:     metadata.DefaultResourceAttributesConfig(),
 	}
 }
 
@@ -70,6 +74,20 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		controllerOption := &controllerOption{}
 		for _, option := range options {
 			controllerOption = option.apply(controllerOption)
+		}
+
+		if cfg.ResourceAttributes.ContainerID.Enabled {
+			controllerOption.processMetaEnrichers = append(controllerOption.processMetaEnrichers, process.NewContainerIDEnricher())
+		}
+		if len(cfg.IncludeEnvVars) > 0 {
+			envVars := libpf.Set[string]{}
+			for envVar := range strings.SplitSeq(cfg.IncludeEnvVars, ",") {
+				envVar = strings.TrimSpace(envVar)
+				if envVar != "" {
+					envVars[envVar] = libpf.Void{}
+				}
+			}
+			controllerOption.processMetaEnrichers = append(controllerOption.processMetaEnrichers, process.NewEnvVarsEnricher(envVars))
 		}
 
 		controlerCfg := &controller.Config{

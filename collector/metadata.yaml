@@ -10,3 +10,10 @@ status:
   distributions: [ebpf-profiler]
 tests:
   skip_lifecycle: true
+
+resource_attributes:
+  container.id:
+    description: It represents the container ID.
+    type: string
+    enabled: true
+    requirement_level: recommended
