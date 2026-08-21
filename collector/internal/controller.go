@@ -151,7 +151,7 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 	for _, id := range c.extensionIDs {
 		ext, ok := extensions[id]
 		if !ok {
-			return fmt.Errorf("extension %q not found; ensure it is listed under service.extensions", id)
+			return fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id)
 		}
 		pp, ok := ext.(ProbeProvider)
 		if !ok {

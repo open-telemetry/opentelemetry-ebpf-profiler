@@ -37,6 +37,6 @@ var _ internal.ProbeProvider = (ProbeExtension)(nil)
 // The receiver calls Probe() after Start has been called on all extensions,
 // then enables the returned probe on the running tracer.
 type ProbeExtension interface {
-	component.Component
+	extension.Extension
 	Probe() tracer.Probe
 }
