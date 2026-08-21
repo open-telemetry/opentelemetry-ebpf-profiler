@@ -310,9 +310,10 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 		// Consequently these symbols might be unavailable on a stripped binary.
 		var start, end libpf.SymbolValue
 		ef.VisitSymbols(func(sym libpf.Symbol) bool {
-			if sym.Name == "runtime.pclntab" {
+			switch sym.Name {
+			case "runtime.pclntab":
 				start = sym.Address
-			} else if sym.Name == "runtime.epclntab" {
+			case "runtime.epclntab":
 				end = sym.Address
 			}
 			return start == 0 || end == 0
