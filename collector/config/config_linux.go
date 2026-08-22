@@ -99,6 +99,14 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
 	}
 
+	if cfg.ReporterInterval <= 0 {
+		return fmt.Errorf("invalid reporter interval: %s", cfg.ReporterInterval)
+	}
+
+	if cfg.MonitorInterval <= 0 {
+		return fmt.Errorf("invalid monitor interval: %s", cfg.MonitorInterval)
+	}
+
 	if cfg.SamplesPerSecond < 1 {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}
