@@ -125,7 +125,7 @@ type ProcessManager struct {
 
 	// pidPageToMappingInfoSize reflects the current size of the eBPF hash map
 	// pid_page_to_mapping_info.
-	pidPageToMappingInfoSize uint64
+	pidPageToMappingInfoSize atomic.Uint64
 
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
