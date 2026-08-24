@@ -177,6 +177,9 @@ func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	monitorInterval time.Duration,
 ) {
+	if !metrics.Enabled() {
+		return
+	}
 	periodiccaller.Start(ctx, monitorInterval, func() {
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
