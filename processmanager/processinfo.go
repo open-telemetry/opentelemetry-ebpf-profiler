@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -639,7 +640,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
-	oldProcessContextPublishedAtNs := info.processContext.PublishedAtNs
+	oldProcessContext := info.processContext
 	oldInternalEnvVars := info.internalEnvVars
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
@@ -822,7 +823,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
 		contextMappingAddr, pid, pr.GetRemoteMemory(),
-		oldProcessContextPublishedAtNs, internalEnvVars, updateProcessMeta || newProcess)
+		oldProcessContext, internalEnvVars, updateProcessMeta || newProcess)
 
 	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)
@@ -899,15 +900,15 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns a consistent snapshot of the process metadata and its
-// resolved OTel process context for the given PID.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, processcontext.Info) {
+// metaForPID returns the process metadata and process-context resource
+// attributes for pid, read under one lock.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.meta, procInfo.processContext
+		return procInfo.meta, procInfo.processContext.ResourceAttrs
 	}
-	return process.Meta{}, processcontext.Info{}
+	return process.Meta{}, attribute.Set{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

@@ -3,10 +3,10 @@
 
 //go:build linux && (amd64 || arm64)
 
-package processcontext_test
+package processcontext
 
 import (
-	"encoding/binary"
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -20,18 +20,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
-)
-
-const (
-	headerSignature  = "OTEL_CTX"
-	supportedVersion = 2
-	headerSize       = 32
 )
 
 var testContext = processcontextpb.ProcessContext{
@@ -163,27 +157,30 @@ func (m *mockReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return 0, io.EOF
 }
 
+// createHeader serialises via the header struct itself, so a layout change in
+// the reader cannot leave the fixtures producing a stale wire format.
 func createHeader(signature string, version uint32, payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
-	buf := make([]byte, headerSize)
-	copy(buf[0:8], []byte(signature))
-	binary.LittleEndian.PutUint32(buf[8:12], version)
-	binary.LittleEndian.PutUint32(buf[12:16], payloadSize)
-	binary.LittleEndian.PutUint64(buf[16:24], publishedAt)
-	binary.LittleEndian.PutUint64(buf[24:32], payloadPtr)
-	return buf
+	hdr := header{
+		Version:                version,
+		PayloadSize:            payloadSize,
+		MonotonicPublishedAtNs: publishedAt,
+		PayloadPtr:             payloadPtr,
+	}
+	copy(hdr.Signature[:], signature)
+	return bytes.Clone(pfunsafe.FromPointer(&hdr))
 }
 
 func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
-	return createHeader(headerSignature, supportedVersion, payloadSize, payloadPtr, publishedAt)
+	return createHeader(signatureOTELCTX, supportedVersion, payloadSize, payloadPtr, publishedAt)
 }
 
 func TestProcessContext_IsContextMapping(t *testing.T) {
-	assert.True(t, processcontext.IsContextMapping(false, "[anon:OTEL_CTX]"))
-	assert.True(t, processcontext.IsContextMapping(false, "[anon_shmem:OTEL_CTX]"))
-	assert.True(t, processcontext.IsContextMapping(false, "/memfd:OTEL_CTX"))
-	assert.True(t, processcontext.IsContextMapping(false, "/memfd:OTEL_CTX (deleted)"))
-	assert.False(t, processcontext.IsContextMapping(false, "test"))
-	assert.False(t, processcontext.IsContextMapping(true, "[anon:OTEL_CTX]"))
+	assert.True(t, IsContextMapping(false, "[anon:OTEL_CTX]"))
+	assert.True(t, IsContextMapping(false, "[anon_shmem:OTEL_CTX]"))
+	assert.True(t, IsContextMapping(false, "/memfd:OTEL_CTX"))
+	assert.True(t, IsContextMapping(false, "/memfd:OTEL_CTX (deleted)"))
+	assert.False(t, IsContextMapping(false, "test"))
+	assert.False(t, IsContextMapping(true, "[anon:OTEL_CTX]"))
 }
 
 func TestProcessContext_Read(t *testing.T) {
@@ -195,7 +192,7 @@ func TestProcessContext_Read(t *testing.T) {
 	tests := []struct {
 		name              string
 		setupMock         func(*mockReader)
-		expectedResult    processcontext.Info
+		expectedResult    Info
 		expectedErr       error
 		errorSubstring    string
 		lastPublishedAtNs uint64
@@ -209,10 +206,10 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: processcontext.Info{
+			expectedResult: Info{
 				ResourceAttrs: expectedResourceAttrs(),
-				Attributes:    expectedAttributes(),
-				PublishedAtNs: 123456789,
+				attributes:    expectedAttributes(),
+				publishedAtNs: 123456789,
 			},
 		},
 		{
@@ -220,7 +217,7 @@ func TestProcessContext_Read(t *testing.T) {
 			setupMock: func(mock *mockReader) {
 				mock.setError(errors.New("read error"))
 			},
-			expectedErr: processcontext.ErrInvalidContext,
+			expectedErr: errInvalidContext,
 		},
 		{
 			name: "invalid protobuf",
@@ -232,7 +229,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, invalidPayload)
 			},
-			expectedErr:    processcontext.ErrInvalidContext,
+			expectedErr:    errInvalidContext,
 			errorSubstring: "failed to unmarshal",
 		},
 		{
@@ -242,17 +239,17 @@ func TestProcessContext_Read(t *testing.T) {
 				header := createHeader("INVALID!", supportedVersion, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    processcontext.ErrInvalidContext,
+			expectedErr:    errInvalidContext,
 			errorSubstring: "signature",
 		},
 		{
 			name: "invalid version",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(headerSignature, 999, 100, 0x2000, 123456789)
+				header := createHeader(signatureOTELCTX, 999, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    processcontext.ErrInvalidContext,
+			expectedErr:    errInvalidContext,
 			errorSubstring: "version",
 		},
 		{
@@ -262,17 +259,17 @@ func TestProcessContext_Read(t *testing.T) {
 				header := createValidHeader(0, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    processcontext.ErrInvalidContext,
+			expectedErr:    errInvalidContext,
 			errorSubstring: "payload size",
 		},
 		{
 			name: "payload size too large",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(headerSignature, supportedVersion, 1024*1024, 0x2000, 123456789)
+				header := createHeader(signatureOTELCTX, supportedVersion, 1024*1024, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    processcontext.ErrInvalidContext,
+			expectedErr:    errInvalidContext,
 			errorSubstring: "payload size",
 		},
 		{
@@ -282,7 +279,7 @@ func TestProcessContext_Read(t *testing.T) {
 				header := createValidHeader(100, 0x2000, 0)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr: processcontext.ErrConcurrentUpdate,
+			expectedErr: errConcurrentUpdate,
 		},
 		{
 			name: "published at same as last published",
@@ -292,7 +289,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 			},
 			lastPublishedAtNs: 123456788,
-			expectedErr:       processcontext.ErrNoUpdate,
+			expectedErr:       errNoUpdate,
 		},
 		{
 			name: "published at too old",
@@ -302,7 +299,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 			},
 			lastPublishedAtNs: 123456788,
-			expectedErr:       processcontext.ErrNoUpdate,
+			expectedErr:       errNoUpdate,
 		},
 	}
 
@@ -313,15 +310,15 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			ctx, err := processcontext.Read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
+			ctx, err := read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
 				require.Equal(t, tt.expectedResult, ctx)
 			} else {
 				assert.Zero(t, ctx.ResourceAttrs.Len())
-				assert.Zero(t, ctx.Attributes.Len())
-				assert.Zero(t, ctx.PublishedAtNs)
+				assert.Zero(t, ctx.attributes.Len())
+				assert.Zero(t, ctx.publishedAtNs)
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
@@ -365,7 +362,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			memSize := len(header)
 			var mem []byte
 			if tt.useMemfd {
-				fd, err := unix.MemfdCreate(headerSignature, 0)
+				fd, err := unix.MemfdCreate(signatureOTELCTX, 0)
 				require.NoError(t, err)
 				defer unix.Close(fd)
 
@@ -392,7 +389,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			copy(mem[0:len(header)], header)
 
 			if tt.usePrctl {
-				nameNullTerminated, _ := unix.ByteSliceFromString(headerSignature)
+				nameNullTerminated, _ := unix.ByteSliceFromString(signatureOTELCTX)
 				err = unix.Prctl(unix.PR_SET_VMA,
 					unix.PR_SET_VMA_ANON_NAME,
 					uintptr(unsafe.Pointer(&mem[0])),
@@ -410,7 +407,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			var contextMappingAddr uint64
 			_, err = proc.IterateMappings(func(m process.RawMapping) bool {
-				if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
+				if IsContextMapping(m.IsExecutable(), m.Path) {
 					contextMappingAddr = m.Vaddr
 					return false
 				}
@@ -421,13 +418,13 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			result, err := read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.Equal(t,
-				processcontext.Info{
+				Info{
 					ResourceAttrs: expectedResourceAttrs(),
-					Attributes:    expectedAttributes(),
-					PublishedAtNs: 123456789,
+					attributes:    expectedAttributes(),
+					publishedAtNs: 123456789,
 				},
 				result)
 
@@ -473,7 +470,7 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 1))
 	mock.writeAt(payloadAddr, payload)
 
-	info, err := processcontext.Read(libpf.Address(0x1000),
+	info, err := read(libpf.Address(0x1000),
 		remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 	require.NoError(t, err)
 
@@ -647,7 +644,7 @@ func TestWithMergedEnvVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := processcontext.Info{}
+			info := Info{}
 			if tt.preexisting != nil {
 				attrs := make([]attribute.KeyValue, 0, len(tt.preexisting))
 				for k, v := range tt.preexisting {
@@ -656,7 +653,7 @@ func TestWithMergedEnvVars(t *testing.T) {
 				info.ResourceAttrs = attribute.NewSet(attrs...)
 			}
 
-			info = processcontext.WithMergedEnvVars(info, tt.envVars)
+			info = withMergedEnvVars(info, tt.envVars)
 
 			if tt.expected == nil {
 				if tt.preexisting == nil {

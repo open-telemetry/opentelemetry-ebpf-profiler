@@ -75,9 +75,6 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	rtp := (*eventsTree)[key]
-	// Refresh so a late-detected process context applies to samples already
-	// collected for this PID. An empty set wins too: Resolve clears the context
-	// when the mapping disappears, and the reporter must not override that.
 	// Compared by hash to skip the map write-back when nothing changed.
 	if meta.ResourceAttrs.Equivalent() != rtp.ResourceAttrs.Equivalent() {
 		rtp.ResourceAttrs = meta.ResourceAttrs

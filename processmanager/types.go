@@ -181,8 +181,8 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 type processInfo struct {
 	// process metadata, updated on executable changes
 	meta process.Meta
-	// processContext is the resolved OTel process-context snapshot. It is
-	// published together with meta under ProcessManager.mu.
+	// processContext is the resolved OTel process-context snapshot.
+	// Published under ProcessManager.mu.
 	processContext processcontext.Info
 	// internalEnvVars contains the OTel environment values needed to
 	// rebuild processContext without exposing them through process metadata. It

@@ -40,10 +40,10 @@ const (
 	// - "[anon_shmem:OTEL_CTX]": memfd-based mapping and prctl succeeded
 	// - "[anon:OTEL_CTX]": anonymous mapping and prctl succeeded
 	// Case where both memfd_create and prctl fail is considered a failure and is not supported.
-	ContextMappingMemfd        = "/memfd:OTEL_CTX"
-	ContextMappingMemfdDeleted = "/memfd:OTEL_CTX (deleted)"
-	ContextMappingMemfdNamed   = "[anon_shmem:OTEL_CTX]"
-	ContextMappingAnonNamed    = "[anon:OTEL_CTX]"
+	contextMappingMemfd        = "/memfd:OTEL_CTX"
+	contextMappingMemfdDeleted = "/memfd:OTEL_CTX (deleted)"
+	contextMappingMemfdNamed   = "[anon_shmem:OTEL_CTX]"
+	contextMappingAnonNamed    = "[anon:OTEL_CTX]"
 
 	defaultMaxAttempts = 3
 
@@ -59,14 +59,14 @@ const (
 )
 
 var (
-	// ErrInvalidContext indicates the ProcessContext has invalid format, signature, version, or size.
-	ErrInvalidContext = errors.New("invalid ProcessContext")
+	// errInvalidContext indicates the ProcessContext has invalid format, signature, version, or size.
+	errInvalidContext = errors.New("invalid ProcessContext")
 
-	// ErrConcurrentUpdate indicates the ProcessContext was updated during read.
-	ErrConcurrentUpdate = errors.New("concurrent ProcessContext update detected")
+	// errConcurrentUpdate indicates the ProcessContext was updated during read.
+	errConcurrentUpdate = errors.New("concurrent ProcessContext update detected")
 
-	// ErrNoUpdate indicates the ProcessContext has not been updated since it was last published.
-	ErrNoUpdate = errors.New("ProcessContext has not been updated")
+	// errNoUpdate indicates the ProcessContext has not been updated since it was last published.
+	errNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
 // Info is a snapshot of process context. attribute.Set is immutable, so the
@@ -74,8 +74,8 @@ var (
 type Info struct {
 	ResourceAttrs attribute.Set
 	// Populated but unused until thread context lands.
-	Attributes    attribute.Set
-	PublishedAtNs uint64
+	attributes    attribute.Set
+	publishedAtNs uint64
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -88,10 +88,10 @@ type header struct {
 	PayloadPtr             uint64
 }
 
-// Read reads ProcessContext from remote process memory at addr.
-// Returns ErrInvalidContext if the process has no ProcessContext memory region.
+// read reads ProcessContext from remote process memory at addr.
+// Returns errInvalidContext if the process has no ProcessContext memory region.
 // Retries concurrent updates up to maxAttempts times, or defaultMaxAttempts if 0.
-func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+func read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
@@ -102,7 +102,7 @@ func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 		if err == nil {
 			return processCtx, nil
 		}
-		if !errors.Is(err, ErrConcurrentUpdate) {
+		if !errors.Is(err, errConcurrentUpdate) {
 			return Info{}, err
 		}
 		lastErr = err
@@ -114,20 +114,20 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",
-			ErrInvalidContext, err)
+			errInvalidContext, err)
 	}
 	if monotonicPublishedAtNs == 0 {
-		return Info{}, ErrConcurrentUpdate
+		return Info{}, errConcurrentUpdate
 	}
 
 	if monotonicPublishedAtNs <= lastPublishedAtNs {
-		return Info{}, ErrNoUpdate
+		return Info{}, errNoUpdate
 	}
 
 	hdr, err := readHeader(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",
-			ErrInvalidContext, err)
+			errInvalidContext, err)
 	}
 
 	ctx, ctxErr := readPayload(rm, hdr)
@@ -137,15 +137,15 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	monotonicPublishedAtNs2, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",
-			ErrInvalidContext, err)
+			errInvalidContext, err)
 	}
 
 	if monotonicPublishedAtNs != monotonicPublishedAtNs2 {
-		return Info{}, ErrConcurrentUpdate
+		return Info{}, errConcurrentUpdate
 	}
 
 	if ctxErr != nil {
-		return Info{}, fmt.Errorf("%w: %w", ErrInvalidContext, ctxErr)
+		return Info{}, fmt.Errorf("%w: %w", errInvalidContext, ctxErr)
 	}
 
 	return ctx, nil
@@ -155,37 +155,39 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 // attributes derived from OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.
 // Returns (_, false) to leave the previously-published context untouched.
 //
-// mappingAddr=0 means the mapping was not observed this sync. With
-// oldPublishedAtNs > 0 it means the mapping disappeared.
-// newProcessOrExec=true discards the old context and forces a rebuild so new
-// env vars take effect even when the mapping is present.
+// mappingAddr=0 means the mapping was not observed this sync. If old also
+// carries a published context, the mapping disappeared.
+// newProcessOrExec=true discards old and forces a rebuild so new env vars
+// take effect even when the mapping is present.
 func Resolve(
 	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
-	oldPublishedAtNs uint64,
+	old Info,
 	envVars map[libpf.String]libpf.String,
 	newProcessOrExec bool,
 ) (Info, bool) {
 	if mappingAddr == 0 {
-		if newProcessOrExec || oldPublishedAtNs != 0 {
-			return WithMergedEnvVars(Info{}, envVars), true
+		if newProcessOrExec || old.publishedAtNs != 0 {
+			return withMergedEnvVars(Info{}, envVars), true
 		}
 		return Info{}, false
 	}
 
-	if newProcessOrExec {
-		oldPublishedAtNs = 0
+	// A new process or an exec rebuilds from scratch, so accept any timestamp.
+	var lastPublishedAtNs uint64
+	if !newProcessOrExec {
+		lastPublishedAtNs = old.publishedAtNs
 	}
 
 	// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
 	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
 
-	processCtx, err := Read(addr, rm, oldPublishedAtNs, 0)
+	processCtx, err := read(addr, rm, lastPublishedAtNs, 0)
 	switch {
 	case err == nil:
-		return WithMergedEnvVars(processCtx, envVars), true
-	case errors.Is(err, ErrNoUpdate):
+		return withMergedEnvVars(processCtx, envVars), true
+	case errors.Is(err, errNoUpdate):
 		return Info{}, false
-	case errors.Is(err, ErrConcurrentUpdate):
+	case errors.Is(err, errConcurrentUpdate):
 		// Retries are exhausted, so prefer the previous context over dropping it.
 		if !newProcessOrExec {
 			return Info{}, false
@@ -194,14 +196,14 @@ func Resolve(
 		log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
 	}
 
-	return WithMergedEnvVars(Info{}, envVars), true
+	return withMergedEnvVars(Info{}, envVars), true
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
-	return !isExecutable && (mappingPath == ContextMappingMemfd ||
-		mappingPath == ContextMappingMemfdDeleted ||
-		mappingPath == ContextMappingAnonNamed ||
-		mappingPath == ContextMappingMemfdNamed)
+	return !isExecutable && (mappingPath == contextMappingMemfd ||
+		mappingPath == contextMappingMemfdDeleted ||
+		mappingPath == contextMappingAnonNamed ||
+		mappingPath == contextMappingMemfdNamed)
 }
 
 func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint64, error) {
@@ -250,8 +252,8 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 
 	return Info{
 		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
-		Attributes:    newAttributeSet(convertKeyValues(ctx.GetAttributes())),
-		PublishedAtNs: hdr.MonotonicPublishedAtNs,
+		attributes:    newAttributeSet(convertKeyValues(ctx.GetAttributes())),
+		publishedAtNs: hdr.MonotonicPublishedAtNs,
 	}, nil
 }
 
@@ -318,10 +320,10 @@ func EnvVarNames() []string {
 	return []string{svcNameKey, resourceAttrKey}
 }
 
-// WithMergedEnvVars returns process context with attributes derived from
+// withMergedEnvVars returns process context with attributes derived from
 // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES merged into its resource
 // attributes.
-func WithMergedEnvVars(info Info, envVars map[libpf.String]libpf.String) Info {
+func withMergedEnvVars(info Info, envVars map[libpf.String]libpf.String) Info {
 	env, err := attributesFromEnvVars(envVars)
 	if err != nil {
 		log.Debugf("Partial resource attributes: %v", err)
