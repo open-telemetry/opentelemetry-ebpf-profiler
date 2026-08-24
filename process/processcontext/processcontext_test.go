@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
@@ -123,9 +123,8 @@ var testContext = processcontextpb.ProcessContext{
 	},
 }
 
-// mockReader implements io.ReaderAt for testing.
-// It stores data as a set of (address, bytes) regions and supports reads
-// that span within any single stored region.
+// mockReader serves reads from a set of (address, bytes) regions. A read may
+// not span two regions.
 type mockReader struct {
 	regions []mockRegion
 	err     error
@@ -174,7 +173,6 @@ func createHeader(signature string, version uint32, payloadSize uint32, payloadP
 	return buf
 }
 
-// createValidHeader creates a valid ProcessContext header
 func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
 	return createHeader(headerSignature, supportedVersion, payloadSize, payloadPtr, publishedAt)
 }
@@ -212,9 +210,9 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(payloadAddr, payload)
 			},
 			expectedResult: processcontext.Info{
-				Resource:        expectedResource(),
-				ExtraAttributes: expectedExtraAttributes(),
-				PublishedAtNs:   123456789,
+				ResourceAttrs: expectedResourceAttrs(),
+				Attributes:    expectedAttributes(),
+				PublishedAtNs: 123456789,
 			},
 		},
 		{
@@ -281,7 +279,6 @@ func TestProcessContext_Read(t *testing.T) {
 			name: "published at zero - update in progress",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				// PublishedAtNs = 0 indicates update in progress
 				header := createValidHeader(100, 0x2000, 0)
 				mock.writeAt(headerAddr, header)
 			},
@@ -320,11 +317,10 @@ func TestProcessContext_Read(t *testing.T) {
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
-				require.NotNil(t, ctx)
-				require.EqualExportedValues(t, &tt.expectedResult, &ctx)
+				require.Equal(t, tt.expectedResult, ctx)
 			} else {
-				assert.Nil(t, ctx.Resource)
-				assert.Nil(t, ctx.ExtraAttributes)
+				assert.Zero(t, ctx.ResourceAttrs.Len())
+				assert.Zero(t, ctx.Attributes.Len())
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -360,7 +356,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test ProcessContext
 			payload, err := proto.Marshal(&testContext)
 			require.NoError(t, err)
 
@@ -370,15 +365,12 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			memSize := len(header)
 			var mem []byte
 			if tt.useMemfd {
-				// Create memfd with OTEL_CTX name
 				fd, err := unix.MemfdCreate(headerSignature, 0)
 				require.NoError(t, err)
 				defer unix.Close(fd)
 
-				// Set size of memfd
 				err = unix.Ftruncate(fd, int64(memSize))
 				require.NoError(t, err)
-				// Map the memfd into memory
 				mem, err = unix.Mmap(
 					fd, 0, memSize,
 					unix.PROT_READ|unix.PROT_WRITE,
@@ -388,7 +380,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 				defer unix.Munmap(mem)
 				unix.Close(fd)
 			} else {
-				// Create  private anonymous memory mapping
 				mem, err = unix.Mmap(
 					-1, 0, memSize,
 					unix.PROT_READ|unix.PROT_WRITE,
@@ -398,11 +389,9 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 				defer unix.Munmap(mem)
 			}
 
-			// Write ProcessContext to memory
 			copy(mem[0:len(header)], header)
 
 			if tt.usePrctl {
-				// Name the memory region using prctl
 				nameNullTerminated, _ := unix.ByteSliceFromString(headerSignature)
 				err = unix.Prctl(unix.PR_SET_VMA,
 					unix.PR_SET_VMA_ANON_NAME,
@@ -415,7 +404,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 				}
 			}
 
-			// Get current process mappings
 			pid := libpf.PID(os.Getpid())
 			proc := process.New(pid, pid)
 			defer proc.Close()
@@ -435,11 +423,11 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
-			require.EqualExportedValues(t,
+			require.Equal(t,
 				processcontext.Info{
-					Resource:        expectedResource(),
-					ExtraAttributes: expectedExtraAttributes(),
-					PublishedAtNs:   123456789,
+					ResourceAttrs: expectedResourceAttrs(),
+					Attributes:    expectedAttributes(),
+					PublishedAtNs: 123456789,
 				},
 				result)
 
@@ -447,28 +435,53 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 	}
 }
 
-func expectedResource() *pcommon.Resource {
-	r := pcommon.NewResource()
-	r.Attributes().PutStr("service.name", "test-service")
-	r.Attributes().PutInt("service.version", 42)
-	r.Attributes().PutBool("service.active", true)
-	r.Attributes().PutDouble("service.weight", 3.14)
-
-	tags := r.Attributes().PutEmptySlice("service.tags")
-	tags.AppendEmpty().SetStr("tag1")
-	tags.AppendEmpty().SetInt(2)
-
-	metadata := r.Attributes().PutEmptyMap("service.metadata")
-	metadata.PutStr("nested.key", "nested-value")
-	metadata.PutInt("nested.count", 7)
-
-	return &r
+func expectedResourceAttrs() attribute.Set {
+	return attribute.NewSet(
+		attribute.String("service.name", "test-service"),
+		attribute.Int64("service.version", 42),
+		attribute.Bool("service.active", true),
+		attribute.Float64("service.weight", 3.14),
+		attribute.Slice("service.tags",
+			attribute.StringValue("tag1"),
+			attribute.Int64Value(2)),
+		attribute.Map("service.metadata",
+			attribute.String("nested.key", "nested-value"),
+			attribute.Int64("nested.count", 7)),
+	)
 }
 
-func expectedExtraAttributes() *pcommon.Map {
-	m := pcommon.NewMap()
-	m.PutStr("custom.attribute", "custom-value")
-	return &m
+func expectedAttributes() attribute.Set {
+	return attribute.NewSet(attribute.String("custom.attribute", "custom-value"))
+}
+
+// An AnyValue with no variant set is a valid empty value per OTLP
+// common.proto. The key must survive the read with an EMPTY value rather than
+// be dropped.
+func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
+	payload, err := proto.Marshal(&processcontextpb.ProcessContext{
+		Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
+			{Key: "set", Value: &commonpb.AnyValue{
+				Value: &commonpb.AnyValue_StringValue{StringValue: "v"}}},
+			{Key: "unset.oneof", Value: &commonpb.AnyValue{}},
+			{Key: "absent.value"},
+		}},
+	})
+	require.NoError(t, err)
+
+	const payloadAddr = 0x2000
+	mock := newMockReader()
+	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 1))
+	mock.writeAt(payloadAddr, payload)
+
+	info, err := processcontext.Read(libpf.Address(0x1000),
+		remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
+	require.NoError(t, err)
+
+	require.Equal(t, attribute.NewSet(
+		attribute.String("set", "v"),
+		attribute.KeyValue{Key: "unset.oneof"},
+		attribute.KeyValue{Key: "absent.value"},
+	), info.ResourceAttrs)
 }
 
 func TestWithMergedEnvVars(t *testing.T) {
@@ -521,28 +534,46 @@ func TestWithMergedEnvVars(t *testing.T) {
 			},
 		},
 		{
-			name: "OTEL_RESOURCE_ATTRIBUTES invalid encoding in value discards all",
+			name: "OTEL_RESOURCE_ATTRIBUTES undecodable value kept raw, siblings kept",
 			envVars: map[libpf.String]libpf.String{
 				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,bad=%ZZ"),
 			},
-			// Per OTel spec, the entire value is discarded on any error.
-			expected: nil,
+			expected: map[string]string{"good": "value", "bad": "%ZZ"},
 		},
 		{
-			name: "OTEL_RESOURCE_ATTRIBUTES invalid encoding in key discards all",
+			name: "OTEL_RESOURCE_ATTRIBUTES undecodable key kept raw, siblings kept",
 			envVars: map[libpf.String]libpf.String{
 				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,bad%ZZ=value2"),
 			},
-			// Per OTel spec, the entire value is discarded on any error.
-			expected: nil,
+			expected: map[string]string{"good": "value", "bad%ZZ": "value2"},
 		},
 		{
-			name: "OTEL_RESOURCE_ATTRIBUTES missing equals discards all",
+			name: "OTEL_RESOURCE_ATTRIBUTES missing equals skips pair, siblings kept",
 			envVars: map[libpf.String]libpf.String{
 				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,badpair"),
 			},
-			// Per OTel spec, the entire value is discarded on any error.
+			expected: map[string]string{"good": "value"},
+		},
+		{
+			name: "OTEL_SERVICE_NAME is trimmed",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("  my-service  "),
+			},
+			expected: map[string]string{"service.name": "my-service"},
+		},
+		{
+			name: "OTEL_SERVICE_NAME whitespace only is dropped",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("   "),
+			},
 			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES surrounding whitespace is trimmed",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("  k=v  "),
+			},
+			expected: map[string]string{"k": "v"},
 		},
 		{
 			name: "OTEL_RESOURCE_ATTRIBUTES empty value",
@@ -550,6 +581,13 @@ func TestWithMergedEnvVars(t *testing.T) {
 				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern(""),
 			},
 			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES empty key dropped, siblings kept",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("=orphan,good=value"),
+			},
+			expected: map[string]string{"good": "value"},
 		},
 		{
 			name:        "OTEL_SERVICE_NAME does not override existing",
@@ -583,8 +621,7 @@ func TestWithMergedEnvVars(t *testing.T) {
 			},
 		},
 		{
-			// Per OTel spec, duplicate keys within OTEL_RESOURCE_ATTRIBUTES
-			// resolve last-writer-wins.
+			// Last-writer-wins is mandated by the OTel spec, not incidental.
 			name: "OTEL_RESOURCE_ATTRIBUTES duplicate keys: last writer wins",
 			envVars: map[libpf.String]libpf.String{
 				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=first,k=second,k=third"),
@@ -594,9 +631,9 @@ func TestWithMergedEnvVars(t *testing.T) {
 			},
 		},
 		{
-			// Pre-existing values on p.Resource still beat OTEL_RESOURCE_ATTRIBUTES,
-			// so the dedup-then-apply order is observable: even though the value
-			// "from-attrs-second" wins the intra-attr dedup, "preset" wins overall.
+			// Dedup runs before the merge, so both orderings are observable:
+			// "from-attrs-second" wins within the env var, then loses to the
+			// pre-existing value.
 			name:        "preexisting attribute beats OTEL_RESOURCE_ATTRIBUTES last writer",
 			preexisting: map[string]string{"k": "preset"},
 			envVars: map[libpf.String]libpf.String{
@@ -612,28 +649,27 @@ func TestWithMergedEnvVars(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := processcontext.Info{}
 			if tt.preexisting != nil {
-				r := pcommon.NewResource()
+				attrs := make([]attribute.KeyValue, 0, len(tt.preexisting))
 				for k, v := range tt.preexisting {
-					r.Attributes().PutStr(k, v)
+					attrs = append(attrs, attribute.String(k, v))
 				}
-				info.Resource = &r
+				info.ResourceAttrs = attribute.NewSet(attrs...)
 			}
 
 			info = processcontext.WithMergedEnvVars(info, tt.envVars)
 
 			if tt.expected == nil {
 				if tt.preexisting == nil {
-					assert.Nil(t, info.Resource)
+					assert.Zero(t, info.ResourceAttrs.Len())
 				}
 				return
 			}
 
-			require.NotNil(t, info.Resource)
+			require.NotZero(t, info.ResourceAttrs.Len())
 			got := make(map[string]string)
-			info.Resource.Attributes().Range(func(k string, v pcommon.Value) bool {
-				got[k] = v.Str()
-				return true
-			})
+			for _, kv := range info.ResourceAttrs.ToSlice() {
+				got[string(kv.Key)] = kv.Value.AsString()
+			}
 			assert.Equal(t, tt.expected, got)
 		})
 	}

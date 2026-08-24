@@ -76,10 +76,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	rtp := (*eventsTree)[key]
 	// Refresh so a late-detected process context applies to samples already
-	// collected for this PID. Only non-nil overwrites: the context mapping
-	// disappearing on teardown must not strip attribution.
-	if meta.Resource != nil && meta.Resource != rtp.Resource {
-		rtp.Resource = meta.Resource
+	// collected for this PID. An empty set wins too: Resolve clears the context
+	// when the mapping disappears, and the reporter must not override that.
+	// Compared by hash to skip the map write-back when nothing changed.
+	if meta.ResourceAttrs.Equivalent() != rtp.ResourceAttrs.Equivalent() {
+		rtp.ResourceAttrs = meta.ResourceAttrs
 		(*eventsTree)[key] = rtp
 	}
 	if _, exists := rtp.Events[meta.ProfileType]; !exists {

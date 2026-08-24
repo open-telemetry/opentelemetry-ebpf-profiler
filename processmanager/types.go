@@ -134,9 +134,9 @@ type ProcessManager struct {
 	// reportEnvVars holds only the user-requested env vars that may be reported.
 	reportEnvVars libpf.Set[string]
 
-	// internalEnvVars holds the interned names of the env vars captured for the
-	// profiler's own use, to derive process context resource attributes.
-	internalEnvVars []libpf.String
+	// internalEnvVarNames holds the interned names of the env vars captured for
+	// the profiler's own use, to derive process context resource attributes.
+	internalEnvVarNames []libpf.String
 
 	metaEnrichers []process.MetaEnricher
 

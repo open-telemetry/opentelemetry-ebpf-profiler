@@ -80,8 +80,8 @@ func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 	assert.Equal(t, libpf.Set[string]{"FOO": {}}, pm.reportEnvVars)
 
 	// The env vars used to derive process context are captured for internal use only.
-	internalNames := make([]string, 0, len(pm.internalEnvVars))
-	for _, name := range pm.internalEnvVars {
+	internalNames := make([]string, 0, len(pm.internalEnvVarNames))
+	for _, name := range pm.internalEnvVarNames {
 		internalNames = append(internalNames, name.String())
 	}
 	assert.ElementsMatch(t,

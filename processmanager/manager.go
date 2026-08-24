@@ -92,10 +92,10 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		includeEnvVars = make(libpf.Set[string])
 	}
 	// Always collect the env vars used to derive process context resource attributes.
-	internalEnvVars := make([]libpf.String, 0, len(processcontext.EnvVars()))
-	for _, name := range processcontext.EnvVars() {
+	internalEnvVarNames := make([]libpf.String, 0, len(processcontext.EnvVarNames()))
+	for _, name := range processcontext.EnvVarNames() {
 		includeEnvVars[name] = libpf.Void{}
-		internalEnvVars = append(internalEnvVars, libpf.Intern(name))
+		internalEnvVarNames = append(internalEnvVarNames, libpf.Intern(name))
 	}
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
@@ -155,7 +155,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		reportEnvVars:            reportEnvVars,
-		internalEnvVars:          internalEnvVars,
+		internalEnvVarNames:      internalEnvVarNames,
 		metaEnrichers:            metaEnrichers,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
@@ -408,7 +408,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        procMeta.EnvVariables,
-		Resource:       processContext.Resource,
+		ResourceAttrs:  processContext.ResourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,

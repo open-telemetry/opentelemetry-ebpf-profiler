@@ -4,7 +4,8 @@
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
-	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/otel/attribute"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
@@ -18,7 +19,7 @@ type TraceEventMeta struct {
 	// SampleAttrProducer.CollectExtraSampleMeta to attach process-level attributes.
 	ExtraMeta      map[libpf.String]string
 	APMServiceName string
-	Resource       *pcommon.Resource
+	ResourceAttrs  attribute.Set
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
 	ProfileType    *TypeMetadata
@@ -47,10 +48,12 @@ type ResourceToProfiles struct {
 	// comparable.
 	EnvVars map[libpf.String]libpf.String
 
-	// Resource is the OTel resource from ProcessContext, if available.
-	// Deliberately not part of ResourceKey: refreshing it as samples arrive lets
-	// a late-detected process context apply to the whole reporting period.
-	Resource *pcommon.Resource
+	// ResourceAttrs are the OTel resource attributes from ProcessContext,
+	// if available. Deliberately not part of ResourceKey: refreshing them as
+	// samples arrive lets a late-detected process context apply to the whole
+	// reporting period. The latest value always wins, an empty one included,
+	// so a cleared context drops attribution instead of leaving it stale.
+	ResourceAttrs attribute.Set
 
 	// Events holds the actual profiling information.
 	Events map[*TypeMetadata]SampleToEvents

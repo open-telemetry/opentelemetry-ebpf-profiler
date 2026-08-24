@@ -159,19 +159,17 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 	return info
 }
 
-// readProcessMeta gathers the process metadata and separates the environment
-// variables captured for the profiler's own use from those the user asked to
-// report. The former are copied into a dedicated map, while reportEnvVars
-// determines which captured values remain in the returned Meta.
+// readProcessMeta gathers the process metadata, splitting the env vars
+// captured for the profiler's own use out of the reported Meta.
 func (pm *ProcessManager) readProcessMeta(pr process.Process) (
 	process.Meta, map[libpf.String]libpf.String,
 ) {
 	meta := pr.GetProcessMeta(pm.metaEnrichers)
 	var internalEnvVars map[libpf.String]libpf.String
-	for _, key := range pm.internalEnvVars {
+	for _, key := range pm.internalEnvVarNames {
 		if value, ok := meta.EnvVariables[key]; ok {
 			if internalEnvVars == nil {
-				internalEnvVars = make(map[libpf.String]libpf.String, len(pm.internalEnvVars))
+				internalEnvVars = make(map[libpf.String]libpf.String, len(pm.internalEnvVarNames))
 			}
 			internalEnvVars[key] = value
 		}
@@ -635,10 +633,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	pm.mu.Lock()
-	// Check if process meta needs an update. execve preserves the tgid, so a
-	// re-exec of the same path is invisible here and leaves env vars and the
-	// process context unrefreshed. Detecting it needs a sched_process_exec
-	// tracepoint.
+	// execve preserves the tgid, so a re-exec of the same path is invisible
+	// here and leaves env vars and the process context unrefreshed. Detecting
+	// it needs a sched_process_exec tracepoint.
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
@@ -680,8 +677,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
-	// Address of the OTel ProcessContext mapping, or 0 if absent. Reading the
-	// payload is deferred until after GetProcessMeta so env vars are available for the merge.
+	// Reading the payload is deferred until after GetProcessMeta so env vars
+	// are available for the merge. 0 means absent.
 	var contextMappingAddr uint64
 
 	// This callback processes each memory mapping, keeping only executable

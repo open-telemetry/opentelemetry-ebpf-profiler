@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/otel/attribute"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
@@ -29,9 +29,9 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
-// expectedResource lists the resource attributes the testdata C programs
-// publish via init_process_context() in processctx_lib.c.
-var expectedResource = map[string]string{
+// expectedResourceAttrs is the subset of attributes published by
+// init_process_context() in processctx_lib.c that this test asserts on.
+var expectedResourceAttrs = map[string]string{
 	"service.name":                "my-service",
 	"service.version":             "4.5.6",
 	"service.instance.id":         "123d8444-2c7e-46e3-89f6-6217880f7123",
@@ -50,8 +50,7 @@ func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.M
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
 
-// captureReporter is a minimal TraceReporter that captures TraceEventMeta
-// so the test can inspect the Resource that HandleTrace resolved.
+// captureReporter exposes the TraceEventMeta that HandleTrace resolved.
 type captureReporter struct {
 	metaCh chan *samples.TraceEventMeta
 }
@@ -134,9 +133,8 @@ func Test_ProcessContext(t *testing.T) {
 			traceCh := make(chan *libpf.EbpfTrace)
 			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
 
-			// Read raw EbpfTrace from the monitor, feed through HandleTrace
-			// (which resolves process metadata including the Resource), and
-			// inspect the TraceEventMeta captured by the reporter.
+			// HandleTrace is what resolves the process context onto the meta
+			// the reporter captures.
 			go func() {
 				for {
 					select {
@@ -166,9 +164,8 @@ func Test_ProcessContext(t *testing.T) {
 				case <-ctx.Done():
 					t.Log("Test program cancelled (run complete)")
 				default:
-					// require.* must run on the test goroutine; mark the test
-					// as failed here and cancel so the main loop unblocks and
-					// reports the early child exit.
+					// require.* must run on the test goroutine, so fail here
+					// and cancel to unblock the main loop.
 					t.Errorf("test program exited unexpectedly: %v", err)
 					cancel()
 				}
@@ -187,10 +184,7 @@ func Test_ProcessContext(t *testing.T) {
 					if meta.PID != libpf.PID(cmd.Process.Pid) {
 						continue
 					}
-					if meta.Resource == nil {
-						continue
-					}
-					if !resourceMatches(meta.Resource, expectedResource) {
+					if !attributesMatch(meta.ResourceAttrs, expectedResourceAttrs) {
 						continue
 					}
 					t.Logf("Got expected resource for PID %d", meta.PID)
@@ -206,14 +200,12 @@ func Test_ProcessContext(t *testing.T) {
 	}
 }
 
-// resourceMatches reports whether every key in want is present in r with the
-// expected value (other keys in r are ignored). Returns false on the first
-// missing key or value mismatch.
-func resourceMatches(r *pcommon.Resource, want map[string]string) bool {
-	attrs := r.Attributes()
+// attributesMatch reports whether every key in want is present in attrs with
+// the expected string value. Extra keys in attrs are ignored.
+func attributesMatch(attrs attribute.Set, want map[string]string) bool {
 	for k, v := range want {
-		got, ok := attrs.Get(k)
-		if !ok || got.Type() != pcommon.ValueTypeStr || got.Str() != v {
+		got, ok := attrs.Value(attribute.Key(k))
+		if !ok || got.Type() != attribute.STRING || got.AsString() != v {
 			return false
 		}
 	}
