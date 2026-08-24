@@ -6,6 +6,7 @@
 package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
+	"debug/elf"
 	"errors"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -67,7 +68,7 @@ const (
 // big and has a somewhat unique FDE we can pick out. We could tighten this up by looking for
 // direct jumps to the start of the interpreter (one can be found lj_dispatch_update) but we'd
 // still need to consult the stack deltas to get the end of the interpreter.
-func extractInterpreterBounds(intervals sdtypes.IntervalData, param int32) (util.Range,
+func extractInterpreterBounds(machine elf.Machine, intervals sdtypes.IntervalData, param int32) (util.Range,
 	error) {
 DeltasLoop:
 	for i, bk := range intervals.Blocks {
@@ -98,7 +99,7 @@ DeltasLoop:
 			// The first case covers x86 w/ dwarf and old versions of luajit ARM that used dwarf and
 			// the second covers more recent arm versions that use frame pointers.
 			if (d.Info.BaseReg == support.UnwindRegSp && d.Info.Param == param) ||
-				(d.Info.BaseReg == support.UnwindRegFp && d.Info.Param == 16) {
+				(machine == elf.EM_AARCH64 && d.Info.BaseReg == support.UnwindRegFp && d.Info.Param == 16) {
 				return util.Range{Start: dAddr, End: nextAddr}, nil
 			}
 		}

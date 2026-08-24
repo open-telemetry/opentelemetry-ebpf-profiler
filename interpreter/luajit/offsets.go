@@ -84,45 +84,46 @@ func scanSymbols(ef *pfelf.File) map[libpf.SymbolName]libpf.Symbol {
 //
 // Some versions of openresty have a stripped luajit which makes things a little more
 // complicated because we have to start from a public symbol and work our way around.
-func extractOffsets(ef *pfelf.File, ljd *luajitData, ir util.Range) error {
-	oft := offsetData{}
-	if err := oft.init(ef); err != nil {
-		return err
+func newLuajitData(ef *pfelf.File, ir util.Range) (*luajitData, error) {
+	ljd := luajitData{}
+	oft, err := newOffsetData(ef)
+	if err != nil {
+		return nil, err
 	}
 
 	curLOffset, err := oft.findCurLOffset()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if curLOffset > 0x7fff {
-		return fmt.Errorf("lj: curL offset %v is too large", curLOffset)
+		return nil, fmt.Errorf("lj: curL offset %v is too large", curLOffset)
 	}
 	ljd.currentLOffset = curLOffset
 
 	g2Traces, err := oft.findG2TracesOffset()
 	if err != nil {
-		return fmt.Errorf("lj: failed to find g2traces offset: %v", err)
+		return nil, fmt.Errorf("lj: failed to find g2traces offset: %v", err)
 	}
 	if g2Traces > 0xffff {
-		return fmt.Errorf("lj: g to traces offset %v is too large", g2Traces)
+		return nil, fmt.Errorf("lj: g to traces offset %v is too large", g2Traces)
 	}
 	ljd.g2Traces = uint16(g2Traces)
 
 	g2dispatch, err := oft.findG2DispatchOffset()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if g2dispatch > 0xffff {
-		return fmt.Errorf("lj: dispatch_L offset %v is too large", g2dispatch)
+		return nil, fmt.Errorf("lj: dispatch_L offset %v is too large", g2dispatch)
 	}
 	ljd.g2Dispatch = uint16(g2dispatch)
 
 	// If we have symbols we can check that the start address is correct.
 	if s, ok := oft.foundSymbols[ljVMAsmBeginSym]; ok && ir.Start != uint64(s.Address) {
-		return fmt.Errorf("lj: unexpected start address %x, expected %x", s.Address, ir.Start)
+		return nil, fmt.Errorf("lj: unexpected start address %x, expected %x", s.Address, ir.Start)
 	}
 
-	return nil
+	return &ljd, nil
 }
 
 type extractor interface {
@@ -196,11 +197,12 @@ type offsetData struct {
 	foundSymbols   map[libpf.SymbolName]libpf.Symbol
 }
 
-func (o *offsetData) init(ef *pfelf.File) error {
+func newOffsetData(ef *pfelf.File) (*offsetData, error) {
+	o := offsetData{}
 	o.f = ef
 	extractor, err := newExtractor(ef)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	o.e = extractor
 
@@ -208,11 +210,11 @@ func (o *offsetData) init(ef *pfelf.File) error {
 	// Two extractors use luaopen_jit so cache it.
 	b, addr, err := o.readSymByName(luaopenJitSym)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	o.luajitOpen = b
 	o.luajitOpenAddr = libpf.Address(addr)
-	return nil
+	return &o, nil
 }
 
 func (o *offsetData) findCurLOffset() (uint16, error) {

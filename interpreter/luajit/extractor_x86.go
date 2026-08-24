@@ -177,7 +177,7 @@ func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (libpf
 	}
 
 	if len(leas) == 0 {
-		return 0, nil
+		return 0, errors.New("g to dispatch offset not found")
 	}
 	if len(leas) == 1 {
 		return libpf.Address(leas[0].disp), nil
@@ -301,7 +301,7 @@ func (x *x86Extractor) findG2TracesOffsetFromChecktrace(b []byte) (libpf.Address
 	it := amd.NewInterpreterWithCode(b)
 	// L is initial RDI; G is L->glref. glref is hard-wired at 0x10 in the
 	// LJ_GC64 layout (findOffsetsFromLuaClose enforces this assumption
-	// before extractOffsets gets here).
+	// before newLuajitData gets here).
 	L := it.Regs.GetX86(x86asm.RDI)
 	G := expression.Mem8(expression.Add(L, expression.Imm(0x10)))
 	tracesCap := expression.NewImmediateCapture("g2traces")

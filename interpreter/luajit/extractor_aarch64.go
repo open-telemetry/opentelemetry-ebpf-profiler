@@ -237,7 +237,6 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 						x1, ok := expression.AsConstant(it.Regs.Get(arm.X1))
 						if ok {
 							retval = libpf.Address(x1)
-							return true
 						} else {
 							err = errors.New("Failed to statically evaluate X1")
 						}

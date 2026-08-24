@@ -74,11 +74,10 @@ func TestOffsets(t *testing.T) {
 				intervals, param, err := extractStackDeltas(target, ef)
 				require.NoError(t, err)
 
-				interp, err := extractInterpreterBounds(intervals, param)
+				interp, err := extractInterpreterBounds(ef.Machine, intervals, param)
 				require.NoError(t, err)
 
-				ljd := luajitData{}
-				err = extractOffsets(ef, &ljd, interp)
+				ljd, err := newLuajitData(ef, interp)
 
 				if tc.fail {
 					//nolint:lll
