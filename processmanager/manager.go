@@ -85,19 +85,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
-	// Keep the user-requested reporting set separate from the full capture set.
-	reportEnvVars := maps.Clone(cfg.IncludeEnvVars)
-	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
-	if includeEnvVars == nil {
-		includeEnvVars = make(libpf.Set[string])
-	}
-	// Always collect the env vars used to derive process context resource attributes.
-	internalEnvVarNames := make([]libpf.String, 0, len(processcontext.EnvVarNames()))
-	for _, name := range processcontext.EnvVarNames() {
-		includeEnvVars[name] = libpf.Void{}
-		internalEnvVarNames = append(internalEnvVarNames, libpf.Intern(name))
-	}
-
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
@@ -129,8 +116,9 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	// includeEnvVars is never empty: it always holds the process context env vars.
-	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(includeEnvVars))
+	// Cloned: the enricher closure outlives New, and the caller owns cfg.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
+		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
@@ -154,8 +142,6 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		reportEnvVars:            reportEnvVars,
-		internalEnvVarNames:      internalEnvVarNames,
 		metaEnrichers:            metaEnrichers,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}

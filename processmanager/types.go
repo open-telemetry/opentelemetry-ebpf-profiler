@@ -131,13 +131,6 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	// reportEnvVars holds only the user-requested env vars that may be reported.
-	reportEnvVars libpf.Set[string]
-
-	// internalEnvVarNames holds the interned names of the env vars captured for
-	// the profiler's own use, to derive process context resource attributes.
-	internalEnvVarNames []libpf.String
-
 	metaEnrichers []process.MetaEnricher
 
 	// probeAttachers is the set of per-process probe attachers registered via
@@ -184,10 +177,6 @@ type processInfo struct {
 	// processContext is the resolved OTel process-context snapshot.
 	// Published under ProcessManager.mu.
 	processContext processcontext.Info
-	// internalEnvVars contains the OTel environment values needed to
-	// rebuild processContext without exposing them through process metadata. It
-	// is immutable once published under ProcessManager.mu.
-	internalEnvVars map[libpf.String]libpf.String
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
 	// C-library Thread Specific Data information

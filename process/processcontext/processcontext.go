@@ -314,10 +314,10 @@ func convertAnyValue(src *commonpb.AnyValue) (attribute.Value, bool) {
 	}
 }
 
-// EnvVarNames returns the environment variables used to derive process
-// context resource attributes.
-func EnvVarNames() []string {
-	return []string{svcNameKey, resourceAttrKey}
+// EnvVarSet returns the environment variables used to derive process context
+// resource attributes.
+func EnvVarSet() libpf.Set[string] {
+	return libpf.Set[string]{svcNameKey: {}, resourceAttrKey: {}}
 }
 
 // withMergedEnvVars returns process context with attributes derived from
