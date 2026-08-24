@@ -7,7 +7,6 @@ import (
 	"context"
 	"debug/dwarf"
 	"debug/elf"
-	"errors"
 	"fmt"
 	"io"
 	"os"
