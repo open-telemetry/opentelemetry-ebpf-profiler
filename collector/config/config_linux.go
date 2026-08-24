@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -45,18 +46,6 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
-// Probe holds the type and configuration for a single probe entry.
-// All fields except "type" are probe-specific and collected via mapstructure's
-// remain feature, so the YAML is flat (no nested "config:" block):
-//
-//	probes:
-//	  - type: kprobe
-//	    symbol: vfs_open
-type Probe struct {
-	Type   string         `mapstructure:"type"`
-	Config map[string]any `mapstructure:",remain"`
-}
-
 // Config is the configuration for the collector.
 type Config struct {
 	ReporterInterval        time.Duration            `mapstructure:"reporter_interval"`
@@ -84,7 +73,7 @@ type Config struct {
 	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
 	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
-	Probes                  []Probe                  `mapstructure:"probes"`
+	Probes                  []component.ID           `mapstructure:"probes"`
 
 	// Configuration options that users can not set directly:
 	//
