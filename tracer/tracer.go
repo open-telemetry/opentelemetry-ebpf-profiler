@@ -1185,12 +1185,14 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	// calculate and store delta values.
 	previousMetricValue := make([]metrics.MetricValue, len(translateIDs))
 
-	periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
-		metrics.AddSlice(eventMetricCollector())
-		metrics.AddSlice(traceEventMetricCollector())
-		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
-		metrics.AddSlice(t.customLabels.getAndResetMetrics())
-	})
+	if metrics.Enabled() {
+		periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
+			metrics.AddSlice(eventMetricCollector())
+			metrics.AddSlice(traceEventMetricCollector())
+			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
+			metrics.AddSlice(t.customLabels.getAndResetMetrics())
+		})
+	}
 
 	return nil
 }
