@@ -19,6 +19,7 @@ run:
   build-tags:
     - integration
     - linux
+    - luajit_offsets_test
 
 linters:
   default: none
