@@ -204,9 +204,14 @@ type dotnetData struct {
 	xsync.Once[dotnetCdac]
 }
 
-func (d *dotnetData) String() string {
+// versionString renders the version as major.minor.build.
+func (d *dotnetData) versionString() string {
 	ver := d.version
-	return fmt.Sprintf("dotnet %d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff)
+	return fmt.Sprintf("%d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff)
+}
+
+func (d *dotnetData) String() string {
+	return "dotnet " + d.versionString()
 }
 
 func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,

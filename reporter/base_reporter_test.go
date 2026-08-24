@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -175,6 +176,69 @@ func TestBaseReporterGenerate(t *testing.T) {
 	// Verify profiles exist
 	assert.Greater(t, scopeProfile.Profiles().Len(), 0,
 		"Should have at least one profile")
+}
+
+// TestReportTraceEventLateResourceAppliesRetroactively verifies that a context
+// published after sampling started applies to that PID's earlier samples: one
+// bucket, the late resource applied, and a later nil not stripping it.
+func TestReportTraceEventLateResourceAppliesRetroactively(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+
+	makeResource := func(name string) *pcommon.Resource {
+		r := pcommon.NewResource()
+		r.Attributes().PutStr("service.name", name)
+		return &r
+	}
+
+	trace := &libpf.Trace{
+		Frames: func() libpf.Frames {
+			frames := make(libpf.Frames, 0, 1)
+			frames.Append(&libpf.Frame{
+				Type:            libpf.NativeFrame,
+				AddressOrLineno: 0x100,
+				FunctionName:    libpf.Intern("f"),
+			})
+			return frames
+		}(),
+	}
+
+	now := libpf.UnixTime64(time.Now().UnixNano())
+	baseMeta := func(resource *pcommon.Resource) *samples.TraceEventMeta {
+		return &samples.TraceEventMeta{
+			Timestamp:      now,
+			Comm:           libpf.NewCommFromString("svc"),
+			ExecutablePath: libpf.Intern("/usr/bin/svc"),
+			ContainerID:    libpf.Intern("c1"),
+			PID:            1234,
+			TID:            1235,
+			ProfileType:    profileTypeSampling,
+			Resource:       resource,
+		}
+	}
+
+	// Samples collected before the process context is detected.
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
+
+	// The context is published and detected: later samples carry the resource.
+	resource := makeResource("svc")
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(resource)))
+
+	// Process tears down and the context mapping disappears.
+	require.NoError(t, reporter.ReportTraceEvent(trace, baseMeta(nil)))
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	tree := *treePtr
+
+	require.Len(t, tree, 1, "all samples for one PID belong to a single bucket")
+	for _, rtp := range tree {
+		require.NotNil(t, rtp.Resource,
+			"late-detected resource should apply to the whole period")
+		serviceName, ok := rtp.Resource.Attributes().Get("service.name")
+		require.True(t, ok)
+		assert.Equal(t, "svc", serviceName.Str())
+	}
 }
 
 // processNameAttrProducer is a test SampleAttrProducer that reads "process.name" from
