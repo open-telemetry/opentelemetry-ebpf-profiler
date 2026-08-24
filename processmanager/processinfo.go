@@ -147,7 +147,7 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 		return nil
 	}
 
-	pm.pidPageToMappingInfoSize.Add(1)
+	pm.pidPageToMappingInfoSize++
 	info = &processInfo{
 		meta:     meta,
 		libcInfo: nil,
@@ -514,12 +514,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	for idx := range info.mappings {
 		deleted += pm.processRemovedMapping(pid, &info.mappings[idx])
 	}
-	for {
-		cur := pm.pidPageToMappingInfoSize.Load()
-		if pm.pidPageToMappingInfoSize.CompareAndSwap(cur, cur-min(cur, deleted)) {
-			break
-		}
-	}
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 
 	for a := range pm.attachedProbes[pid] {
@@ -772,13 +767,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpRemove {
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
-	for {
-		cur := pm.pidPageToMappingInfoSize.Load()
-		if pm.pidPageToMappingInfoSize.CompareAndSwap(cur, cur-min(cur, numChanges)) {
-			break
-		}
-	}
 	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	collectAnonymousMappings = pm.processRemovedInterpreters(pid, interpretersValid)
 	if collectAnonymousMappings != previousAnonymousMappingsWanted {
 		if err := pm.updatePIDAnonymousMappingInterest(pid, collectAnonymousMappings); err != nil {
@@ -792,7 +782,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpAdd {
 		numChanges += pm.processNewMapping(pid, m)
 	}
-	pm.pidPageToMappingInfoSize.Add(numChanges)
 
 	// Update metadata of the process.
 	var meta process.Meta
@@ -805,6 +794,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	info = pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize += numChanges
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
