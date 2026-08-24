@@ -1,10 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Shared library that defines a TLS variable. When loaded via dlopen(),
-// this uses dynamic TLS (global-dynamic / TLS descriptor model), testing
-// the dynamic TLS path in the threadcontext interpreter.
-
 #include "processctx_lib.h"
 
 #include "otel_process_ctx.h"
@@ -15,8 +11,8 @@
 #include <string.h>
 #include <time.h>
 
-// The TLS variable that the threadcontext interpreter looks up.
-// In a shared library, this will use the global-dynamic TLS model.
+// TLS model varies with how this file is linked (static exe vs shared object),
+// which is the point of the build matrix in the Makefile.
 __thread otel_thread_ctx_v1_t *otel_thread_ctx_v1;
 
 int init_process_context(void) {

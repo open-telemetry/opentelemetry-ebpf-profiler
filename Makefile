@@ -149,8 +149,8 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support inte
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
 
-# Runs on the host (not qemu): the runtime differs from the qemu-based
-# integration suite, so it uses a dedicated build tag.
+# Host-only: the qemu initramfs cannot load shared libraries, which the
+# lib/dlopen testdata variants will need.
 host-integration-tests: processctx-execs
 	go test -exec sudo -v -tags host_integration ./process/processcontext/integrationtests/
 

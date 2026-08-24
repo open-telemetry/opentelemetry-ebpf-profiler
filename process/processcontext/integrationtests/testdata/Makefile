@@ -1,9 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Makefile to build test binaries for processcontext and threadcontext integration tests.
-#
-# These binaries exercise the different TLS models across libc and architecture combinations.
+# Test binaries for the processcontext integration tests.
 
 .PHONY: all clean
 
@@ -21,7 +19,8 @@ GCC       ?= $(ARCH)-linux-gnu-gcc
 MUSL_GCC  ?= $(ARCH)-linux-musl-gcc
 
 
-# Only the static executable variant is built; shared-lib and dlopen targets remain for future thread-context support.
+# Only the static executable variant is built. The rest exercise other TLS
+# models and are kept for the upcoming thread-context support.
 BINARIES := processctx_exe_glibc # processctx_exe_musl processctx_lib_glibc processctx_lib_musl processctx_dlopen_glibc processctx_dlopen_musl
 
 all: $(BINARIES)

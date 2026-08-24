@@ -20,7 +20,7 @@ typedef struct __attribute__((packed)) {
   // Size of attrs_data in bytes (lets reader know when to stop parsing)
   uint16_t attrs_data_size;
 
-  // Attribute data; each attr is [key_index:1][length:1][value:length]
+  // Attribute data, each attr is [key_index:1][length:1][value:length]
   // This is stored without padding to a constant length (like the key table)
   // so that we squeeze as much data as we can into each context update.
   uint8_t attrs_data[];
