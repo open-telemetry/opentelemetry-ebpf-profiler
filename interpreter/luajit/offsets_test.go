@@ -96,8 +96,7 @@ func TestOffsets(t *testing.T) {
 						"bootstrap emit bad-G candidates and starves luajit "+
 						"triangulation in CI")
 
-				od := offsetData{}
-				err = od.init(ef)
+				od, err := newOffsetData(ef)
 				require.NoError(t, err)
 
 				// Test that our chicanery for finding traceinfo checks out on symbolized builds.
