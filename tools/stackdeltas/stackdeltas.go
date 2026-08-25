@@ -49,6 +49,7 @@ func getCommand(param int32) string {
 }
 
 func getOpcode(baseReg uint8, param int32, deref bool) string {
+	baseReg &^= 0xf0 // mask out RA register from high nybble
 	str := ""
 	switch baseReg {
 	case support.UnwindRegInvalid:
@@ -91,8 +92,8 @@ func dumpDelta(addr uint64, info sdtypes.UnwindInfo, first, merged bool) {
 	if first {
 		comment += " bb"
 	}
-	if info.Flags&support.UnwindFlagRegisterRA != 0 {
-		comment += " ra-reg"
+	if raReg := info.BaseReg >> 4; raReg != 0 {
+		comment += fmt.Sprintf(" ra-reg=0x%x", raReg)
 	}
 	if info.Flags&support.UnwindFlagLeafOnly != 0 {
 		comment += " leaf-only"
