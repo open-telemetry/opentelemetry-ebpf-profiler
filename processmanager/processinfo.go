@@ -613,10 +613,14 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
-	oldProcessContext := info.processContext
 	internalEnvVars := info.meta.InternalEnvVariables
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
+	// An exec replaces the image, so the previous context no longer applies.
+	oldProcessContext := info.processContext
+	if updateProcessMeta {
+		oldProcessContext = processcontext.Info{}
+	}
 	var numInterpreters int
 	collectAnonymousMappings := false
 	if intrp, ok := pm.interpreters[pid]; ok {
@@ -795,8 +799,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
-		contextMappingAddr, pid, pr.GetRemoteMemory(),
-		oldProcessContext, internalEnvVars, updateProcessMeta || newProcess)
+		contextMappingAddr, pid, pr.GetRemoteMemory(), oldProcessContext, internalEnvVars)
 
 	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)

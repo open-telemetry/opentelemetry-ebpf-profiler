@@ -671,3 +671,94 @@ func TestWithMergedEnvVars(t *testing.T) {
 		})
 	}
 }
+
+// Resolve distinguishes a zero Info (never resolved, or invalidated by an exec)
+// from a resolved context that happens to carry nothing.
+func TestResolve(t *testing.T) {
+	envVars := map[libpf.String]libpf.String{
+		libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("svc"),
+	}
+	serviceName := func(t *testing.T, info Info) string {
+		t.Helper()
+		v, ok := info.ResourceAttrs.Value("service.name")
+		require.True(t, ok)
+		return v.AsString()
+	}
+	// A resolved context carrying nothing: no mapping, no env vars.
+	resolvedEmpty, _ := Resolve(0, 1, remotememory.RemoteMemory{}, Info{}, nil)
+	// A header stuck mid-update, so read exhausts its retries and reports a
+	// concurrent update.
+	midUpdate := func() remotememory.RemoteMemory {
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(100, 0x2000, 0))
+		return remotememory.RemoteMemory{ReaderAt: mock}
+	}
+
+	t.Run("zero Info publishes even with nothing to publish", func(t *testing.T) {
+		info, published := Resolve(0, 1, remotememory.RemoteMemory{}, Info{}, nil)
+		require.True(t, published)
+		assert.True(t, info.resolved)
+		assert.Zero(t, info.publishedAtNs)
+	})
+
+	t.Run("zero Info publishes env vars", func(t *testing.T) {
+		info, published := Resolve(0, 1, remotememory.RemoteMemory{}, Info{}, envVars)
+		require.True(t, published)
+		assert.Equal(t, "svc", serviceName(t, info))
+	})
+
+	t.Run("resolved and empty is steady state", func(t *testing.T) {
+		_, published := Resolve(0, 1, remotememory.RemoteMemory{}, resolvedEmpty, envVars)
+		assert.False(t, published)
+	})
+
+	t.Run("mapping disappeared clears its attributes", func(t *testing.T) {
+		old := Info{
+			ResourceAttrs: attribute.NewSet(attribute.String("from.mapping", "v")),
+			publishedAtNs: 7,
+			resolved:      true,
+		}
+		info, published := Resolve(0, 1, remotememory.RemoteMemory{}, old, envVars)
+		require.True(t, published)
+		_, found := info.ResourceAttrs.Value("from.mapping")
+		assert.False(t, found, "mapping attributes must not outlive the mapping")
+		assert.Equal(t, "svc", serviceName(t, info))
+	})
+
+	t.Run("concurrent update preserves a resolved context", func(t *testing.T) {
+		_, published := Resolve(0x1000, 1, midUpdate(), resolvedEmpty, envVars)
+		assert.False(t, published)
+	})
+
+	t.Run("concurrent update on a zero Info falls back to env vars", func(t *testing.T) {
+		info, published := Resolve(0x1000, 1, midUpdate(), Info{}, envVars)
+		require.True(t, published)
+		assert.Equal(t, "svc", serviceName(t, info))
+	})
+
+	t.Run("read failure falls back to env vars", func(t *testing.T) {
+		mock := newMockReader()
+		mock.setError(errors.New("read error"))
+		info, published := Resolve(0x1000, 1,
+			remotememory.RemoteMemory{ReaderAt: mock}, Info{}, envVars)
+		require.True(t, published)
+		assert.Equal(t, "svc", serviceName(t, info))
+	})
+
+	t.Run("unchanged timestamp is steady state", func(t *testing.T) {
+		payload, err := proto.Marshal(&testContext)
+		require.NoError(t, err)
+		const payloadAddr = 0x2000
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 7))
+		mock.writeAt(payloadAddr, payload)
+		rm := remotememory.RemoteMemory{ReaderAt: mock}
+
+		first, published := Resolve(0x1000, 1, rm, Info{}, envVars)
+		require.True(t, published)
+		require.Equal(t, uint64(7), first.publishedAtNs)
+
+		_, published = Resolve(0x1000, 1, rm, first, envVars)
+		assert.False(t, published, "same timestamp must not republish")
+	})
+}

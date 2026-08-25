@@ -76,6 +76,9 @@ type Info struct {
 	// Populated but unused until thread context lands.
 	attributes    attribute.Set
 	publishedAtNs uint64
+	// resolved is false only on a zero Info, meaning never resolved or
+	// invalidated by an exec. Never store an Info that Resolve did not publish.
+	resolved bool
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -155,48 +158,47 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 // attributes derived from OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.
 // Returns (_, false) to leave the previously-published context untouched.
 //
-// mappingAddr=0 means the mapping was not observed this sync. If old also
-// carries a published context, the mapping disappeared.
-// newProcessOrExec=true discards old and forces a rebuild so new env vars
-// take effect even when the mapping is present.
+// mappingAddr=0 means the mapping was not observed this sync. Pass a zero old
+// to force a rebuild, which is what an exec requires so that new env vars take
+// effect even while a mapping is present.
 func Resolve(
 	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
 	old Info,
 	envVars map[libpf.String]libpf.String,
-	newProcessOrExec bool,
 ) (Info, bool) {
+	var ctx Info
 	if mappingAddr == 0 {
-		if newProcessOrExec || old.publishedAtNs != 0 {
-			return withMergedEnvVars(Info{}, envVars), true
-		}
-		return Info{}, false
-	}
-
-	// A new process or an exec rebuilds from scratch, so accept any timestamp.
-	var lastPublishedAtNs uint64
-	if !newProcessOrExec {
-		lastPublishedAtNs = old.publishedAtNs
-	}
-
-	// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
-	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-
-	processCtx, err := read(addr, rm, lastPublishedAtNs, 0)
-	switch {
-	case err == nil:
-		return withMergedEnvVars(processCtx, envVars), true
-	case errors.Is(err, errNoUpdate):
-		return Info{}, false
-	case errors.Is(err, errConcurrentUpdate):
-		// Retries are exhausted, so prefer the previous context over dropping it.
-		if !newProcessOrExec {
+		// Publish env vars alone on a first resolution, or when a mapping that
+		// had been published disappeared.
+		if old.resolved && old.publishedAtNs == 0 {
 			return Info{}, false
 		}
-	default:
-		log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
+	} else {
+		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
+		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
+
+		var err error
+		// read leaves ctx zero on every error, so the paths below fall through
+		// to an env-vars-only context.
+		ctx, err = read(addr, rm, old.publishedAtNs, 0)
+		switch {
+		case err == nil:
+		case errors.Is(err, errNoUpdate):
+			return Info{}, false
+		case errors.Is(err, errConcurrentUpdate):
+			// Retries are exhausted, so prefer the previous context over dropping it.
+			if old.resolved {
+				return Info{}, false
+			}
+		default:
+			log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
+		}
 	}
 
-	return withMergedEnvVars(Info{}, envVars), true
+	// The only publishing exit, so resolved is set in exactly one place.
+	info := withMergedEnvVars(ctx, envVars)
+	info.resolved = true
+	return info, true
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
