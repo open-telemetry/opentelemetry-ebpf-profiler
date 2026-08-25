@@ -783,6 +783,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		numChanges += pm.processNewMapping(pid, m)
 	}
 
+	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize += numChanges
+	pm.mu.Unlock()
+
 	// Update metadata of the process.
 	var meta process.Meta
 	if updateProcessMeta {
@@ -794,7 +798,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	info = pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
-	pm.pidPageToMappingInfoSize += numChanges
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
