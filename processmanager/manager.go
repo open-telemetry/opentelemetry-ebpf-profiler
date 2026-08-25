@@ -40,6 +40,11 @@ import (
 )
 
 const (
+	// pidResyncCycles is the number of SynchronizePIDs calls over which
+	// every tracked PID is resynchronised once. With a 2-minute call
+	// interval this gives a full cycle of ~10 minutes.
+	pidResyncCycles = 5
+
 	// ELFInfoCacheSize is the maximum size of the LRU cache holding the executables'
 	// ELF information. It is exported so other packages (e.g. usdt) can share it.
 	ELFInfoCacheSize = 16384
