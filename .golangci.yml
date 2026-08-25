@@ -23,19 +23,25 @@ run:
 linters:
   default: none
   enable:
-    - copyloopvar
-    - decorder
     - misspell
     - modernize
-    - nolintlint
-    - reassign
     - revive
     - staticcheck
     - testifylint
     - thelper
     - usestdlibvars
-    - usetesting
-    - whitespace
+
+    # overlaps with configured formatters
+    # - whitespace
+
+    # covered by modernize
+    # - copyloopvar
+    # - usetesting
+
+    # covered by staticcheck
+    # - decorder
+    # - nolintlint
+    # - reassign
 
   exclusions:
     paths:
