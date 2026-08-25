@@ -8,8 +8,9 @@ package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"
 import (
 	"errors"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	aa "golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 )
 
 // Various constants to mark or check for a specific step.

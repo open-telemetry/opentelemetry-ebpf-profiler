@@ -12,10 +12,11 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
 )
 
 const (

@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"io"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type Interpreter struct {
