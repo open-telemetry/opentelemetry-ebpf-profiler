@@ -80,6 +80,8 @@ type SampleKey struct {
 	Comm libpf.Comm
 
 	Hash libpf.TraceHash
+	// CustomLabelsHash keeps samples with different custom labels distinct.
+	CustomLabelsHash libpf.TraceHash
 
 	TID int64
 	CPU int64
