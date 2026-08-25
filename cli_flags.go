@@ -30,7 +30,6 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = 0
 	defaultEnvVarsValue           = ""
 	defaultArgFrameCacheSize      = pm.DefaultFrameCacheSize
 	defaultBPFFSRoot              = "/sys/fs/bpf/"
@@ -78,16 +77,10 @@ var (
 	sendIdleFramesHelp      = "Unwind and report idle states of the Linux kernel."
 	filterMinProcessAgeHelp = "Skip samples from processes younger than this minimum age. " +
 		"Set to 0 to disable minimum process age filtering."
-	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
-		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
-		"Default is %d.",
-		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
 	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
 		"Default is %d.", defaultArgFrameCacheSize)
-	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
-		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
@@ -104,7 +97,6 @@ var (
 func parseArgs() (*controller.Config, error) {
 	var args controller.Config
 	var tracers string
-	var offCPUThreshold float64
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
@@ -168,28 +160,9 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
-	fs.Float64Var(&offCPUThreshold, "off-cpu-threshold",
-		defaultOffCPUThreshold, offCPUThresholdHelp)
-
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
 	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
-
-	fs.Func("probe-link", probeLinkHelper, func(link string) error {
-		probeSpec, err := tracer.ParseProbe(link)
-		if err != nil {
-			return err
-		}
-		args.Probes = append(args.Probes, config.Probe{
-			Type: "kprobe",
-			Config: map[string]any{
-				"mode":   probeSpec.Mode.String(),
-				"symbol": probeSpec.Symbol,
-				"target": probeSpec.Target,
-			},
-		})
-		return nil
-	})
 
 	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
 
@@ -211,13 +184,6 @@ func parseArgs() (*controller.Config, error) {
 		ff.WithAllowMissingConfigFile(true),
 	); err != nil {
 		return nil, err
-	}
-
-	if offCPUThreshold != 0 {
-		args.Probes = append(args.Probes, config.Probe{
-			Type:   "offcpu",
-			Config: map[string]any{"threshold": offCPUThreshold},
-		})
 	}
 
 	interpreters, err := parseTracers(tracers)

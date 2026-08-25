@@ -27,17 +27,16 @@ type Config struct {
 	Threshold float64 `mapstructure:"threshold"`
 }
 
-type probe struct {
-	threshold uint32
+// Validate implements confmap.Validator.
+func (cfg *Config) Validate() error {
+	if cfg.Threshold <= 0.0 || cfg.Threshold > 1.0 {
+		return fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
+	}
+	return nil
 }
 
-// New validates cfg and returns an off-CPU profiling Probe.
-// Threshold is a capture probability in ]0.0, 1.0]. 1.0 captures every event.
-func New(cfg Config) (*probe, error) {
-	if cfg.Threshold <= 0.0 || cfg.Threshold > 1.0 {
-		return nil, fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
-	}
-	return &probe{threshold: uint32(cfg.Threshold * math.MaxUint32)}, nil
+type probe struct {
+	threshold uint32
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
