@@ -6,6 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -40,6 +41,16 @@ type baseReporter struct {
 }
 
 var errUnknownProfileType = errors.New("unknown trace profile type")
+
+var customLabelHashSeed = maphash.MakeSeed()
+
+func hashCustomLabels(labels map[libpf.String]libpf.String) uint64 {
+	var sum uint64
+	for key, value := range labels {
+		sum ^= maphash.Comparable(customLabelHashSeed, [2]libpf.String{key, value})
+	}
+	return sum
+}
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
@@ -79,13 +90,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	sampleKey := samples.SampleKey{
-		Hash:      traceHash,
-		Comm:      meta.Comm,
-		TID:       int64(meta.TID),
-		CPU:       int64(meta.CPU),
-		SpanID:    meta.SpanID,
-		TraceID:   meta.TraceID,
-		ExtraMeta: extraMeta,
+		Hash:             traceHash,
+		CustomLabelsHash: hashCustomLabels(trace.CustomLabels),
+		Comm:             meta.Comm,
+		TID:              int64(meta.TID),
+		CPU:              int64(meta.CPU),
+		SpanID:           meta.SpanID,
+		TraceID:          meta.TraceID,
+		ExtraMeta:        extraMeta,
 	}
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))

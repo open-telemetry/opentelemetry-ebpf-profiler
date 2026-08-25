@@ -79,7 +79,8 @@ type SampleKey struct {
 	// Comm is provided by the eBPF programs
 	Comm libpf.Comm
 
-	Hash libpf.TraceHash
+	Hash             libpf.TraceHash
+	CustomLabelsHash uint64
 
 	TID int64
 	CPU int64
