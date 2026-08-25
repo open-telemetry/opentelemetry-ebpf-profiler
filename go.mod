@@ -21,7 +21,7 @@ require (
 	github.com/klauspost/compress v1.19.2
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260820055258-94bfcd1a1841
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260821055944-d2ab6d50401a
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.12.1
 	github.com/zeebo/xxh3 v1.1.0
@@ -30,6 +30,7 @@ require (
 	go.opentelemetry.io/collector/confmap v1.65.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.159.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.159.0
+	go.opentelemetry.io/collector/extension v1.65.0
 	go.opentelemetry.io/collector/pdata v1.65.0
 	go.opentelemetry.io/collector/pdata/pprofile v0.159.0
 	go.opentelemetry.io/collector/receiver v1.65.0
