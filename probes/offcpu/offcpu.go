@@ -20,9 +20,9 @@ import (
 
 // Config holds the YAML configuration for the off-CPU probe.
 //
-//	probes:
-//	  - type: offcpu
-//	    threshold: 0.1   # capture probability in ]0.0, 1.0]
+//	extensions:
+//	   offcpu:
+//	     threshold: 0.1		# capture probability in ]0.0, 1.0]
 type Config struct {
 	Threshold float64 `mapstructure:"threshold"`
 }
