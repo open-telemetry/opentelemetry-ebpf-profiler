@@ -101,9 +101,11 @@ func (p *probe) Load(_ context.Context, probeCtx *tracer.ProbeContext) error {
 		return err
 	}
 
-	if err := probeCtx.WireTrampoline(coll, ctxMapName, tailCallMapName); err != nil {
+	tailCallMap, err := probeCtx.WireTrampoline(coll, ctxMapName, tailCallMapName)
+	if err != nil {
 		return err
 	}
+	defer tailCallMap.Close()
 
 	ebpfProgs := make(map[string]*cebpf.Program)
 	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{

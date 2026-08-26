@@ -158,27 +158,34 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 // WireTrampoline wires the trampoline into coll: it populates the tail-call
 // prog array at slot 0 with the tracer's trampoline program, then rewrites
 // both the ctx map and the tail-call map into the collection spec.
-func (c *ProbeContext) WireTrampoline(coll *cebpf.CollectionSpec, ctxMapName, tailCallMapName string) error {
+// The returned map must be kept open until the probe programs are loaded —
+// the caller is responsible for closing it afterwards.
+func (c *ProbeContext) WireTrampoline(coll *cebpf.CollectionSpec, ctxMapName, tailCallMapName string) (*cebpf.Map, error) {
 	tailCallMap, err := cebpf.NewMap(coll.Maps[tailCallMapName])
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", tailCallMapName, err)
+		return nil, fmt.Errorf("creating %s: %w", tailCallMapName, err)
 	}
-	defer tailCallMap.Close()
 
 	trampolineProg, err := cebpf.NewProgramFromID(cebpf.ProgramID(c.trampolineRef.progID))
 	if err != nil {
-		return fmt.Errorf("opening trampoline program: %w", err)
+		tailCallMap.Close()
+		return nil, fmt.Errorf("opening trampoline program: %w", err)
 	}
 	defer trampolineProg.Close()
 
 	if err := tailCallMap.Put(uint32(0), trampolineProg); err != nil {
-		return fmt.Errorf("populating %s: %w", tailCallMapName, err)
+		tailCallMap.Close()
+		return nil, fmt.Errorf("populating %s: %w", tailCallMapName, err)
 	}
 
-	return c.RewriteMaps(coll, map[string]*cebpf.Map{
+	if err := rewriteMaps(coll, map[string]*cebpf.Map{
 		ctxMapName:      c.trampolineRef.ctxMap,
 		tailCallMapName: tailCallMap,
-	})
+	}); err != nil {
+		tailCallMap.Close()
+		return nil, err
+	}
+	return tailCallMap, nil
 }
 
 // collReferencesMap reports whether any program in coll references the named map.
