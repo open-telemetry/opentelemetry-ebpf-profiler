@@ -200,24 +200,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 			return err
 		}
 	}
-	kprobeProgs := c.maps["kprobe_progs"]
-	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
-	}
-	perfProgs := c.maps["perf_progs"]
-	if perfProgs == nil {
-		return fmt.Errorf("perf_progs map not available")
-	}
-	perCPURecords := c.maps["per_cpu_records"]
-	if perCPURecords == nil {
-		return fmt.Errorf("per_cpu_records map not available")
-	}
-	perCPURecordsKp := c.maps["per_cpu_records_kp"]
-	if perCPURecordsKp == nil {
-		return fmt.Errorf("per_cpu_records_kp map not available")
-	}
-	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+	return loadProbeUnwinders(coll, ebpfProgs, c.maps["kprobe_progs"], progs,
+		bpfVerifierLogLevel, c.maps["perf_progs"].FD(), c.maps["per_cpu_records"].FD(), c.maps["per_cpu_records_kp"])
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -245,7 +229,7 @@ func (r *CollectTrampolineRef) Close() error {
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) registerCollectTrampoline(reg ProbeRegistrar, sysVars SysConfigVars, meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) registerCollectTrampoline(reg *originRegistry, sysVars SysConfigVars, meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
 		ctxMapName         = "ext_probe_value"
@@ -362,12 +346,6 @@ func (c *ProbeContext) AddLink(lnk link.Link) {
 // ProcessManager calls Match/Attach as new mappings appear and Detach on process exit.
 func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
 	c.registerAttacher(a)
-}
-
-// ProbeRegistrar allocates origin IDs backed by sample-type metadata.
-// Used internally by the tracer; probe implementations do not call it directly.
-type ProbeRegistrar interface {
-	Register(meta *samples.TypeMetadata) (uint16, error)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
