@@ -16,10 +16,12 @@ concurrency:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   test:
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -68,6 +70,9 @@ jobs:
           issuegenerator -path /tmp/testresults
 
   otelcol-ebpf-profiler:
+    permissions:
+      contents: read
+      issues: write
     strategy:
       matrix:
         include:
