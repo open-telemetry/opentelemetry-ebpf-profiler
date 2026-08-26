@@ -77,7 +77,7 @@ type Info struct {
 	attributes    attribute.Set
 	publishedAtNs uint64
 	// resolved is false only on a zero Info, meaning never resolved or
-	// invalidated by an exec. Never store an Info that Resolve did not publish.
+	// invalidated by an exec. Resolve never returns an unresolved Info.
 	resolved bool
 }
 
@@ -158,7 +158,7 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 // [OTEP 4719], a successful read is already the SDK's resolved resource, so
 // it publishes as-is. OTEL_SERVICE_NAME/OTEL_RESOURCE_ATTRIBUTES are only a
 // fallback when no context is available.
-// Returns (_, false) to leave the previously-published context untouched.
+// Returns old when nothing new was read, so the result is always safe to store.
 //
 // mappingAddr=0 means the mapping was not observed this sync. Pass a zero old
 // to force a rebuild, which is what an exec requires so that new env vars take
@@ -167,12 +167,11 @@ func Resolve(
 	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
 	old Info,
 	envVars map[libpf.String]libpf.String,
-) (Info, bool) {
+) Info {
 	if mappingAddr == 0 {
-		// Publish env vars alone on a first resolution, or when a mapping that
-		// had been published disappeared.
+		// Old came from env vars alone: nothing changed.
 		if old.resolved && old.publishedAtNs == 0 {
-			return Info{}, false
+			return old
 		}
 	} else {
 		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
@@ -182,13 +181,13 @@ func Resolve(
 		switch {
 		case err == nil:
 			ctx.resolved = true
-			return ctx, true
+			return ctx
 		case errors.Is(err, errNoUpdate):
-			return Info{}, false
+			return old
 		case errors.Is(err, errConcurrentUpdate):
 			// Retries are exhausted, so prefer the previous context over dropping it.
 			if old.resolved {
-				return Info{}, false
+				return old
 			}
 		default:
 			log.Debugf("Failed to read ProcessContext for PID %d: %v", pid, err)
@@ -200,7 +199,7 @@ func Resolve(
 	if err != nil {
 		log.Debugf("Partial resource attributes: %v", err)
 	}
-	return Info{ResourceAttrs: env, resolved: true}, true
+	return Info{ResourceAttrs: env, resolved: true}
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {

@@ -802,7 +802,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		internalEnvVars = meta.InternalEnvVariables
 	}
 
-	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
+	newProcessContextInfo := processcontext.Resolve(
 		contextMappingAddr, pid, pr.GetRemoteMemory(), oldProcessContext, internalEnvVars)
 
 	// Sort and publish the new mappings and meta.
@@ -815,9 +815,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		if updateProcessMeta {
 			info.meta = meta
 		}
-		if publishProcessContextInfo {
-			info.processContext = newProcessContextInfo
-		}
+		info.processContext = newProcessContextInfo
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
