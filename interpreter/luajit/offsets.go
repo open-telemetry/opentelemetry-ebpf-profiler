@@ -98,7 +98,7 @@ func newLuajitData(ef *pfelf.File, ir util.Range) (*luajitData, error) {
 	if curLOffset > 0x7fff {
 		return nil, fmt.Errorf("lj: curL offset %v is too large", curLOffset)
 	}
-	ljd.currentLOffset = curLOffset
+	ljd.currentLOffset = uint16(curLOffset)
 
 	g2Traces, err := oft.findG2TracesOffset()
 	if err != nil {

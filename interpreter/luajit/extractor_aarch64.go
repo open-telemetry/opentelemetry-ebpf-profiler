@@ -104,7 +104,7 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL libpf.Addr
 		}
 		return false
 	})
-	
+
 	if errors.Is(err, io.EOF) {
 		err = errors.New("find offsets from lua_close failed")
 	}
