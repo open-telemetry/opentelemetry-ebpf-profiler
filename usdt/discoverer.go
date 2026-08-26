@@ -8,23 +8,21 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// parseCacheSize bounds the number of distinct backing files for which we
-// retain parsed `.note.stapsdt` results. It matches the process manager's ELF
-// cache size so the two caches age at a similar rate.
-const parseCacheSize = 16384
-
 // Discoverer finds USDT attachment points and caches results by backing-file identity.
+// The parse cache is not synchronised; callers serialise access via the
+// processmanager lock (see processinfo.Attach).
 type Discoverer struct {
-	parseCache *lru.SyncedLRU[util.OnDiskFileIdentifier, []AttachmentPoint]
+	parseCache *lru.LRU[util.OnDiskFileIdentifier, []AttachmentPoint]
 }
 
 // NewDiscoverer constructs a USDT discoverer.
 func NewDiscoverer() (*Discoverer, error) {
-	parseCache, err := lru.NewSynced[util.OnDiskFileIdentifier, []AttachmentPoint](
-		parseCacheSize, util.OnDiskFileIdentifier.Hash32)
+	parseCache, err := lru.New[util.OnDiskFileIdentifier, []AttachmentPoint](
+		processmanager.ELFInfoCacheSize, util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("usdt: build parse cache: %w", err)
 	}

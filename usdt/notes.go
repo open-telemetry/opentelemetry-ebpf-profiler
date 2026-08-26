@@ -69,11 +69,16 @@ func readSDTNotes(f *pfelf.File) ([]sdtNote, uint64, error) {
 		}
 		notes = append(notes, parsed...)
 	}
+	if len(notes) > 0 && baseAddr == 0 {
+		return nil, 0, errors.New("SDT notes found without a valid .stapsdt.base section")
+	}
 	return notes, baseAddr, nil
 }
 
-// parseSDTNotes decodes the ELF note stream. For background and format details,
-// see https://www.polarsignals.com/blog/posts/2025/12/10/usdt-deep-dive.
+// parseSDTNotes decodes the ELF note stream. Format references:
+//   - https://sourceware.org/systemtap/wiki/UserSpaceProbeImplementation
+//   - https://docs.ebpf.io/linux/concepts/usdt/
+//
 // Each record contains a 12-byte header followed by a four-byte-aligned owner
 // and descriptor. An SDT descriptor starts with three little-endian 64-bit
 // addresses followed by provider, name, and arguments as NUL-terminated

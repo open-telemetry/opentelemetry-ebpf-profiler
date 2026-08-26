@@ -6,13 +6,16 @@ package usdt // import "go.opentelemetry.io/ebpf-profiler/usdt"
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
-// Discover returns the USDT probes in an executable file-backed mapping.
-// Results are cached by backing-file identity, including empty results.
+// Discover returns the USDT attachment points in an executable file-backed
+// mapping. If individual notes cannot be resolved, it returns the valid points
+// together with an error describing the skipped notes. Results are cached by
+// backing-file identity, including empty and partial results.
 func (d *Discoverer) Discover(
 	pr process.Process,
 	mapping *process.RawMapping,
@@ -23,7 +26,7 @@ func (d *Discoverer) Discover(
 
 	fileID := mapping.GetOnDiskFileIdentifier()
 	if cached, ok := d.parseCache.Get(fileID); ok {
-		return cached, nil
+		return slices.Clone(cached), nil
 	}
 
 	// OpenELFMapping uses /proc/<pid>/map_files/<start>-<end>, so this also
@@ -32,43 +35,60 @@ func (d *Discoverer) Discover(
 	if err != nil {
 		// Executable mappings are not necessarily ELF files. Cache expected
 		// misses so they are not retried on every process synchronization.
-		if errors.Is(err, process.ErrMappingFileUnavailable) || errors.Is(err, pfelf.ErrNotELF) {
+		if errors.Is(err, pfelf.ErrNotELF) {
 			d.parseCache.Add(fileID, nil)
 			return nil, nil
 		}
-		return nil, fmt.Errorf("open ELF mapping: %w", err)
+		return nil, fmt.Errorf("open ELF mapping: %v", err)
 	}
 	defer ef.Close()
 
 	notes, sectionBase, err := readSDTNotes(ef)
 	if err != nil {
-		return nil, fmt.Errorf("parse .note.stapsdt: %w", err)
+		// Structural note errors are deterministic for this backing file.
+		d.parseCache.Add(fileID, nil)
+		return nil, fmt.Errorf("parse .note.stapsdt: %v", err)
 	}
 
+	points, discoveryErr := attachmentPointsFromNotes(ef, sectionBase, notes)
+	d.parseCache.Add(fileID, points)
+	return slices.Clone(points), discoveryErr
+}
+
+func attachmentPointsFromNotes(
+	f *pfelf.File,
+	sectionBase uint64,
+	notes []sdtNote,
+) ([]AttachmentPoint, error) {
 	points := make([]AttachmentPoint, 0, len(notes))
+	var discoveryErrs []error
 	for _, note := range notes {
 		location, err := adjustedSDTAddress(sectionBase, note.base, note.location)
 		if err != nil {
-			return nil, fmt.Errorf("adjust %s:%s location: %w",
-				note.provider, note.name, err)
+			discoveryErrs = append(discoveryErrs, fmt.Errorf("adjust %s:%s location: %v",
+				note.provider, note.name, err))
+			continue
 		}
-		location, err = elfFileOffset(ef, location, true)
+		location, err = elfFileOffset(f, location, true)
 		if err != nil {
-			return nil, fmt.Errorf("resolve %s:%s location: %w",
-				note.provider, note.name, err)
+			discoveryErrs = append(discoveryErrs, fmt.Errorf("resolve %s:%s location: %v",
+				note.provider, note.name, err))
+			continue
 		}
 
 		var semaphoreOffset uint64
 		if note.semaphore != 0 {
 			semaphore, err := adjustedSDTAddress(sectionBase, note.base, note.semaphore)
 			if err != nil {
-				return nil, fmt.Errorf("adjust %s:%s semaphore: %w",
-					note.provider, note.name, err)
+				discoveryErrs = append(discoveryErrs, fmt.Errorf(
+					"adjust %s:%s semaphore: %v", note.provider, note.name, err))
+				continue
 			}
-			semaphoreOffset, err = elfFileOffset(ef, semaphore, false)
+			semaphoreOffset, err = elfFileOffset(f, semaphore, false)
 			if err != nil {
-				return nil, fmt.Errorf("resolve %s:%s semaphore: %w",
-					note.provider, note.name, err)
+				discoveryErrs = append(discoveryErrs, fmt.Errorf(
+					"resolve %s:%s semaphore: %v", note.provider, note.name, err))
+				continue
 			}
 		}
 
@@ -79,7 +99,5 @@ func (d *Discoverer) Discover(
 			SemaphoreOffset: semaphoreOffset,
 		})
 	}
-
-	d.parseCache.Add(fileID, points)
-	return points, nil
+	return points, errors.Join(discoveryErrs...)
 }
