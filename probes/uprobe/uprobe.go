@@ -101,26 +101,7 @@ func (p *probe) Load(_ context.Context, probeCtx *tracer.ProbeContext) error {
 		return err
 	}
 
-	tailCallMap, err := cebpf.NewMap(coll.Maps[tailCallMapName])
-	if err != nil {
-		return fmt.Errorf("creating %s: %w", tailCallMapName, err)
-	}
-	defer tailCallMap.Close()
-
-	trampolineProg, err := cebpf.NewProgramFromID(cebpf.ProgramID(probeCtx.TrampolineProgID()))
-	if err != nil {
-		return fmt.Errorf("opening trampoline program: %w", err)
-	}
-	defer trampolineProg.Close()
-
-	if err := tailCallMap.Put(uint32(0), trampolineProg); err != nil {
-		return fmt.Errorf("populating %s: %w", tailCallMapName, err)
-	}
-
-	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{
-		ctxMapName:      probeCtx.TrampolineCtxMap(),
-		tailCallMapName: tailCallMap,
-	}); err != nil {
+	if err := probeCtx.WireTrampoline(coll, ctxMapName, tailCallMapName); err != nil {
 		return err
 	}
 

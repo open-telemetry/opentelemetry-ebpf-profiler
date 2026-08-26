@@ -22,17 +22,8 @@ type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
-	trampolineRef    *CollectTrampolineRef
+	trampolineRef    *collectTrampolineRef
 }
-
-// TrampolineCtxMap returns the per-CPU context map owned by the tracer.
-// Probes pass it as a MapReplacement when loading their eBPF collection.
-// Do not close it; the tracer closes it on shutdown.
-func (c *ProbeContext) TrampolineCtxMap() *cebpf.Map { return c.trampolineRef.CtxMap }
-
-// TrampolineProgID returns the kernel program ID of the collect trampoline.
-// Probes use it to populate their tail-call prog array.
-func (c *ProbeContext) TrampolineProgID() uint32 { return c.trampolineRef.TailCallDestinationID }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
 // eBPF ELF containing only the requested maps, programs, and variables plus ".rodata.var".
@@ -164,6 +155,32 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 	return rewriteMaps(coll, toRewrite)
 }
 
+// WireTrampoline wires the trampoline into coll: it populates the tail-call
+// prog array at slot 0 with the tracer's trampoline program, then rewrites
+// both the ctx map and the tail-call map into the collection spec.
+func (c *ProbeContext) WireTrampoline(coll *cebpf.CollectionSpec, ctxMapName, tailCallMapName string) error {
+	tailCallMap, err := cebpf.NewMap(coll.Maps[tailCallMapName])
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", tailCallMapName, err)
+	}
+	defer tailCallMap.Close()
+
+	trampolineProg, err := cebpf.NewProgramFromID(cebpf.ProgramID(c.trampolineRef.progID))
+	if err != nil {
+		return fmt.Errorf("opening trampoline program: %w", err)
+	}
+	defer trampolineProg.Close()
+
+	if err := tailCallMap.Put(uint32(0), trampolineProg); err != nil {
+		return fmt.Errorf("populating %s: %w", tailCallMapName, err)
+	}
+
+	return c.RewriteMaps(coll, map[string]*cebpf.Map{
+		ctxMapName:      c.trampolineRef.ctxMap,
+		tailCallMapName: tailCallMap,
+	})
+}
+
 // collReferencesMap reports whether any program in coll references the named map.
 func collReferencesMap(coll *cebpf.CollectionSpec, name string) bool {
 	for _, progSpec := range coll.Programs {
@@ -204,32 +221,20 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		bpfVerifierLogLevel, c.maps["perf_progs"].FD(), c.maps["per_cpu_records"].FD(), c.maps["per_cpu_records_kp"])
 }
 
-// CollectTrampolineRef describes what an external probe's eBPF entry program needs
-// in order to trigger stack collection via the provided trampoline.
-type CollectTrampolineRef struct {
-	// CtxMap is the per-CPU array map (key=int, value=u64, max_entries=1) into
-	// which the external entry program writes its payload (slot 0) before tail-calling.
-	CtxMap *cebpf.Map
-
-	// TailCallDestinationID is the kernel program ID of the loaded trampoline.
-	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
-	// can bpf_tail_call into it.
-	TailCallDestinationID uint32
-
-	// prog keeps the trampoline kernel program alive for the lifetime of this ref.
-	prog *cebpf.Program
+type collectTrampolineRef struct {
+	ctxMap *cebpf.Map
+	progID uint32
+	prog   *cebpf.Program
 }
 
-// Close releases the trampoline program handle and the context map.
-// Called by the tracer on shutdown, after all probe links have been detached.
-func (r *CollectTrampolineRef) Close() error {
+func (r *collectTrampolineRef) Close() error {
 	r.prog.Close()
-	return r.CtxMap.Close()
+	return r.ctxMap.Close()
 }
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) registerCollectTrampoline(reg *originRegistry, sysVars SysConfigVars, meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) registerCollectTrampoline(reg *originRegistry, sysVars SysConfigVars, meta *samples.TypeMetadata) (*collectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
 		ctxMapName         = "ext_probe_value"
@@ -329,9 +334,9 @@ func (c *ProbeContext) registerCollectTrampoline(reg *originRegistry, sysVars Sy
 		return nil, fmt.Errorf("trampoline program ID not available")
 	}
 
-	return &CollectTrampolineRef{
-		CtxMap:                ctxMap,
-		TailCallDestinationID: uint32(progID),
+	return &collectTrampolineRef{
+		ctxMap: ctxMap,
+		progID: uint32(progID),
 		prog:                  prog,
 	}, nil
 }
