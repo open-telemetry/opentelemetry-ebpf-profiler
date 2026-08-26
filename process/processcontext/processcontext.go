@@ -154,8 +154,10 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	return ctx, nil
 }
 
-// Resolve reads the process context from a context mapping (if any) and merges
-// attributes derived from OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.
+// Resolve reads the process context from a context mapping (if any). Per
+// [OTEP 4719], a successful read is already the SDK's resolved resource, so
+// it publishes as-is. OTEL_SERVICE_NAME/OTEL_RESOURCE_ATTRIBUTES are only a
+// fallback when no context is available.
 // Returns (_, false) to leave the previously-published context untouched.
 //
 // mappingAddr=0 means the mapping was not observed this sync. Pass a zero old
@@ -166,7 +168,6 @@ func Resolve(
 	old Info,
 	envVars map[libpf.String]libpf.String,
 ) (Info, bool) {
-	var ctx Info
 	if mappingAddr == 0 {
 		// Publish env vars alone on a first resolution, or when a mapping that
 		// had been published disappeared.
@@ -177,12 +178,11 @@ func Resolve(
 		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
 		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
 
-		var err error
-		// read leaves ctx zero on every error, so the paths below fall through
-		// to an env-vars-only context.
-		ctx, err = read(addr, rm, old.publishedAtNs, 0)
+		ctx, err := read(addr, rm, old.publishedAtNs, 0)
 		switch {
 		case err == nil:
+			ctx.resolved = true
+			return ctx, true
 		case errors.Is(err, errNoUpdate):
 			return Info{}, false
 		case errors.Is(err, errConcurrentUpdate):
@@ -195,10 +195,12 @@ func Resolve(
 		}
 	}
 
-	// The only publishing exit, so resolved is set in exactly one place.
-	info := withMergedEnvVars(ctx, envVars)
-	info.resolved = true
-	return info, true
+	// No context to read from at this point, so env vars are all there is.
+	env, err := attributesFromEnvVars(envVars)
+	if err != nil {
+		log.Debugf("Partial resource attributes: %v", err)
+	}
+	return Info{ResourceAttrs: env, resolved: true}, true
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
@@ -322,26 +324,6 @@ func EnvVarSet() libpf.Set[string] {
 	return libpf.Set[string]{svcNameKey: {}, resourceAttrKey: {}}
 }
 
-// withMergedEnvVars returns process context with attributes derived from
-// OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES merged into its resource
-// attributes.
-func withMergedEnvVars(info Info, envVars map[libpf.String]libpf.String) Info {
-	env, err := attributesFromEnvVars(envVars)
-	if err != nil {
-		log.Debugf("Partial resource attributes: %v", err)
-	}
-	// Guards live here, not in mergeAttributes: NewMergeIterator takes pointers,
-	// so entering it moves both sets to the heap even on an early return.
-	switch {
-	case env.Len() == 0:
-	case info.ResourceAttrs.Len() == 0:
-		info.ResourceAttrs = env
-	default:
-		info.ResourceAttrs = mergeAttributes(info.ResourceAttrs, env)
-	}
-	return info
-}
-
 // attributesFromEnvVars builds resource attributes from OTEL_SERVICE_NAME and
 // OTEL_RESOURCE_ATTRIBUTES, returning an empty set when neither contributes.
 // A non-nil error means the returned set is partial.
@@ -364,19 +346,6 @@ func attributesFromEnvVars(envVars map[libpf.String]libpf.String) (attribute.Set
 		}
 	}
 	return newAttributeSet(attrs), err
-}
-
-// mergeAttributes returns primary's attributes plus any keys from secondary
-// not already in primary (primary wins on collision). Inputs are not modified.
-func mergeAttributes(primary, secondary attribute.Set) attribute.Set {
-	// Argument order is load-bearing: MergeIterator keeps the first set's
-	// value on collision.
-	mi := attribute.NewMergeIterator(&primary, &secondary)
-	attrs := make([]attribute.KeyValue, 0, primary.Len()+secondary.Len())
-	for mi.Next() {
-		attrs = append(attrs, mi.Attribute())
-	}
-	return newAttributeSet(attrs)
 }
 
 // parseResourceAttributes parses an OTEL_RESOURCE_ATTRIBUTES value as

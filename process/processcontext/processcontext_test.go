@@ -481,15 +481,14 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 	), info.ResourceAttrs)
 }
 
-func TestWithMergedEnvVars(t *testing.T) {
+func TestAttributesFromEnvVars(t *testing.T) {
 	tests := []struct {
-		name        string
-		preexisting map[string]string
-		envVars     map[libpf.String]libpf.String
-		expected    map[string]string
+		name     string
+		envVars  map[libpf.String]libpf.String
+		expected map[string]string
 	}{
 		{
-			name: "no env vars no preexisting",
+			name: "no env vars",
 		},
 		{
 			name: "OTEL_SERVICE_NAME",
@@ -587,16 +586,6 @@ func TestWithMergedEnvVars(t *testing.T) {
 			expected: map[string]string{"good": "value"},
 		},
 		{
-			name:        "OTEL_SERVICE_NAME does not override existing",
-			preexisting: map[string]string{"service.name": "test-service"},
-			envVars: map[libpf.String]libpf.String{
-				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("env-service"),
-			},
-			expected: map[string]string{
-				"service.name": "test-service",
-			},
-		},
-		{
 			name: "both env vars",
 			envVars: map[libpf.String]libpf.String{
 				libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("my-svc"),
@@ -627,44 +616,20 @@ func TestWithMergedEnvVars(t *testing.T) {
 				"k": "third",
 			},
 		},
-		{
-			// Dedup runs before the merge, so both orderings are observable:
-			// "from-attrs-second" wins within the env var, then loses to the
-			// pre-existing value.
-			name:        "preexisting attribute beats OTEL_RESOURCE_ATTRIBUTES last writer",
-			preexisting: map[string]string{"k": "preset"},
-			envVars: map[libpf.String]libpf.String{
-				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=from-attrs-first,k=from-attrs-second"),
-			},
-			expected: map[string]string{
-				"k": "preset",
-			},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			info := Info{}
-			if tt.preexisting != nil {
-				attrs := make([]attribute.KeyValue, 0, len(tt.preexisting))
-				for k, v := range tt.preexisting {
-					attrs = append(attrs, attribute.String(k, v))
-				}
-				info.ResourceAttrs = attribute.NewSet(attrs...)
-			}
-
-			info = withMergedEnvVars(info, tt.envVars)
+			attrs, _ := attributesFromEnvVars(tt.envVars)
 
 			if tt.expected == nil {
-				if tt.preexisting == nil {
-					assert.Zero(t, info.ResourceAttrs.Len())
-				}
+				assert.Zero(t, attrs.Len())
 				return
 			}
 
-			require.NotZero(t, info.ResourceAttrs.Len())
+			require.NotZero(t, attrs.Len())
 			got := make(map[string]string)
-			for _, kv := range info.ResourceAttrs.ToSlice() {
+			for _, kv := range attrs.ToSlice() {
 				got[string(kv.Key)] = kv.Value.AsString()
 			}
 			assert.Equal(t, tt.expected, got)
@@ -743,6 +708,26 @@ func TestResolve(t *testing.T) {
 			remotememory.RemoteMemory{ReaderAt: mock}, Info{}, envVars)
 		require.True(t, published)
 		assert.Equal(t, "svc", serviceName(t, info))
+	})
+
+	t.Run("successfully read context is published as-is, env vars ignored", func(t *testing.T) {
+		payload, err := proto.Marshal(&testContext)
+		require.NoError(t, err)
+		const payloadAddr = 0x2000
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 7))
+		mock.writeAt(payloadAddr, payload)
+		rm := remotememory.RemoteMemory{ReaderAt: mock}
+
+		envVarsWithExtra := map[libpf.String]libpf.String{
+			libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("svc"),
+			libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("deployment.environment=prod"),
+		}
+		info, published := Resolve(0x1000, 1, rm, Info{}, envVarsWithExtra)
+		require.True(t, published)
+		assert.Equal(t, "test-service", serviceName(t, info), "context resource.name must win")
+		_, found := info.ResourceAttrs.Value("deployment.environment")
+		assert.False(t, found, "env vars must not be merged into a successfully read context")
 	})
 
 	t.Run("unchanged timestamp is steady state", func(t *testing.T) {
