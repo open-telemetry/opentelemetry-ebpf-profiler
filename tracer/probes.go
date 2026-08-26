@@ -20,7 +20,6 @@ import (
 // collections inside Probe.Load() implementations.
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
-	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
 	trampolineRef    *CollectTrampolineRef
@@ -92,12 +91,11 @@ func (c *ProbeContext) CollectionSpecWith(
 // task_stack_offset, etc.) from the tracer ELF into coll and writes their
 // runtime values. Call this after CollectionSpecWith for programs that perform
 // stack unwinding (i.e. the collect trampoline).
-func (c *ProbeContext) applySystemVarsToSpec(coll *cebpf.CollectionSpec) error {
+func applySystemVarsToSpec(coll *cebpf.CollectionSpec, sv SysConfigVars) error {
 	full, err := support.LoadCollectionSpec()
 	if err != nil {
 		return fmt.Errorf("loading collection spec: %w", err)
 	}
-	sv := c.sysVars
 	for name, val := range map[string]any{
 		"inverse_pac_mask":         sv.inverse_pac_mask,
 		"tpbase_offset":            sv.tpbase_offset,
@@ -247,7 +245,7 @@ func (r *CollectTrampolineRef) Close() error {
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) registerCollectTrampoline(reg ProbeRegistrar, meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) registerCollectTrampoline(reg ProbeRegistrar, sysVars SysConfigVars, meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
 		ctxMapName         = "ext_probe_value"
@@ -267,7 +265,7 @@ func (c *ProbeContext) registerCollectTrampoline(reg ProbeRegistrar, meta *sampl
 	if err != nil {
 		return nil, err
 	}
-	if err := c.applySystemVarsToSpec(coll); err != nil {
+	if err := applySystemVarsToSpec(coll, sysVars); err != nil {
 		return nil, err
 	}
 
@@ -439,14 +437,13 @@ type PostTraceHandler interface {
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:    t.ebpfMaps,
-		sysVars: t.sysConfigVars,
+		maps: t.ebpfMaps,
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},
 	}
 
-	ref, err := probeCtx.registerCollectTrampoline(t.origins, p.SampleType())
+	ref, err := probeCtx.registerCollectTrampoline(t.origins, t.sysConfigVars, p.SampleType())
 	if err != nil {
 		return err
 	}
