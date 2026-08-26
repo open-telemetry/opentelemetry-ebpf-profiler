@@ -69,33 +69,48 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	}
 }
 
-func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&samples.TypeMetadata{
+func (g *probe) SampleType() *samples.TypeMetadata {
+	return &samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
-	})
-	if err != nil {
-		return fmt.Errorf("registering probe origin: %w", err)
 	}
+}
 
+const (
+	ctxMapName      = "probe_value"
+	tailCallMapName = "collect_trace_trampoline"
+)
+
+func (g *probe) Load(_ context.Context, probeCtx *tracer.ProbeContext) error {
 	coll, err := probeCtx.CollectionSpecWith(
-		nil,
+		[]string{ctxMapName, tailCallMapName},
 		[]string{progName},
-		[]string{"origin_id_probe"},
+		nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	v, ok := coll.Variables["origin_id_probe"]
-	if !ok {
-		return fmt.Errorf("origin_id_probe variable not found in collection spec")
+	tailCallMap, err := cebpf.NewMap(coll.Maps[tailCallMapName])
+	if err != nil {
+		return fmt.Errorf("creating %s: %w", tailCallMapName, err)
 	}
-	if err := v.Set(originID); err != nil {
-		return err
+	defer tailCallMap.Close()
+
+	trampolineProg, err := cebpf.NewProgramFromID(cebpf.ProgramID(probeCtx.TrampolineProgID()))
+	if err != nil {
+		return fmt.Errorf("opening trampoline program: %w", err)
+	}
+	defer trampolineProg.Close()
+
+	if err := tailCallMap.Put(uint32(0), trampolineProg); err != nil {
+		return fmt.Errorf("populating %s: %w", tailCallMapName, err)
 	}
 
-	if err := probeCtx.RewriteMaps(coll, nil); err != nil {
+	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{
+		ctxMapName:      probeCtx.TrampolineCtxMap(),
+		tailCallMapName: tailCallMap,
+	}); err != nil {
 		return err
 	}
 

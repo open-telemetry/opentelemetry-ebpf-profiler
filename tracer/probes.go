@@ -24,7 +24,17 @@ type ProbeContext struct {
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
 	reg              ProbeRegistrar
+	trampolineRef    *CollectTrampolineRef
 }
+
+// TrampolineCtxMap returns the per-CPU context map owned by the tracer.
+// Probes pass it as a MapReplacement when loading their eBPF collection.
+// Do not close it; the tracer closes it on shutdown.
+func (c *ProbeContext) TrampolineCtxMap() *cebpf.Map { return c.trampolineRef.CtxMap }
+
+// TrampolineProgID returns the kernel program ID of the collect trampoline.
+// Probes use it to populate their tail-call prog array.
+func (c *ProbeContext) TrampolineProgID() uint32 { return c.trampolineRef.TailCallDestinationID }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
 // eBPF ELF. The returned spec contains only the maps, programs, and variables requested
@@ -184,6 +194,18 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 	return rewriteMaps(coll, toRewrite)
 }
 
+// collReferencesMap reports whether any program in coll references the named map.
+func collReferencesMap(coll *cebpf.CollectionSpec, name string) bool {
+	for _, progSpec := range coll.Programs {
+		for _, ins := range progSpec.Instructions {
+			if ins.Reference() == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // LoadProbeUnwinders loads the eBPF programs described by progs into the kernel,
 // wiring them into the tracer's kprobe tail-call map and the perf unwinder chain.
 // It syncs all VariableSpec values into the .rodata.var MapSpec, creates that map,
@@ -198,7 +220,7 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	if err := syncVariablesToMapSpecs(coll); err != nil {
 		return err
 	}
-	if rodataSpec, ok := coll.Maps[".rodata.var"]; ok {
+	if rodataSpec, ok := coll.Maps[".rodata.var"]; ok && collReferencesMap(coll, ".rodata.var") {
 		rodataMap, err := cebpf.NewMap(rodataSpec)
 		if err != nil {
 			return fmt.Errorf("creating .rodata.var: %w", err)
@@ -239,11 +261,21 @@ type CollectTrampolineRef struct {
 	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
 	// can bpf_tail_call into it.
 	TailCallDestinationID uint32
+
+	// prog keeps the trampoline kernel program alive for the lifetime of this ref.
+	prog *cebpf.Program
+}
+
+// Close releases the trampoline program handle and the context map.
+// Called by the tracer on shutdown, after all probe links have been detached.
+func (r *CollectTrampolineRef) Close() error {
+	r.prog.Close()
+	return r.CtxMap.Close()
 }
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) registerCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
 		ctxMapName         = "ext_probe_value"
@@ -343,6 +375,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 	return &CollectTrampolineRef{
 		CtxMap:                ctxMap,
 		TailCallDestinationID: uint32(progID),
+		prog:                  prog,
 	}, nil
 }
 
@@ -366,10 +399,11 @@ type ProbeRegistrar interface {
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
+	SampleType() *samples.TypeMetadata
 	// Load configures the probe. It registers one or more origin IDs via reg,
 	// then registers its kernel attachment via probeCtx: call AddLink for a
 	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
-	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
+	Load(ctx context.Context, probeCtx *ProbeContext) error
 }
 
 // PreTraceHandler is an optional interface that Probe implementations may
@@ -439,7 +473,17 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		},
 	}
 
-	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
+	ref, err := probeCtx.registerCollectTrampoline(p.SampleType())
+	if err != nil {
+		return err
+	}
+	probeCtx.trampolineRef = ref
+
+	if err := p.Load(ctx, probeCtx); err != nil {
+		for _, lnk := range probeCtx.links {
+			lnk.Close()
+		}
+		ref.Close()
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
@@ -450,13 +494,21 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			for _, lnk := range probeCtx.links {
 				lnk.Close()
 			}
+			ref.Close()
 			return fmt.Errorf("tracer is already closed")
 		}
 		for i, lnk := range probeCtx.links {
 			key := hookPoint{group: "probe", name: fmt.Sprintf("%p/%d", p, i)}
-			h.m[key] = lnk
+			entry := hookEntry{link: lnk}
+			if i == 0 {
+				entry.closer = ref
+			}
+			h.m[key] = entry
 		}
 		t.hooks.WUnlock(&h)
+	} else {
+		// No links registered; close the ctx map now since nothing will hold it.
+		ref.Close()
 	}
 
 	if pth, ok := p.(PreTraceHandler); ok {

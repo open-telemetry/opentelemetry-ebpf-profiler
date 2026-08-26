@@ -1,11 +1,7 @@
 #include "bpfdefs.h"
 #include "tracemgmt.h"
-#include "types.h"
 
-// origin_id_probe is set during load time.
-BPF_RODATA_VAR(u16, origin_id_probe, 0)
-
-static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
+static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u16 origin_id, u64 value)
 {
   u32 pid = 0;
   u32 tid = 0;
@@ -19,17 +15,13 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace(ctx, origin_id_probe, pid, tid, ts, value);
+  return collect_trace(ctx, origin_id, pid, tid, ts, value);
 }
 
-// kprobe__generic serves as entry point for kprobe based profiling.
-SEC("kprobe/generic")
-int kprobe__generic(struct pt_regs *ctx)
-{
-  return probe__generic(ctx, 0);
-}
+// origin_id_probe is set during load time.
+BPF_RODATA_VAR(u16, origin_id_probe, 0)
 
-// ext_probe_value enables externally hosted probes to forward values
+// ext_probe_value enables external probes to forward values
 // related to the stack unwinding.
 struct external_probe_value_t {
   __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -48,5 +40,5 @@ int kprobe__external(struct pt_regs *ctx)
     DEBUG_PRINT("Failed to read value from ext_probe_value");
     return 0;
   }
-  return probe__generic(ctx, *value);
+  return probe__generic(ctx, origin_id_probe, *value);
 }

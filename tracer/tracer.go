@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"math/rand/v2"
 	"os"
@@ -230,12 +231,19 @@ type hookPoint struct {
 	group, name string
 }
 
+// hookEntry pairs a kernel hook with an optional closer for resources that
+// must be released after the hook is detached (e.g. a per-probe eBPF map).
+type hookEntry struct {
+	link   link.Link
+	closer io.Closer // closed after link; nil if no extra resource
+}
+
 // hooksState keeps track of loaded hooks.
 type hooksState struct {
 	// Closed indicates a graceful termination, so no new elements should
 	// be added to m.
 	closed bool
-	m      map[hookPoint]link.Link
+	m      map[hookPoint]hookEntry
 }
 
 // ProgLoaderHelper supports the loading process of eBPF programs.
@@ -321,7 +329,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
-		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]link.Link)}),
+		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]hookEntry)}),
 		intervals:              cfg.Intervals,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
 		samplesPerSecond:       cfg.SamplesPerSecond,
@@ -348,9 +356,14 @@ func (t *Tracer) Close() {
 	// Avoid resource leakage by closing all kernel hooks.
 	h := t.hooks.WLock()
 	h.closed = true
-	for hp, hook := range h.m {
-		if err := hook.Close(); err != nil {
+	for hp, entry := range h.m {
+		if err := entry.link.Close(); err != nil {
 			log.Errorf("Failed to close '%s/%s': %v", hp.group, hp.name, err)
+		}
+		if entry.closer != nil {
+			if err := entry.closer.Close(); err != nil {
+				log.Errorf("Failed to close resource for '%s/%s': %v", hp.group, hp.name, err)
+			}
 		}
 		delete(h.m, hp)
 	}
@@ -711,7 +724,18 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 	noPrealloc := probeNoPrealloc()
 
+	// Per-probe maps are instantiated fresh for each Enable() call; loading them
+	// at startup would waste memory and cause conflicts in RewriteMaps.
+	perProbeMaps := libpf.Set[string]{
+		"probe_value":              {},
+		"collect_trace_trampoline": {},
+		"ext_probe_value":          {},
+	}
+
 	for mapName, mapSpec := range coll.Maps {
+		if _, skip := perProbeMaps[mapName]; skip {
+			continue
+		}
 		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
 			// Off CPU Profiling is disabled. So do not load this map.
 			continue
@@ -1369,7 +1393,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		}
 		attached = true
 		h := t.hooks.WLock()
-		h.m[hookPoint{group: "kprobe", name: string(symb.Name)}] = kprobeLink
+		h.m[hookPoint{group: "kprobe", name: string(symb.Name)}] = hookEntry{link: kprobeLink}
 		t.hooks.WUnlock(&h)
 	}
 	if !attached {
@@ -1387,7 +1411,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		return fmt.Errorf("failed to attach sched_switch tracepoint: %w", err)
 	}
 	h := t.hooks.WLock()
-	h.m[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
+	h.m[hookPoint{group: "sched", name: "sched_switch"}] = hookEntry{link: tpLink}
 	t.hooks.WUnlock(&h)
 
 	return nil
@@ -1411,7 +1435,7 @@ func (t *Tracer) AttachProbes(probes []string) error {
 		}
 
 		h := t.hooks.WLock()
-		h.m[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = probeLink
+		h.m[hookPoint{group: probeSpec.Mode.String(), name: probeStr}] = hookEntry{link: probeLink}
 		t.hooks.WUnlock(&h)
 	}
 	return nil
