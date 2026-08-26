@@ -95,7 +95,7 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL libpf.Addr
 				name, ok := expression.AsNamed(it.Regs.GetArmSP(a1.Base))
 				// We renamed the register holding a pointer to `g` as "g" above.
 				if name == "g" && ok {
-					if imm, ok := arm.DecodeImmediate(a1); ok {
+					if imm, ok := arm.DecodeImmediate(a1); ok && imm > 0 {
 						curL = libpf.Address(imm)
 						return true
 					}
@@ -104,7 +104,10 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL libpf.Addr
 		}
 		return false
 	})
-
+	
+	if errors.Is(err, io.EOF) {
+		err = errors.New("find offsets from lua_close failed")
+	}
 	return glref, curL, err
 }
 

@@ -1,8 +1,8 @@
-module go.opentelemetry.io/ebpf-profiler/interpreter/luajit/offsetstest
+module go.opentelemetry.io/ebpf-profiler/tools/luajitoffsets
 
 go 1.26.0
 
-replace go.opentelemetry.io/ebpf-profiler => ../../..
+replace go.opentelemetry.io/ebpf-profiler => ../..
 
 require (
 	github.com/stretchr/testify v1.12.1

@@ -130,7 +130,7 @@ test: generate ebpf test-deps
 # Lives in its own module to keep heavy dependencies (testcontainers,
 # Docker, etc.) out of the main go.mod.
 test-luajit-offsets: generate
-	go test -C ./interpreter/luajit/offsetstest $(GO_FLAGS) -tags luajit_offsets_test ./...
+	go test -C ./tools/luajitoffsets $(GO_FLAGS) -tags luajit_offsets_test ./...
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)

@@ -8,7 +8,7 @@
 // The instruction-decoding tests that need no binaries stay in the main
 // module, in interpreter/luajit/offsets_test.go.
 
-package offsetstest
+package luajitoffsets
 
 import (
 	"context"

@@ -217,7 +217,7 @@ func newOffsetData(ef *pfelf.File) (*offsetData, error) {
 	return &o, nil
 }
 
-func (o *offsetData) findCurLOffset() (uint16, error) {
+func (o *offsetData) findCurLOffset() (libpf.Address, error) {
 	b, _, err := o.readSymByName(luaCloseSym)
 	if err != nil {
 		return 0, err
@@ -232,7 +232,7 @@ func (o *offsetData) findCurLOffset() (uint16, error) {
 		//nolint: lll
 		return 0, fmt.Errorf("unexpected glref offset %x, only luajit with LJ_GC64 is supported", glref)
 	}
-	return uint16(curL), nil
+	return curL, nil
 }
 
 func (o *offsetData) findG2DispatchOffset() (libpf.Address, error) {
@@ -249,7 +249,7 @@ func (o *offsetData) findG2DispatchOffset() (libpf.Address, error) {
 }
 
 func (o *offsetData) findG2TracesOffset() (libpf.Address, error) {
-	if sym, ok := o.foundSymbols["jit_checktrace"]; ok {
+	if sym, ok := o.foundSymbols[jitChecktraceSym]; ok {
 		// easiest case
 		b, err := o.readSym(sym)
 		if err != nil {

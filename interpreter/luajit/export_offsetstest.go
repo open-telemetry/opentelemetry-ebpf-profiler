@@ -4,7 +4,7 @@
 //go:build luajit_offsets_test
 
 // Test-only rexports for luajit internals.
-// Used by ./offsetstest
+// Used by tools/luajitoffsets
 
 package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
