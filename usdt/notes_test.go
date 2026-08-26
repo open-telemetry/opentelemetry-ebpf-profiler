@@ -137,6 +137,33 @@ func TestELFFileOffset(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
+	f := &pfelf.File{Progs: []pfelf.Prog{
+		{ProgHeader: elf.ProgHeader{
+			Type: elf.PT_LOAD, Flags: elf.PF_R | elf.PF_X,
+			Vaddr: 0x1000, Off: 0x200, Filesz: 0x100,
+		}},
+		{ProgHeader: elf.ProgHeader{
+			Type: elf.PT_LOAD, Flags: elf.PF_R | elf.PF_W,
+			Vaddr: 0x2000, Off: 0x400, Filesz: 0x100,
+		}},
+	}}
+	notes := []sdtNote{
+		{provider: "provider", name: "bad", location: 0x3000, base: 0x1000},
+		{provider: "provider", name: "alloc", location: 0x1020, base: 0x1000,
+			semaphore: 0x2020},
+	}
+
+	points, err := attachmentPointsFromNotes(f, 0x1000, notes)
+	require.ErrorContains(t, err, "provider:bad")
+	require.Equal(t, []AttachmentPoint{{
+		Provider:        "provider",
+		Name:            "alloc",
+		Location:        0x220,
+		SemaphoreOffset: 0x420,
+	}}, points)
+}
+
 func buildSDTNote(owner string, noteType uint32, location, base, semaphore uint64,
 	provider, name, arguments string,
 ) []byte {
