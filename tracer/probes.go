@@ -24,7 +24,7 @@ type ProbeContext struct {
 	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
-	KernelModule     *kallsyms.Module
+	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
 }
 
@@ -432,10 +432,6 @@ type PostTraceHandler interface {
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
-	kmod, err := t.kernelSymbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
-	if err != nil {
-		return fmt.Errorf("getting kernel module for probe context: %w", err)
-	}
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
@@ -443,7 +439,7 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},
-		KernelModule: kmod,
+		KernelSymbolizer: t.kernelSymbolizer,
 	}
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
