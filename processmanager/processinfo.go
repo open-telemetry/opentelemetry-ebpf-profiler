@@ -767,8 +767,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpRemove {
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
-	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	collectAnonymousMappings = pm.processRemovedInterpreters(pid, interpretersValid)
 	if collectAnonymousMappings != previousAnonymousMappingsWanted {
 		if err := pm.updatePIDAnonymousMappingInterest(pid, collectAnonymousMappings); err != nil {
@@ -782,7 +782,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpAdd {
 		numChanges += pm.processNewMapping(pid, m)
 	}
+
+	pm.mu.Lock()
 	pm.pidPageToMappingInfoSize += numChanges
+	pm.mu.Unlock()
 
 	// Update metadata of the process.
 	var meta process.Meta
