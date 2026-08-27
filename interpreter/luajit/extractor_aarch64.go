@@ -95,7 +95,8 @@ func (a *armExtractor) findOffsetsFromLuaClose(b []byte) (glref, curL libpf.Addr
 				name, ok := expression.AsNamed(it.Regs.GetArmSP(a1.Base))
 				// We renamed the register holding a pointer to `g` as "g" above.
 				if name == "g" && ok {
-					if imm, ok := arm.DecodeImmediate(a1); ok && imm > 0 {
+					// the last bound is redundant on 64-bit platforms, but required to silence errors.
+					if imm, ok := arm.DecodeImmediate(a1); ok && imm > 0 && uint64(imm) <= uint64(^uintptr(0)) {
 						curL = libpf.Address(imm)
 						return true
 					}
