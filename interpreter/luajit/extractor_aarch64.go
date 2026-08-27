@@ -375,7 +375,7 @@ func (a *armExtractor) findFirstCall(b []byte, addr libpf.Address) (libpf.Addres
 			a0, ok := i.Args[0].(arm64asm.PCRel)
 			if ok {
 				ip, _ := expression.AsConstant(it.Regs.Get(arm.PC))
-				retval = libpf.Address(ip) + libpf.Address(a0)
+				retval = libpf.Address(ip) + libpf.Address(a0) - libpf.Address(arm.InstSz)
 				return true
 			}
 		}
