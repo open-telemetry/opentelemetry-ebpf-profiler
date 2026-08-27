@@ -13,11 +13,11 @@ dist:
   version: dev
 
 extensions:
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202632
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202633
     import: go.opentelemetry.io/ebpf-profiler/probes/kprobe
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202632
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202633
     import: go.opentelemetry.io/ebpf-profiler/probes/offcpu
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202632
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202633
     import: go.opentelemetry.io/ebpf-profiler/probes/uprobe
 
 receivers:
