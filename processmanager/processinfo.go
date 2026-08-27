@@ -234,7 +234,7 @@ func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.
 		if !a.Match(pr, m) {
 			continue
 		}
-		if err := a.Attach(pr); err != nil {
+		if err := a.Attach(pr, m); err != nil {
 			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
 			continue
 		}
@@ -767,8 +767,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpRemove {
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
-	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	collectAnonymousMappings = pm.processRemovedInterpreters(pid, interpretersValid)
 	if collectAnonymousMappings != previousAnonymousMappingsWanted {
 		if err := pm.updatePIDAnonymousMappingInterest(pid, collectAnonymousMappings); err != nil {
@@ -782,7 +782,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpAdd {
 		numChanges += pm.processNewMapping(pid, m)
 	}
+
+	pm.mu.Lock()
 	pm.pidPageToMappingInfoSize += numChanges
+	pm.mu.Unlock()
 
 	// Update metadata of the process.
 	var meta process.Meta

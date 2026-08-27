@@ -8,11 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/collector/confmap"
-
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -165,42 +162,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
-	if err := c.enableProbes(ctx, trc); err != nil {
-		c.cancelFunc() // stop the startTraceHandling goroutine
-		return fmt.Errorf("failed to enable probes: %w", err)
-	}
-
 	return nil
-}
-
-func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
-	for i, p := range c.config.Probes {
-		probe, err := createProbe(p.Type, p.Config)
-		if err != nil {
-			return fmt.Errorf("probe %d: %w", i, err)
-		}
-
-		if err := trc.Enable(ctx, probe); err != nil {
-			return fmt.Errorf("probe %d (%s): %w", i, p.Type, err)
-		}
-
-		log.Infof("Enabled probe %d (%s)", i, p.Type)
-	}
-
-	return nil
-}
-
-func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
-	switch probeType {
-	case "kprobe":
-		var kcfg kprobe.Config
-		if err := confmap.NewFromStringMap(cfg).Unmarshal(&kcfg); err != nil {
-			return nil, fmt.Errorf("decoding kprobe config: %w", err)
-		}
-		return kprobe.New(kcfg)
-	default:
-		return nil, fmt.Errorf("unknown probe type %q", probeType)
-	}
 }
 
 // Shutdown stops the controller
@@ -219,6 +181,13 @@ func (c *Controller) Shutdown() {
 			c.tracer.Close()
 		}
 	})
+}
+
+// EnableProbe enables a probe on the running tracer. It must be called after
+// Start has completed. The probe requires the kprobe unwinder chain, which is
+// loaded automatically when probes is non-empty in the config.
+func (c *Controller) EnableProbe(ctx context.Context, p tracer.Probe) error {
+	return c.tracer.Enable(ctx, p)
 }
 
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {

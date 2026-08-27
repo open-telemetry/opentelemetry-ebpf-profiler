@@ -9,6 +9,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/elastic/go-freelru"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -178,4 +180,73 @@ func TestWalkRangeSectionMapAlias(t *testing.T) {
 	require.NoError(t, err)
 	// Each level is read exactly once plus a handful of fragments/sections.
 	require.Less(t, cr.reads, 100)
+}
+
+func TestSymbolizeDynamicMethod(t *testing.T) {
+	const codeHeaderPtr = libpf.Address(0x1234)
+
+	tests := map[string]struct {
+		dynamicName libpf.String
+		withModule  bool
+		wantName    string
+	}{
+		"friendly name": {
+			dynamicName: libpf.Intern("lambda_method1"),
+			withModule:  true,
+			wantName:    "lambda_method1",
+		},
+		"fallback name": {
+			dynamicName: stubFrameName[codeDynamic],
+			withModule:  true,
+			wantName:    "[stub: dynamic]",
+		},
+		"friendly name without module": {
+			dynamicName: libpf.Intern("lambda_method1"),
+			wantName:    "lambda_method1",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			moduleName := libpf.Intern("ProfileDemo.dll")
+			moduleMapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+				File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+					FileID:   libpf.NewFileID(1, 2),
+					FileName: moduleName,
+				}),
+			})
+			module := &peInfo{simpleName: moduleName, mapping: moduleMapping}
+			var methodModule *peInfo
+			if tt.withModule {
+				methodModule = module
+			}
+			addrToMethod, err := freelru.New[libpf.Address, *dotnetMethod](
+				interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
+			require.NoError(t, err)
+			addrToMethod.Add(codeHeaderPtr, &dotnetMethod{
+				classification: mcDynamic,
+				dynamicName:    tt.dynamicName,
+				module:         methodModule,
+			})
+
+			instance := &dotnetInstance{addrToMethod: addrToMethod}
+			ebpfFrame := libpf.NewEbpfFrame(libpf.DotnetFrame, 0, 2, 0)
+			ebpfFrame[1] = uint64(codeHeaderPtr)<<5 | codeJIT
+
+			var frames libpf.Frames
+			var mapping libpf.FrameMapping
+			err = instance.Symbolize(ebpfFrame, &frames, mapping)
+			require.NoError(t, err)
+			require.Len(t, frames, 1)
+			frame := frames[0].Value()
+			assert.Equal(t, tt.wantName, frame.FunctionName.String())
+			if tt.withModule {
+				assert.Equal(t, moduleName, frame.SourceFile)
+				assert.Equal(t, moduleMapping, frame.Mapping)
+			} else {
+				assert.Equal(t, libpf.NullString, frame.SourceFile)
+				assert.False(t, frame.Mapping.Valid())
+			}
+		})
+	}
 }

@@ -109,6 +109,18 @@ var codeName = []string{
 	codeDynamic:                   "dynamic",
 }
 
+var stubFrameName = func() []libpf.String {
+	names := make([]libpf.String, len(codeName))
+	for codeType, name := range codeName {
+		names[codeType] = libpf.Intern("[stub: " + name + "]")
+	}
+	return names
+}()
+
+// stubDynamicFrameName is the fallback frame name for dynamic methods whose
+// friendly name cannot be resolved.
+var stubDynamicFrameName = stubFrameName[codeDynamic]
+
 // dotnetMapping reflects mapping of PE file to process.
 type dotnetMapping struct {
 	start, end uint64
@@ -222,7 +234,7 @@ type dotnetInstance struct {
 func (i *dotnetInstance) appendStubFrame(frames *libpf.Frames, codeType uint) {
 	frames.Append(&libpf.Frame{
 		Type:         libpf.DotnetFrame,
-		FunctionName: libpf.Intern("[stub: " + codeName[codeType] + "]"),
+		FunctionName: stubFrameName[codeType],
 	})
 }
 
@@ -555,6 +567,16 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	tokenRemainder &= cdac.calculated.MethodDescTokenRemainderMask
 	chunkIndex := npsr.Uint8(methodDesc, vms.MethodDesc.ChunkIndex)
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
+	dynamicName := libpf.NullString
+	if classification == mcDynamic {
+		dynamicName = stubDynamicFrameName
+		if vms.DynamicMethodDesc.MethodName != 0 {
+			if name := libpf.Intern(i.rm.StringPtr(methodDescPtr +
+				libpf.Address(vms.DynamicMethodDesc.MethodName))); name != libpf.NullString {
+				dynamicName = name
+			}
+		}
+	}
 
 	// Calculate the offset to the owning MethodDescChunk structure
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L2321-L2328
@@ -587,12 +609,13 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
 	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
-	if err != nil {
+	if err != nil && classification != mcDynamic {
 		return nil, err
 	}
 
 	method := &dotnetMethod{
 		classification: classification,
+		dynamicName:    dynamicName,
 		index:          index,
 		module:         module,
 	}
@@ -919,7 +942,19 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		if err != nil {
 			return err
 		}
-		if method.index == 0 || method.classification == mcDynamic {
+		if method.classification == mcDynamic {
+			frame := &libpf.Frame{
+				Type:         libpf.DotnetFrame,
+				FunctionName: method.dynamicName,
+			}
+			if method.module != nil {
+				frame.SourceFile = method.module.simpleName
+				frame.Mapping = method.module.mapping
+			}
+			frames.Append(frame)
+			break
+		}
+		if method.index == 0 {
 			i.appendStubFrame(frames, codeDynamic)
 			break
 		}
