@@ -7,10 +7,13 @@ package tracer_test
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"slices"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -286,5 +289,102 @@ func TestAllTracers(t *testing.T) {
 			require.NoError(t, err)
 			defer tr.Close()
 		})
+	}
+}
+
+func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
+	if os.Getenv("OTEL_EBPF_PROFILER_PIDNS_CHILD") == "1" {
+		require.Equal(t, 1, os.Getpid())
+		runtime.GOMAXPROCS(2)
+		deadline := time.Now().Add(3 * time.Second)
+		ready := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			runtime.LockOSThread()
+			close(ready)
+			for time.Now().Before(deadline) {
+				runtime.Gosched()
+			}
+			close(done)
+		}()
+		<-ready
+		runtime.LockOSThread()
+		for time.Now().Before(deadline) {
+			runtime.Gosched()
+		}
+		<-done
+		return
+	}
+
+	_, btfErr := os.Stat("/sys/kernel/btf/vmlinux")
+	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
+		Intervals:               &mockIntervals{},
+		InterpretersConfig:      interpreterconfig.AllInterpreters(),
+		SamplesPerSecond:        20,
+		ProbabilisticInterval:   100,
+		ProbabilisticThreshold:  100,
+		PIDNamespaceTranslation: true,
+		TranslateDescendantPIDs: true,
+	})
+	if os.IsNotExist(btfErr) {
+		require.ErrorContains(t, err, "PID translation from descendant namespaces requires readable kernel BTF")
+		return
+	}
+	require.NoError(t, btfErr)
+	require.NoError(t, err)
+	defer tr.Close()
+
+	traceChan := make(chan *libpf.EbpfTrace, 1024)
+	require.NoError(t, tr.StartMapMonitors(t.Context(), traceChan))
+
+	coll, err := support.LoadCollectionSpec()
+	require.NoError(t, err)
+	require.NoError(t, tracer.RewriteMaps(coll, tr.GetEbpfMaps()))
+
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	require.NoError(t, err)
+	defer restoreRlimit()
+
+	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
+	require.NoError(t, err)
+	defer prog.Close()
+
+	event, err := link.Tracepoint("sched", "sched_switch", prog, nil)
+	require.NoError(t, err)
+	defer event.Close()
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestPIDNamespaceTranslationFromDescendant$")
+	cmd.Env = append(os.Environ(), "OTEL_EBPF_PROFILER_PIDNS_CHILD=1")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		if cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	})
+
+	targetPID := libpf.PID(cmd.Process.Pid)
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-timer.C:
+			t.Fatalf("no trace received for descendant namespace PID %d", targetPID)
+		case <-tr.Done():
+			t.Fatal("tracer encountered an unrecoverable error")
+		case trace := <-traceChan:
+			comm := trace.Comm.String()
+			if len(comm) < 3 || comm[:3] != "\xAA\xBB\xCC" ||
+				trace.PID != targetPID || trace.TID == targetPID {
+				continue
+			}
+			_, err := os.Stat(fmt.Sprintf("/proc/%d/task/%d", trace.PID, trace.TID))
+			require.NoError(t, err, "translated TID does not belong to the target process")
+			require.NoError(t, event.Close())
+			require.NoError(t, cmd.Wait())
+			return
+		}
 	}
 }

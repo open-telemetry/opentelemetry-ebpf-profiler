@@ -111,7 +111,7 @@ type sysVar struct {
 // both the include list in CollectionSpecWith and the apply pass in applySystemVars.
 func (c *ProbeContext) sysVarSetters() []sysVar {
 	sv := c.sysVars
-	return []sysVar{
+	vars := []sysVar{
 		{"inverse_pac_mask", sv.inverse_pac_mask},
 		{"tpbase_offset", sv.tpbase_offset},
 		{"task_stack_offset", sv.task_stack_offset},
@@ -122,6 +122,7 @@ func (c *ProbeContext) sysVarSetters() []sysVar {
 		{"task_group_leader_offset", sv.task_group_leader_offset},
 		{"task_start_time_offset", sv.task_start_time_offset},
 	}
+	return append(vars, sv.pidNamespaceVars()...)
 }
 
 // applySystemVars writes the system configuration values determined at tracer startup into

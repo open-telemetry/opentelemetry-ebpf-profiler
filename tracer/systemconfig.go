@@ -32,15 +32,47 @@ import (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
-	inverse_pac_mask         uint64
-	tpbase_offset            uint64
-	task_stack_offset        uint32
-	stack_ptregs_offset      uint32
-	vma_lookup_enabled       bool
-	vma_vm_file_offset       uint32
-	vma_vm_flags_offset      uint32
-	task_group_leader_offset uint32
-	task_start_time_offset   uint32
+	inverse_pac_mask           uint64
+	tpbase_offset              uint64
+	task_stack_offset          uint32
+	stack_ptregs_offset        uint32
+	vma_lookup_enabled         bool
+	vma_vm_file_offset         uint32
+	vma_vm_flags_offset        uint32
+	task_group_leader_offset   uint32
+	task_start_time_offset     uint32
+	pid_ns_translation_enabled bool
+	translate_descendant_pids  bool
+	target_pid_ns_dev          uint64
+	target_pid_ns_inode        uint64
+	pid_namespace_layout       pidNamespaceLayout
+}
+
+type pidNamespaceLayout struct {
+	task_thread_pid_offset    uint32
+	pid_level_offset          uint32
+	pid_numbers_offset        uint32
+	upid_size                 uint32
+	upid_nr_offset            uint32
+	upid_ns_offset            uint32
+	pid_namespace_inum_offset uint32
+}
+
+func (v SysConfigVars) pidNamespaceVars() []sysVar {
+	layout := v.pid_namespace_layout
+	return []sysVar{
+		{name: "pid_ns_translation_enabled", val: v.pid_ns_translation_enabled},
+		{name: "translate_descendant_pids", val: v.translate_descendant_pids},
+		{name: "target_pid_ns_dev", val: v.target_pid_ns_dev},
+		{name: "target_pid_ns_inode", val: v.target_pid_ns_inode},
+		{name: "task_thread_pid_offset", val: layout.task_thread_pid_offset},
+		{name: "pid_level_offset", val: layout.pid_level_offset},
+		{name: "pid_numbers_offset", val: layout.pid_numbers_offset},
+		{name: "upid_size", val: layout.upid_size},
+		{name: "upid_nr_offset", val: layout.upid_nr_offset},
+		{name: "upid_ns_offset", val: layout.upid_ns_offset},
+		{name: "pid_namespace_inum_offset", val: layout.pid_namespace_inum_offset},
+	}
 }
 
 var (
@@ -139,8 +171,56 @@ func parseVMAOffsets(spec *btf.Spec, vars *SysConfigVars) {
 	vars.vma_vm_flags_offset = uint32(flagsOffset)
 }
 
+func parsePIDNamespaceLayout(spec *btf.Spec, layout *pidNamespaceLayout) error {
+	var taskStruct, pid, upid, pidNamespace *btf.Struct
+	for _, kernelType := range []struct {
+		name   string
+		target **btf.Struct
+	}{
+		{name: "task_struct", target: &taskStruct},
+		{name: "pid", target: &pid},
+		{name: "upid", target: &upid},
+		{name: "pid_namespace", target: &pidNamespace},
+	} {
+		if err := spec.TypeByName(kernelType.name, kernelType.target); err != nil {
+			return fmt.Errorf("resolve kernel BTF type %s: %w", kernelType.name, err)
+		}
+	}
+
+	for _, field := range []struct {
+		typ    btf.Type
+		name   string
+		target *uint32
+	}{
+		{typ: taskStruct, name: "thread_pid", target: &layout.task_thread_pid_offset},
+		{typ: pid, name: "level", target: &layout.pid_level_offset},
+		{typ: pid, name: "numbers", target: &layout.pid_numbers_offset},
+		{typ: upid, name: "nr", target: &layout.upid_nr_offset},
+		{typ: upid, name: "ns", target: &layout.upid_ns_offset},
+		{typ: pidNamespace, name: "ns.inum", target: &layout.pid_namespace_inum_offset},
+	} {
+		offset, err := calculateFieldOffset(field.typ, field.name)
+		if err != nil {
+			return fmt.Errorf("resolve kernel BTF field %s.%s: %w", field.typ.TypeName(), field.name, err)
+		}
+		*field.target = uint32(offset)
+	}
+
+	upidSize, err := btf.Sizeof(upid)
+	if err != nil {
+		return fmt.Errorf("resolve kernel BTF upid size: %w", err)
+	}
+	if upidSize <= 0 {
+		return fmt.Errorf("invalid kernel BTF upid size %d", upidSize)
+	}
+	layout.upid_size = uint32(upidSize)
+	return nil
+}
+
 // parseBTF resolves the SystemConfig data from kernel BTF
-func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool) error {
+func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime,
+	needPIDNamespaceTranslation bool,
+) error {
 	fh, err := os.Open("/sys/kernel/btf/vmlinux")
 	if err != nil {
 		return err
@@ -171,18 +251,26 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool) error 
 		}
 	}
 
-	if needProcessStartTime {
+	if needProcessStartTime || needPIDNamespaceTranslation {
 		groupLeaderOffset, err := calculateFieldOffset(taskStruct, "group_leader")
 		if err != nil {
 			return err
 		}
 		vars.task_group_leader_offset = uint32(groupLeaderOffset)
+	}
 
+	if needProcessStartTime {
 		startTimeOffset, err := calculateFieldOffset(taskStruct, "start_time")
 		if err != nil {
 			return err
 		}
 		vars.task_start_time_offset = uint32(startTimeOffset)
+	}
+
+	if needPIDNamespaceTranslation {
+		if err := parsePIDNamespaceLayout(spec, &vars.pid_namespace_layout); err != nil {
+			return err
+		}
 	}
 	parseVMAOffsets(spec, vars)
 
@@ -380,13 +468,16 @@ func getCurrentNS(filename string) (dev, ino uint64, err error) {
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, needProcessStartTime bool,
-	vars *SysConfigVars,
+	pidNamespaceTranslationFromDescendants bool, vars *SysConfigVars,
 ) error {
 	needTPBase := !interpretersConfig.Perl.IsDisabled() ||
 		!interpretersConfig.Python.IsDisabled() ||
 		!interpretersConfig.Ruby.IsDisabled() ||
 		!interpretersConfig.Go.IsLabelsDisabled()
-	if err := parseBTF(vars, needTPBase, needProcessStartTime); err != nil {
+	if err := parseBTF(vars, needTPBase, needProcessStartTime, pidNamespaceTranslationFromDescendants); err != nil {
+		if pidNamespaceTranslationFromDescendants {
+			return fmt.Errorf("PID translation from descendant namespaces requires readable kernel BTF with task and PID namespace layout: %w", err)
+		}
 		if needProcessStartTime {
 			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
 		}
@@ -557,6 +648,9 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if cfg.FilterMinProcessAge < 0 {
 		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
 	}
+	if cfg.TranslateDescendantPIDs && !cfg.PIDNamespaceTranslation {
+		return errors.New("PID namespace translation from descendants requires PID namespace translation")
+	}
 
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
@@ -564,11 +658,17 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		}
 	}
 
+	var targetPIDNamespaceDev, targetPIDNamespaceInode uint64
 	if cfg.PIDNamespaceTranslation {
 		dev, ino, err := getCurrentNS("/proc/self/ns/pid")
 		if err != nil {
 			return fmt.Errorf("failed to read PID namespace info: %v", err)
 		}
+		if dev == 0 || ino == 0 {
+			return fmt.Errorf("invalid PID namespace identity: device=%d, inode=%d", dev, ino)
+		}
+		targetPIDNamespaceDev = dev
+		targetPIDNamespaceInode = ino
 		if err := coll.Variables["pid_ns_translation_enabled"].Set(uint8(1)); err != nil {
 			return fmt.Errorf("failed to set pid_ns_translation_enabled: %v", err)
 		}
@@ -578,7 +678,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
 			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
 		}
-		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
+		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only process traces visible in the profiler namespace will be collected", dev, ino)
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
@@ -626,7 +726,13 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
 	}
 
-	rodataVars := SysConfigVars{inverse_pac_mask: ^pacMask}
+	rodataVars := SysConfigVars{
+		inverse_pac_mask:           ^pacMask,
+		pid_ns_translation_enabled: cfg.PIDNamespaceTranslation,
+		translate_descendant_pids:  cfg.TranslateDescendantPIDs,
+		target_pid_ns_dev:          targetPIDNamespaceDev,
+		target_pid_ns_inode:        targetPIDNamespaceInode,
+	}
 	configureVMALookup(coll, cfg, &rodataVars)
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
@@ -636,9 +742,16 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	if err := determineSysConfig(
 		systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
-		&rodataVars,
+		cfg.TranslateDescendantPIDs, &rodataVars,
 	); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
+	}
+	if cfg.PIDNamespaceTranslation {
+		for _, variable := range rodataVars.pidNamespaceVars() {
+			if err := coll.Variables[variable.name].Set(variable.val); err != nil {
+				return fmt.Errorf("failed to set %s: %v", variable.name, err)
+			}
+		}
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
 		return fmt.Errorf("failed to set tpbase_offset: %v", err)

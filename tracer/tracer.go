@@ -219,9 +219,11 @@ type Config struct {
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
-	// their container-namespace equivalents. Useful for sidecar deployments where
-	// the profiler and the target application share a PID namespace but not host PIDs.
+	// the profiler's PID namespace when tasks share that namespace with the profiler.
 	PIDNamespaceTranslation bool
+	// TranslateDescendantPIDs extends PID namespace translation to tasks in descendant
+	// namespaces. It requires PIDNamespaceTranslation and readable kernel BTF.
+	TranslateDescendantPIDs bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
