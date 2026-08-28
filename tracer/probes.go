@@ -20,24 +20,16 @@ import (
 // collections inside Probe.Load() implementations.
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
-	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
-	reg              ProbeRegistrar
+	trampolineRef    *collectTrampolineRef
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
-// eBPF ELF. The returned spec contains only the maps, programs, and variables requested
-// by the probe plus ".rodata.var" and the mandatory system variables (tpbase_offset,
-// task_stack_offset, etc.), which are always included and pre-populated from the values
-// determined at tracer startup.
-//
-// After receiving the spec the probe should:
-//  1. Set its own RODATA variables (e.g. origin ID, thresholds).
-//  2. Create any probe-specific maps from the returned MapSpecs.
-//  3. Call RewriteMaps with those probe-owned maps.
-//  4. Call LoadProbeUnwinders to load the programs into the kernel.
-//     Variable-to-map syncing is handled automatically inside LoadProbeUnwinders.
+// eBPF ELF containing only the requested maps, programs, and variables plus ".rodata.var".
+// It is a pure filter: system variables are not included or applied.
+// Callers that need system variables (e.g. programs that walk the stack) should follow
+// this call with applySystemVarsToSpec.
 func (c *ProbeContext) CollectionSpecWith(
 	extraMaps []string,
 	extraProgs []string,
@@ -75,14 +67,6 @@ func (c *ProbeContext) CollectionSpecWith(
 		filtered.Programs[name] = p.Copy()
 	}
 
-	// Mandatory system variables must be present in the ELF on all supported arches.
-	for _, s := range c.sysVarSetters() {
-		v, ok := full.Variables[s.name]
-		if !ok {
-			return nil, fmt.Errorf("mandatory system variable %q not found in collection spec", s.name)
-		}
-		filtered.Variables[s.name] = v
-	}
 	for _, name := range extraVars {
 		v, ok := full.Variables[name]
 		if !ok {
@@ -91,52 +75,39 @@ func (c *ProbeContext) CollectionSpecWith(
 		filtered.Variables[name] = v
 	}
 
-	if err := c.applySystemVars(filtered); err != nil {
-		return nil, err
-	}
-
 	return filtered, nil
 }
 
-// sysVar pairs an eBPF variable name with its runtime value.
-type sysVar struct {
-	name string
-	val  any
-}
-
-// sysVarSetters returns the name/value pairs for all system variables that every
-// probe must apply to its CollectionSpec. It is the single source of truth for
-// both the include list in CollectionSpecWith and the apply pass in applySystemVars.
-func (c *ProbeContext) sysVarSetters() []sysVar {
-	sv := c.sysVars
-	return []sysVar{
-		{"inverse_pac_mask", sv.inverse_pac_mask},
-		{"tpbase_offset", sv.tpbase_offset},
-		{"task_stack_offset", sv.task_stack_offset},
-		{"stack_ptregs_offset", sv.stack_ptregs_offset},
-		{"vma_lookup_enabled", sv.vma_lookup_enabled},
-		{"vma_vm_file_offset", sv.vma_vm_file_offset},
-		{"vma_vm_flags_offset", sv.vma_vm_flags_offset},
-		{"task_group_leader_offset", sv.task_group_leader_offset},
-		{"task_start_time_offset", sv.task_start_time_offset},
+// applySystemVarsToSpec loads the mandatory system variables (tpbase_offset,
+// task_stack_offset, etc.) from the tracer ELF into coll and writes their
+// runtime values. Call this after CollectionSpecWith for programs that perform
+// stack unwinding (i.e. the collect trampoline).
+func applySystemVarsToSpec(coll *cebpf.CollectionSpec, sv SysConfigVars) error {
+	full, err := support.LoadCollectionSpec()
+	if err != nil {
+		return fmt.Errorf("loading collection spec: %w", err)
 	}
-}
-
-// applySystemVars writes the system configuration values determined at tracer startup into
-// coll's RODATA variables and patches programs that depend on VMA helper availability.
-// All system variables must be present in coll; CollectionSpecWith guarantees this for
-// specs built through the normal path.
-func (c *ProbeContext) applySystemVars(coll *cebpf.CollectionSpec) error {
-	for _, s := range c.sysVarSetters() {
-		v, ok := coll.Variables[s.name]
+	for name, val := range map[string]any{
+		"inverse_pac_mask":         sv.inverse_pac_mask,
+		"tpbase_offset":            sv.tpbase_offset,
+		"task_stack_offset":        sv.task_stack_offset,
+		"stack_ptregs_offset":      sv.stack_ptregs_offset,
+		"vma_lookup_enabled":       sv.vma_lookup_enabled,
+		"vma_vm_file_offset":       sv.vma_vm_file_offset,
+		"vma_vm_flags_offset":      sv.vma_vm_flags_offset,
+		"task_group_leader_offset": sv.task_group_leader_offset,
+		"task_start_time_offset":   sv.task_start_time_offset,
+	} {
+		v, ok := full.Variables[name]
 		if !ok {
-			return fmt.Errorf("system variable %q missing from collection spec", s.name)
+			return fmt.Errorf("mandatory system variable %q not found in collection spec", name)
 		}
-		if err := v.Set(s.val); err != nil {
-			return fmt.Errorf("set %s: %w", s.name, err)
+		coll.Variables[name] = v
+		if err := v.Set(val); err != nil {
+			return fmt.Errorf("set %s: %w", name, err)
 		}
 	}
-	if !c.sysVars.vma_lookup_enabled {
+	if !sv.vma_lookup_enabled {
 		disableVMAHelperCalls(coll)
 	}
 	return nil
@@ -184,6 +155,51 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 	return rewriteMaps(coll, toRewrite)
 }
 
+// WireTrampoline wires the trampoline into coll: it populates the tail-call
+// prog array at slot 0 with the tracer's trampoline program, then rewrites
+// both the ctx map and the tail-call map into the collection spec.
+// The returned map must be kept open until the probe programs are loaded —
+// the caller is responsible for closing it afterwards.
+func (c *ProbeContext) WireTrampoline(coll *cebpf.CollectionSpec, ctxMapName, tailCallMapName string) (*cebpf.Map, error) {
+	tailCallMap, err := cebpf.NewMap(coll.Maps[tailCallMapName])
+	if err != nil {
+		return nil, fmt.Errorf("creating %s: %w", tailCallMapName, err)
+	}
+
+	trampolineProg, err := cebpf.NewProgramFromID(cebpf.ProgramID(c.trampolineRef.progID))
+	if err != nil {
+		tailCallMap.Close()
+		return nil, fmt.Errorf("opening trampoline program: %w", err)
+	}
+	defer trampolineProg.Close()
+
+	if err := tailCallMap.Put(uint32(0), trampolineProg); err != nil {
+		tailCallMap.Close()
+		return nil, fmt.Errorf("populating %s: %w", tailCallMapName, err)
+	}
+
+	if err := rewriteMaps(coll, map[string]*cebpf.Map{
+		ctxMapName:      c.trampolineRef.ctxMap,
+		tailCallMapName: tailCallMap,
+	}); err != nil {
+		tailCallMap.Close()
+		return nil, err
+	}
+	return tailCallMap, nil
+}
+
+// collReferencesMap reports whether any program in coll references the named map.
+func collReferencesMap(coll *cebpf.CollectionSpec, name string) bool {
+	for _, progSpec := range coll.Programs {
+		for _, ins := range progSpec.Instructions {
+			if ins.Reference() == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // LoadProbeUnwinders loads the eBPF programs described by progs into the kernel,
 // wiring them into the tracer's kprobe tail-call map and the perf unwinder chain.
 // It syncs all VariableSpec values into the .rodata.var MapSpec, creates that map,
@@ -198,7 +214,7 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	if err := syncVariablesToMapSpecs(coll); err != nil {
 		return err
 	}
-	if rodataSpec, ok := coll.Maps[".rodata.var"]; ok {
+	if rodataSpec, ok := coll.Maps[".rodata.var"]; ok && collReferencesMap(coll, ".rodata.var") {
 		rodataMap, err := cebpf.NewMap(rodataSpec)
 		if err != nil {
 			return fmt.Errorf("creating .rodata.var: %w", err)
@@ -208,49 +224,31 @@ func (c *ProbeContext) LoadProbeUnwinders(
 			return err
 		}
 	}
-	kprobeProgs := c.maps["kprobe_progs"]
-	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
-	}
-	perfProgs := c.maps["perf_progs"]
-	if perfProgs == nil {
-		return fmt.Errorf("perf_progs map not available")
-	}
-	perCPURecords := c.maps["per_cpu_records"]
-	if perCPURecords == nil {
-		return fmt.Errorf("per_cpu_records map not available")
-	}
-	perCPURecordsKp := c.maps["per_cpu_records_kp"]
-	if perCPURecordsKp == nil {
-		return fmt.Errorf("per_cpu_records_kp map not available")
-	}
-	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+	return loadProbeUnwinders(coll, ebpfProgs, c.maps["kprobe_progs"], progs,
+		bpfVerifierLogLevel, c.maps["perf_progs"].FD(), c.maps["per_cpu_records"].FD(), c.maps["per_cpu_records_kp"])
 }
 
-// CollectTrampolineRef describes what an external probe's eBPF entry program needs
-// in order to trigger stack collection via the provided trampoline.
-type CollectTrampolineRef struct {
-	// CtxMap is the per-CPU array map (key=int, value=u64, max_entries=1) into
-	// which the external entry program writes its payload (slot 0) before tail-calling.
-	CtxMap *cebpf.Map
+type collectTrampolineRef struct {
+	ctxMap *cebpf.Map
+	progID uint32
+	prog   *cebpf.Program
+}
 
-	// TailCallDestinationID is the kernel program ID of the loaded trampoline.
-	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
-	// can bpf_tail_call into it.
-	TailCallDestinationID uint32
+func (r *collectTrampolineRef) Close() error {
+	r.prog.Close()
+	return r.ctxMap.Close()
 }
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) registerCollectTrampoline(reg *originRegistry, sysVars SysConfigVars, meta *samples.TypeMetadata) (*collectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
 		ctxMapName         = "ext_probe_value"
 		originVarName      = "origin_id_probe"
 	)
 
-	originID, err := c.reg.Register(meta)
+	originID, err := reg.Register(meta)
 	if err != nil {
 		return nil, fmt.Errorf("registering collect trampoline origin: %w", err)
 	}
@@ -261,6 +259,9 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 		[]string{originVarName},
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err := applySystemVarsToSpec(coll, sysVars); err != nil {
 		return nil, err
 	}
 
@@ -340,9 +341,10 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 		return nil, fmt.Errorf("trampoline program ID not available")
 	}
 
-	return &CollectTrampolineRef{
-		CtxMap:                ctxMap,
-		TailCallDestinationID: uint32(progID),
+	return &collectTrampolineRef{
+		ctxMap: ctxMap,
+		progID: uint32(progID),
+		prog:                  prog,
 	}, nil
 }
 
@@ -358,18 +360,12 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
 	c.registerAttacher(a)
 }
 
-// ProbeRegistrar lets a Probe register one or more origin IDs during Load.
-// Each call to Register allocates a unique ID backed by the supplied metadata;
-type ProbeRegistrar interface {
-	Register(meta *samples.TypeMetadata) (uint16, error)
-}
-
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
-	// Load configures the probe. It registers one or more origin IDs via reg,
-	// then registers its kernel attachment via probeCtx: call AddLink for a
-	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
-	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
+	SampleType() *samples.TypeMetadata
+	// Load registers the probe's kernel attachment via probeCtx: call AddLink
+	// for a system-wide hook, or AddAttacher for per-process PID-filtered attachment.
+	Load(ctx context.Context, probeCtx *ProbeContext) error
 }
 
 // PreTraceHandler is an optional interface that Probe implementations may
@@ -431,15 +427,23 @@ type PostTraceHandler interface {
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:    t.ebpfMaps,
-		sysVars: t.sysConfigVars,
-		reg:     t.origins,
+		maps: t.ebpfMaps,
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},
 	}
 
-	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
+	ref, err := probeCtx.registerCollectTrampoline(t.origins, t.sysConfigVars, p.SampleType())
+	if err != nil {
+		return err
+	}
+	probeCtx.trampolineRef = ref
+
+	if err := p.Load(ctx, probeCtx); err != nil {
+		for _, lnk := range probeCtx.links {
+			lnk.Close()
+		}
+		ref.Close()
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
@@ -450,13 +454,21 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			for _, lnk := range probeCtx.links {
 				lnk.Close()
 			}
+			ref.Close()
 			return fmt.Errorf("tracer is already closed")
 		}
 		for i, lnk := range probeCtx.links {
 			key := hookPoint{group: "probe", name: fmt.Sprintf("%p/%d", p, i)}
-			h.m[key] = lnk
+			entry := hookEntry{link: lnk}
+			if i == 0 {
+				entry.closer = ref
+			}
+			h.m[key] = entry
 		}
 		t.hooks.WUnlock(&h)
+	} else {
+		// No links registered; close the ctx map now since nothing will hold it.
+		ref.Close()
 	}
 
 	if pth, ok := p.(PreTraceHandler); ok {

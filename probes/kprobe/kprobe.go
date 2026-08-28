@@ -69,35 +69,33 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 	}
 }
 
-func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&samples.TypeMetadata{
+func (g *probe) SampleType() *samples.TypeMetadata {
+	return &samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
-	})
-	if err != nil {
-		return fmt.Errorf("registering probe origin: %w", err)
 	}
+}
 
+const (
+	ctxMapName      = "probe_value"
+	tailCallMapName = "collect_trace_trampoline"
+)
+
+func (g *probe) Load(_ context.Context, probeCtx *tracer.ProbeContext) error {
 	coll, err := probeCtx.CollectionSpecWith(
-		nil,
+		[]string{ctxMapName, tailCallMapName},
 		[]string{progName},
-		[]string{"origin_id_probe"},
+		nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	v, ok := coll.Variables["origin_id_probe"]
-	if !ok {
-		return fmt.Errorf("origin_id_probe variable not found in collection spec")
-	}
-	if err := v.Set(originID); err != nil {
+	tailCallMap, err := probeCtx.WireTrampoline(coll, ctxMapName, tailCallMapName)
+	if err != nil {
 		return err
 	}
-
-	if err := probeCtx.RewriteMaps(coll, nil); err != nil {
-		return err
-	}
+	defer tailCallMap.Close()
 
 	ebpfProgs := make(map[string]*cebpf.Program)
 	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
