@@ -360,8 +360,8 @@ type ProbeRegistrar interface {
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
 	// Load configures the probe. It registers one or more origin IDs via reg,
-	// then registers its kernel attachment via probeCtx: call AddLink for a
-	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
+	// then registers its kernel attachment via probeCtx using AddAttacher for
+	// per-process PID-filtered attachment.
 	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
 
 	// UnLoad closes all kernel links opened by the probe. Called on shutdown.
@@ -409,9 +409,8 @@ type PostTraceHandler interface {
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
-// Links registered via AddLink are stored and closed on tracer shutdown. Attachers
-// registered via AddAttacher receive per-process lifecycle callbacks from the
-// ProcessManager.
+// Attachers registered via AddAttacher receive per-process lifecycle callbacks
+// from the ProcessManager.
 //
 // If the probe satisfies PreTraceHandler and/or PostTraceHandler, it is
 // registered to intercept traces before symbolization or receive them after
