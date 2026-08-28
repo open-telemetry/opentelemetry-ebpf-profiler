@@ -17,12 +17,13 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"go.opentelemetry.io/otel/metric/noop"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 // Short copyright / license text for eBPF code

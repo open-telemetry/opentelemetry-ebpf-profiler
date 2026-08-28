@@ -18,13 +18,14 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
-	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 const (
@@ -256,7 +257,7 @@ func TestProcessContext_Read(t *testing.T) {
 			} else {
 				assert.Nil(t, ctx.Context)
 				assert.Zero(t, ctx.PublishedAtNs)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
@@ -368,7 +369,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
-
 		})
 	}
 }

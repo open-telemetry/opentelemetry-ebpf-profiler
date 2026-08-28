@@ -8,8 +8,9 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/support"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 func TestReadCPURange(t *testing.T) {

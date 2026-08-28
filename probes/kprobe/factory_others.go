@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
+
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe/internal/metadata"
 )
 

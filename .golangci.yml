@@ -12,7 +12,7 @@ formatters:
       # put imports beginning with prefix after 3rd-party packages;
       # it's a comma-separated list of prefixes
       local-prefixes:
-        - github.com/open-telemetry/opentelemetry-ebpf-profiler
+        - go.opentelemetry.io/ebpf-profiler
 
 run:
   timeout: 10m
@@ -21,69 +21,27 @@ run:
     - linux
 
 linters:
-  default: all
-  disable:
-    # Disabled because of
-    #   - too many non-sensical warnings
-    #   - not relevant for us
-    #   - false positives
-    #
-    # "might be worth fixing" means we should investigate/fix in the mid term
-    - containedctx # might be worth fixing
-    - contextcheck # might be worth fixing
-    - cyclop
-    - depguard
-    - dupword
-    - durationcheck # might be worth fixing
-    - err113
-    - errcheck
-    - errorlint # might be worth fixing
-    - exhaustive
-    - exhaustruct
-    - forbidigo
-    - forcetypeassert # might be worth fixing
-    - funlen
-    - funcorder
-    - gochecknoglobals
-    - gochecknoinits
-    - gocognit
-    - goconst
-    - gocyclo
-    - godot
-    - godox # complains about TODO etc
-    - gomoddirectives
-    - gomodguard # deprecated since golangci-lint v2.12.0, replaced by gomodguard_v2
-    - gosmopolitan
-    - inamedparam
-    - interfacebloat
-    - ireturn
-    - maintidx
-    - makezero
-    - mnd
-    - nestif
-    - nilerr # might be worth fixing
-    - nilnil
-    - nlreturn
-    - noctx # might be worth fixing
-    - nonamedreturns
-    - paralleltest
-    - protogetter
-    - sqlclosecheck # might be worth fixing
+  default: none
+  enable:
+    - misspell
+    - modernize
+    - revive
     - staticcheck
-    - tagalign
-    - tagliatelle
-    - testableexamples # might be worth fixing
-    - testpackage
-    - tparallel # might be worth fixing
+    - testifylint
     - thelper
-    - varnamelen
-    - wastedassign
-    - wsl
-    - wrapcheck
-    - prealloc # CI failure with golangci 2.10.1, worth fixing
-    # we don't want to change code to Go 1.22+ yet
-    - intrange
-    - copyloopvar
+    - usestdlibvars
+
+    # overlaps with configured formatters
+    # - whitespace
+
+    # covered by modernize
+    # - copyloopvar
+    # - usetesting
+
+    # covered by staticcheck
+    # - decorder
+    # - nolintlint
+    # - reassign
 
   exclusions:
     paths:
@@ -91,7 +49,6 @@ linters:
       - doc
       - LICENSES
       - target
-      - go
 
   settings:
     goconst:
@@ -143,6 +100,9 @@ linters:
       locale: US
       ignore-rules:
         - rela
+    modernize:
+      disable:
+        - importcomment
     revive:
       rules:
         - name: unexported-naming
