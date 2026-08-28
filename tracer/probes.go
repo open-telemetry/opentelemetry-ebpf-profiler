@@ -364,6 +364,7 @@ type Probe interface {
 	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
 	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
 
+	// UnLoad closes all kernel links opened by the probe. Called on shutdown.
 	UnLoad() error
 }
 

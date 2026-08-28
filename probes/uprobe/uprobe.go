@@ -185,6 +185,7 @@ func (p *probe) Detach(pid libpf.PID) {
 
 func (p *probe) UnLoad() error {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	var unloadErrs error
 	for pid, pidLinks := range p.links {
 		for _, lnk := range pidLinks {
@@ -195,7 +196,6 @@ func (p *probe) UnLoad() error {
 		}
 		delete(p.links, pid)
 	}
-	p.mu.Unlock()
 
 	return unloadErrs
 }

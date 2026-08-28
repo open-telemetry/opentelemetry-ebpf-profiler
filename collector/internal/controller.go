@@ -7,6 +7,7 @@ package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 
@@ -153,24 +154,29 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 
 // Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
-	extensions := c.host.GetExtensions()
-	for _, id := range c.extensionIDs {
-		ext, ok := extensions[id]
-		if !ok {
-			return fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id)
+	var shutdownErr error
+	if c.host != nil {
+		extensions := c.host.GetExtensions()
+		for _, id := range c.extensionIDs {
+			ext, ok := extensions[id]
+			if !ok {
+				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id))
+				continue
+			}
+			pp, ok := ext.(ProbeProvider)
+			if !ok {
+				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("extension %q does not implement ProbeExtension", id))
+				continue
+			}
+			if err := pp.Probe().UnLoad(); err != nil {
+				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
+			}
+			log.Infof("Unloaded probe from extension %q", id)
 		}
-		pp, ok := ext.(ProbeProvider)
-		if !ok {
-			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
-		}
-		if err := pp.Probe().UnLoad(); err != nil {
-			return fmt.Errorf("unloading probe from extension %q: %w", id, err)
-		}
-		log.Infof("Unloaded probe from extension %q", id)
 	}
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
-		return c.onShutdown()
+		shutdownErr = errors.Join(shutdownErr, c.onShutdown())
 	}
-	return nil
+	return shutdownErr
 }
