@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/confmap"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 // validConfig returns a config with valid defaults for testing.
@@ -159,6 +160,31 @@ func TestUnmarshalText(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tt.want, e)
+		})
+	}
+}
+
+func TestPIDNamespaceTranslationModeUnmarshal(t *testing.T) {
+	for _, tt := range []struct {
+		value   string
+		want    tracer.PIDNamespaceTranslationMode
+		wantErr bool
+	}{
+		{value: "exact", want: tracer.PIDNamespaceTranslationModeExact},
+		{value: "descendants", want: tracer.PIDNamespaceTranslationModeDescendants},
+		{value: "invalid", wantErr: true},
+	} {
+		t.Run(tt.value, func(t *testing.T) {
+			cfg := validConfig()
+			err := confmap.NewFromStringMap(map[string]any{
+				"pid_namespace_translation_mode": tt.value,
+			}).Unmarshal(cfg)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, cfg.PIDNamespaceTranslationMode)
 		})
 	}
 }

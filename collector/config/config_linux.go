@@ -75,6 +75,8 @@ type Config struct {
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
 	Probes                  []component.ID           `mapstructure:"probes"`
 
+	PIDNamespaceTranslationMode tracer.PIDNamespaceTranslationMode `mapstructure:"pid_namespace_translation_mode"`
+
 	// Configuration options that users can not set directly:
 	//
 	// PinnedCPUIDs is derived from TargetCPUIDs during Validate

@@ -68,6 +68,19 @@ const (
 	PIDNamespaceTranslationModeDescendants
 )
 
+func (m *PIDNamespaceTranslationMode) UnmarshalText(text []byte) error {
+	mode := strings.ToLower(string(text))
+	switch mode {
+	case "exact":
+		*m = PIDNamespaceTranslationModeExact
+	case "descendants":
+		*m = PIDNamespaceTranslationModeDescendants
+	default:
+		return fmt.Errorf("unknown PID namespace translation mode %q", mode)
+	}
+	return nil
+}
+
 // Constants that define the status of probabilistic profiling.
 const (
 	probProfilingEnable  = 1
@@ -231,9 +244,9 @@ type Config struct {
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// the profiler's PID namespace when tasks share that namespace with the profiler.
 	PIDNamespaceTranslation bool
-	// PIDNamespaceTranslationMode controls the scope of PID namespace translation.
-	// It is ignored when PIDNamespaceTranslation is false. Descendants mode requires
-	// readable kernel BTF.
+	// PIDNamespaceTranslationMode controls the scope of PID namespace translation. Its
+	// zero value is Exact. It is ignored when PIDNamespaceTranslation is false.
+	// Descendants mode requires readable kernel BTF.
 	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
 }
 

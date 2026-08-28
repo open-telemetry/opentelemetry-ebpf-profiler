@@ -18,6 +18,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, u64 tid)
   Trace *trace = &record->trace;
 
   // Use COMM as a marker for our test traces. COMM[3] serves as test case ID.
+  bpf_get_current_comm(trace->comm, sizeof(trace->comm));
   trace->comm[0] = 0xAA;
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;

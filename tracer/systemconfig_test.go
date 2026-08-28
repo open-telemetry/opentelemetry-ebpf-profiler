@@ -36,25 +36,31 @@ func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
 	require.NotZero(t, ino, "pid namespace inode should be non-zero")
 }
 
-func TestDescendantPIDTranslationEnabled(t *testing.T) {
-	descendants, err := descendantPIDTranslationEnabled(&Config{
-		PIDNamespaceTranslationMode: PIDNamespaceTranslationModeDescendants,
-	})
-	require.NoError(t, err)
-	require.False(t, descendants)
-
-	descendants, err = descendantPIDTranslationEnabled(&Config{
-		PIDNamespaceTranslation:     true,
-		PIDNamespaceTranslationMode: PIDNamespaceTranslationModeDescendants,
-	})
-	require.NoError(t, err)
-	require.True(t, descendants)
-
-	_, err = descendantPIDTranslationEnabled(&Config{
-		PIDNamespaceTranslation:     true,
-		PIDNamespaceTranslationMode: PIDNamespaceTranslationMode(255),
-	})
-	require.Error(t, err)
+func TestPIDNamespaceTranslationMode(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		enabled bool
+		mode    PIDNamespaceTranslationMode
+		want    bool
+		wantErr bool
+	}{
+		{name: "disabled ignores mode", mode: PIDNamespaceTranslationModeDescendants},
+		{name: "exact", enabled: true},
+		{name: "descendants", enabled: true, mode: PIDNamespaceTranslationModeDescendants, want: true},
+		{name: "unknown", enabled: true, mode: PIDNamespaceTranslationMode(255), wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := descendantPIDTranslationEnabled(&Config{
+				PIDNamespaceTranslation: tt.enabled, PIDNamespaceTranslationMode: tt.mode,
+			})
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestValidateSystemAnalysisResult(t *testing.T) {

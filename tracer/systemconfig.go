@@ -219,7 +219,7 @@ func parsePIDNamespaceLayout(spec *btf.Spec, layout *pidNamespaceLayout) error {
 
 // parseBTF resolves the SystemConfig data from kernel BTF
 func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime,
-	needPIDNamespaceTranslation bool,
+	needPIDNamespaceLayout bool,
 ) error {
 	fh, err := os.Open("/sys/kernel/btf/vmlinux")
 	if err != nil {
@@ -251,7 +251,7 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime,
 		}
 	}
 
-	if needProcessStartTime || needPIDNamespaceTranslation {
+	if needProcessStartTime || needPIDNamespaceLayout {
 		groupLeaderOffset, err := calculateFieldOffset(taskStruct, "group_leader")
 		if err != nil {
 			return err
@@ -267,7 +267,7 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime,
 		vars.task_start_time_offset = uint32(startTimeOffset)
 	}
 
-	if needPIDNamespaceTranslation {
+	if needPIDNamespaceLayout {
 		if err := parsePIDNamespaceLayout(spec, &vars.pid_namespace_layout); err != nil {
 			return err
 		}
@@ -468,14 +468,14 @@ func getCurrentNS(filename string) (dev, ino uint64, err error) {
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, needProcessStartTime bool,
-	pidNamespaceTranslationFromDescendants bool, vars *SysConfigVars,
+	translateDescendantPIDs bool, vars *SysConfigVars,
 ) error {
 	needTPBase := !interpretersConfig.Perl.IsDisabled() ||
 		!interpretersConfig.Python.IsDisabled() ||
 		!interpretersConfig.Ruby.IsDisabled() ||
 		!interpretersConfig.Go.IsLabelsDisabled()
-	if err := parseBTF(vars, needTPBase, needProcessStartTime, pidNamespaceTranslationFromDescendants); err != nil {
-		if pidNamespaceTranslationFromDescendants {
+	if err := parseBTF(vars, needTPBase, needProcessStartTime, translateDescendantPIDs); err != nil {
+		if translateDescendantPIDs {
 			return fmt.Errorf("PID translation from descendant namespaces requires readable kernel BTF with task and PID namespace layout: %w", err)
 		}
 		if needProcessStartTime {
