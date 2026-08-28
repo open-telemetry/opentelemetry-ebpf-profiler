@@ -364,8 +364,8 @@ type Probe interface {
 	// per-process PID-filtered attachment.
 	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
 
-	// UnLoad closes all kernel links opened by the probe. Called on shutdown.
-	UnLoad() error
+	// Unload closes all kernel links opened by the probe. Called on shutdown.
+	Unload() error
 }
 
 // PreTraceHandler is an optional interface that Probe implementations may

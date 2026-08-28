@@ -183,7 +183,7 @@ func (p *probe) Detach(pid libpf.PID) {
 	}
 }
 
-func (p *probe) UnLoad() error {
+func (p *probe) Unload() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var unloadErrs error

@@ -168,7 +168,7 @@ func (c *Controller) Shutdown(_ context.Context) error {
 				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("extension %q does not implement ProbeExtension", id))
 				continue
 			}
-			if err := pp.Probe().UnLoad(); err != nil {
+			if err := pp.Probe().Unload(); err != nil {
 				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
 			}
 			log.Infof("Unloaded probe from extension %q", id)
