@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"io"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 type x86Extractor struct {

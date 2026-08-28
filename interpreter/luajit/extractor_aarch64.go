@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"io"
 
+	"golang.org/x/arch/arm64/arm64asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"golang.org/x/arch/arm64/arm64asm"
 )
 
 type armExtractor struct {
