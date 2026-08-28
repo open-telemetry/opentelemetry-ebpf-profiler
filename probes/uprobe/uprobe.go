@@ -19,6 +19,7 @@ package uprobe // import "go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -180,4 +181,21 @@ func (p *probe) Detach(pid libpf.PID) {
 	for _, lnk := range links {
 		lnk.Close()
 	}
+}
+
+func (p *probe) UnLoad() error {
+	p.mu.Lock()
+	var unloadErrs error
+	for pid, pidLinks := range p.links {
+		for _, lnk := range pidLinks {
+			err := lnk.Close()
+			if err != nil {
+				unloadErrs = errors.Join(unloadErrs, err)
+			}
+		}
+		delete(p.links, pid)
+	}
+	p.mu.Unlock()
+
+	return unloadErrs
 }

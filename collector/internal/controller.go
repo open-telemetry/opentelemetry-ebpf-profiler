@@ -38,6 +38,7 @@ type Controller struct {
 	onShutdown   func() error
 	errorMode    config.ErrorMode
 	extensionIDs []component.ID
+	host         component.Host
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -127,6 +128,7 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 // enableProbes resolves each configured extension ID from the host,
 // verifies it implements ProbeExtension, and enables its probe on the tracer.
 func (c *Controller) enableProbes(ctx context.Context, host component.Host) error {
+	c.host = host
 	if len(c.extensionIDs) == 0 {
 		return nil
 	}
@@ -151,6 +153,21 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 
 // Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
+	extensions := c.host.GetExtensions()
+	for _, id := range c.extensionIDs {
+		ext, ok := extensions[id]
+		if !ok {
+			return fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id)
+		}
+		pp, ok := ext.(ProbeProvider)
+		if !ok {
+			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
+		}
+		if err := pp.Probe().UnLoad(); err != nil {
+			return fmt.Errorf("unloading probe from extension %q: %w", id, err)
+		}
+		log.Infof("Unloaded probe from extension %q", id)
+	}
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
 		return c.onShutdown()

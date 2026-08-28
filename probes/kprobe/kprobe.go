@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	cebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -32,7 +33,8 @@ type Config struct {
 }
 
 type probe struct {
-	spec *tracer.ProbeSpec
+	spec      *tracer.ProbeSpec
+	probeLink link.Link
 }
 
 // Validate implements confmap.Validator.
@@ -115,10 +117,13 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("program %q not found after loading", progName)
 	}
 
-	lnk, err := tracer.AttachProbe(prog, g.spec)
-	if err != nil {
-		return err
+	g.probeLink, err = tracer.AttachProbe(prog, g.spec)
+	return err
+}
+
+func (g *probe) UnLoad() error {
+	if g.probeLink != nil {
+		return g.probeLink.Close()
 	}
-	probeCtx.AddLink(lnk)
 	return nil
 }
