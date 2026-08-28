@@ -36,6 +36,27 @@ func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
 	require.NotZero(t, ino, "pid namespace inode should be non-zero")
 }
 
+func TestDescendantPIDTranslationEnabled(t *testing.T) {
+	descendants, err := descendantPIDTranslationEnabled(&Config{
+		PIDNamespaceTranslationMode: PIDNamespaceTranslationModeDescendants,
+	})
+	require.NoError(t, err)
+	require.False(t, descendants)
+
+	descendants, err = descendantPIDTranslationEnabled(&Config{
+		PIDNamespaceTranslation:     true,
+		PIDNamespaceTranslationMode: PIDNamespaceTranslationModeDescendants,
+	})
+	require.NoError(t, err)
+	require.True(t, descendants)
+
+	_, err = descendantPIDTranslationEnabled(&Config{
+		PIDNamespaceTranslation:     true,
+		PIDNamespaceTranslationMode: PIDNamespaceTranslationMode(255),
+	})
+	require.Error(t, err)
+}
+
 func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
 

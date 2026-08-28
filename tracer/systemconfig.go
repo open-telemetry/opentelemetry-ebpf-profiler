@@ -641,6 +641,21 @@ func stripProgramExtInfos(insns asm.Instructions) {
 	}
 }
 
+func descendantPIDTranslationEnabled(cfg *Config) (bool, error) {
+	if !cfg.PIDNamespaceTranslation {
+		return false, nil
+	}
+
+	switch cfg.PIDNamespaceTranslationMode {
+	case PIDNamespaceTranslationModeExact:
+		return false, nil
+	case PIDNamespaceTranslationModeDescendants:
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown PID namespace translation mode %d", cfg.PIDNamespaceTranslationMode)
+	}
+}
+
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
 	major, minor uint32, origins *originRegistry, out *SysConfigVars,
@@ -648,8 +663,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if cfg.FilterMinProcessAge < 0 {
 		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
 	}
-	if cfg.TranslateDescendantPIDs && !cfg.PIDNamespaceTranslation {
-		return errors.New("PID namespace translation from descendants requires PID namespace translation")
+	pidNamespaceTranslation := cfg.PIDNamespaceTranslation
+	translateDescendantPIDs, err := descendantPIDTranslationEnabled(cfg)
+	if err != nil {
+		return err
 	}
 
 	if cfg.VerboseMode {
@@ -659,7 +676,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	var targetPIDNamespaceDev, targetPIDNamespaceInode uint64
-	if cfg.PIDNamespaceTranslation {
+	if pidNamespaceTranslation {
 		dev, ino, err := getCurrentNS("/proc/self/ns/pid")
 		if err != nil {
 			return fmt.Errorf("failed to read PID namespace info: %v", err)
@@ -728,8 +745,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	rodataVars := SysConfigVars{
 		inverse_pac_mask:           ^pacMask,
-		pid_ns_translation_enabled: cfg.PIDNamespaceTranslation,
-		translate_descendant_pids:  cfg.TranslateDescendantPIDs,
+		pid_ns_translation_enabled: pidNamespaceTranslation,
+		translate_descendant_pids:  translateDescendantPIDs,
 		target_pid_ns_dev:          targetPIDNamespaceDev,
 		target_pid_ns_inode:        targetPIDNamespaceInode,
 	}
@@ -742,11 +759,11 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	if err := determineSysConfig(
 		systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
-		cfg.TranslateDescendantPIDs, &rodataVars,
+		translateDescendantPIDs, &rodataVars,
 	); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
-	if cfg.PIDNamespaceTranslation {
+	if pidNamespaceTranslation {
 		for _, variable := range rodataVars.pidNamespaceVars() {
 			if err := coll.Variables[variable.name].Set(variable.val); err != nil {
 				return fmt.Errorf("failed to set %s: %v", variable.name, err)

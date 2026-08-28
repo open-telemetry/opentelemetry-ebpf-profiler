@@ -7,6 +7,7 @@ package tracer_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -33,7 +34,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
+var pidNamespaceTranslationChild = flag.Bool(
+	"pid-namespace-translation-child",
+	false,
+	"run the descendant PID namespace integration-test workload",
+)
+
 func TestMain(m *testing.M) {
+	flag.Parse()
+	if *pidNamespaceTranslationChild {
+		os.Exit(runPIDNamespaceTranslationChild())
+	}
+
 	// Initialize metrics once to avoid concurrent map access between
 	// metrics.Start() and metrics.AddSlice() called from lingering periodiccaller goroutines.
 	metrics.Start(noop.Meter{})
@@ -293,38 +305,15 @@ func TestAllTracers(t *testing.T) {
 }
 
 func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
-	if os.Getenv("OTEL_EBPF_PROFILER_PIDNS_CHILD") == "1" {
-		require.Equal(t, 1, os.Getpid())
-		runtime.GOMAXPROCS(2)
-		deadline := time.Now().Add(3 * time.Second)
-		ready := make(chan struct{})
-		done := make(chan struct{})
-		go func() {
-			runtime.LockOSThread()
-			close(ready)
-			for time.Now().Before(deadline) {
-				runtime.Gosched()
-			}
-			close(done)
-		}()
-		<-ready
-		runtime.LockOSThread()
-		for time.Now().Before(deadline) {
-			runtime.Gosched()
-		}
-		<-done
-		return
-	}
-
 	_, btfErr := os.Stat("/sys/kernel/btf/vmlinux")
 	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
-		Intervals:               &mockIntervals{},
-		InterpretersConfig:      interpreterconfig.AllInterpreters(),
-		SamplesPerSecond:        20,
-		ProbabilisticInterval:   100,
-		ProbabilisticThreshold:  100,
-		PIDNamespaceTranslation: true,
-		TranslateDescendantPIDs: true,
+		Intervals:                   &mockIntervals{},
+		InterpretersConfig:          interpreterconfig.AllInterpreters(),
+		SamplesPerSecond:            20,
+		ProbabilisticInterval:       100,
+		ProbabilisticThreshold:      100,
+		PIDNamespaceTranslation:     true,
+		PIDNamespaceTranslationMode: tracer.PIDNamespaceTranslationModeDescendants,
 	})
 	if os.IsNotExist(btfErr) {
 		require.ErrorContains(t, err, "PID translation from descendant namespaces requires readable kernel BTF")
@@ -353,8 +342,7 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 	require.NoError(t, err)
 	defer event.Close()
 
-	cmd := exec.Command(os.Args[0], "-test.run=^TestPIDNamespaceTranslationFromDescendant$")
-	cmd.Env = append(os.Environ(), "OTEL_EBPF_PROFILER_PIDNS_CHILD=1")
+	cmd := exec.Command(os.Args[0], "-pid-namespace-translation-child")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: syscall.CLONE_NEWPID}
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
@@ -387,4 +375,31 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 			return
 		}
 	}
+}
+
+func runPIDNamespaceTranslationChild() int {
+	if os.Getpid() != 1 {
+		fmt.Fprintf(os.Stderr, "PID namespace child has PID %d, want 1\n", os.Getpid())
+		return 1
+	}
+
+	runtime.GOMAXPROCS(2)
+	deadline := time.Now().Add(3 * time.Second)
+	ready := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		runtime.LockOSThread()
+		close(ready)
+		for time.Now().Before(deadline) {
+			runtime.Gosched()
+		}
+		close(done)
+	}()
+	<-ready
+	runtime.LockOSThread()
+	for time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	<-done
+	return 0
 }

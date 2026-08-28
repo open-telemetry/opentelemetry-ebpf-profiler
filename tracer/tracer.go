@@ -58,6 +58,16 @@ const (
 	ProbabilisticThresholdMax = 100
 )
 
+// PIDNamespaceTranslationMode controls which PID namespaces are translated.
+type PIDNamespaceTranslationMode uint8
+
+const (
+	// PIDNamespaceTranslationModeExact translates tasks in the profiler's PID namespace.
+	PIDNamespaceTranslationModeExact PIDNamespaceTranslationMode = iota
+	// PIDNamespaceTranslationModeDescendants also translates tasks in descendant PID namespaces.
+	PIDNamespaceTranslationModeDescendants
+)
+
 // Constants that define the status of probabilistic profiling.
 const (
 	probProfilingEnable  = 1
@@ -221,9 +231,10 @@ type Config struct {
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
 	// the profiler's PID namespace when tasks share that namespace with the profiler.
 	PIDNamespaceTranslation bool
-	// TranslateDescendantPIDs extends PID namespace translation to tasks in descendant
-	// namespaces. It requires PIDNamespaceTranslation and readable kernel BTF.
-	TranslateDescendantPIDs bool
+	// PIDNamespaceTranslationMode controls the scope of PID namespace translation.
+	// It is ignored when PIDNamespaceTranslation is false. Descendants mode requires
+	// readable kernel BTF.
+	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
