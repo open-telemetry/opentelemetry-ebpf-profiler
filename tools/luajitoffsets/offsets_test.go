@@ -95,7 +95,11 @@ func TestOffsets(t *testing.T) {
 
 				if tc.fail {
 					//nolint:lll
-					require.Error(t, err, "unexpected glref offset 8, only luajit with LJ_GC64 is supported")
+					if platform == "linux/arm64" {
+						require.ErrorContains(t, err, "unexpected glref offset 8, only luajit with LJ_GC64 is supported")
+					} else {
+						require.ErrorContains(t, err, "find offsets from lua_close failed")
+					}
 					return
 				}
 
