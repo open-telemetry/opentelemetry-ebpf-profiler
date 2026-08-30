@@ -41,16 +41,17 @@ func TestPIDNamespaceTranslationMode(t *testing.T) {
 		name    string
 		enabled bool
 		mode    PIDNamespaceTranslationMode
-		want    bool
+		want    PIDNamespaceTranslationMode
 		wantErr bool
 	}{
-		{name: "disabled ignores mode", mode: PIDNamespaceTranslationModeDescendants},
-		{name: "exact", enabled: true},
-		{name: "descendants", enabled: true, mode: PIDNamespaceTranslationModeDescendants, want: true},
+		{name: "disabled ignores mode", mode: PIDNamespaceTranslationMode(255), want: PIDNamespaceTranslationModeExact},
+		{name: "auto default", enabled: true, want: PIDNamespaceTranslationModeAuto},
+		{name: "exact", enabled: true, mode: PIDNamespaceTranslationModeExact, want: PIDNamespaceTranslationModeExact},
+		{name: "descendants", enabled: true, mode: PIDNamespaceTranslationModeDescendants, want: PIDNamespaceTranslationModeDescendants},
 		{name: "unknown", enabled: true, mode: PIDNamespaceTranslationMode(255), wantErr: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := descendantPIDTranslationEnabled(&Config{
+			got, err := pidNamespaceTranslationMode(&Config{
 				PIDNamespaceTranslation: tt.enabled, PIDNamespaceTranslationMode: tt.mode,
 			})
 			if tt.wantErr {
@@ -61,6 +62,20 @@ func TestPIDNamespaceTranslationMode(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestAutoPIDNamespaceTranslationFallback(t *testing.T) {
+	var calls []bool
+	enabled, err := parseBTFForPIDNamespaceMode(PIDNamespaceTranslationModeAuto, func(layout bool) error {
+		calls = append(calls, layout)
+		if layout {
+			return fs.ErrNotExist
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.False(t, enabled)
+	require.Equal(t, []bool{true, false}, calls)
 }
 
 func TestValidateSystemAnalysisResult(t *testing.T) {

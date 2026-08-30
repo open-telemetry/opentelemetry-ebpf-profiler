@@ -62,8 +62,10 @@ const (
 type PIDNamespaceTranslationMode uint8
 
 const (
+	// PIDNamespaceTranslationModeAuto translates descendants when the required kernel BTF is available.
+	PIDNamespaceTranslationModeAuto PIDNamespaceTranslationMode = iota
 	// PIDNamespaceTranslationModeExact translates tasks in the profiler's PID namespace.
-	PIDNamespaceTranslationModeExact PIDNamespaceTranslationMode = iota
+	PIDNamespaceTranslationModeExact
 	// PIDNamespaceTranslationModeDescendants also translates tasks in descendant PID namespaces.
 	PIDNamespaceTranslationModeDescendants
 )
@@ -71,6 +73,8 @@ const (
 func (m *PIDNamespaceTranslationMode) UnmarshalText(text []byte) error {
 	mode := strings.ToLower(string(text))
 	switch mode {
+	case "auto":
+		*m = PIDNamespaceTranslationModeAuto
 	case "exact":
 		*m = PIDNamespaceTranslationModeExact
 	case "descendants":
@@ -242,11 +246,12 @@ type Config struct {
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
 	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
-	// the profiler's PID namespace when tasks share that namespace with the profiler.
+	// the profiler's PID namespace.
 	PIDNamespaceTranslation bool
-	// PIDNamespaceTranslationMode controls the scope of PID namespace translation. Its
-	// zero value is Exact. It is ignored when PIDNamespaceTranslation is false.
-	// Descendants mode requires readable kernel BTF.
+	// PIDNamespaceTranslationMode controls the scope of PID namespace translation. Its zero
+	// value is Auto, which translates descendants when their kernel BTF layout can be resolved
+	// and otherwise uses Exact. It is ignored when PIDNamespaceTranslation is false.
+	// Descendants requires readable kernel BTF.
 	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
 }
 

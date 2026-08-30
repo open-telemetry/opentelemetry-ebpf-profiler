@@ -468,15 +468,19 @@ func getCurrentNS(filename string) (dev, ino uint64, err error) {
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, needProcessStartTime bool,
-	translateDescendantPIDs bool, vars *SysConfigVars,
+	pidNamespaceMode PIDNamespaceTranslationMode, vars *SysConfigVars,
 ) error {
 	needTPBase := !interpretersConfig.Perl.IsDisabled() ||
 		!interpretersConfig.Python.IsDisabled() ||
 		!interpretersConfig.Ruby.IsDisabled() ||
 		!interpretersConfig.Go.IsLabelsDisabled()
-	if err := parseBTF(vars, needTPBase, needProcessStartTime, translateDescendantPIDs); err != nil {
-		if translateDescendantPIDs {
-			return fmt.Errorf("PID translation from descendant namespaces requires readable kernel BTF with task and PID namespace layout: %w", err)
+	translateDescendantPIDs, err := parseBTFForPIDNamespaceMode(pidNamespaceMode, func(layout bool) error {
+		return parseBTF(vars, needTPBase, needProcessStartTime, layout)
+	})
+	vars.translate_descendant_pids = translateDescendantPIDs
+	if err != nil {
+		if pidNamespaceMode == PIDNamespaceTranslationModeDescendants {
+			return err
 		}
 		if needProcessStartTime {
 			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
@@ -525,6 +529,24 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		vars.task_start_time_offset)
 
 	return nil
+}
+
+func parseBTFForPIDNamespaceMode(mode PIDNamespaceTranslationMode,
+	parse func(needPIDNamespaceLayout bool) error,
+) (bool, error) {
+	if mode == PIDNamespaceTranslationModeExact {
+		return false, parse(false)
+	}
+
+	if err := parse(true); err != nil {
+		if mode == PIDNamespaceTranslationModeDescendants {
+			return false, fmt.Errorf("PID translation from descendant namespaces requires readable kernel BTF with task and PID namespace layout: %w", err)
+		}
+
+		log.Infof("PID translation from descendant namespaces unavailable, using exact namespace translation: %s", err)
+		return false, parse(false)
+	}
+	return true, nil
 }
 
 func configureVMALookup(coll *cebpf.CollectionSpec, cfg *Config, vars *SysConfigVars) {
@@ -641,18 +663,18 @@ func stripProgramExtInfos(insns asm.Instructions) {
 	}
 }
 
-func descendantPIDTranslationEnabled(cfg *Config) (bool, error) {
+func pidNamespaceTranslationMode(cfg *Config) (PIDNamespaceTranslationMode, error) {
 	if !cfg.PIDNamespaceTranslation {
-		return false, nil
+		return PIDNamespaceTranslationModeExact, nil
 	}
 
 	switch cfg.PIDNamespaceTranslationMode {
-	case PIDNamespaceTranslationModeExact:
-		return false, nil
-	case PIDNamespaceTranslationModeDescendants:
-		return true, nil
+	case PIDNamespaceTranslationModeAuto,
+		PIDNamespaceTranslationModeExact,
+		PIDNamespaceTranslationModeDescendants:
+		return cfg.PIDNamespaceTranslationMode, nil
 	default:
-		return false, fmt.Errorf("unknown PID namespace translation mode %d", cfg.PIDNamespaceTranslationMode)
+		return 0, fmt.Errorf("unknown PID namespace translation mode %d", cfg.PIDNamespaceTranslationMode)
 	}
 }
 
@@ -664,7 +686,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
 	}
 	pidNamespaceTranslation := cfg.PIDNamespaceTranslation
-	translateDescendantPIDs, err := descendantPIDTranslationEnabled(cfg)
+	pidNamespaceMode, err := pidNamespaceTranslationMode(cfg)
 	if err != nil {
 		return err
 	}
@@ -746,7 +768,6 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	rodataVars := SysConfigVars{
 		inverse_pac_mask:           ^pacMask,
 		pid_ns_translation_enabled: pidNamespaceTranslation,
-		translate_descendant_pids:  translateDescendantPIDs,
 		target_pid_ns_dev:          targetPIDNamespaceDev,
 		target_pid_ns_inode:        targetPIDNamespaceInode,
 	}
@@ -759,7 +780,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	if err := determineSysConfig(
 		systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
-		translateDescendantPIDs, &rodataVars,
+		pidNamespaceMode, &rodataVars,
 	); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/confmap"
+
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -170,6 +171,7 @@ func TestPIDNamespaceTranslationModeUnmarshal(t *testing.T) {
 		want    tracer.PIDNamespaceTranslationMode
 		wantErr bool
 	}{
+		{value: "auto", want: tracer.PIDNamespaceTranslationModeAuto},
 		{value: "exact", want: tracer.PIDNamespaceTranslationModeExact},
 		{value: "descendants", want: tracer.PIDNamespaceTranslationModeDescendants},
 		{value: "invalid", wantErr: true},
