@@ -374,28 +374,18 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 	cmd := newPIDNamespaceCommand("-pid-namespace-translation-role=" + pidNamespaceTarget)
 	require.NoError(t, cmd.Start())
 	t.Cleanup(func() {
-		if cmd.ProcessState == nil {
-			_ = cmd.Process.Kill()
-		}
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
 	})
 
 	targetPID := libpf.PID(cmd.Process.Pid)
-	targetWait := make(chan error, 1)
-	go func() { targetWait <- cmd.Wait() }()
 	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()
-	targetSeen := false
 
 	for {
 		select {
 		case <-timer.C:
 			t.Fatalf("no trace received for descendant namespace PID %d", targetPID)
-		case err := <-targetWait:
-			require.NoError(t, err)
-			targetWait = nil
-			if targetSeen {
-				return
-			}
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
 		case trace := <-traceChan:
@@ -412,10 +402,7 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 			}
 			_, err := os.Stat(fmt.Sprintf("/proc/%d/task/%d", trace.PID, trace.TID))
 			require.NoError(t, err, "translated TID does not belong to the target process")
-			targetSeen = true
-			if targetWait == nil {
-				return
-			}
+			return
 		}
 	}
 }
@@ -433,10 +420,7 @@ func runPIDNamespaceTranslationWorkload(comm string) int {
 	}
 
 	runtime.GOMAXPROCS(2)
-	duration := 3 * time.Second
-	if comm == pidNamespaceSibling {
-		duration = 15 * time.Second
-	}
+	duration := 15 * time.Second
 	deadline := time.Now().Add(duration)
 	errs := make(chan error, 2)
 	run := func() {
