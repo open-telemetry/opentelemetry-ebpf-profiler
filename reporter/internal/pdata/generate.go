@@ -5,8 +5,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"path/filepath"
-	"slices"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -80,24 +78,6 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
-	// Collect the profile types present anywhere in the tree once, in a stable
-	// order, so that the order profiles are appended in is deterministic.
-	seenProfileTypes := make(libpf.Set[*samples.TypeMetadata])
-	for _, resourceToEvents := range tree {
-		for profileType := range resourceToEvents.Events {
-			if _, ok := seenProfileTypes[profileType]; !ok {
-				seenProfileTypes[profileType] = libpf.Void{}
-			}
-		}
-	}
-	profileTypes := seenProfileTypes.ToSlice()
-	slices.SortFunc(profileTypes, func(a, b *samples.TypeMetadata) int {
-		if c := strings.Compare(a.SampleType, b.SampleType); c != 0 {
-			return c
-		}
-		return strings.Compare(a.PeriodType, b.PeriodType)
-	})
-
 	for resource, toEvents := range tree {
 		if len(toEvents.Events) == 0 {
 			continue
@@ -113,8 +93,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, profileType := range profileTypes {
-			if len(toEvents.Events[profileType]) == 0 {
+		for profileType, events := range toEvents.Events {
+			if len(events) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
@@ -122,7 +102,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, toEvents.Events[profileType], prof,
+				profileType, events, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
