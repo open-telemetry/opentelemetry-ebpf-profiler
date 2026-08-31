@@ -6,8 +6,9 @@ package arm // import "go.opentelemetry.io/ebpf-profiler/asm/arm"
 import (
 	"fmt"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type Registers struct {

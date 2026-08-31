@@ -400,6 +400,9 @@ const (
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
 	RubyFrameTypeJit      = 0x5
+
+	LJCframeSpaceX86 = 0x50
+	LJCframeSpaceArm = 0xd0
 )
 
 var MetricsTranslation = []metrics.MetricID{

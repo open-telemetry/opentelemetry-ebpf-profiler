@@ -23,6 +23,7 @@ import (
 	"unsafe"
 
 	"github.com/mdlayher/kobject"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"

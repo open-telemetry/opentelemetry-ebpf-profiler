@@ -22,17 +22,16 @@ import (
 // Config holds configuration for all interpreters.
 // By default all interpreters are enabled.
 type Config struct {
-	Python  python.Config  `mapstructure:"python" json:"python,omitempty"`
-	Perl    perl.Config    `mapstructure:"perl" json:"perl,omitempty"`
-	PHP     php.Config     `mapstructure:"php" json:"php,omitempty"`
-	Hotspot hotspot.Config `mapstructure:"hotspot" json:"hotspot,omitempty"`
-	Ruby    ruby.Config    `mapstructure:"ruby" json:"ruby,omitempty"`
-	V8      nodev8.Config  `mapstructure:"v8" json:"v8,omitempty"`
-	Dotnet  dotnet.Config  `mapstructure:"dotnet" json:"dotnet,omitempty"`
-	Go      golang.Config  `mapstructure:"go" json:"go,omitempty"`
-	BEAM    beam.Config    `mapstructure:"beam" json:"beam,omitempty"`
-	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit,omitempty"`
-	APMInt  apmint.Config  `mapstructure:"apmint" json:"apmint,omitempty"`
+	Python  python.Config  `mapstructure:"python" json:"python"`
+	Perl    perl.Config    `mapstructure:"perl" json:"perl"`
+	PHP     php.Config     `mapstructure:"php" json:"php"`
+	Hotspot hotspot.Config `mapstructure:"hotspot" json:"hotspot"`
+	Ruby    ruby.Config    `mapstructure:"ruby" json:"ruby"`
+	V8      nodev8.Config  `mapstructure:"v8" json:"v8"`
+	Dotnet  dotnet.Config  `mapstructure:"dotnet" json:"dotnet"`
+	Go      golang.Config  `mapstructure:"go" json:"go"`
+	BEAM    beam.Config    `mapstructure:"beam" json:"beam"`
+	LuaJIT  luajit.Config  `mapstructure:"luajit" json:"luajit"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
@@ -52,7 +51,6 @@ func NoInterpreters() Config {
 		Go:      golang.Config{BaseConfig: disabled},
 		BEAM:    beam.Config{BaseConfig: disabled},
 		LuaJIT:  luajit.Config{BaseConfig: disabled},
-		APMInt:  apmint.Config{BaseConfig: disabled},
 	}
 }
 
@@ -89,9 +87,6 @@ func (cfg *Config) Loaders() []interpreter.Loader {
 	}
 	if !cfg.Go.IsDisabled() {
 		loaders = append(loaders, golang.GetLoader(cfg.Go))
-	}
-	if !cfg.APMInt.IsDisabled() {
-		loaders = append(loaders, apmint.GetLoader(cfg.APMInt))
 	}
 	return loaders
 }

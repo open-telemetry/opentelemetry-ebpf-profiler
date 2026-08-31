@@ -15,12 +15,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-func getPFELF(path string, t *testing.T) *File {
+func getPFELF(t *testing.T, path string) *File {
 	t.Helper()
 	testsupport.RequireGeneratedTestFile(t, path)
 	file, err := Open(path)
@@ -78,7 +79,8 @@ func TestPFELFSections(t *testing.T) {
 }
 
 func testPFELFIsGolang(t *testing.T, filename string, isGoExpected bool) {
-	ef := getPFELF(filename, t)
+	t.Helper()
+	ef := getPFELF(t, filename)
 	defer ef.Close()
 	assert.Equal(t, isGoExpected, ef.IsGolang())
 }
@@ -89,13 +91,13 @@ func TestPFELFIsGolang(t *testing.T) {
 }
 
 func TestGoVersion(t *testing.T) {
-	ef := getPFELF("testdata/go-binary", t)
+	ef := getPFELF(t, "testdata/go-binary")
 	defer ef.Close()
 
 	vers := ef.GoVersion()
 	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
 
-	testEF := getPFELF("/proc/self/exe", t)
+	testEF := getPFELF(t, "/proc/self/exe")
 	defer testEF.Close()
 	testVersion := testEF.GoVersion()
 	assert.Equal(t, runtime.Version(), testVersion)
@@ -109,6 +111,7 @@ func TestParseGoBuildinfoFallback(t *testing.T) {
 	// buildinfo magic in memory, simulating a coredump so incomplete that
 	// even the PT_LOAD fallback scan can't locate it.
 	magicStripped := func(t *testing.T) *File {
+		t.Helper()
 		testsupport.RequireGeneratedTestFile(t, "testdata/go-binary-no-sections")
 		raw, err := os.ReadFile("testdata/go-binary-no-sections")
 		require.NoError(t, err)
@@ -123,7 +126,11 @@ func TestParseGoBuildinfoFallback(t *testing.T) {
 		return ef
 	}
 	open := func(path string) func(t *testing.T) *File {
-		return func(t *testing.T) *File { return getPFELF(path, t) }
+		t.Helper()
+		return func(t *testing.T) *File {
+			t.Helper()
+			return getPFELF(t, path)
+		}
 	}
 
 	tests := map[string]struct {
@@ -173,7 +180,7 @@ func TestParseGoBuildinfoFallback(t *testing.T) {
 }
 
 func TestGetGoBuildID(t *testing.T) {
-	ef := getPFELF("testdata/go-binary", t)
+	ef := getPFELF(t, "testdata/go-binary")
 	defer ef.Close()
 
 	buildID, err := ef.GetGoBuildID()

@@ -134,7 +134,7 @@ func TestKernelFrameCacheIgnoresInvalidEntries(t *testing.T) {
 	}
 	frame := capture.traces[0].Frames[0].Value()
 	assert.Equal(t, libpf.KernelFrame, frame.Type)
-	assert.Equal(t, "", frame.FunctionName.String())
+	assert.Empty(t, frame.FunctionName.String())
 	assert.Equal(t, libpf.AddressOrLineno(address-1), frame.AddressOrLineno)
 	assert.Equal(t, uint64(0), pm.frameCacheMiss.Load())
 	assert.Equal(t, uint64(0), pm.frameCacheHit.Load())
@@ -248,7 +248,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	goFrame := goTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, goFrame.Type)
-	assert.Equal(t, "", goFrame.FunctionName.String())
+	assert.Empty(t, goFrame.FunctionName.String())
 
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       catPID,
@@ -263,7 +263,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	catFrame := catTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
-	assert.Equal(t, "", catFrame.FunctionName.String())
+	assert.Empty(t, catFrame.FunctionName.String())
 }
 
 func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
@@ -317,12 +317,12 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 	require.NotEmpty(t, capture.traces[0].Frames)
 	frame0 := capture.traces[0].Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, frame0.Type)
-	assert.Equal(t, "", frame0.FunctionName.String())
+	assert.Empty(t, frame0.FunctionName.String())
 
 	require.NotEmpty(t, capture.traces[1].Frames)
 	frame1 := capture.traces[1].Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, frame1.Type)
-	assert.Equal(t, "", frame1.FunctionName.String())
+	assert.Empty(t, frame1.FunctionName.String())
 
 	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
 	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())

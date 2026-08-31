@@ -11,8 +11,9 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 )
 
 type attributeStruct struct {

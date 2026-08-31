@@ -470,7 +470,7 @@ func TestSynchronizeMappingsPublishesJITRangeBeforePrefixes(t *testing.T) {
 	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
-	assert.Greater(t, handler.mappingUpdates, 0)
+	assert.Positive(t, handler.mappingUpdates)
 	require.Len(t, handler.procDataUpdates, 1)
 	assert.Equal(t, uint64(0x100000), handler.procDataUpdates[0].Jit_start)
 	assert.Equal(t, uint64(0x110000), handler.procDataUpdates[0].Jit_end)
@@ -494,7 +494,7 @@ func TestSynchronizeMappingsReportsPartialPublicationAfterMappingFailure(t *test
 
 	err := instance.SynchronizeMappings(handler, nil, pr, mappings)
 	require.ErrorIs(t, err, updateErr)
-	assert.ErrorContains(t, err, "JIT proc data was already published")
+	require.ErrorContains(t, err, "JIT proc data was already published")
 	assert.Equal(t, []string{"proc-data", "interpreter-mapping"}, handler.calls)
 	assert.Equal(t, uint64(0x100000), instance.procInfo.Jit_start)
 	assert.Equal(t, uint64(0x110000), instance.procInfo.Jit_end)
@@ -532,5 +532,5 @@ func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {
 	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
 	require.NotEmpty(t, handler.calls)
 	assert.Equal(t, "proc-data", handler.calls[0])
-	assert.Greater(t, handler.mappingUpdates, 0)
+	assert.Positive(t, handler.mappingUpdates)
 }
