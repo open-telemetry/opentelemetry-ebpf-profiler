@@ -6,7 +6,7 @@ replace go.opentelemetry.io/ebpf-profiler => ../..
 
 require (
 	github.com/stretchr/testify v1.12.1
-	github.com/testcontainers/testcontainers-go v0.43.0
+	github.com/testcontainers/testcontainers-go v0.44.0
 	go.opentelemetry.io/ebpf-profiler v0.0.0-00010101000000-000000000000
 )
 
