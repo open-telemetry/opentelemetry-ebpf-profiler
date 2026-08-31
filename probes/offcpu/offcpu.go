@@ -112,6 +112,8 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 		return fmt.Errorf("no finish_task_switch symbols found in /proc/kallsyms")
 	}
 
+	attached := false
+	// Attach to all symbols with the prefix finish_task_switch.
 	for _, sym := range syms {
 		kl, err := link.Kprobe(string(sym.Name), kprobeProg, nil)
 		if err != nil {
@@ -119,6 +121,11 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 			continue
 		}
 		probeCtx.AddLink(kl)
+		attached = true
+	}
+	if !attached {
+		return fmt.Errorf("failed to attach to any of the %d 'finish_task_switch' symbols",
+			len(syms))
 	}
 
 	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
