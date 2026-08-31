@@ -52,9 +52,9 @@ func TestAsyncMapUpdaterPool(t *testing.T) {
 
 	g, _ := errgroup.WithContext(ctx)
 	// For every worker start a Go routine that tries to send updates.
-	for i := 0; i < updatePoolWorkers; i++ {
+	for range updatePoolWorkers {
 		g.Go(func() error {
-			for j := 0; j < updatePoolQueueCap*42; j++ {
+			for j := range updatePoolQueueCap * 42 {
 				// After some time, cancel the context to stop asyncUpdateWorker.
 				if j%updatePoolQueueCap == 0 {
 					cancel()

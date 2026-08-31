@@ -22,9 +22,10 @@ import (
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -52,8 +53,7 @@ func isPIDLive(pid libpf.PID) (bool, error) {
 		return true, nil
 	}
 
-	var errno unix.Errno
-	if errors.As(err, &errno) {
+	if errno, ok := errors.AsType[unix.Errno](err); ok {
 		switch errno {
 		case unix.ESRCH:
 			return false, nil
@@ -597,7 +597,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Get current executable name
 	exe, exeErr := pr.GetExe()
-	if exeErr != nil && !os.IsNotExist(exeErr) {
+	if exeErr != nil && !os.IsNotExist(exeErr) { //nolint:staticcheck
 		// The /proc/PID/exe returns "not exists" error also in
 		// the case of main thread exit. Ignore it.
 	}
@@ -778,8 +778,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpRemove {
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
-	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	pm.mu.Lock()
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	collectAnonymousMappings = pm.processRemovedInterpreters(pid, interpretersValid)
 	if collectAnonymousMappings != previousAnonymousMappingsWanted {
 		if err := pm.updatePIDAnonymousMappingInterest(pid, collectAnonymousMappings); err != nil {
@@ -793,7 +793,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpAdd {
 		numChanges += pm.processNewMapping(pid, m)
 	}
+
+	pm.mu.Lock()
 	pm.pidPageToMappingInfoSize += numChanges
+	pm.mu.Unlock()
 
 	// Update metadata of the process.
 	var meta process.Meta

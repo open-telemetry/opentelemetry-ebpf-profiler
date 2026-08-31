@@ -19,13 +19,14 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
-	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 var testContext = processcontextpb.ProcessContext{
@@ -157,7 +158,7 @@ func (m *mockReader) ReadAt(p []byte, off int64) (n int, err error) {
 	return 0, io.EOF
 }
 
-// createHeader serialises via the header struct itself, so a layout change in
+// createHeader serializes via the header struct itself, so a layout change in
 // the reader cannot leave the fixtures producing a stale wire format.
 func createHeader(signature string, version uint32, payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
 	hdr := header{
@@ -319,7 +320,7 @@ func TestProcessContext_Read(t *testing.T) {
 				assert.Zero(t, ctx.ResourceAttrs.Len())
 				assert.Zero(t, ctx.attributes.Len())
 				assert.Zero(t, ctx.publishedAtNs)
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)

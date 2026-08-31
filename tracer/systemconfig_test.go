@@ -4,7 +4,6 @@
 package tracer
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"runtime"
@@ -20,7 +19,7 @@ import (
 func TestGetCurrentNS_FileNotFound(t *testing.T) {
 	_, _, err := getCurrentNS("/nonexistent/path/pid")
 	require.Error(t, err)
-	require.True(t, errors.Is(err, fs.ErrNotExist))
+	require.ErrorIs(t, err, fs.ErrNotExist)
 }
 
 func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
@@ -50,7 +49,7 @@ func TestValidateSystemAnalysisResult(t *testing.T) {
 	t.Run("helper failure", func(t *testing.T) {
 		err := validateSystemAnalysisResult(support.SystemAnalysis{Err: -14}, address)
 		require.Error(t, err)
-		require.True(t, errors.Is(err, errSystemAnalysisFailed))
+		require.ErrorIs(t, err, errSystemAnalysisFailed)
 		require.ErrorContains(t, err, "helper err=-14")
 	})
 

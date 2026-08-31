@@ -14,10 +14,11 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -102,7 +103,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 			if !interpretersConfig.IsMapEnabled(nameTag) {
 				continue
 			}
-			return nil, fmt.Errorf("Map %v is not available", nameTag)
+			return nil, fmt.Errorf("map %v is not available", nameTag)
 		}
 		implRefVal.Field(i).Set(reflect.ValueOf(mapVal))
 	}
@@ -113,7 +114,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 		deltasMapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		deltasMap, ok := maps[deltasMapName]
 		if !ok {
-			return nil, fmt.Errorf("Map %v is not available", deltasMapName)
+			return nil, fmt.Errorf("map %v is not available", deltasMapName)
 		}
 		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
 	}
@@ -139,7 +140,7 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 	if err := impl.InterpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 		cebpf.UpdateAny); err != nil {
 		// TODO: Used to be log.Fatalf, revisit if needed
-		return fmt.Errorf("Failed to place interpreter range in map: %v", err)
+		return fmt.Errorf("failed to place interpreter range in map: %v", err)
 	}
 
 	return nil
@@ -555,7 +556,6 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-
 }
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.

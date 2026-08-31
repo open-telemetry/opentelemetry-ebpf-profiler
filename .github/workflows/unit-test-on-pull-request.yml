@@ -104,6 +104,18 @@ jobs:
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
+  luajit-offsets-test:
+    name: LuaJIT offsets test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Clone code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Tests
+        run: make test-luajit-offsets
+
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}

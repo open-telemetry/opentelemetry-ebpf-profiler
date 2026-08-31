@@ -11,8 +11,9 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/otel/attribute"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
@@ -126,7 +127,6 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				return profiles, err
 			}
 		}
-
 	}
 
 	// Populate the ProfilesDictionary tables.
@@ -195,7 +195,6 @@ func (p *Pdata) setProfile(
 				l := dic.LinkTable().AppendEmpty()
 				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
 				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
-
 			}
 			sample.SetLinkIndex(link)
 		}

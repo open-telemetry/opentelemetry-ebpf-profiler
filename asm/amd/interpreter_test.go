@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 func BenchmarkPythonInterpreter(b *testing.B) {
@@ -23,7 +24,9 @@ func TestPythonInterpreter(t *testing.T) {
 	testPythonInterpreter(t)
 }
 
-func testPythonInterpreter(t testing.TB) {
+func testPythonInterpreter(tb testing.TB) {
+	tb.Helper()
+
 	// 00010000 	4D 89 F2 	mov 	r10, r14
 	// 00010003 	45 0F B6 36 	movzx 	r14d, byte ptr [r14]
 	// 00010007 	48 8D 05 2D B3 35 00 	lea 	rax, [rip + 0x35b32d]
@@ -45,7 +48,7 @@ func testPythonInterpreter(t testing.TB) {
 	r14 := it.Regs.Get(R14)
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	actual := it.Regs.Get(RAX)
 	expected := expression.Mem(
@@ -59,7 +62,7 @@ func testPythonInterpreter(t testing.TB) {
 		8,
 	)
 	if !actual.Match(expected) {
-		t.Fatal()
+		tb.Fatal()
 	}
 }
 
@@ -140,6 +143,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 }
 
 func assertEval(t *testing.T, left, right expression.Expression) {
+	t.Helper()
 	if !left.Match(right) {
 		assert.Failf(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
 		t.Logf("left  %s", left.DebugString())

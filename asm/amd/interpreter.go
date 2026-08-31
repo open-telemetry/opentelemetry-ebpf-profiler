@@ -8,8 +8,9 @@ import (
 	"io"
 	"math"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type CodeBlock struct {

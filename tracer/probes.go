@@ -9,6 +9,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"

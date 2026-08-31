@@ -654,7 +654,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Samples().Len())
 	sample := prof.Samples().At(0)
-	assert.Len(t, sample.Values().AsRaw(), 0)
+	assert.Empty(t, sample.Values().AsRaw())
 	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 
 	// Check that the mapping table contains our native frame mapping
@@ -693,7 +693,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// Verify SpanID and TraceID are set via Link
 	linkIndex := sample.LinkIndex()
-	assert.Greater(t, linkIndex, int32(0), "Sample should have a link set (index > 0, since 0 is dummy)")
+	assert.Positive(t, linkIndex, "Sample should have a link set (index > 0, since 0 is dummy)")
 	link := dic.LinkTable().At(int(linkIndex))
 	expectedSpanID := pcommon.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}
 	expectedTraceID := pcommon.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -733,7 +733,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundComm, "Sample should have Comm attribute set")
 	assert.True(t, foundTID, "Sample should have TID attribute set")
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
-
 }
 
 func TestStackTableOrder(t *testing.T) {

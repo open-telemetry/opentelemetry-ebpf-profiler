@@ -18,8 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -109,6 +110,10 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 	if err != nil {
 		return libpf.NullString, err
 	}
+	// The kernel appends " (deleted)" to the symlink target when the
+	// executable has been removed from disk. Strip it so callers get
+	// the original path.
+	str = strings.TrimSuffix(str, " (deleted)")
 	return libpf.Intern(str), nil
 }
 

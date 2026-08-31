@@ -14,6 +14,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"

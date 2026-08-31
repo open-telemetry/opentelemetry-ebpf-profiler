@@ -104,7 +104,7 @@ func TestWalkRangeListCycle(t *testing.T) {
 	)
 	buf := make([]byte, 0x2000)
 	fillRanges := func(base libpf.Address, next libpf.Address, valueStart uint64) {
-		for index := 0; index < 10; index++ {
+		for index := range 10 {
 			start := valueStart + uint64(index*0x100)
 			putUint64(buf, int(base)+index*24, start)
 			putUint64(buf, int(base)+index*24+8, start+0x10)
@@ -128,7 +128,7 @@ func TestWalkRangeListCycle(t *testing.T) {
 func TestMarkSeen(t *testing.T) {
 	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 
-	for addr := libpf.Address(0); addr < maxRangeSectionWalkNodes; addr++ {
+	for addr := range libpf.Address(maxRangeSectionWalkNodes) {
 		fresh, err := w.markSeen(addr)
 		require.NoError(t, err)
 		require.True(t, fresh)
