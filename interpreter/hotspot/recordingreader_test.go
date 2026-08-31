@@ -44,5 +44,5 @@ func TestRecordingReaderMaxBufferSize(t *testing.T) {
 
 	// The reader must stop at the size cap and never allocate beyond it.
 	assert.Equal(t, maxRecordingReaderBuf, read)
-	assert.Equal(t, maxRecordingReaderBuf, len(rr.buf))
+	assert.Len(t, rr.buf, maxRecordingReaderBuf)
 }

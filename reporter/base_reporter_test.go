@@ -157,14 +157,14 @@ func TestBaseReporterGenerate(t *testing.T) {
 	require.NotNil(t, profiles)
 
 	// Validate profile structure
-	assert.Greater(t, profiles.SampleCount(), 0,
+	assert.Positive(t, profiles.SampleCount(),
 		"Should have at least one sample")
 	assert.Equal(t, 2, profiles.ResourceProfiles().Len(),
 		"Should have exactly two resource profile")
 
 	// Check that we have scope profiles
 	resourceProfile := profiles.ResourceProfiles().At(0)
-	assert.Equal(t, 1, resourceProfile.ScopeProfiles().Len(), 0,
+	assert.Equal(t, 1, resourceProfile.ScopeProfiles().Len(),
 		"Should have exactly one scope profile")
 
 	// Verify scope profile metadata
@@ -173,7 +173,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	assert.Equal(t, reporter.version, scopeProfile.Scope().Version())
 
 	// Verify profiles exist
-	assert.Greater(t, scopeProfile.Profiles().Len(), 0,
+	assert.Positive(t, scopeProfile.Profiles().Len(),
 		"Should have at least one profile")
 }
 
