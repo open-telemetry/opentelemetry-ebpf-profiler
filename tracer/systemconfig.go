@@ -454,11 +454,7 @@ func probeVMALookupSupport(cfg *Config) (bool, string) {
 	}
 	defer restoreRlimit()
 
-	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
-	if cfg.OffCPUThreshold > 0 {
-		progTypes = append(progTypes, cebpf.Kprobe)
-	}
-
+	progTypes := []cebpf.ProgramType{cebpf.PerfEvent, cebpf.Kprobe}
 	helpers := []asm.BuiltinFunc{asm.FnGetCurrentTaskBtf, asm.FnFindVma}
 	for _, progType := range progTypes {
 		for _, helper := range helpers {
@@ -599,10 +595,6 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return err
 	}
 
-	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
-		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
-	}
-
 	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
 		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
 	}
@@ -679,10 +671,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 // setOriginIDs assigns an origin ID to every kind of sample the tracer's
 // eBPF programs can produce and writes each ID into the corresponding
-// RODATA variable. Sampling is always active. Off-CPU and probe profiling
-// only get one if enabled.
-// TODO: this is a temporary helper and will be removed once tracer manages
-// custom probes.
+// RODATA variable.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
 	sampling, err := origins.Register(&samples.TypeMetadata{
 		PeriodType: "cpu",
@@ -695,20 +684,6 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 	}
 	if err := coll.Variables["origin_id_sampling"].Set(sampling); err != nil {
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
-	}
-
-	if cfg.OffCPUThreshold > 0 {
-		offCPU, err := origins.Register(&samples.TypeMetadata{
-			SampleType:   "off_cpu",
-			SampleUnit:   "nanoseconds",
-			ReportValues: true,
-		})
-		if err != nil {
-			return err
-		}
-		if err := coll.Variables["origin_id_off_cpu"].Set(uint16(offCPU)); err != nil {
-			return fmt.Errorf("failed to set origin_id_off_cpu: %v", err)
-		}
 	}
 
 	return nil

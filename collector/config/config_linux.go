@@ -62,7 +62,6 @@ type Config struct {
 	SendIdleFrames          bool                     `mapstructure:"send_idle_frames"`
 	FilterMinProcessAge     time.Duration            `mapstructure:"filter_min_process_age"`
 	VerboseMode             bool                     `mapstructure:"verbose_mode"`
-	OffCPUThreshold         float64                  `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
 	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
@@ -122,12 +121,6 @@ func (cfg *Config) Validate() error {
 			"invalid argument for probabilistic-interval: use " +
 				"a duration between 1 and 5 minutes",
 		)
-	}
-
-	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
-		return errors.New(
-			"invalid argument for off-cpu-threshold. The value " +
-				"should be in the range [0..1]. 0 disables off-cpu profiling")
 	}
 
 	if cfg.FilterMinProcessAge < 0 {

@@ -3,18 +3,19 @@
 
 //go:build linux && (amd64 || arm64)
 
-package uprobe // import "go.opentelemetry.io/ebpf-profiler/probes/uprobe"
+package offcpu // import "go.opentelemetry.io/ebpf-profiler/probes/offcpu"
 
 import (
 	"context"
+	"math"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
 
-	"go.opentelemetry.io/ebpf-profiler/probes/uprobe/internal/metadata"
+	"go.opentelemetry.io/ebpf-profiler/probes/offcpu/internal/metadata"
 )
 
-// NewFactory returns an extension.Factory for the uprobe extension.
+// NewFactory returns an extension.Factory for the offcpu extension.
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
 		metadata.Type,
@@ -25,9 +26,8 @@ func NewFactory() extension.Factory {
 }
 
 func createExtension(_ context.Context, _ extension.Settings, cfg component.Config) (extension.Extension, error) {
-	p, err := New(*cfg.(*Config))
-	if err != nil {
-		return nil, err
-	}
-	return &uprobeExtension{p: p}, nil
+	c := cfg.(*Config)
+	return &offCPUExtension{p: &probe{
+		threshold: uint32(c.Threshold * math.MaxUint32),
+	}}, nil
 }
