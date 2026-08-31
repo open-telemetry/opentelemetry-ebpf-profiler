@@ -6,7 +6,7 @@ status:
   disable_codecov_badge: true
   class: extension
   stability:
-    development: [extensions]
+    development: [extension]
   distributions: [ebpf-profiler]
 tests:
   skip_lifecycle: true

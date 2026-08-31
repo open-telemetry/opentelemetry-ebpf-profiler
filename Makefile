@@ -1,6 +1,8 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit protobuf docker-image agent legal integration-test-binaries \
+	test-junit test-luajit-offsets protobuf docker-image agent legal \
+	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
+	processctx-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
@@ -52,6 +54,7 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
+	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
@@ -126,6 +129,11 @@ test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+# Lives in its own module to keep heavy dependencies (testcontainers,
+# Docker, etc.) out of the main go.mod.
+test-luajit-offsets: generate
+	go test -C ./tools/luajitoffsets $(GO_FLAGS) -tags luajit_offsets_test ./...
+
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
 	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
@@ -143,6 +151,14 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+
+processctx-execs:
+	$(MAKE) -C process/processcontext/integrationtests/testdata
+
+# Host-only: the qemu initramfs cannot load shared libraries, which the
+# lib/dlopen testdata variants will need.
+host-integration-tests: processctx-execs
+	go test -exec sudo -v -tags host_integration ./process/processcontext/integrationtests/
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
 

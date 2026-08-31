@@ -30,7 +30,6 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = 0
 	defaultEnvVarsValue           = ""
 	defaultArgFrameCacheSize      = pm.DefaultFrameCacheSize
 	defaultBPFFSRoot              = "/sys/fs/bpf/"
@@ -78,10 +77,6 @@ var (
 	sendIdleFramesHelp      = "Unwind and report idle states of the Linux kernel."
 	filterMinProcessAgeHelp = "Skip samples from processes younger than this minimum age. " +
 		"Set to 0 to disable minimum process age filtering."
-	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
-		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
-		"Default is %d.",
-		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
 	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
@@ -164,9 +159,6 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
-
-	fs.Float64Var(&args.OffCPUThreshold, "off-cpu-threshold",
-		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
