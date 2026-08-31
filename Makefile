@@ -2,6 +2,7 @@
 	test-junit test-luajit-offsets protobuf docker-image agent legal \
 	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
+	processctx-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
@@ -53,6 +54,7 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
+	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
@@ -149,6 +151,14 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+
+processctx-execs:
+	$(MAKE) -C process/processcontext/integrationtests/testdata
+
+# Host-only: the qemu initramfs cannot load shared libraries, which the
+# lib/dlopen testdata variants will need.
+host-integration-tests: processctx-execs
+	go test -exec sudo -v -tags host_integration ./process/processcontext/integrationtests/
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
 

@@ -104,7 +104,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars)
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars,
+			toEvents.ResourceAttrs)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -302,23 +303,78 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
-	if resource.APMServiceName != "" {
-		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
+func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
+	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set) {
+	// service.name, container.id, process.pid, process.executable.{path,name}
+	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 5)
+	for iter := resourceAttrs.Iter(); iter.Next(); {
+		kv := iter.Attribute()
+		setAttributeValue(dst.PutEmpty(string(kv.Key)), kv.Value)
 	}
-	if resource.ContainerID != libpf.NullString {
-		attrs.PutStr(string(semconv.ContainerIDKey), resource.ContainerID.String())
+	if resourceKey.APMServiceName != "" {
+		dst.PutStr(string(semconv.ServiceNameKey), resourceKey.APMServiceName)
+	}
+	if resourceKey.ContainerID != libpf.NullString {
+		dst.PutStr(string(semconv.ContainerIDKey), resourceKey.ContainerID.String())
 	}
 
-	attrs.PutInt(string(semconv.ProcessPIDKey), resource.PID)
+	dst.PutInt(string(semconv.ProcessPIDKey), resourceKey.PID)
 
-	if resource.ExecutablePath != libpf.NullString {
-		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
-		_, exeName := filepath.Split(resource.ExecutablePath.String())
-		attrs.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
+	if resourceKey.ExecutablePath != libpf.NullString {
+		dst.PutStr(string(semconv.ProcessExecutablePathKey), resourceKey.ExecutablePath.String())
+		_, exeName := filepath.Split(resourceKey.ExecutablePath.String())
+		dst.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
 	}
 
 	for key, value := range envVars {
-		attrs.PutStr("process.environment_variable."+key.String(), value.String())
+		dst.PutStr("process.environment_variable."+key.String(), value.String())
+	}
+}
+
+// setAttributeValue writes src into dst. dst is already inserted in its
+// container, so a case that writes nothing yields an empty pcommon value.
+func setAttributeValue(dst pcommon.Value, src attribute.Value) {
+	switch src.Type() {
+	case attribute.BOOL:
+		dst.SetBool(src.AsBool())
+	case attribute.INT64:
+		dst.SetInt(src.AsInt64())
+	case attribute.FLOAT64:
+		dst.SetDouble(src.AsFloat64())
+	case attribute.STRING:
+		dst.SetStr(src.AsString())
+	case attribute.BYTESLICE:
+		dst.SetEmptyBytes().FromRaw(src.AsByteSlice())
+	case attribute.BOOLSLICE:
+		setSliceValue(dst, src.AsBoolSlice(), pcommon.Value.SetBool)
+	case attribute.INT64SLICE:
+		setSliceValue(dst, src.AsInt64Slice(), pcommon.Value.SetInt)
+	case attribute.FLOAT64SLICE:
+		setSliceValue(dst, src.AsFloat64Slice(), pcommon.Value.SetDouble)
+	case attribute.STRINGSLICE:
+		setSliceValue(dst, src.AsStringSlice(), pcommon.Value.SetStr)
+	case attribute.SLICE:
+		setSliceValue(dst, src.AsSlice(), setAttributeValue)
+	case attribute.MAP:
+		kvs := src.AsMap()
+		m := dst.SetEmptyMap()
+		m.EnsureCapacity(len(kvs))
+		for _, kv := range kvs {
+			setAttributeValue(m.PutEmpty(string(kv.Key)), kv.Value)
+		}
+	case attribute.EMPTY:
+		// A published empty value, and dst already is one.
+	default:
+		// Reachable only if otel adds an attribute.Type.
+		log.Warnf("setAttributeValue: no pcommon representation for %s, "+
+			"emitting empty", src.Type())
+	}
+}
+
+func setSliceValue[T any](dst pcommon.Value, values []T, set func(pcommon.Value, T)) {
+	sl := dst.SetEmptySlice()
+	sl.EnsureCapacity(len(values))
+	for _, v := range values {
+		set(sl.AppendEmpty(), v)
 	}
 }

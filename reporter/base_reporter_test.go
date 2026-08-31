@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -177,6 +178,82 @@ func TestBaseReporterGenerate(t *testing.T) {
 		"Should have at least one profile")
 }
 
+func serviceAttrs(name string) attribute.Set {
+	return attribute.NewSet(semconv.ServiceName(name))
+}
+
+func singleNativeFrameTrace() *libpf.Trace {
+	frames := make(libpf.Frames, 0, 1)
+	frames.Append(&libpf.Frame{
+		Type:            libpf.NativeFrame,
+		AddressOrLineno: 0x100,
+		FunctionName:    libpf.Intern("f"),
+	})
+	return &libpf.Trace{Frames: frames}
+}
+
+// baseMetaWithResourceAttrs builds meta for one synthetic PID, varying only the
+// resource attributes so every event lands in the same bucket.
+func baseMetaWithResourceAttrs(resourceAttrs attribute.Set) *samples.TraceEventMeta {
+	return &samples.TraceEventMeta{
+		Timestamp:      libpf.UnixTime64(time.Now().UnixNano()),
+		Comm:           libpf.NewCommFromString("svc"),
+		ExecutablePath: libpf.Intern("/usr/bin/svc"),
+		ContainerID:    libpf.Intern("c1"),
+		PID:            1234,
+		TID:            1235,
+		ProfileType:    profileTypeSampling,
+		ResourceAttrs:  resourceAttrs,
+	}
+}
+
+func serviceNameIn(t *testing.T, reporter *baseReporter) string {
+	t.Helper()
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	require.Len(t, *treePtr, 1, "all samples for one PID belong to a single bucket")
+	for _, rtp := range *treePtr {
+		v, _ := rtp.ResourceAttrs.Value(semconv.ServiceNameKey)
+		return v.AsString()
+	}
+	return ""
+}
+
+// The bucket's resource attributes track the most recent sample's, so a context
+// detected or cleared mid-interval applies to the whole reporting period.
+func TestReportTraceEventResourceAttrsTrackLatest(t *testing.T) {
+	tests := map[string]struct {
+		reported []attribute.Set
+		want     string
+	}{
+		"late publish applies to earlier samples": {
+			reported: []attribute.Set{{}, {}, serviceAttrs("svc")},
+			want:     "svc",
+		},
+		"republish replaces previous": {
+			reported: []attribute.Set{serviceAttrs("svc-v1"), serviceAttrs("svc-v2")},
+			want:     "svc-v2",
+		},
+		// A mapping gone on teardown must drop attribution rather than leave
+		// the last-seen resource attached.
+		"cleared context clears attribution": {
+			reported: []attribute.Set{serviceAttrs("svc"), {}},
+			want:     "",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			reporter := createTestBaseReporter(t, nil)
+			trace := singleNativeFrameTrace()
+			for _, attrs := range tt.reported {
+				require.NoError(t, reporter.ReportTraceEvent(trace,
+					baseMetaWithResourceAttrs(attrs)))
+			}
+			assert.Equal(t, tt.want, serviceNameIn(t, reporter))
+		})
+	}
+}
+
 // processNameAttrProducer is a test SampleAttrProducer that reads "process.name" from
 // TraceEventMeta.ExtraMeta (populated by a ProcessMetaEnricher) and emits it as a
 // sample attribute, exercising the full enricher → TraceEventMeta → attribute pipeline.
@@ -216,17 +293,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	}
 	reporter := createTestBaseReporter(t, cfg)
 
-	trace := &libpf.Trace{
-		Frames: func() libpf.Frames {
-			frames := make(libpf.Frames, 0, 1)
-			frames.Append(&libpf.Frame{
-				Type:            libpf.NativeFrame,
-				AddressOrLineno: 0x1000,
-				FunctionName:    libpf.Intern("main"),
-			})
-			return frames
-		}(),
-	}
+	trace := singleNativeFrameTrace()
 
 	now := time.Now()
 	// Simulate what a ProcessMetaEnricher would have stored in ExtraMeta at
