@@ -57,8 +57,7 @@ const (
 	resourceAttrKey = "OTEL_RESOURCE_ATTRIBUTES"
 	svcNameKey      = "OTEL_SERVICE_NAME"
 
-	// threadlocal.* attributes describe the per-thread custom label schema.
-	// See [OTEP 4719].
+	// Per-thread label schema, published as attributes per [OTEP 4719].
 	threadCtxSchemaVersionKey       = "threadlocal.schema_version"
 	supportedThreadCtxSchemaVersion = "tlsdesc_v1_dev"
 	threadCtxKeyMapKey              = "threadlocal.attribute_key_map"
@@ -74,28 +73,26 @@ var (
 	// errNoUpdate indicates the ProcessContext has not been updated since it was last published.
 	errNoUpdate = errors.New("ProcessContext has not been updated")
 
-	// errThreadContextInfoNotFound indicates the thread context schema was not published.
+	// errThreadContextInfoNotFound is the common case: most processes publish
+	// a context without a thread-label schema.
 	errThreadContextInfoNotFound = errors.New("thread context info not found")
 )
 
-// AttributeKeyMap maps the small integer index a profiled process encodes a
-// per-thread label with to its attribute key.
-type AttributeKeyMap []libpf.String
-
-// ThreadContextInfo decodes per-thread custom labels published alongside the
-// process context, per the threadlocal.* schema in [OTEP 4719].
-type ThreadContextInfo struct {
-	schemaVersion   string
-	attributeKeyMap AttributeKeyMap
+// threadContextInfo is one process's published per-thread label schema.
+type threadContextInfo struct {
+	schemaVersion string
+	// Indexed by the key index the payload encodes.
+	attributeKeyMap []libpf.String
 }
 
-// Info is a snapshot of process context. attribute.Set is immutable, so the
-// sets are safe to copy and share across goroutines without locking.
+var _ libpf.LabelDecoder = (*threadContextInfo)(nil)
+
+// Info is a snapshot of process context. Copies are safe to share across
+// goroutines: attribute.Set is immutable and threadCtx is never mutated after
+// construction.
 type Info struct {
 	ResourceAttrs attribute.Set
-	// Populated but unused until thread context lands.
-	attributes    attribute.Set
-	ThreadContext *ThreadContextInfo
+	threadCtx     *threadContextInfo
 	publishedAtNs uint64
 	// resolved is false only on a zero Info, meaning never resolved or
 	// invalidated by an exec. Resolve never returns an unresolved Info.
@@ -281,17 +278,15 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 
 	return Info{
 		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
-		attributes:    newAttributeSet(convertKeyValues(ctx.GetAttributes())),
-		ThreadContext: threadCtx,
+		threadCtx:     threadCtx,
 		publishedAtNs: hdr.MonotonicPublishedAtNs,
 	}, nil
 }
 
-// readThreadContextInfo parses the threadlocal.* attributes describing the
-// per-thread custom label schema. Returns errThreadContextInfoNotFound when
-// the process does not publish thread context.
-func readThreadContextInfo(attrs []*commonpb.KeyValue) (*ThreadContextInfo, error) {
-	var attributeKeyMap AttributeKeyMap
+// readThreadContextInfo parses the threadlocal.* schema attributes. Returns
+// errThreadContextInfoNotFound when no schema is published.
+func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, error) {
+	var attributeKeyMap []libpf.String
 	var schemaVersion string
 	for _, attr := range attrs {
 		switch attr.GetKey() {
@@ -318,12 +313,12 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*ThreadContextInfo, erro
 	if schemaVersion == "" {
 		return nil, errThreadContextInfoNotFound
 	}
-	return &ThreadContextInfo{schemaVersion: schemaVersion, attributeKeyMap: attributeKeyMap}, nil
+	return &threadContextInfo{schemaVersion: schemaVersion, attributeKeyMap: attributeKeyMap}, nil
 }
 
-// DecodeThreadLabels decodes the wire format used for per-thread custom
-// labels: repeated (key index byte, value length byte, value bytes) entries.
-func (t *ThreadContextInfo) DecodeThreadLabels(data []byte) map[libpf.String]libpf.String {
+// DecodeLabels resolves each entry's key index against the published schema.
+// Payload is repeated (key index byte, value length byte, value bytes).
+func (t *threadContextInfo) DecodeLabels(data []byte) map[libpf.String]libpf.String {
 	labels := make(map[libpf.String]libpf.String)
 	for len(data) >= 2 {
 		keyIndex := int(data[0])
@@ -342,13 +337,16 @@ func (t *ThreadContextInfo) DecodeThreadLabels(data []byte) map[libpf.String]lib
 	return labels
 }
 
-// DecodeThreadLabels decodes data using p's thread context schema, or
-// returns nil if the process does not publish thread context.
-func (p *Info) DecodeThreadLabels(data []byte) map[libpf.String]libpf.String {
-	if p.ThreadContext == nil {
+// LabelDecoder returns a decoder for the process's per-thread labels, or nil if
+// it publishes no schema.
+//
+// The explicit nil check keeps this from returning a non-nil interface holding
+// a typed nil, which a caller's nil test would pass.
+func (i Info) LabelDecoder() libpf.LabelDecoder {
+	if i.threadCtx == nil {
 		return nil
 	}
-	return p.ThreadContext.DecodeThreadLabels(data)
+	return i.threadCtx
 }
 
 // newAttributeSet builds a Set from attrs, dropping entries with an empty key

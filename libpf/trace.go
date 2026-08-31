@@ -221,6 +221,12 @@ func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
 }
 
+// LabelDecoder resolves the per-thread custom-label payload eBPF captured from
+// thread-local storage. Implementations must be safe for concurrent use.
+type LabelDecoder interface {
+	DecodeLabels(data []byte) map[String]String
+}
+
 var labelsHashSeed = maphash.MakeSeed()
 
 // HashLabels returns a 64-bit order-independent hash of a labels map.

@@ -1090,11 +1090,10 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			}
 		}
 	case support.CustomLabelsTypeNative:
-		// The key indices in the payload are only meaningful against the schema
-		// the process published with its context, so a PID with no thread
-		// context (exited, or raced with publication) yields no labels.
-		if tc := t.processManager.ThreadContextForPID(trace.PID); tc != nil {
-			trace.CustomLabels = tc.DecodeThreadLabels(
+		// Key indices mean nothing without the schema the process published, so
+		// a PID with none (exited, or raced with publication) yields no labels.
+		if dec := t.processManager.LabelDecoderForPID(trace.PID); dec != nil {
+			trace.CustomLabels = dec.DecodeLabels(
 				ptr.Custom_labels_data.Data[:ptr.Custom_labels_data.Size])
 		}
 	}

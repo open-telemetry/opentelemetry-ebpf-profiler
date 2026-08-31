@@ -209,7 +209,6 @@ func TestProcessContext_Read(t *testing.T) {
 			},
 			expectedResult: Info{
 				ResourceAttrs: expectedResourceAttrs(),
-				attributes:    expectedAttributes(),
 				publishedAtNs: 123456789,
 			},
 		},
@@ -318,7 +317,7 @@ func TestProcessContext_Read(t *testing.T) {
 				require.Equal(t, tt.expectedResult, ctx)
 			} else {
 				assert.Zero(t, ctx.ResourceAttrs.Len())
-				assert.Zero(t, ctx.attributes.Len())
+				assert.Nil(t, ctx.LabelDecoder())
 				assert.Zero(t, ctx.publishedAtNs)
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -424,7 +423,6 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.Equal(t,
 				Info{
 					ResourceAttrs: expectedResourceAttrs(),
-					attributes:    expectedAttributes(),
 					publishedAtNs: 123456789,
 				},
 				result)
@@ -446,10 +444,6 @@ func expectedResourceAttrs() attribute.Set {
 			attribute.String("nested.key", "nested-value"),
 			attribute.Int64("nested.count", 7)),
 	)
-}
-
-func expectedAttributes() attribute.Set {
-	return attribute.NewSet(attribute.String("custom.attribute", "custom-value"))
 }
 
 // An AnyValue with no variant set is a valid empty value per OTLP
@@ -749,4 +743,207 @@ func TestResolve(t *testing.T) {
 		second := resolve(t, 0x1000, rm, first, envVars)
 		assert.Equal(t, first, second, "same timestamp must return old unchanged")
 	})
+}
+
+func TestReadThreadContextInfo(t *testing.T) {
+	strVal := func(s string) *commonpb.AnyValue {
+		return &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: s}}
+	}
+	intVal := func(i int64) *commonpb.AnyValue {
+		return &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: i}}
+	}
+	attr := func(k string, v *commonpb.AnyValue) *commonpb.KeyValue {
+		return &commonpb.KeyValue{Key: k, Value: v}
+	}
+	arrVal := func(vals ...*commonpb.AnyValue) *commonpb.AnyValue {
+		return &commonpb.AnyValue{Value: &commonpb.AnyValue_ArrayValue{
+			ArrayValue: &commonpb.ArrayValue{Values: vals},
+		}}
+	}
+	version := attr(threadCtxSchemaVersionKey, strVal(supportedThreadCtxSchemaVersion))
+
+	tests := map[string]struct {
+		attrs      []*commonpb.KeyValue
+		wantKeyMap []libpf.String
+		wantErr    error
+		wantErrSub string
+	}{
+		"no threadlocal attributes": {
+			attrs:   []*commonpb.KeyValue{attr("custom.attribute", strVal("v"))},
+			wantErr: errThreadContextInfoNotFound,
+		},
+		// A key map alone is unusable: without a version the encoding is unknown.
+		"key map without a version": {
+			attrs:   []*commonpb.KeyValue{attr(threadCtxKeyMapKey, arrVal(strVal("a")))},
+			wantErr: errThreadContextInfoNotFound,
+		},
+		"version without a key map": {
+			attrs:      []*commonpb.KeyValue{version},
+			wantKeyMap: nil,
+		},
+		"version and key map": {
+			attrs: []*commonpb.KeyValue{
+				version,
+				attr(threadCtxKeyMapKey, arrVal(strVal("a"), strVal("b"))),
+			},
+			wantKeyMap: []libpf.String{libpf.Intern("a"), libpf.Intern("b")},
+		},
+		"key map before version": {
+			attrs: []*commonpb.KeyValue{
+				attr(threadCtxKeyMapKey, arrVal(strVal("a"))),
+				version,
+			},
+			wantKeyMap: []libpf.String{libpf.Intern("a")},
+		},
+		"unsupported version": {
+			attrs:      []*commonpb.KeyValue{attr(threadCtxSchemaVersionKey, strVal("v99"))},
+			wantErrSub: "unsupported thread context schema version",
+		},
+		// Not a string, so it cannot match the supported version.
+		"version of the wrong type": {
+			attrs:      []*commonpb.KeyValue{attr(threadCtxSchemaVersionKey, intVal(1))},
+			wantErrSub: "unsupported thread context schema version",
+		},
+		"key map is not an array": {
+			attrs:      []*commonpb.KeyValue{version, attr(threadCtxKeyMapKey, strVal("a"))},
+			wantErrSub: "not an array",
+		},
+		"key map holds an empty key": {
+			attrs: []*commonpb.KeyValue{
+				version,
+				attr(threadCtxKeyMapKey, arrVal(strVal("a"), strVal(""))),
+			},
+			wantErrSub: "invalid thread context attribute",
+		},
+		"key map holds a non-string key": {
+			attrs: []*commonpb.KeyValue{
+				version,
+				attr(threadCtxKeyMapKey, arrVal(strVal("a"), intVal(2))),
+			},
+			wantErrSub: "invalid thread context attribute",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := readThreadContextInfo(tt.attrs)
+
+			if tt.wantErr == nil && tt.wantErrSub == "" {
+				require.NoError(t, err)
+				require.NotNil(t, got)
+				assert.Equal(t, supportedThreadCtxSchemaVersion, got.schemaVersion)
+				assert.Equal(t, tt.wantKeyMap, got.attributeKeyMap)
+				return
+			}
+
+			require.Error(t, err)
+			assert.Nil(t, got)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				// A malformed schema is a real fault, not the absent-schema case
+				// that callers silently tolerate.
+				require.NotErrorIs(t, err, errThreadContextInfoNotFound)
+				assert.Contains(t, err.Error(), tt.wantErrSub)
+			}
+		})
+	}
+}
+
+func TestInfoLabelDecoder(t *testing.T) {
+	// Callers test the result against nil, so a nil schema must not surface as
+	// a non-nil interface holding a typed nil.
+	assert.Nil(t, Info{}.LabelDecoder())
+
+	info := Info{threadCtx: &threadContextInfo{
+		schemaVersion:   supportedThreadCtxSchemaVersion,
+		attributeKeyMap: []libpf.String{libpf.Intern("k")},
+	}}
+	assert.NotNil(t, info.LabelDecoder())
+}
+
+func TestDecodeLabels(t *testing.T) {
+	keyMap := []libpf.String{
+		libpf.Intern("http_route"),
+		libpf.Intern("http_method"),
+		libpf.Intern("user_id"),
+	}
+
+	// entry encodes one (key index, value length, value) tuple.
+	entry := func(keyIndex byte, value string) []byte {
+		return append([]byte{keyIndex, byte(len(value))}, value...)
+	}
+
+	tests := map[string]struct {
+		data []byte
+		want map[string]string
+	}{
+		"empty payload": {
+			data: nil,
+			want: map[string]string{},
+		},
+		// The length prefix counts bytes, not runes.
+		"multi-byte value": {
+			data: entry(0, "/健康"),
+			want: map[string]string{"http_route": "/健康"},
+		},
+		"entries resolve by index, not order": {
+			data: append(append(entry(2, "u-1"), entry(1, "GET")...), entry(0, "/x")...),
+			want: map[string]string{"user_id": "u-1", "http_method": "GET", "http_route": "/x"},
+		},
+		"empty value is kept": {
+			data: entry(1, ""),
+			want: map[string]string{"http_method": ""},
+		},
+		// A key index the published map does not cover cannot be named, but it
+		// carries a length so the entries after it stay decodable.
+		"unknown key index is skipped": {
+			data: append(append(entry(9, "dropped"), entry(1, "GET")...), entry(0, "/y")...),
+			want: map[string]string{"http_method": "GET", "http_route": "/y"},
+		},
+		// Truncation must stop decoding rather than read past the payload.
+		"value length past end of payload": {
+			data: append(entry(0, "/x"), 1, 40, 'G', 'E', 'T'),
+			want: map[string]string{"http_route": "/x"},
+		},
+		"trailing byte without a length": {
+			data: append(entry(0, "/x"), 1),
+			want: map[string]string{"http_route": "/x"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := &threadContextInfo{
+				schemaVersion:   supportedThreadCtxSchemaVersion,
+				attributeKeyMap: keyMap,
+			}
+
+			got := tc.DecodeLabels(tt.data)
+
+			want := make(map[libpf.String]libpf.String, len(tt.want))
+			for k, v := range tt.want {
+				want[libpf.Intern(k)] = libpf.Intern(v)
+			}
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// The decoder must not retain the eBPF payload, which is reused per trace.
+// Interning is what breaks ToString's alias, so this guards a decode path that
+// stopped interning.
+func TestDecodeLabelsDoesNotAliasPayload(t *testing.T) {
+	tc := &threadContextInfo{
+		schemaVersion:   supportedThreadCtxSchemaVersion,
+		attributeKeyMap: []libpf.String{libpf.Intern("k")},
+	}
+
+	data := append([]byte{0, 3}, "abc"...)
+	got := tc.DecodeLabels(data)
+	require.Equal(t, libpf.Intern("abc"), got[libpf.Intern("k")])
+
+	copy(data[2:], "xyz")
+	assert.Equal(t, libpf.Intern("abc"), got[libpf.Intern("k")],
+		"decoded value must not alias the caller's buffer")
 }
