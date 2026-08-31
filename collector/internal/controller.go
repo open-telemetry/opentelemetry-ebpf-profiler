@@ -39,7 +39,7 @@ type Controller struct {
 	onShutdown   func() error
 	errorMode    config.ErrorMode
 	extensionIDs []component.ID
-	host         component.Host
+	probes       map[component.ID]tracer.Probe
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -100,6 +100,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		ctlr:         controller.New(cfg),
 		errorMode:    cfg.ErrorMode,
 		extensionIDs: cfg.Probes,
+		probes:       make(map[component.ID]tracer.Probe),
 	}, nil
 }
 
@@ -129,7 +130,6 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 // enableProbes resolves each configured extension ID from the host,
 // verifies it implements ProbeExtension, and enables its probe on the tracer.
 func (c *Controller) enableProbes(ctx context.Context, host component.Host) error {
-	c.host = host
 	if len(c.extensionIDs) == 0 {
 		return nil
 	}
@@ -144,7 +144,8 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 		if !ok {
 			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
 		}
-		if err := c.ctlr.EnableProbe(ctx, pp.Probe()); err != nil {
+		c.probes[id] = pp.Probe()
+		if err := c.ctlr.EnableProbe(ctx, c.probes[id]); err != nil {
 			return fmt.Errorf("enabling probe from extension %q: %w", id, err)
 		}
 		log.Infof("Enabled probe from extension %q", id)
@@ -155,23 +156,9 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 // Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
 	var shutdownErr error
-	if c.host != nil {
-		extensions := c.host.GetExtensions()
-		for _, id := range c.extensionIDs {
-			ext, ok := extensions[id]
-			if !ok {
-				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("extension %q not found; ensure it is listed under service::extensions", id))
-				continue
-			}
-			pp, ok := ext.(ProbeProvider)
-			if !ok {
-				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("extension %q does not implement ProbeExtension", id))
-				continue
-			}
-			if err := pp.Probe().Unload(); err != nil {
-				shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
-			}
-			log.Infof("Unloaded probe from extension %q", id)
+	for id, probe := range c.probes {
+		if err := probe.Unload(); err != nil {
+			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
 		}
 	}
 	c.ctlr.Shutdown()
