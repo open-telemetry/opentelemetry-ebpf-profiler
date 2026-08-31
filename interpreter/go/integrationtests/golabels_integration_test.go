@@ -19,12 +19,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/metric/noop"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 var (
@@ -121,13 +122,11 @@ func Test_Golabels(t *testing.T) {
 			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
 
 			wg := sync.WaitGroup{}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				err := exec.CommandContext(ctx, exe.Name()).Run()
 				select {
 				case <-ctx.Done():
-					t.Log("Test program cancelled (run complete)")
+					t.Log("Test program canceled (run complete)")
 					select {
 					case <-trc.Done():
 						t.Error("map monitoring ended with unrecoverable errors")
@@ -141,7 +140,7 @@ func Test_Golabels(t *testing.T) {
 					// the backtrace what the tracer is doing.
 					panic("failed to capture golabel frames")
 				}
-			}()
+			})
 
 			ok := false
 			for trace := range traceCh {

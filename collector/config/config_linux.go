@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"

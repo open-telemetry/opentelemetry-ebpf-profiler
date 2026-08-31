@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 // TestLuaOffsets is based on armExtractor.findG2TracesOffsetFromChecktrace, which

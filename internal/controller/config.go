@@ -8,6 +8,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )

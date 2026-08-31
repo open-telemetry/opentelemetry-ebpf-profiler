@@ -16,7 +16,7 @@ func TestValidateMaxValue(t *testing.T) {
 		Sizeof uint `maxValue:"4096"`
 		Plain  uint
 	}
-	structType := reflect.TypeOf(testStruct{})
+	structType := reflect.TypeFor[testStruct]()
 
 	cases := []struct {
 		name      string

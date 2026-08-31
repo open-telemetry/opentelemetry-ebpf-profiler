@@ -8,8 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"go.opentelemetry.io/ebpf-profiler/stringutil"
 	aa "golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // Xreg2num converts arm64asm Reg or RegSP X0...X30 and W0...W30 register enum into a register

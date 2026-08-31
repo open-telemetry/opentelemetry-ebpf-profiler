@@ -16,9 +16,10 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/elastic/go-perf"
+	"golang.org/x/sys/unix"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"golang.org/x/sys/unix"
 )
 
 // bpfProgPrefix is the prefix the kernel uses for all JIT'd BPF program
