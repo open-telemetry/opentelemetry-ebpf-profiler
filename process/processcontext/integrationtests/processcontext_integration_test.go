@@ -8,7 +8,6 @@ package integrationtests
 import (
 	"context"
 	"log/slog"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,7 +115,6 @@ func Test_ProcessContext(t *testing.T) {
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
-				OffCPUThreshold:        uint32(math.MaxUint32 / 100),
 				VerboseMode:            true,
 				TraceReporter:          rep,
 			})
