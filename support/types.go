@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x73
+	MetricIDBeginCumulative = 0x79
 )
 
 const (
@@ -86,13 +86,6 @@ const (
 	HSTSIDStackDeltaScale = 0x8
 	HSTSIDSegMapBit       = 0x0
 	HSTSIDSegMapMask      = 0xffffffffffffff
-)
-
-const (
-	TraceOriginUnknown  = 0x0
-	TraceOriginSampling = 0x1
-	TraceOriginOffCPU   = 0x2
-	TraceOriginProbe    = 0x3
 )
 
 const (
@@ -177,7 +170,7 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
-	Origin             uint32
+	Origin             uint16
 	Value              uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
@@ -208,12 +201,14 @@ type DotnetProcInfo struct {
 }
 type GoRuntimeOffsets struct {
 	M_offset               uint32
+	M_gsignal              uint32
 	Curg                   uint32
 	Labels                 uint32
 	Hmap_count             uint32
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -300,6 +295,8 @@ type RubyProcInfo struct {
 	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
+	Jit_start                    uint64
+	Jit_end                      uint64
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
@@ -348,12 +345,12 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62e0
+	Sizeof_Trace      = 0x62d8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x48
+	sizeof_RubyProcInfo   = 0x60
 )
 
 const (
@@ -382,6 +379,7 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandGoAsmcgocall int32 = 0x5
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
@@ -418,6 +416,10 @@ const (
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
+	RubyFrameTypeJit      = 0x5
+
+	LJCframeSpaceX86 = 0x50
+	LJCframeSpaceArm = 0xd0
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -522,8 +524,14 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
 	0x6d: metrics.IDUnwindLuaJITAttempts,
 	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
-	0x6f: metrics.IDUnwindThreadContextErrReadTsdBase,
-	0x70: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
-	0x71: metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,
-	0x72: metrics.IDUnwindThreadContextReadSuccesses,
+	0x6f: metrics.IDSamplesSkippedProcessTooNew,
+	0x70: metrics.IDNumSyncsFromPrctl,
+	0x71: metrics.IDNumPriorityEventDeferred,
+	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x75: metrics.IDUnwindThreadContextErrReadTsdBase,
+	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x77: metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,
+	0x78: metrics.IDUnwindThreadContextReadSuccesses,
 }

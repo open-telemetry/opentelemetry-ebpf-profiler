@@ -18,7 +18,7 @@ func TestNoInterpreters(t *testing.T) {
 		field := cfg.Field(i)
 		fieldType := cfgType.Field(i)
 
-		interpreter, ok := field.Interface().(interface{ IsDisabled() bool })
+		interpreter, ok := reflect.TypeAssert[interface{ IsDisabled() bool }](field)
 		require.Truef(t, ok, "Config.%s does not implement IsDisabled", fieldType.Name)
 		require.Truef(t, interpreter.IsDisabled(), "Config.%s is enabled", fieldType.Name)
 	}

@@ -6,8 +6,9 @@ package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 import (
 	"fmt"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type Registers struct {

@@ -2190,31 +2190,73 @@
     "id": 299
   },
   {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 300
+  },
+  {
+    "description": "Number of PID resynchronizations triggered by the prctl monitor",
+    "type": "counter",
+    "name": "NumSyncsFromPrctl",
+    "field": "bpf.num_syncs_from_prctl",
+    "id": 301
+  },
+  {
+    "description": "Number of priority PID events deferred (recorded but not signalled) due to rate limiting",
+    "type": "counter",
+    "name": "NumPriorityEventDeferred",
+    "field": "bpf.num_priority_event_deferred",
+    "id": 302
+  },
+  {
+    "description": "Number of attempted Go asmcgocall stack-switch unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallAttempts",
+    "field": "bpf.go.asmcgocall_attempts",
+    "id": 303
+  },
+  {
+    "description": "Number of successful Go asmcgocall unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallSuccess",
+    "field": "bpf.go.asmcgocall_success",
+    "id": 304
+  },
+  {
+    "description": "Number of Go asmcgocall unwind failures",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallUnwindFailure",
+    "field": "bpf.go.errors.asmcgocall_unwind_failure",
+    "id": 305
+  },
+  {
     "description": "Number of failures to get TSD base for thread context",
     "type": "counter",
     "name": "UnwindThreadContextErrReadTsdBase",
     "field": "bpf.threadctx.errors.read_tsd_base",
-    "id": 300
+    "id": 306
   },
   {
     "description": "Number of failures to read the thread context buffer",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxBuf",
     "field": "bpf.threadctx.errors.read_thread_ctx_buf",
-    "id": 301
+    "id": 307
   },
   {
     "description": "Number of failures to read the thread context attributes",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxAttrs",
     "field": "bpf.threadctx.errors.read_thread_ctx_attrs",
-    "id": 302
+    "id": 308
   },
   {
     "description": "Number of successful reads of thread context info",
     "type": "counter",
     "name": "UnwindThreadContextReadSuccesses",
     "field": "bpf.threadctx.read_successes",
-    "id": 303
+    "id": 309
   }
 ]

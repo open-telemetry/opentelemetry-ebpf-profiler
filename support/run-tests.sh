@@ -42,7 +42,7 @@ done < <(find . -name '*.test' -print0)
 additionalQemuArgs=""
 
 supportKVM=$(grep -E 'vmx|svm' /proc/cpuinfo || true)
-if [ ! "$supportKVM" ] && [ "$qemu_arch" = "$(uname -m)" ]; then
+if [ -n "$supportKVM" ] && [ "$qemu_arch" = "$(uname -m)" ]; then
   additionalQemuArgs="-enable-kvm"
 fi
 

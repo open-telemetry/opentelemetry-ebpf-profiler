@@ -5,6 +5,7 @@
 #include "../../support/ebpf/types.h"
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 
 struct cgo_ctx {
@@ -50,6 +51,10 @@ void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_
   // Initialize variables set via RODATA.
   inverse_pac_mask        = new_inv_pac_mask;
   ruby_skip_native_resume = new_ruby_skip_native_resume;
+
+  // collect_trace rejects origin == 0. Use UINT16_MAX as a placeholder since
+  // the coredump test harness has no real origin registry.
+  origin_id_sampling = UINT16_MAX;
 }
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)

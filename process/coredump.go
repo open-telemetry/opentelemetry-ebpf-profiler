@@ -9,11 +9,13 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"bytes"
+	"cmp"
 	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -172,6 +174,13 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		return nil, err
 	}
 
+	// PT_LOAD entries are collected before notes are parsed. NT_FILE mappings
+	// without a matching PT_LOAD entry are appended later, so restore the
+	// address order provided by /proc/PID/maps before exposing the mappings.
+	slices.SortFunc(cd.mappings, func(a, b RawMapping) int {
+		return cmp.Compare(a.Vaddr, b.Vaddr)
+	})
+
 	return cd, nil
 }
 
@@ -203,8 +212,8 @@ func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
 }
 
-func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
-	return ProcessMeta{}
+func (cd *CoredumpProcess) GetProcessMeta(_ []MetaEnricher) Meta {
+	return Meta{}
 }
 
 func (cd *CoredumpProcess) GetExe() (libpf.String, error) {

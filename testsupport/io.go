@@ -14,6 +14,7 @@ import (
 // transparent view into the given reference buffer.
 func ValidateReadAtWrapperTransparency(
 	t *testing.T, iterations uint, reference []byte, testee io.ReaderAt) {
+	t.Helper()
 	bufferSize := uint64(len(reference))
 
 	// Samples random slices to validate within the file.

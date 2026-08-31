@@ -97,6 +97,7 @@ func TestReader_ReadString(t *testing.T) {
 }
 
 func TestReadSlice_CrossBoundary(t *testing.T) {
+	const bufferSize = 256
 	a := bytes.Repeat([]byte("a"), bufferSize-10)
 	b := bytes.Repeat([]byte("b"), 100)
 	comma := []byte(",")
@@ -105,6 +106,7 @@ func TestReadSlice_CrossBoundary(t *testing.T) {
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer PutReader(r)
+	r.SetBufferSize(bufferSize)
 
 	slice, err := r.ReadSlice(',')
 	require.NoError(t, err)

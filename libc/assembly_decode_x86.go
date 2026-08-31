@@ -8,9 +8,10 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 func getAnalyzersX86() []Analyzer {

@@ -774,7 +774,7 @@ func TestExtractLibcInfoIndependence(t *testing.T) {
 	info, err := ExtractLibcInfo(ef)
 
 	// Should succeed (no error) because DTV extraction works even though TSD fails.
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, info, "ExtractLibcInfo should return non-nil LibcInfo")
 
 	// TSD should be empty (no pthread_getspecific symbol)

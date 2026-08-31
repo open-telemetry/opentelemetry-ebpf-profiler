@@ -13,6 +13,7 @@ import (
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/luajit.h"
 */
 import "C"
 
@@ -98,13 +99,6 @@ const (
 )
 
 const (
-	TraceOriginUnknown  = C.TRACE_UNKNOWN
-	TraceOriginSampling = C.TRACE_SAMPLING
-	TraceOriginOffCPU   = C.TRACE_OFF_CPU
-	TraceOriginProbe    = C.TRACE_PROBE
-)
-
-const (
 	CustomLabelsTypeNone   = C.CUSTOM_LABELS_TYPE_NONE
 	CustomLabelsTypeNative = C.CUSTOM_LABELS_TYPE_NATIVE
 	CustomLabelsTypeGo     = C.CUSTOM_LABELS_TYPE_GO
@@ -179,6 +173,7 @@ const (
 	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
 	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
 	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
+	UnwindCommandGoAsmcgocall int32 = C.UNWIND_COMMAND_GO_ASMCGOCALL
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
@@ -218,6 +213,10 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+	RubyFrameTypeJit      = C.RUBY_FRAME_TYPE_JIT
+
+	LJCframeSpaceX86 = C.LUAJIT_CFRAME_SPACE_X86_64
+	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -322,6 +321,12 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNativeErrNonExecutableVMA:            metrics.IDUnwindNativeErrNonExecutableVMA,
 	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
 	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
+	C.metricID_SamplesSkippedProcessTooNew:                metrics.IDSamplesSkippedProcessTooNew,
+	C.metricID_NumSyncsFromPrctl:                          metrics.IDNumSyncsFromPrctl,
+	C.metricID_NumPriorityEventDeferred:                   metrics.IDNumPriorityEventDeferred,
+	C.metricID_UnwindGoAsmcgocallAttempts:                 metrics.IDUnwindGoAsmcgocallAttempts,
+	C.metricID_UnwindGoAsmcgocallSuccess:                  metrics.IDUnwindGoAsmcgocallSuccess,
+	C.metricID_UnwindGoAsmcgocallUnwindFailure:            metrics.IDUnwindGoAsmcgocallUnwindFailure,
 	C.metricID_UnwindThreadContextErrReadTsdBase:          metrics.IDUnwindThreadContextErrReadTsdBase,
 	C.metricID_UnwindThreadContextErrReadThreadCtxBuf:     metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
 	C.metricID_UnwindThreadContextErrReadThreadCtxAttrs:   metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,

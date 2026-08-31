@@ -99,7 +99,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 ) (func() (lost, noData, readError uint64), error) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
+		return nil, fmt.Errorf("failed to setup perf reporting via %s: %v", perfEventMap, err)
 	}
 
 	// Set a deadline so ReadInto times out periodically and we can check context
@@ -154,7 +154,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := ringbuf.NewReader(eventsMap)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to setup ringbuf reporting via %s: %v", eventsMap, err)
+		return nil, fmt.Errorf("failed to setup ringbuf reporting via %s: %v", eventsMap, err)
 	}
 
 	// A deadline of zero is treated as "no deadline". A deadline in the past
@@ -304,7 +304,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
 	eventMap, ok := t.ebpfMaps["report_events"]
 	if !ok {
-		return nil, fmt.Errorf("Map report_events is not available")
+		return nil, fmt.Errorf("map report_events is not available")
 	}
 
 	getPerfErrorCounts, err := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())

@@ -6,10 +6,11 @@ package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 import (
 	"fmt"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 // ExtractTLSOffset scans through x86_64 assembly code looking for MOV instructions

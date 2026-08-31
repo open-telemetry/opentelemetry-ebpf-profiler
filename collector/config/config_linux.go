@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -47,37 +49,51 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 
 // Config is the configuration for the collector.
 type Config struct {
-	ReporterInterval       time.Duration            `mapstructure:"reporter_interval"`
-	ReporterJitter         float64                  `mapstructure:"reporter_jitter"`
-	MonitorInterval        time.Duration            `mapstructure:"monitor_interval"`
-	SamplesPerSecond       int                      `mapstructure:"samples_per_second"`
-	FrameCacheSize         uint                     `mapstructure:"frame_cache_size"`
-	ProbabilisticInterval  time.Duration            `mapstructure:"probabilistic_interval"`
-	ProbabilisticThreshold uint                     `mapstructure:"probabilistic_threshold"`
-	Interpreters           interpreterconfig.Config `mapstructure:"interpreters"`
-	ClockSyncInterval      time.Duration            `mapstructure:"clock_sync_interval"`
-	SendErrorFrames        bool                     `mapstructure:"send_error_frames"`
-	SendIdleFrames         bool                     `mapstructure:"send_idle_frames"`
-	VerboseMode            bool                     `mapstructure:"verbose_mode"`
-	OffCPUThreshold        float64                  `mapstructure:"off_cpu_threshold"`
-	IncludeEnvVars         string                   `mapstructure:"include_env_vars"`
-	ProbeLinks             []string                 `mapstructure:"probe_links"`
-	LoadProbe              bool                     `mapstructure:"load_probe"`
-	MapScaleFactor         uint                     `mapstructure:"map_scale_factor"`
-	BPFVerifierLogLevel    uint                     `mapstructure:"bpf_verifier_log_level"`
-	NoKernelVersionCheck   bool                     `mapstructure:"no_kernel_version_check"`
-	MaxGRPCRetries         uint32                   `mapstructure:"max_grpc_retries"`
-	MaxRPCMsgSize          int                      `mapstructure:"max_rpc_msg_size"`
-	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
-	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
-	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
+	ReporterInterval        time.Duration            `mapstructure:"reporter_interval"`
+	ReporterJitter          float64                  `mapstructure:"reporter_jitter"`
+	MonitorInterval         time.Duration            `mapstructure:"monitor_interval"`
+	SamplesPerSecond        int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize          uint                     `mapstructure:"frame_cache_size"`
+	ProbabilisticInterval   time.Duration            `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold  uint                     `mapstructure:"probabilistic_threshold"`
+	Interpreters            interpreterconfig.Config `mapstructure:"interpreters"`
+	ClockSyncInterval       time.Duration            `mapstructure:"clock_sync_interval"`
+	SendErrorFrames         bool                     `mapstructure:"send_error_frames"`
+	SendIdleFrames          bool                     `mapstructure:"send_idle_frames"`
+	FilterMinProcessAge     time.Duration            `mapstructure:"filter_min_process_age"`
+	VerboseMode             bool                     `mapstructure:"verbose_mode"`
+	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
+	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
+	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
+	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`
+	MaxGRPCRetries          uint32                   `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize           int                      `mapstructure:"max_rpc_msg_size"`
+	BPFFSRoot               string                   `mapstructure:"bpf_fs_root"`
+	ErrorMode               ErrorMode                `mapstructure:"error_mode"`
+	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
+	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
+	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
+	Probes                  []component.ID           `mapstructure:"probes"`
+
+	// Configuration options that users can not set directly:
+	//
+	// PinnedCPUIDs is derived from TargetCPUIDs during Validate
+	PinnedCPUIDs []int `mapstructure:"-"`
 }
 
 // Validate validates the config.
-// This is automatically called by the config parser as it implements the xconfmap.Validator interface.
+// This is automatically called by the config parser as it implements the confmap.Validator interface.
 func (cfg *Config) Validate() error {
 	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
 		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
+	}
+
+	if cfg.ReporterInterval <= 0 {
+		return fmt.Errorf("invalid reporter interval: %s", cfg.ReporterInterval)
+	}
+
+	if cfg.MonitorInterval <= 0 {
+		return fmt.Errorf("invalid monitor interval: %s", cfg.MonitorInterval)
 	}
 
 	if cfg.SamplesPerSecond < 1 {
@@ -107,16 +123,24 @@ func (cfg *Config) Validate() error {
 		)
 	}
 
-	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
+	if cfg.FilterMinProcessAge < 0 {
 		return errors.New(
-			"invalid argument for off-cpu-threshold. The value " +
-				"should be in the range [0..1]. 0 disables off-cpu profiling")
+			"invalid argument for filter-min-process-age. The value " +
+				"should be a non-negative duration. 0 disables minimum process age filtering")
 	}
 
 	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {
 		return errors.New(
 			"invalid argument for reporter-jitter. The value " +
 				"should be in the range [0..1]. 0 disables jitter")
+	}
+
+	if cfg.TargetCPUIDs != "" {
+		cpus, err := tracer.ReadCPURange(cfg.TargetCPUIDs)
+		if err != nil {
+			return fmt.Errorf("invalid argument for target-cpu-ids: %v", err)
+		}
+		cfg.PinnedCPUIDs = cpus
 	}
 
 	if cfg.ProbabilisticThreshold < 1 ||

@@ -1,0 +1,12 @@
+type: offcpu
+github_project: open-telemetry/opentelemetry-ebpf-profiler
+scope_name: go.opentelemetry.io/ebpf-profiler/probes/offcpu
+
+status:
+  disable_codecov_badge: true
+  class: extension
+  stability:
+    development: [extension]
+  distributions: [ebpf-profiler]
+tests:
+  skip_lifecycle: true

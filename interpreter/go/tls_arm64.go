@@ -8,11 +8,12 @@ package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 import (
 	"fmt"
 
+	"golang.org/x/arch/arm64/arm64asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
-	"golang.org/x/arch/arm64/arm64asm"
 )
 
 // runtime.load_g starts by loading runtime.iscgo before deciding how to

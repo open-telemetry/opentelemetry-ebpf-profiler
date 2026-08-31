@@ -686,18 +686,36 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 299
 
+	// Number of samples skipped because the process is too new
+	IDSamplesSkippedProcessTooNew = 300
+
+	// Number of PID resynchronizations triggered by the prctl monitor
+	IDNumSyncsFromPrctl = 301
+
+	// Number of priority PID events deferred (recorded but not signalled) due to rate limiting
+	IDNumPriorityEventDeferred = 302
+
+	// Number of attempted Go asmcgocall stack-switch unwinds
+	IDUnwindGoAsmcgocallAttempts = 303
+
+	// Number of successful Go asmcgocall unwinds
+	IDUnwindGoAsmcgocallSuccess = 304
+
+	// Number of Go asmcgocall unwind failures
+	IDUnwindGoAsmcgocallUnwindFailure = 305
+
 	// Number of failures to get TSD base for thread context
-	IDUnwindThreadContextErrReadTsdBase = 300
+	IDUnwindThreadContextErrReadTsdBase = 306
 
 	// Number of failures to read the thread context buffer
-	IDUnwindThreadContextErrReadThreadCtxBuf = 301
+	IDUnwindThreadContextErrReadThreadCtxBuf = 307
 
 	// Number of failures to read the thread context attributes
-	IDUnwindThreadContextErrReadThreadCtxAttrs = 302
+	IDUnwindThreadContextErrReadThreadCtxAttrs = 308
 
 	// Number of successful reads of thread context info
-	IDUnwindThreadContextReadSuccesses = 303
+	IDUnwindThreadContextReadSuccesses = 309
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 304
+	IDMax = 310
 )

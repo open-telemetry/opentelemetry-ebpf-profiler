@@ -10,11 +10,12 @@ import (
 	"slices"
 	"strings"
 
+	aa "golang.org/x/arch/arm64/arm64asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	aa "golang.org/x/arch/arm64/arm64asm"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )

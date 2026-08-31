@@ -1,5 +1,5 @@
 // This file contains the code and map definitions for the tracepoint on the scheduler to
-// report the stopping a process.
+// report the stopping of a process.
 
 #include "bpfdefs.h"
 #include "tracemgmt.h"
@@ -26,6 +26,15 @@ struct sched_process_free_ctx {
 
 static EBPF_INLINE int do_process_free(void *ctx, u32 pid)
 {
+  if (pid_ns_translation_enabled) {
+    // pid is always the PID within the root/init PID namespace, since it comes straight
+    // from the task_struct field the tracepoint copies, and get_pid_tgid() cannot
+    // translate it. Therefore skip the fast exit-notification and ratelimit-reset below.
+    // Process exit is still detected via ProcessManager's periodic /proc liveness sweep
+    // and ENOENT/ESRCH handling during synchronization.
+    return 0;
+  }
+
   if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(pid)) {
     // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
     // to userspace.

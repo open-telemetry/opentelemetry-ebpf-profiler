@@ -6,9 +6,10 @@ package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 import (
 	"errors"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 func extractTSDInfoX86(code []byte) (TSDInfo, error) {

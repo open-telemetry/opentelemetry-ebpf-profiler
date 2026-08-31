@@ -14,8 +14,8 @@ var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
 // byte, or all of buf if no NUL is present. Suitable for fixed-size buffers
 // populated from eBPF.
 func CString(buf []byte) []byte {
-	if i := bytes.IndexByte(buf, 0); i >= 0 {
-		return buf[:i]
+	if before, _, ok := bytes.Cut(buf, []byte{0}); ok {
+		return before
 	}
 	return buf
 }

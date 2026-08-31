@@ -7,8 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	aa "golang.org/x/arch/arm64/arm64asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 )
 
 func getAnalyzersARM() []Analyzer {

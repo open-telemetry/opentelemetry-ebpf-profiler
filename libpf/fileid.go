@@ -15,6 +15,7 @@ import (
 	"os"
 
 	sha256 "github.com/minio/sha256-simd"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf/basehash"
 )
 

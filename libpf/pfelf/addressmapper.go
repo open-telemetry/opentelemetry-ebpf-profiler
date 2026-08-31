@@ -60,9 +60,9 @@ func (f *File) GetAddressMapper() AddressMapper {
 			continue
 		}
 		phdrs = append(phdrs, addressMapperPHDR{
-			offset: p.ProgHeader.Off,
-			vaddr:  p.ProgHeader.Vaddr,
-			filesz: p.ProgHeader.Filesz,
+			offset: p.Off,
+			vaddr:  p.Vaddr,
+			filesz: p.Filesz,
 		})
 	}
 	return AddressMapper{phdrs: phdrs}

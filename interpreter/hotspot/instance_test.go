@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
@@ -125,8 +126,7 @@ func TestStubsMapRace(t *testing.T) {
 func TestVMStructsFieldKinds(t *testing.T) {
 	var checkType func(rt reflect.Type, prefix string)
 	checkType = func(rt reflect.Type, prefix string) {
-		for i := 0; i < rt.NumField(); i++ {
-			f := rt.Field(i)
+		for f := range rt.Fields() {
 			fullName := prefix + f.Name
 			switch f.Type.Kind() {
 			case reflect.Struct:

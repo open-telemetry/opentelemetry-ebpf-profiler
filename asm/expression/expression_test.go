@@ -132,4 +132,13 @@ func TestExpression(t *testing.T) {
 		require.Equal(t, wantExpr, expr.DebugString(),
 			"Match must not sort the expression's operand slice in-place")
 	})
+
+	t.Run("named must use equality of names", func(t *testing.T) {
+		n1 := Named("good")
+		n2 := Named("good")
+		require.True(t, n1.Match(n2))
+
+		n3 := Named("bad")
+		require.False(t, n1.Match(n3))
+	})
 }

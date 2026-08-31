@@ -2,10 +2,13 @@ package processmanager
 
 import (
 	"os"
+	"path"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+	"unique"
 	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
@@ -16,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -39,6 +43,14 @@ func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEve
 	return nil
 }
 
+type fakeKernelSymbols struct {
+	snapshot kallsyms.Snapshot
+}
+
+func (f fakeKernelSymbols) Snapshot() kallsyms.Snapshot {
+	return f.snapshot
+}
+
 func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	pm, err := New(t.Context(), Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
@@ -53,6 +65,129 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
 	require.Equal(t, 1, pm.frameCache.Len())
+}
+
+// enrichEnvVars runs the configured enrichers against a synthetic
+// /proc/PID/environ holding env.
+func enrichEnvVars(t *testing.T, pm *ProcessManager, env ...string) process.Meta {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(path.Join(dir, "environ"),
+		[]byte(strings.Join(env, "\000")+"\000"), 0o600))
+	var meta process.Meta
+	for _, e := range pm.metaEnrichers {
+		e.EnrichMeta(dir+"/", &meta)
+	}
+	return meta
+}
+
+func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
+	requestedEnvVars := libpf.Set[string]{"FOO": {}}
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		IncludeEnvVars:        requestedEnvVars,
+	})
+	require.NoError(t, err)
+
+	meta := enrichEnvVars(t, pm,
+		"FOO=foo", "OTEL_SERVICE_NAME=svc", "OTEL_RESOURCE_ATTRIBUTES=k=v", "BAR=bar")
+
+	// Only the user-requested env vars may be reported.
+	assert.Equal(t, map[libpf.String]libpf.String{
+		libpf.Intern("FOO"): libpf.Intern("foo"),
+	}, meta.EnvVariables)
+
+	// The env vars used to derive process context are captured for internal use only.
+	assert.Equal(t, map[libpf.String]libpf.String{
+		libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("svc"),
+		libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=v"),
+	}, meta.InternalEnvVariables)
+
+	// New must not add the internal env vars to the caller's set.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, requestedEnvVars)
+
+	// Later mutations of the caller's set must not reach the enricher.
+	requestedEnvVars["BAR"] = libpf.Void{}
+	meta = enrichEnvVars(t, pm, "BAR=bar")
+	assert.Empty(t, meta.EnvVariables)
+}
+
+func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	require.NoError(t, err)
+
+	const address = libpf.Address(0x1234)
+	cachedFrame := unique.Make(libpf.Frame{
+		Type:            libpf.KernelFrame,
+		AddressOrLineno: 12,
+		FunctionName:    libpf.Intern("cached"),
+	})
+	frameCache.Add(kernelFrameCacheKey(address, kallsyms.Generation(0)), libpf.Frames{cachedFrame})
+
+	capture := &traceCapture{}
+	pm := &ProcessManager{
+		frameCache:    frameCache,
+		kernelSymbols: fakeKernelSymbols{},
+		traceReporter: capture,
+	}
+
+	for range 2 {
+		pm.HandleTrace(&libpf.EbpfTrace{
+			NumKernelFrames: 1,
+			FrameData:       []uint64{uint64(address)},
+		}, nil)
+	}
+
+	require.Len(t, capture.traces, 2)
+	require.Len(t, capture.traces[0].Frames, 1)
+	frame := capture.traces[0].Frames[0].Value()
+	assert.Equal(t, libpf.KernelFrame, frame.Type)
+	assert.Equal(t, "cached", frame.FunctionName.String())
+	assert.Equal(t, libpf.AddressOrLineno(12), frame.AddressOrLineno)
+
+	assert.Equal(t, uint64(0), pm.frameCacheMiss.Load())
+	assert.Equal(t, uint64(2), pm.frameCacheHit.Load())
+}
+
+func TestKernelFrameCacheIgnoresInvalidEntries(t *testing.T) {
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	require.NoError(t, err)
+
+	const address = libpf.Address(0x1234)
+	const staleGeneration = kallsyms.Generation(2)
+	cachedFrame := unique.Make(libpf.Frame{
+		Type:            libpf.KernelFrame,
+		AddressOrLineno: 0,
+		FunctionName:    libpf.Intern("cached"),
+	})
+	frameCache.Add(kernelFrameCacheKey(address, staleGeneration), libpf.Frames{cachedFrame})
+
+	capture := &traceCapture{}
+	pm := &ProcessManager{
+		frameCache:    frameCache,
+		kernelSymbols: fakeKernelSymbols{},
+		traceReporter: capture,
+	}
+
+	pm.HandleTrace(&libpf.EbpfTrace{
+		NumKernelFrames: 1,
+		FrameData:       []uint64{uint64(address)},
+	}, nil)
+
+	require.Len(t, capture.traces, 1)
+	require.Len(t, capture.traces[0].Frames, 1)
+	if capture.traces[0].Frames[0] == cachedFrame {
+		t.Fatalf("expected stale cache entry to be ignored")
+	}
+	frame := capture.traces[0].Frames[0].Value()
+	assert.Equal(t, libpf.KernelFrame, frame.Type)
+	assert.Empty(t, frame.FunctionName.String())
+	assert.Equal(t, libpf.AddressOrLineno(address-1), frame.AddressOrLineno)
+	assert.Equal(t, uint64(0), pm.frameCacheMiss.Load())
+	assert.Equal(t, uint64(0), pm.frameCacheHit.Load())
 }
 
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
@@ -82,7 +217,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	realPID := libpf.PID(os.Getpid())
 	pid := process.New(realPID, realPID)
 	elfRef := pfelf.NewReference(exec, pid)
-	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef, nil)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
 	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
@@ -164,7 +299,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	goFrame := goTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, goFrame.Type)
-	assert.Equal(t, "", goFrame.FunctionName.String())
+	assert.Empty(t, goFrame.FunctionName.String())
 
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       catPID,
@@ -179,7 +314,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	catFrame := catTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
-	assert.Equal(t, "", catFrame.FunctionName.String())
+	assert.Empty(t, catFrame.FunctionName.String())
 }
 
 func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
@@ -233,12 +368,12 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 	require.NotEmpty(t, capture.traces[0].Frames)
 	frame0 := capture.traces[0].Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, frame0.Type)
-	assert.Equal(t, "", frame0.FunctionName.String())
+	assert.Empty(t, frame0.FunctionName.String())
 
 	require.NotEmpty(t, capture.traces[1].Frames)
 	frame1 := capture.traces[1].Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, frame1.Type)
-	assert.Equal(t, "", frame1.FunctionName.String())
+	assert.Empty(t, frame1.FunctionName.String())
 
 	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
 	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())

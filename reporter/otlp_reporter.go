@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding/gzip"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"

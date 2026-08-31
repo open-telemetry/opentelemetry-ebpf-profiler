@@ -22,3 +22,27 @@ func TestRecordingReader(t *testing.T) {
 	}
 	assert.Len(t, rr.GetBuffer(), len(data)-1)
 }
+
+type endlessReader struct{}
+
+func (endlessReader) ReadAt(p []byte, _ int64) (int, error) {
+	for i := range p {
+		p[i] = 0xaa
+	}
+	return len(p), nil
+}
+
+func TestRecordingReaderMaxBufferSize(t *testing.T) {
+	rr := newRecordingReader(endlessReader{}, 0, 256)
+	read := 0
+	for read <= maxRecordingReaderBuf {
+		if _, err := rr.ReadByte(); err != nil {
+			break
+		}
+		read++
+	}
+
+	// The reader must stop at the size cap and never allocate beyond it.
+	assert.Equal(t, maxRecordingReaderBuf, read)
+	assert.Len(t, rr.buf, maxRecordingReaderBuf)
+}

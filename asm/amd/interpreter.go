@@ -8,8 +8,9 @@ import (
 	"io"
 	"math"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 type CodeBlock struct {
@@ -21,7 +22,7 @@ type Interpreter struct {
 	Regs        Registers
 	code        []byte
 	CodeAddress expression.Expression
-	pc          int
+	pc          uint64
 }
 
 func NewInterpreter() *Interpreter {
@@ -36,7 +37,7 @@ func NewInterpreterWithCode(code []byte) *Interpreter {
 	return it
 }
 
-func (i *Interpreter) PC() int {
+func (i *Interpreter) PC() uint64 {
 	return i.pc
 }
 
@@ -78,23 +79,29 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 			return inst, fmt.Errorf("at 0x%x : %v", i.pc, err)
 		}
 	}
-	i.pc += inst.Len
+	i.pc += uint64(inst.Len)
 	i.code = i.code[inst.Len:]
 	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
 	switch inst.Op {
-	case x86asm.ADD:
+	case x86asm.ADD, x86asm.SUB:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			left := i.Regs.GetX86(dst)
+			var right expression.Expression
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				right := expression.Imm(uint64(src))
-				i.Regs.setX86asm(dst, expression.Add(left, right))
+				right = expression.Imm(uint64(src))
 			case x86asm.Reg:
-				right := i.Regs.GetX86(src)
-				i.Regs.setX86asm(dst, expression.Add(left, right))
+				right = i.Regs.GetX86(src)
 			case x86asm.Mem:
-				right := i.MemArg(src)
-				right = expression.MemWithSegment(src.Segment, right, inst.MemBytes)
+				right = expression.MemWithSegment(src.Segment, i.MemArg(src), inst.MemBytes)
+			}
+			if right != nil {
+				// SUB is ADD with the right operand negated (-1 * x). Multiply/Add fold
+				// the immediate case, so `sub reg, imm` cancels a later `+imm`. Note that
+				// symbolic cancellation doesn't happen, so X + (-1 * X) doesn't become 0.
+				if inst.Op == x86asm.SUB {
+					right = expression.Multiply(expression.Imm(^uint64(0)), right)
+				}
 				i.Regs.setX86asm(dst, expression.Add(left, right))
 			}
 		}

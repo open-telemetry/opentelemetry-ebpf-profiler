@@ -3,11 +3,13 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 import (
 	"debug/elf"
 	"errors"
+	"fmt"
 	"testing"
 	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -145,6 +147,7 @@ func (h *testEbpfHandler) SupportsLPMTrieBatchOperations() bool {
 
 type testProcess struct {
 	pid      libpf.PID
+	exe      libpf.String
 	mappings []process.RawMapping
 }
 
@@ -156,12 +159,16 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.ProcessMeta {
-	return process.ProcessMeta{}
+func (tp *testProcess) GetProcessMeta(enrichers []process.MetaEnricher) process.Meta {
+	meta := process.Meta{Executable: tp.exe}
+	for _, e := range enrichers {
+		e.EnrichMeta(fmt.Sprintf("/proc/%d", tp.pid), &meta)
+	}
+	return meta
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
-	return libpf.NullString, nil
+	return tp.exe, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {
@@ -500,6 +507,14 @@ func TestIsInterpreterMapping(t *testing.T) {
 			m:    process.RawMapping{Flags: elf.PF_R},
 		},
 		{
+			name: "prctl-named anonymous non-executable",
+			m: process.RawMapping{
+				Flags: elf.PF_R,
+				Path:  "[anon:Ruby:rb_jit_reserve_addr_space]",
+			},
+			want: true,
+		},
+		{
 			name: "dll",
 			m:    process.RawMapping{Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 			want: true,
@@ -521,7 +536,8 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 	collector := newInterpreterMappingCollector(8)
 	pending := []process.RawMapping{
 		{Vaddr: 0x1000, Flags: elf.PF_R | elf.PF_X},
-		{Vaddr: 0x2000, Flags: elf.PF_R},
+		{Vaddr: 0x2000, Flags: elf.PF_R, Path: "[anon:Ruby:rb_jit_reserve_addr_space]"},
+		{Vaddr: 0x2800, Flags: elf.PF_R},
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x4000, Flags: elf.PF_R | elf.PF_X, Path: "/tmp/interpreter"},
 	}
@@ -539,7 +555,47 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 
 	require.Equal(t, []process.RawMapping{
 		{Vaddr: 0x1000, Flags: elf.PF_R | elf.PF_X},
+		{Vaddr: 0x2000, Flags: elf.PF_R, Path: "[anon:Ruby:rb_jit_reserve_addr_space]"},
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x5000, Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 	}, collector.mappings())
+}
+
+// TestSynchronizeProcessRunEnrichers verifies that meta enrichers run at process
+// discovery and again when the executable changes, so that enricher-produced
+// ExtraMeta is not lost when process metadata is refetched.
+func TestSynchronizeProcessRunEnrichers(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	key := libpf.Intern("test.key")
+	enricherCalls := 0
+	enricher := process.MetaEnricherFunc(func(procBase string, meta *process.Meta) {
+		enricherCalls++
+		require.Equal(fmt.Sprintf("/proc/%d", pid), procBase)
+		meta.ExtraMeta = map[libpf.String]string{key: meta.Executable.String()}
+	})
+
+	pm := &ProcessManager{
+		ebpf:             &testEbpfHandler{},
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: make(map[libpf.PID]*processInfo),
+		exitEvents:       make(map[libpf.PID]times.KTime),
+		metaEnrichers:    []process.MetaEnricher{enricher},
+	}
+
+	// Process first seen: gather and enrich metadata.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(1, enricherCalls)
+	meta, _ := pm.metaForPID(pid)
+	require.Equal("foobar", meta.ExtraMeta[key])
+
+	// Unchanged executable: don't refetch metadata, don't enrich.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
+	require.Equal(1, enricherCalls)
+
+	// Executable changed: refetch metadata and enrich.
+	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
+	require.Equal(2, enricherCalls)
+	meta, _ = pm.metaForPID(pid)
+	require.Equal("foobarbaz", meta.ExtraMeta[key])
 }

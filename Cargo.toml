@@ -36,7 +36,7 @@ opt-level = 1 # default of 0 is annoyingly slow
 
 [workspace.dependencies]
 argh = "0.1"
-base64 = "0.22.0"
+base64 = "0.23.0"
 cpp_demangle = "0.5"
 fallible-iterator = "0.3"
 flate2 = "1"
@@ -67,7 +67,7 @@ version = "0.18.0"
 default-features = false
 
 [workspace.dependencies.object]
-version = "0.39.0"
+version = "0.40.0"
 default-features = false
 features = ["std", "read_core", "elf", "macho", "unaligned"]
 

@@ -4,9 +4,10 @@
 package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
+	aa "golang.org/x/arch/arm64/arm64asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
 // decodeStubArgumentARM64 disassembles arm64 code and decodes the assumed value

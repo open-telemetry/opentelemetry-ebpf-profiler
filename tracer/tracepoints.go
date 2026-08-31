@@ -8,6 +8,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 )
@@ -24,7 +25,9 @@ func (t *Tracer) attachToTracepoint(group, name string, prog *ebpf.Program) erro
 	if err != nil {
 		return fmt.Errorf("failed to configure tracepoint on %#v: %v", hp, err)
 	}
-	t.hooks[hp] = hook
+	h := t.hooks.WLock()
+	h.m[hp] = hook
+	t.hooks.WUnlock(&h)
 	return nil
 }
 
@@ -39,4 +42,16 @@ func (t *Tracer) AttachSchedMonitor() error {
 	defer restoreRlimit()
 	name := schedProcessFreeHookName(libpf.MapKeysToSet(t.ebpfProgs))
 	return t.attachToTracepoint("sched", "sched_process_free", t.ebpfProgs[name])
+}
+
+// AttachPrctlMonitor attaches a tracepoint on prctl() to detect when a process
+// names an anonymous VMA "OTEL_CTX" via prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, ...).
+// This triggers a PID resynchronization so the profiler can discover newly published
+// process context mappings.
+func (t *Tracer) AttachPrctlMonitor() error {
+	prog, ok := t.ebpfProgs["tracepoint__sys_exit_prctl"]
+	if !ok {
+		return fmt.Errorf("eBPF program tracepoint__sys_exit_prctl not found")
+	}
+	return t.attachToTracepoint("syscalls", "sys_exit_prctl", prog)
 }

@@ -12,9 +12,10 @@ import (
 	"debug/elf"
 	"fmt"
 
+	"golang.org/x/arch/arm64/arm64asm"
+
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"golang.org/x/arch/arm64/arm64asm"
 )
 
 const (

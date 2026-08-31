@@ -54,9 +54,8 @@ func main() {
 			continue
 		}
 
-		output.WriteString(
-			fmt.Sprintf("\n\t// %s\n\tID%s = %d\n",
-				m.Description, m.Name, m.ID))
+		fmt.Fprintf(&output, "\n\t// %s\n\tID%s = %d\n",
+			m.Description, m.Name, m.ID)
 	}
 
 	output.WriteString(

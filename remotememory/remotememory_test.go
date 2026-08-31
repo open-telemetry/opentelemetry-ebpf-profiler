@@ -19,6 +19,7 @@ import (
 )
 
 func RemoteMemTests(t *testing.T, rm RemoteMemory) {
+	t.Helper()
 	data := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
 	dataPtr := libpf.Address(unsafe.Pointer(&data[0]))
 	str := []byte("this is a string\x00")
