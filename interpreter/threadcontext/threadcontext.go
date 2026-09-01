@@ -67,6 +67,7 @@ type tlsIndex struct {
 // an offset larger than a non-PIE process's heap addresses, and that heap is
 // exactly where the loader allocates the tls_index. So dereference it instead:
 // a pointer yields a small module index, an offset points at nothing mapped.
+// On aarch64 this only runs for a resolver tlsdescReturnsArg could not identify.
 //
 // Only a failure to read the address is evidence about what it holds, so a
 // failure to reach the process at all is reported instead of being classified.
@@ -183,7 +184,8 @@ type data struct {
 var _ interpreter.Data = &data{}
 
 func (d data) String() string {
-	return "Native thread labels"
+	return fmt.Sprintf("Native thread labels (%v elfAddr=0x%x offset=0x%x)",
+		d.access, d.elfAddr, d.offset)
 }
 
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
@@ -210,7 +212,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		}
 		return d.attachStatic(ebpf, pid, got+d.offset)
 
-	case accessGlobalDynamic:
+	case accessGeneralDynamic:
 		// The GOT holds a tls_index {module_id, offset} pair.
 		moduleID, err := readUint64(rm, bias+d.elfAddr)
 		if err != nil {
