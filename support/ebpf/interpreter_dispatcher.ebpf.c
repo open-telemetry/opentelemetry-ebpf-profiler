@@ -151,7 +151,7 @@ struct thread_context_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, pid_t);
   __type(value, ThreadContextProcInfo);
-  __uint(max_entries, 128);
+  __uint(max_entries, 1024);
 } thread_context_procs SEC(".maps");
 
 // filter_error_frames is set during load time.
@@ -310,11 +310,10 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
         (void *)(thread_context_buf_ptr + sizeof(thread_context_buf)))) {
     trace->custom_labels_type      = CUSTOM_LABELS_TYPE_NATIVE;
     trace->custom_labels_data.size = thread_context_buf.attrs_data_size;
+    increment_metric(metricID_UnwindThreadContextReadSuccesses);
   } else {
     increment_metric(metricID_UnwindThreadContextErrReadThreadCtxAttrs);
   }
-
-  increment_metric(metricID_UnwindThreadContextReadSuccesses);
 
   // WARN: we print this as little endian
   DEBUG_PRINT(
@@ -333,7 +332,6 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
-  maybe_add_thread_context_info(trace);
   // TODO: remove apmint once thread context info is fully supported
   maybe_add_apm_info(trace);
   if (
@@ -391,8 +389,13 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
-  // Must be last since it may not return (it will call send_trace).
+  // Does not return once it dispatches, so anything below runs only when the Go
+  // path did not claim the custom labels union.
   maybe_add_go_custom_labels(ctx, record);
+
+  // Go labels win the union, so this must read after the Go dispatch. Its trace
+  // and span IDs override apmint and the OTel span map above.
+  maybe_add_thread_context_info(trace);
 
   send_trace(ctx, trace);
 
