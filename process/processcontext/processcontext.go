@@ -352,7 +352,7 @@ func (t *threadContextInfo) DecodeLabels(data []byte) map[libpf.String]libpf.Str
 // it publishes no schema.
 //
 // The explicit nil check keeps this from returning a non-nil interface holding
-// a typed nil, which a caller's nil test would pass.
+// a typed nil, which a caller's nil test would not catch.
 func (i Info) LabelDecoder() libpf.LabelDecoder {
 	if i.threadCtx == nil {
 		return nil

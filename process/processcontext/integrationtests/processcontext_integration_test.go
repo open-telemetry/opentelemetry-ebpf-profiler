@@ -43,7 +43,7 @@ var expectedResourceAttrs = map[string]string{
 	"resource.key2":               "resource.value2",
 }
 
-// expectedThreadLabels is what update_thread_context() in processctx.c encodes,
+// expectedThreadLabels is what update_thread_context() in testdata/processctx_lib.c encodes,
 // resolved through the attribute_key_map published with the process context.
 var expectedThreadLabels = map[string]string{
 	"http_route":  "some_endpoint",

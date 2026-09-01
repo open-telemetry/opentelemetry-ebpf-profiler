@@ -100,6 +100,8 @@ type SampleKey struct {
 	// LabelsHash is a hash of the custom labels attached to the trace.
 	// It separates samples that share the same stack / TID / SpanID / TraceID
 	// but carry different labels so their labels aren't merged.
+	// On a 64-bit collision the first arrival's labels win and the other set is
+	// dropped. Unlike Hash above, this key exists only to keep label sets apart.
 	LabelsHash uint64
 }
 

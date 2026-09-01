@@ -223,6 +223,8 @@ func (f EbpfFrame) Variable(ndx int) uint64 {
 
 // LabelDecoder resolves the per-thread custom-label payload eBPF captured from
 // thread-local storage. Implementations must be safe for concurrent use.
+// DecodeLabels must not retain or alias data: it points into a reused
+// perf-ring buffer.
 type LabelDecoder interface {
 	DecodeLabels(data []byte) map[String]String
 }
@@ -230,7 +232,7 @@ type LabelDecoder interface {
 var labelsHashSeed = maphash.MakeSeed()
 
 // HashLabels returns a 64-bit order-independent hash of a labels map.
-// Uses XOR of per-entry hashes so map iteration order is irrelevant.
+// XOR folding is sound only because map keys are unique.
 func HashLabels(labels map[String]String) uint64 {
 	var sum uint64
 	var h maphash.Hash
