@@ -107,13 +107,13 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	switch {
 	case tlsdescAddr != 0:
 		// General-dynamic, GNU2/desc dialect.
-		return &data{access: accessTLSDesc, elfAddr: tlsdescAddr}, nil
+		return &data{access: accessTLSDesc, elfAddr: tlsdescAddr, machine: ef.Machine}, nil
 	case tpmodAddr != 0:
 		// General-dynamic, GNU dialect.
-		return &data{access: accessGlobalDynamic, elfAddr: tpmodAddr}, nil
+		return &data{access: accessGlobalDynamic, elfAddr: tpmodAddr, machine: ef.Machine}, nil
 	case tpoffAddr != 0:
 		// Initial-exec.
-		return &data{access: accessInitialExec, elfAddr: tpoffAddr}, nil
+		return &data{access: accessInitialExec, elfAddr: tpoffAddr, machine: ef.Machine}, nil
 	}
 
 	// Local-dynamic: the symbol is local to a shared object (not preemptible).
@@ -122,10 +122,10 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	switch {
 	case tlsdescNoSymAddr != 0:
 		return &data{access: accessTLSDesc, elfAddr: tlsdescNoSymAddr,
-			offset: uint64(sym.Address)}, nil
+			offset: uint64(sym.Address), machine: ef.Machine}, nil
 	case tpmodNoSymAddr != 0:
 		return &data{access: accessLocalDynamic, elfAddr: tpmodNoSymAddr,
-			offset: uint64(sym.Address)}, nil
+			offset: uint64(sym.Address), machine: ef.Machine}, nil
 	}
 
 	// No relocation references the symbol directly.
@@ -136,7 +136,7 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get static TLS offset: %v", err)
 		}
-		return &data{access: accessLocalExec, offset: tlsOffset}, nil
+		return &data{access: accessLocalExec, offset: tlsOffset, machine: ef.Machine}, nil
 	}
 
 	return nil, errors.New("unsupported TLS model")
@@ -162,6 +162,12 @@ func getStaticTLSOffset(ef *pfelf.File, sym *libpf.Symbol) (uint64, error) {
 	tlsProg := getTLSProg(ef)
 	if tlsProg == nil {
 		return 0, fmt.Errorf("failed to locate TLS segment")
+	}
+	// A symbol claiming to sit outside the TLS image means a malformed PT_TLS:
+	// the arithmetic below would turn it into a plausible-looking offset.
+	if uint64(sym.Address)+sym.Size > tlsProg.Memsz {
+		return 0, fmt.Errorf("TLS symbol at 0x%x size %d exceeds TLS segment size %d",
+			sym.Address, sym.Size, tlsProg.Memsz)
 	}
 	align := uint64(tlsProg.Align)
 	if align == 0 {

@@ -12,7 +12,14 @@
 #include <time.h>
 
 // TLS model varies with how this file is linked (static exe vs shared object),
-// which is the point of the build matrix in the Makefile.
+// which is the point of the build matrix in the Makefile. When built with
+// -DHIDDEN_TLS the variable is given hidden visibility, which lets the
+// compiler emit the local-dynamic model (-ftls-model=local-dynamic): a
+// global, default-visibility symbol can never use local-dynamic because it
+// is preemptible, so hiding it is required.
+#ifdef HIDDEN_TLS
+__attribute__((visibility("hidden")))
+#endif
 __thread otel_thread_ctx_v1_t *otel_thread_ctx_v1;
 
 int init_process_context(void) {
