@@ -12,7 +12,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -111,12 +110,13 @@ type ReadAtCloser = pfelf.ReadAtCloser
 type Meta struct {
 	// executable path retrieved from /proc/PID/exe
 	Executable libpf.String
-	// process env vars from /proc/PID/environ
+	// process env vars from /proc/PID/environ that may be reported
 	EnvVariables map[libpf.String]libpf.String
+	// process env vars captured for the profiler's own use. Overlaps
+	// EnvVariables when the user also asked to report one of them.
+	InternalEnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
 	ContainerID libpf.String
-	// process context
-	ProcessContextInfo processcontext.Info
 
 	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
 	// It is nil unless an enricher is configured and explicitly sets values.
