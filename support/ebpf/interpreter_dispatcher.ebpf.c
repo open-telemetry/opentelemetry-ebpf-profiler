@@ -306,9 +306,17 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  trace->apm_trace_id.as_int.hi    = thread_context_buf.trace_id.as_int.hi;
-  trace->apm_trace_id.as_int.lo    = thread_context_buf.trace_id.as_int.lo;
-  trace->apm_transaction_id.as_int = thread_context_buf.span_id.as_int;
+  // valid only means the writer is not mid-update. A thread with no active span
+  // publishes zero IDs, which must not clobber apmint or the OTel span map:
+  // this runs after both. ApmCorrelationBuf carries a separate trace_present
+  // flag for the same purpose, which ThreadContextBuf has no equivalent of.
+  if (
+    thread_context_buf.trace_id.as_int.hi | thread_context_buf.trace_id.as_int.lo |
+    thread_context_buf.span_id.as_int) {
+    trace->apm_trace_id.as_int.hi    = thread_context_buf.trace_id.as_int.hi;
+    trace->apm_trace_id.as_int.lo    = thread_context_buf.trace_id.as_int.lo;
+    trace->apm_transaction_id.as_int = thread_context_buf.span_id.as_int;
+  }
 
   if (thread_context_buf.attrs_data_size > sizeof(trace->custom_labels_data.data)) {
     thread_context_buf.attrs_data_size = sizeof(trace->custom_labels_data.data);
