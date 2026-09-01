@@ -102,22 +102,29 @@ func processInaccessible(err error) bool {
 	return errors.Is(err, unix.ESRCH) || errors.Is(err, unix.EPERM)
 }
 
-func findSymbol(ef *pfelf.File, symname string) *libpf.Symbol {
+// findSymbol returns nil when the symbol is absent. The error is non-nil only
+// when the fallback walk itself failed, which is indistinguishable from absence
+// to the caller and so must not be silently dropped.
+func findSymbol(ef *pfelf.File, symname string) (*libpf.Symbol, error) {
 	sym, err := ef.LookupSymbol(libpf.SymbolName(symname))
-	if err != nil {
-		// Lookup symbol might not find the symbol if it is not in the ELF hash table (DT_GNU_HASH).
-		// Only dynamic symbols are referenced in the ELF hash table
-		// (for example symbols from an executable or local symbols from a shared library are not referenced).
-		ef.VisitSymbols(func(s libpf.Symbol) bool {
-			if s.Name == libpf.SymbolName(symname) {
-				sym = &s
-				return false
-			}
-			return true
-		})
+	if err == nil {
+		return sym, nil
 	}
 
-	return sym
+	// Lookup symbol might not find the symbol if it is not in the ELF hash table (DT_GNU_HASH).
+	// Only dynamic symbols are referenced in the ELF hash table
+	// (for example symbols from an executable or local symbols from a shared library are not referenced).
+	if err := ef.VisitSymbols(func(s libpf.Symbol) bool {
+		if s.Name == libpf.SymbolName(symname) {
+			sym = &s
+			return false
+		}
+		return true
+	}); err != nil {
+		return nil, err
+	}
+
+	return sym, nil
 }
 
 func GetLoader(_ Config) interpreter.Loader {
@@ -139,8 +146,19 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 
 	// Resolve process storage symbol.
-	threadStorageSym := findSymbol(ef, tlsExport)
+	threadStorageSym, err := findSymbol(ef, tlsExport)
+	if err != nil {
+		// Reaches the caller as "symbol absent", quietly disabling the feature
+		// for this file. A stripped local-exec executable lands here.
+		log.Debugf("%s: thread context symbol lookup failed: %v", info.FileName(), err)
+	}
 	if threadStorageSym == nil {
+		return nil, nil
+	}
+
+	if threadStorageSym.Size == 0 && threadStorageSym.Address == 0 {
+		// An undefined entry: this module references the variable, another
+		// defines it. Not ours to handle, and not an error worth a warning.
 		return nil, nil
 	}
 
