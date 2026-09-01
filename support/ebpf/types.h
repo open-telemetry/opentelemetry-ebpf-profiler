@@ -662,6 +662,12 @@ typedef struct CustomLabelsData {
   u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
 } CustomLabelsData;
 
+// Trace.custom_labels_data and Trace.custom_labels alias the same bytes
+// (see the union below). tracer.go's reinterpret relies on this.
+_Static_assert(
+  sizeof(CustomLabelsData) == sizeof(CustomLabelsArray),
+  "CustomLabelsData and CustomLabelsArray must be the same size");
+
 enum CustomLabelsType {
   CUSTOM_LABELS_TYPE_NONE,
   CUSTOM_LABELS_TYPE_NATIVE,

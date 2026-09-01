@@ -347,10 +347,11 @@ const (
 	Sizeof_StackDelta = 0x4
 	Sizeof_Trace      = 0x62d8
 
-	sizeof_ApmIntProcInfo = 0x8
-	sizeof_DotnetProcInfo = 0x4
-	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x60
+	sizeof_ApmIntProcInfo        = 0x8
+	sizeof_DotnetProcInfo        = 0x4
+	sizeof_PHPProcInfo           = 0x18
+	sizeof_RubyProcInfo          = 0x60
+	sizeof_ThreadContextProcInfo = 0xc
 )
 
 const (
