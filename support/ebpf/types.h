@@ -367,10 +367,10 @@ enum {
   // number of failures to get TSD base for thread context
   metricID_UnwindThreadContextErrReadTsdBase,
 
-  // number of failures read the thread context buffer
+  // number of failures to read the thread context buffer
   metricID_UnwindThreadContextErrReadThreadCtxBuf,
 
-  // number of failures read the thread context attributes
+  // number of failures to read the thread context attributes
   metricID_UnwindThreadContextErrReadThreadCtxAttrs,
 
   // number of successful reads of thread context info
@@ -633,11 +633,17 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+// Defines the format of the OTel thread context TLS buffer, published by an
+// instrumented process per OTEP #4719. The attribute payload follows
+// immediately after this struct.
 typedef struct __attribute__((packed)) ThreadContextBuf {
   ApmTraceID trace_id;
   ApmSpanID span_id;
+  // 0 while the writer is mid-update.
   u8 valid;
+  // _padding on the writer side.
   u8 _reserved;
+  // Payload length in bytes.
   u16 attrs_data_size;
 } ThreadContextBuf;
 
@@ -659,11 +665,13 @@ typedef struct CustomLabelsArray {
 
 typedef struct CustomLabelsData {
   u16 size;
+  // Sized so sizeof(CustomLabelsData) == sizeof(CustomLabelsArray), which the
+  // union in Trace requires.
   u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
 } CustomLabelsData;
 
 // Trace.custom_labels_data and Trace.custom_labels alias the same bytes
-// (see the union below). tracer.go's reinterpret relies on this.
+// (see the union below). Both eBPF writers and tracer.go's reinterpret rely on it.
 _Static_assert(
   sizeof(CustomLabelsData) == sizeof(CustomLabelsArray),
   "CustomLabelsData and CustomLabelsArray must be the same size");
@@ -690,7 +698,7 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom labels type (Native or Go)
+  // Custom labels type: none, native or Go.
   u8 custom_labels_type;
   union {
     // Custom labels data
@@ -1160,6 +1168,7 @@ typedef struct ThreadContextProcInfo {
   // tls_offset is the variable's offset: TP-relative for static TLS
   // (local-exec / initial-exec, when module_id == 0), or the offset within the
   // module's TLS block for dynamic TLS.
+  // Signed because static TLS offsets (local exec model) are negative on x86_64.
   s32 tls_offset;
   // module_id is the TLS module ID for dynamic TLS, or 0 for static TLS.
   u32 module_id;

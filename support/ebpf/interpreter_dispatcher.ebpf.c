@@ -300,7 +300,6 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   trace->apm_trace_id.as_int.lo    = thread_context_buf.trace_id.as_int.lo;
   trace->apm_transaction_id.as_int = thread_context_buf.span_id.as_int;
 
-  // Truncate the data size to the size of the custom labels data
   if (thread_context_buf.attrs_data_size > sizeof(trace->custom_labels_data.data)) {
     thread_context_buf.attrs_data_size = sizeof(trace->custom_labels_data.data);
   }
