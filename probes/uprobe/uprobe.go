@@ -58,8 +58,9 @@ type probe struct {
 	// prog is the shared eBPF program loaded once in Load, reused across Attach calls.
 	prog *cebpf.Program
 
-	mu    sync.Mutex
-	links map[libpf.PID][]link.Link
+	mu       sync.Mutex
+	unloaded bool
+	links    map[libpf.PID][]link.Link
 }
 
 func (p *probe) String() string {
@@ -165,6 +166,11 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	}
 
 	p.mu.Lock()
+	if p.unloaded {
+		p.mu.Unlock()
+		// closing link due unloaded probe
+		return lnk.Close()
+	}
 	p.links[pid] = append(p.links[pid], lnk)
 	p.mu.Unlock()
 	return nil
@@ -186,6 +192,7 @@ func (p *probe) Detach(pid libpf.PID) {
 func (p *probe) Unload() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.unloaded = true
 	var unloadErrs error
 	for pid, pidLinks := range p.links {
 		for _, lnk := range pidLinks {
