@@ -831,7 +831,6 @@ func TestReadThreadContextInfo(t *testing.T) {
 			if tt.wantErr == nil && tt.wantErrSub == "" {
 				require.NoError(t, err)
 				require.NotNil(t, got)
-				assert.Equal(t, supportedThreadCtxSchemaVersion, got.schemaVersion)
 				assert.Equal(t, tt.wantKeyMap, got.attributeKeyMap)
 				return
 			}
@@ -856,7 +855,6 @@ func TestInfoLabelDecoder(t *testing.T) {
 	assert.Nil(t, Info{}.LabelDecoder())
 
 	info := Info{threadCtx: &threadContextInfo{
-		schemaVersion:   supportedThreadCtxSchemaVersion,
 		attributeKeyMap: []libpf.String{libpf.Intern("k")},
 	}}
 	assert.NotNil(t, info.LabelDecoder())
@@ -914,10 +912,7 @@ func TestDecodeLabels(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			tc := &threadContextInfo{
-				schemaVersion:   supportedThreadCtxSchemaVersion,
-				attributeKeyMap: keyMap,
-			}
+			tc := &threadContextInfo{attributeKeyMap: keyMap}
 
 			got := tc.DecodeLabels(tt.data)
 
@@ -935,7 +930,6 @@ func TestDecodeLabels(t *testing.T) {
 // stopped interning.
 func TestDecodeLabelsDoesNotAliasPayload(t *testing.T) {
 	tc := &threadContextInfo{
-		schemaVersion:   supportedThreadCtxSchemaVersion,
 		attributeKeyMap: []libpf.String{libpf.Intern("k")},
 	}
 

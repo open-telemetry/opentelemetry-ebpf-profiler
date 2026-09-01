@@ -80,7 +80,6 @@ var (
 
 // threadContextInfo is one process's published per-thread label schema.
 type threadContextInfo struct {
-	schemaVersion string
 	// Indexed by the key index the payload encodes.
 	attributeKeyMap []libpf.String
 }
@@ -324,7 +323,7 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, erro
 	if schemaVersion == "" {
 		return nil, errThreadContextInfoNotFound
 	}
-	return &threadContextInfo{schemaVersion: schemaVersion, attributeKeyMap: attributeKeyMap}, nil
+	return &threadContextInfo{attributeKeyMap: attributeKeyMap}, nil
 }
 
 // DecodeLabels resolves each entry's key index against the published schema.
