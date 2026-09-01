@@ -129,7 +129,7 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	}
 
 	// No relocation references the symbol directly.
-	if isExecutable(ef) {
+	if ef.IsExecutable() {
 		// Local-exec: the variable lives in the main executable's static TLS
 		// block and its TP-relative offset is known at load time.
 		tlsOffset, err := getStaticTLSOffset(ef, sym)
@@ -140,38 +140,6 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	}
 
 	return nil, errors.New("unsupported TLS model")
-}
-
-func isExecutable(ef *pfelf.File) bool {
-	switch ef.Type {
-	case elf.ET_EXEC:
-		// Classic, non-PIE executable.
-		return true
-
-	case elf.ET_DYN:
-		// Ambiguous: either a shared library or a PIE executable.
-		// The DF_1_PIE flag is the canonical discriminator.
-		if vals, err := ef.DynValue(elf.DT_FLAGS_1); err == nil {
-			for _, v := range vals {
-				if v&uint64(elf.DF_1_PIE) != 0 {
-					return true
-				}
-			}
-		}
-		// Fallback for older toolchains that didn't emit DF_1_PIE:
-		// a dynamically-linked executable carries a PT_INTERP segment,
-		// whereas a plain shared library does not.
-		// This fallback is not perfect:
-		// - libc.so.6 is a shared library, but has an interpreter segment.
-		// - a statically-linked PIE executable might does not have an interpreter segment.
-		for _, p := range ef.Progs {
-			if p.Type == elf.PT_INTERP {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 func roundUp(value, alignment uint64) uint64 {
