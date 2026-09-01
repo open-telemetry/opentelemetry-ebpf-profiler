@@ -531,8 +531,8 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
 	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
 	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
-	0x75: metrics.IDUnwindThreadContextErrReadTsdBase,
+	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
 	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
-	0x77: metrics.IDUnwindThreadContextErrReadThreadCtxAttrs,
-	0x78: metrics.IDUnwindThreadContextReadSuccesses,
+	0x77: metrics.IDUnwindThreadContextReadSuccesses,
+	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
 }

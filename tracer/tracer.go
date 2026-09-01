@@ -140,6 +140,11 @@ type Tracer struct {
 	// tracks how many were dropped due to invalid UTF-8.
 	customLabels customLabelValidator
 
+	// threadContextLabelsDropped counts native thread-context samples for
+	// which no label schema decoder was available (process never published
+	// one, published an unsupported version, or exited before it could).
+	threadContextLabelsDropped atomic.Int64
+
 	// sysConfigVars holds kernel struct offsets determined at startup, passed
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
@@ -1090,11 +1095,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			}
 		}
 	case support.CustomLabelsTypeNative:
-		// Key indices mean nothing without the schema the process published, so
-		// a PID with none (exited, or raced with publication) yields no labels.
+		// Key indices mean nothing without the schema the process published.
+		// A PID with none can be permanent (no publisher, or an unsupported
+		// schema version), not just a startup/exit race.
 		if dec := t.processManager.LabelDecoderForPID(trace.PID); dec != nil {
-			trace.CustomLabels = dec.DecodeLabels(
-				ptr.Custom_labels_data.Data[:ptr.Custom_labels_data.Size])
+			// Size is kernel-supplied. eBPF already clamps it to len(Data), but
+			// don't trust that blindly across a version skew between the loaded
+			// eBPF object and this binary -- a stale/newer .o could disagree.
+			size := min(int(ptr.Custom_labels_data.Size), len(ptr.Custom_labels_data.Data))
+			trace.CustomLabels = dec.DecodeLabels(ptr.Custom_labels_data.Data[:size])
+		} else if ptr.Custom_labels_data.Size > 0 {
+			// An empty payload is the common case for a process that publishes
+			// only trace/span IDs, so counting it would swamp the metric.
+			t.threadContextLabelsDropped.Add(1)
 		}
 	}
 
@@ -1170,6 +1183,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 			metrics.AddSlice(t.customLabels.getAndResetMetrics())
+			metrics.Add(metrics.IDThreadContextLabelsDroppedNoDecoder,
+				metrics.MetricValue(t.threadContextLabelsDropped.Swap(0)))
 		})
 	}
 

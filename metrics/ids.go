@@ -704,18 +704,21 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
-	// Number of failures to get TSD base for thread context
-	IDUnwindThreadContextErrReadTsdBase = 306
+	// Number of failures to read the thread context buffer pointer out of TLS
+	IDUnwindThreadContextErrReadTlsPtr = 306
 
-	// Number of failures to read the thread context buffer
+	// Number of failures to read the thread context buffer, header or payload
 	IDUnwindThreadContextErrReadThreadCtxBuf = 307
 
-	// Number of failures to read the thread context attributes
-	IDUnwindThreadContextErrReadThreadCtxAttrs = 308
-
 	// Number of successful reads of thread context info
-	IDUnwindThreadContextReadSuccesses = 309
+	IDUnwindThreadContextReadSuccesses = 308
+
+	// Number of native thread-context samples dropped because no label schema decoder was available for the process
+	IDThreadContextLabelsDroppedNoDecoder = 309
+
+	// Number of thread context attribute payloads truncated to fit the buffer
+	IDUnwindThreadContextAttrsTruncated = 310
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 310
+	IDMax = 311
 )

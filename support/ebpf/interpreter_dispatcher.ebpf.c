@@ -265,8 +265,8 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   }
 
   u64 tsd_base;
+  // tsd_get_base counts metricID_UnwindErrBadTPBaseAddr itself.
   if (tsd_get_base((void **)&tsd_base) != 0) {
-    increment_metric(metricID_UnwindThreadContextErrReadTsdBase);
     DEBUG_PRINT("Failed to get TSD base for native thread labels");
     return;
   }
@@ -281,6 +281,7 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
           &thread_context_buf_ptr,
           sizeof(thread_context_buf_ptr),
           (void *)(tsd_base + tls_offset))) {
+      increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
       DEBUG_PRINT("Failed to read thread context buffer pointer from static TLS");
       return;
     }
@@ -290,7 +291,16 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
                proc->module_id,
                proc->tls_offset,
                (void **)&thread_context_buf_ptr)) {
+    // Not double counting: dtv_read's metricID_UnwindErrBadDTVRead is shared
+    // with its other callers.
+    increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
     DEBUG_PRINT("Failed to read thread context buffer pointer from DTV");
+    return;
+  }
+
+  // An unpublished pointer is null and would swamp the error counter below.
+  if (!thread_context_buf_ptr) {
+    DEBUG_PRINT("Thread context unpublished: null TLS pointer");
     return;
   }
 
@@ -303,6 +313,7 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   }
 
   if (!thread_context_buf.valid) {
+    DEBUG_PRINT("Thread context buffer mid-update, skipping");
     return;
   }
 
@@ -319,6 +330,8 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   }
 
   if (thread_context_buf.attrs_data_size > sizeof(trace->custom_labels_data.data)) {
+    // Only signal that the buffer is too small for what processes publish.
+    increment_metric(metricID_UnwindThreadContextAttrsTruncated);
     thread_context_buf.attrs_data_size = sizeof(trace->custom_labels_data.data);
   }
   if (!bpf_probe_read_user(
@@ -329,7 +342,8 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     trace->custom_labels_data.size = thread_context_buf.attrs_data_size;
     increment_metric(metricID_UnwindThreadContextReadSuccesses);
   } else {
-    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxAttrs);
+    // Same counter as the header read: both mean the buffer is unreadable.
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
   }
 
   // WARN: we print this as little endian
