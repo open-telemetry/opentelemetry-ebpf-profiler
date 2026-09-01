@@ -49,7 +49,7 @@ func TestControllerShutdownUnloadsProbes(t *testing.T) {
 
 	c := &Controller{
 		ctlr:   internalcontroller.New(&internalcontroller.Config{}),
-		probes: map[component.ID]tracer.Probe{component.MustNewIDWithName("test", "probe"): mp},
+		probes: []tracer.Probe{mp},
 	}
 
 	if err := c.Shutdown(context.Background()); err != nil {

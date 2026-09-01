@@ -39,7 +39,7 @@ type Controller struct {
 	onShutdown   func() error
 	errorMode    config.ErrorMode
 	extensionIDs []component.ID
-	probes       map[component.ID]tracer.Probe
+	probes       []tracer.Probe
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -100,7 +100,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		ctlr:         controller.New(cfg),
 		errorMode:    cfg.ErrorMode,
 		extensionIDs: cfg.Probes,
-		probes:       make(map[component.ID]tracer.Probe),
+		probes:       make([]tracer.Probe, 0, len(cfg.Probes)),
 	}, nil
 }
 
@@ -144,10 +144,11 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 		if !ok {
 			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
 		}
-		c.probes[id] = pp.Probe()
-		if err := c.ctlr.EnableProbe(ctx, c.probes[id]); err != nil {
+		probe := pp.Probe()
+		if err := c.ctlr.EnableProbe(ctx, probe); err != nil {
 			return fmt.Errorf("enabling probe from extension %q: %w", id, err)
 		}
+		c.probes = append(c.probes, probe)
 		log.Infof("Enabled probe from extension %q", id)
 	}
 	return nil
@@ -156,12 +157,13 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 // Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
 	var shutdownErr error
-	for id, probe := range c.probes {
+	for _, probe := range c.probes {
 		if err := probe.Unload(); err != nil {
-			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
+			shutdownErr = errors.Join(shutdownErr, err)
 		}
-		delete(c.probes, id)
 	}
+	c.probes = c.probes[:0]
+
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
 		shutdownErr = errors.Join(shutdownErr, c.onShutdown())
