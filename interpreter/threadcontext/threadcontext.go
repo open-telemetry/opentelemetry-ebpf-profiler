@@ -130,6 +130,13 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 
+	// A file with no TLS segment cannot define a thread-local, so skip the
+	// .symtab walk findSymbol falls back to. That walk allocates a Go string
+	// per symbol and runs for every mapped executable and library.
+	if getTLSProg(ef) == nil {
+		return nil, nil
+	}
+
 	// Resolve process storage symbol.
 	threadStorageSym := findSymbol(ef, tlsExport)
 	if threadStorageSym == nil {
@@ -246,7 +253,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		if err != nil {
 			return nil, err
 		}
-		return d.attachTLSDesc(ebpf, pid, rm, arg)
+		return d.attachTLSDesc(ebpf, pid, rm, resolver, arg)
 
 	default:
 		return nil, fmt.Errorf("unknown TLS access model %v", d.access)
@@ -256,7 +263,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 // attachTLSDesc resolves a relocated TLS descriptor whose argument is either a
 // TP-relative offset (static TLS) or a pointer to a tls_index (dynamic TLS).
 func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	rm remotememory.RemoteMemory, arg uint64,
+	rm remotememory.RemoteMemory, resolver, arg uint64,
 ) (interpreter.Instance, error) {
 	if d.machine == elf.EM_X86_64 {
 		// Variant II places the static TLS block below TP, so a static offset
@@ -278,9 +285,21 @@ func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
 	}
 
-	// Variant I places the block above TP, so both forms are positive and only
-	// a dereference separates them. An unreadable argument is the expected
-	// outcome for a static offset, hence the fallback rather than an error.
+	// Variant I places the block above TP, so both forms are positive and the
+	// argument alone cannot separate them. Ask the resolver instead: one that
+	// returns the argument unchanged is what makes that argument a TP-relative
+	// offset.
+	static, err := tlsdescReturnsArg(rm, libpf.Address(resolver))
+	if err != nil {
+		return nil, err
+	}
+	if static {
+		return d.attachStatic(ebpf, pid, arg+d.offset)
+	}
+
+	// An unrecognized resolver (a loader we don't decode) leaves only the
+	// dereference. An unreadable argument is the expected outcome for a static
+	// offset, hence the fallback rather than an error.
 	ti, err := readTLSIndex(rm, arg)
 	if err != nil {
 		return nil, err
