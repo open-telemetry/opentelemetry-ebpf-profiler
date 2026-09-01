@@ -216,27 +216,8 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   // frame pointer: gobuf.bp is already its caller's. Unwinding it by its own
   // stack delta would therefore land in the caller's caller and drop a frame.
   // Emit it here and step straight to its caller instead.
-  u64 caller_pc;
-  u64 caller_sp;
-#if defined(__aarch64__)
-  // The return address never reached the stack; morestack saved it into gobuf.lr,
-  // the slot ahead of bp (tools/gooffsets and TestSchedOffsets guard the adjacency).
-  caller_pc = *((u64 *)(scratch + bp_off - sizeof(u64)));
-  // aarch64 calls do not push, so the recovered sp is already the caller's.
-  caller_sp = saved_sp;
-#else
-  // The call pushed the return address, and gobuf.sp points at it.
-  if (bpf_probe_read_user(&caller_pc, sizeof(caller_pc), (void *)saved_sp)) {
-    DEBUG_PRINT("morestack: failed to read caller return address");
-    return ERR_GO_RUNTIME_LOAD_FAILURE;
-  }
-  caller_sp = saved_sp + sizeof(u64);
-#endif
-  if (!caller_pc) {
-    DEBUG_PRINT("morestack: caller pc not populated");
-    return ERR_GO_RUNTIME_LOAD_FAILURE;
-  }
-
+  // resolve_unwind_mapping() describes the frame from the current state->pc, so it
+  // and the push have to happen before that is moved on to the caller.
   int unwinder;
   err = resolve_unwind_mapping(record, &unwinder);
   if (err != ERR_OK) {
@@ -247,13 +228,25 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
     &record->trace,
     state->text_section_id,
     state->text_section_offset,
-    state->return_address);
+    /*return_address=*/true);
   if (err != ERR_OK) {
     return err;
   }
 
-  state->pc = caller_pc;
-  state->sp = caller_sp;
+#if defined(__aarch64__)
+  // The return address never reached the stack; morestack saved it into gobuf.lr,
+  // the slot ahead of bp (tools/gooffsets and TestSchedOffsets guard the adjacency).
+  state->pc = *((u64 *)(scratch + bp_off - sizeof(u64)));
+  // aarch64 calls do not push, so the recovered sp is already the caller's.
+  state->sp = saved_sp;
+#else
+  // The call pushed the return address, and gobuf.sp points at it.
+  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)saved_sp)) {
+    DEBUG_PRINT("morestack: failed to read caller return address");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  state->sp = saved_sp + sizeof(u64);
+#endif
   // state->fp is gobuf.bp, which already is this frame's frame pointer.
   unwinder_mark_nonleaf_frame(state);
   DEBUG_PRINT(
