@@ -108,7 +108,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 func (c *Controller) Start(ctx context.Context, host component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
-			c.ctlr.Shutdown()
+			c.Shutdown(ctx)
 			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
 			return nil
 		}
@@ -117,7 +117,7 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 
 	if err := c.enableProbes(ctx, host); err != nil {
 		if c.errorMode == config.IgnoreError {
-			c.ctlr.Shutdown()
+			c.Shutdown(ctx)
 			log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
 			return nil
 		}
@@ -160,6 +160,7 @@ func (c *Controller) Shutdown(_ context.Context) error {
 		if err := probe.Unload(); err != nil {
 			shutdownErr = errors.Join(shutdownErr, fmt.Errorf("unloading probe from extension %q: %w", id, err))
 		}
+		delete(c.probes, id)
 	}
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
