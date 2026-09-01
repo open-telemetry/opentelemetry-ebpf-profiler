@@ -151,7 +151,7 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 			errInvalidContext, err)
 	}
 
-	ctx, ctxErr := readPayload(rm, hdr)
+	ctx, threadCtxErr, ctxErr := readPayload(rm, hdr)
 	// Deferred: the read may have failed only because of a concurrent update
 	// between the header and the payload, which the timestamp recheck detects.
 
@@ -167,6 +167,13 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 
 	if ctxErr != nil {
 		return Info{}, fmt.Errorf("%w: %w", errInvalidContext, ctxErr)
+	}
+
+	if threadCtxErr != nil {
+		// The read is now known coherent, so this is a real fault (unsupported
+		// schema version, or a malformed publisher) rather than a torn read.
+		// Every native label from this process is dropped until it is fixed.
+		log.Warnf("failed to read thread context: %v", threadCtxErr)
 	}
 
 	return ctx, nil
@@ -259,28 +266,32 @@ func readHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (header,
 	return hdr, nil
 }
 
-func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
+// threadCtxErr reports a non-fatal thread-context schema fault: Info is valid
+// without it. Returned rather than logged here because only the caller's
+// timestamp recheck can tell a genuine fault from a torn read.
+func readPayload(rm remotememory.RemoteMemory, hdr header,
+) (info Info, threadCtxErr error, err error) {
 	payloadBytes := make([]byte, hdr.PayloadSize)
-	err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes)
-	if err != nil {
-		return Info{}, fmt.Errorf("failed to read payload: %w", err)
+	if err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes); err != nil {
+		return Info{}, nil, fmt.Errorf("failed to read payload: %w", err)
 	}
 
 	ctx := &processcontextpb.ProcessContext{}
 	if err := proto.Unmarshal(payloadBytes, ctx); err != nil {
-		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
+		return Info{}, nil, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
-	if err != nil && !errors.Is(err, errThreadContextInfoNotFound) {
-		log.Debugf("failed to read thread context: %v", err)
+	threadCtx, threadCtxErr := readThreadContextInfo(ctx.GetAttributes())
+	if errors.Is(threadCtxErr, errThreadContextInfoNotFound) {
+		// No schema published: the common case, not a fault.
+		threadCtxErr = nil
 	}
 
 	return Info{
 		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
 		threadCtx:     threadCtx,
 		publishedAtNs: hdr.MonotonicPublishedAtNs,
-	}, nil
+	}, threadCtxErr, nil
 }
 
 // readThreadContextInfo parses the threadlocal.* schema attributes. Returns
