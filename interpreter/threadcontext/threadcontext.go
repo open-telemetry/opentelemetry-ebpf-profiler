@@ -7,9 +7,12 @@ package threadcontext // import "go.opentelemetry.io/ebpf-profiler/interpreter/t
 import (
 	"debug/elf"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"unsafe"
+
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -64,13 +67,23 @@ type tlsIndex struct {
 // an offset larger than a non-PIE process's heap addresses, and that heap is
 // exactly where the loader allocates the tls_index. So dereference it instead:
 // a pointer yields a small module index, an offset points at nothing mapped.
+//
+// Only a failure to read the address is evidence about what it holds, so a
+// failure to reach the process at all is reported instead of being classified.
 func readTLSIndex(rm remotememory.RemoteMemory, addr uint64) (*tlsIndex, error) {
 	if addr < minUserAddr {
 		return nil, nil
 	}
 	moduleID, err := readUint64(rm, libpf.Address(addr))
-	if err != nil || moduleID == 0 || moduleID > maxTLSModuleID {
-		// Unreadable or implausible: not a pointer, so a large static offset.
+	if err != nil {
+		if processInaccessible(err) {
+			return nil, err
+		}
+		// Unreadable: not a pointer, so a large static offset.
+		return nil, nil
+	}
+	if moduleID == 0 || moduleID > maxTLSModuleID {
+		// Implausible module index: likewise a static offset.
 		return nil, nil
 	}
 	offset, err := readUint64(rm, libpf.Address(addr+8))
@@ -78,6 +91,14 @@ func readTLSIndex(rm remotememory.RemoteMemory, addr uint64) (*tlsIndex, error) 
 		return nil, err
 	}
 	return &tlsIndex{moduleID: moduleID, offset: offset}, nil
+}
+
+// processInaccessible reports whether err means the target process could not be
+// reached, as opposed to the address being unmapped. Anything else, including an
+// unrecognized error from a non-ptrace RemoteMemory, stays a classification
+// signal so the probe keeps working.
+func processInaccessible(err error) bool {
+	return errors.Is(err, unix.ESRCH) || errors.Is(err, unix.EPERM)
 }
 
 func findSymbol(ef *pfelf.File, symname string) *libpf.Symbol {
@@ -225,19 +246,49 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		if err != nil {
 			return nil, err
 		}
-
-		ti, err := readTLSIndex(rm, arg)
-		if err != nil {
-			return nil, err
-		}
-		if ti != nil {
-			return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
-		}
-		return d.attachStatic(ebpf, pid, arg+d.offset)
+		return d.attachTLSDesc(ebpf, pid, rm, arg)
 
 	default:
 		return nil, fmt.Errorf("unknown TLS access model %v", d.access)
 	}
+}
+
+// attachTLSDesc resolves a relocated TLS descriptor whose argument is either a
+// TP-relative offset (static TLS) or a pointer to a tls_index (dynamic TLS).
+func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	rm remotememory.RemoteMemory, arg uint64,
+) (interpreter.Instance, error) {
+	if d.machine == elf.EM_X86_64 {
+		// Variant II places the static TLS block below TP, so a static offset
+		// is always negative and a tls_index pointer never is. Exact, unlike
+		// the dereference the variant I path below has to fall back on.
+		if int64(arg) < 0 {
+			return d.attachStatic(ebpf, pid, arg+d.offset)
+		}
+		ti, err := readTLSIndex(rm, arg)
+		if err != nil {
+			return nil, err
+		}
+		if ti == nil {
+			// A non-negative argument can only be a tls_index here, so failing
+			// to read one is a fault rather than a static offset.
+			return nil, fmt.Errorf("TLSDESC argument %#x is neither a negative "+
+				"TP offset nor a readable tls_index", arg)
+		}
+		return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
+	}
+
+	// Variant I places the block above TP, so both forms are positive and only
+	// a dereference separates them. An unreadable argument is the expected
+	// outcome for a static offset, hence the fallback rather than an error.
+	ti, err := readTLSIndex(rm, arg)
+	if err != nil {
+		return nil, err
+	}
+	if ti != nil {
+		return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
+	}
+	return d.attachStatic(ebpf, pid, arg+d.offset)
 }
 
 // s32FromUint64 narrows v to an int32, rejecting values that don't fit.

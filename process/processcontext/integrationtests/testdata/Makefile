@@ -109,9 +109,11 @@ processctx_dlopen_musl: processctx.c
 	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN -Wl,-rpath=/lib/x86_64-linux-musl/
 
 # Non-PIE variant. A non-PIE executable loads at 0x400000, so glibc's brk heap
-# sits below 4 GiB -- and that is where _dl_make_tlsdesc_dynamic allocates the
-# tls_index a dynamic TLS descriptor points at. Exercises the magnitude test
-# that tells a descriptor's static offset from a tls_index pointer.
+# sits below 4 GiB, and that is where _dl_make_tlsdesc_dynamic allocates the
+# tls_index a dynamic TLS descriptor points at. At that address the pointer is
+# indistinguishable by magnitude from a static TP-relative offset, so on aarch64
+# this exercises readTLSIndex having to dereference it. On x86-64 the argument's
+# sign settles it without a dereference.
 # No musl counterpart: mallocng serves this from mmap, well above 4 GiB.
 processctx_dlopen_glibc_nopie: processctx.c
 	$(GCC) -o $@ $< -DUSE_DLOPEN -no-pie

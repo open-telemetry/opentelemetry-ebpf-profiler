@@ -131,8 +131,9 @@ func Test_ProcessContext(t *testing.T) {
 
 		// Non-PIE executable dlopen'ing a TLS-descriptor library. glibc
 		// allocates the descriptor's tls_index on the brk heap, which for a
-		// non-PIE process sits below 4 GiB -- the range Attach's magnitude test
-		// reads as a static TP-relative offset instead of a pointer.
+		// non-PIE process sits below 4 GiB, in the same range as a plausible
+		// static TP-relative offset. On aarch64 only readTLSIndex's dereference
+		// separates the two; on x86-64 the argument's sign already does.
 		// The tunable disables the static TLS surplus, which glibc would
 		// otherwise use for a module this small, making the descriptor static.
 		"glibc_dlopen_nopie": {
