@@ -100,7 +100,6 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		ctlr:         controller.New(cfg),
 		errorMode:    cfg.ErrorMode,
 		extensionIDs: cfg.Probes,
-		probes:       make([]tracer.Probe, 0, len(cfg.Probes)),
 	}, nil
 }
 
