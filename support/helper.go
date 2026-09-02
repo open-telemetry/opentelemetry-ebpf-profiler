@@ -60,18 +60,21 @@ func NewStaticTLSVarInfo(tlsOffset uint64) (TLSVarInfo, error) {
 // NewDynamicTLSVarInfo builds a TLSVarInfo for a variable in dynamic TLS,
 // located by module ID and an offset within that module's TLS block.
 //
-// Dtv_info is left zeroed: it is only known once libc has been introspected,
-// so the caller must fill it in before handing the result to eBPF.
-func NewDynamicTLSVarInfo(moduleID, tlsOffset uint64) (TLSVarInfo, error) {
+// dtvInfo must be non-zero: a zeroed Dtv_info reads as "no DTV" downstream,
+// valid only for static TLS. Call once libc is introspected.
+func NewDynamicTLSVarInfo(moduleID, tlsOffset uint64, dtvInfo DTVInfo) (TLSVarInfo, error) {
 	if moduleID == 0 {
 		return TLSVarInfo{}, errors.New("unexpected value 0 for moduleID in dynamic TLS")
 	}
 	if moduleID > math.MaxUint32 {
 		return TLSVarInfo{}, fmt.Errorf("moduleID %#x does not fit in u32", moduleID)
 	}
+	if dtvInfo == (DTVInfo{}) {
+		return TLSVarInfo{}, errors.New("dynamic TLS var missing DTV info")
+	}
 	offset, err := s32TLSOffset(tlsOffset)
 	if err != nil {
 		return TLSVarInfo{}, err
 	}
-	return TLSVarInfo{Tls_offset: offset, Module_id: uint32(moduleID)}, nil
+	return TLSVarInfo{Tls_offset: offset, Module_id: uint32(moduleID), Dtv_info: dtvInfo}, nil
 }

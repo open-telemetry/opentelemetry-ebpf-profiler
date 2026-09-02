@@ -45,7 +45,7 @@ func resolverModeledOp(op arm64asm.Op) bool {
 // returns, so returning the argument verbatim is what *makes* that argument a
 // TP-relative offset: static TLS. It is a property of the code rather than of a
 // particular libc, hence decoding it instead of matching known resolver
-// addresses -- which is also the only option available, since loaders ship
+// addresses. That's also the only option available, since loaders ship
 // stripped and _dl_tlsdesc_return is hidden, so there is no symbol to match.
 //
 // glibc's _dl_tlsdesc_return and musl's __tlsdesc_static are both

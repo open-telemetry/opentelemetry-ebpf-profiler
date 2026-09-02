@@ -33,7 +33,9 @@ BINARIES := \
 	processctx_lib_glibc processctx_lib_musl \
 	processctx_lib_glibc_gnu processctx_lib_musl_gnu \
 	processctx_lib_glibc_ie processctx_lib_musl_ie \
+	processctx_lib_glibc_ie_hidden processctx_lib_musl_ie_hidden \
 	processctx_lib_glibc_ld processctx_lib_musl_ld \
+	processctx_lib_glibc_ld_desc processctx_lib_musl_ld_desc \
 	processctx_dlopen_glibc processctx_dlopen_musl \
 	processctx_dlopen_glibc_nopie
 
@@ -70,6 +72,15 @@ libprocessctx_glibc_ie.so: processctx_lib.c processctx_lib.h otel_process_ctx.c 
 libprocessctx_musl_ie.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(MUSL_GCC) -shared -fPIC -ftls-model=initial-exec -o $@ $< otel_process_ctx.c
 
+# Initial-exec, hidden symbol: the runtime-resolved TP offset is still needed
+# (the module's position among initial-exec modules isn't known until
+# program start), but the relocation carrying it becomes symbol-less.
+libprocessctx_glibc_ie_hidden.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
+	$(GCC) -shared -fPIC -DHIDDEN_TLS -ftls-model=initial-exec -o $@ $< otel_process_ctx.c
+
+libprocessctx_musl_ie_hidden.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
+	$(MUSL_GCC) -shared -fPIC -DHIDDEN_TLS -ftls-model=initial-exec -o $@ $< otel_process_ctx.c
+
 # Local-dynamic model (requires a hidden TLS symbol).
 libprocessctx_glibc_ld.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(GCC) -shared -fPIC -DHIDDEN_TLS -ftls-model=local-dynamic -mtls-dialect=$(TLS_DIALECT_ALT) -o $@ $< otel_process_ctx.c
@@ -77,36 +88,56 @@ libprocessctx_glibc_ld.so: processctx_lib.c processctx_lib.h otel_process_ctx.c 
 libprocessctx_musl_ld.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(MUSL_GCC) -shared -fPIC -DHIDDEN_TLS -ftls-model=local-dynamic -mtls-dialect=$(TLS_DIALECT_ALT) -o $@ $< otel_process_ctx.c
 
+# Local-dynamic, desc dialect, with a second hidden TLS variable: each gets
+# its own symbol-less TLSDESC relocation, distinguishable only by addend.
+libprocessctx_glibc_ld_desc.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
+	$(GCC) -shared -fPIC -DHIDDEN_TLS -DEXTRA_HIDDEN_TLS_VAR -ftls-model=local-dynamic -mtls-dialect=$(TLS_DIALECT) -o $@ $< otel_process_ctx.c
+
+libprocessctx_musl_ld_desc.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
+	$(MUSL_GCC) -shared -fPIC -DHIDDEN_TLS -DEXTRA_HIDDEN_TLS_VAR -ftls-model=local-dynamic -mtls-dialect=$(TLS_DIALECT) -o $@ $< otel_process_ctx.c
+
 # Executables linking the shared libraries at startup.
 processctx_lib_glibc: processctx.c processctx_lib.h libprocessctx_glibc.so
 	$(GCC) -o $@ $< -L. -lprocessctx_glibc -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_musl: processctx.c processctx_lib.h libprocessctx_musl.so
-	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl -Wl,-rpath=/lib/x86_64-linux-musl/ -Wl,-rpath='$$ORIGIN'
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_glibc_gnu: processctx.c processctx_lib.h libprocessctx_glibc_gnu.so
 	$(GCC) -o $@ $< -L. -lprocessctx_glibc_gnu -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_musl_gnu: processctx.c processctx_lib.h libprocessctx_musl_gnu.so
-	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_gnu -Wl,-rpath=/lib/x86_64-linux-musl/ -Wl,-rpath='$$ORIGIN'
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_gnu -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_glibc_ie: processctx.c processctx_lib.h libprocessctx_glibc_ie.so
 	$(GCC) -o $@ $< -L. -lprocessctx_glibc_ie -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_musl_ie: processctx.c processctx_lib.h libprocessctx_musl_ie.so
-	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ie -Wl,-rpath=/lib/x86_64-linux-musl/ -Wl,-rpath='$$ORIGIN'
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ie -Wl,-rpath='$$ORIGIN'
+
+processctx_lib_glibc_ie_hidden: processctx.c processctx_lib.h libprocessctx_glibc_ie_hidden.so
+	$(GCC) -o $@ $< -L. -lprocessctx_glibc_ie_hidden -Wl,-rpath='$$ORIGIN'
+
+processctx_lib_musl_ie_hidden: processctx.c processctx_lib.h libprocessctx_musl_ie_hidden.so
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ie_hidden -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_glibc_ld: processctx.c processctx_lib.h libprocessctx_glibc_ld.so
 	$(GCC) -o $@ $< -L. -lprocessctx_glibc_ld -Wl,-rpath='$$ORIGIN'
 
 processctx_lib_musl_ld: processctx.c processctx_lib.h libprocessctx_musl_ld.so
-	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ld -Wl,-rpath=/lib/x86_64-linux-musl/ -Wl,-rpath='$$ORIGIN'
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ld -Wl,-rpath='$$ORIGIN'
+
+processctx_lib_glibc_ld_desc: processctx.c processctx_lib.h libprocessctx_glibc_ld_desc.so
+	$(GCC) -o $@ $< -L. -lprocessctx_glibc_ld_desc -Wl,-rpath='$$ORIGIN'
+
+processctx_lib_musl_ld_desc: processctx.c processctx_lib.h libprocessctx_musl_ld_desc.so
+	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl_ld_desc -Wl,-rpath='$$ORIGIN'
 
 processctx_dlopen_glibc: processctx.c
 	$(GCC) -o $@ $< -DUSE_DLOPEN
 
 processctx_dlopen_musl: processctx.c
-	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN -Wl,-rpath=/lib/x86_64-linux-musl/
+	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN
 
 # Non-PIE variant. A non-PIE executable loads at 0x400000, so glibc's brk heap
 # sits below 4 GiB, and that is where _dl_make_tlsdesc_dynamic allocates the

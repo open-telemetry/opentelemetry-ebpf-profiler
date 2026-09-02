@@ -73,16 +73,23 @@ func (a tlsAccess) String() string {
 // symbol but the module (symbol index 0), because the per-variable offset is
 // resolved separately in code. In that case the in-module offset is the
 // symbol's static value (offset).
+//
+// A hidden symbol makes TPOFF64 symbol-less too (initial-exec on a symbol
+// local to this object).
 func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*threadcontextData, error) {
 	var tlsdescAddr, tpmodAddr, tpoffAddr libpf.Address
-	// Module-level relocations (not referencing any symbol) are local-dynamic
-	// candidates: we keep the first one of each dialect as a fallback.
-	var tlsdescNoSymAddr, tpmodNoSymAddr libpf.Address
+	// Module-level relocations (not referencing any symbol). DTPMOD64 only
+	// resolves the module ID, shared by every hidden TLS variable in the
+	// object, so any one of them will do. TLSDESC and TPOFF64 are per-variable
+	// instead, so with more than one hidden TLS variable in the object,
+	// telling them apart takes matching the relocation's addend (each
+	// variable's own static offset) against sym.Address.
+	var tlsdescNoSymAddr, tpmodNoSymAddr, tpoffNoSymAddr libpf.Address
 
 	if err := ef.VisitRelocations(func(r pfelf.ElfReloc, symName string,
 		relType pfelf.RelocType) bool {
 		switch symName {
-		case tlsExport:
+		case string(sym.Name):
 			switch relType {
 			case pfelf.RelTLSDESC:
 				tlsdescAddr = libpf.Address(r.Off)
@@ -95,12 +102,16 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*threadcontextData, er
 		case "":
 			switch relType {
 			case pfelf.RelTLSDESC:
-				if tlsdescNoSymAddr == 0 {
+				if tlsdescNoSymAddr == 0 && r.Addend == int64(sym.Address) {
 					tlsdescNoSymAddr = libpf.Address(r.Off)
 				}
 			case pfelf.RelDTPMOD64:
 				if tpmodNoSymAddr == 0 {
 					tpmodNoSymAddr = libpf.Address(r.Off)
+				}
+			case pfelf.RelTPOFF64:
+				if tpoffNoSymAddr == 0 && r.Addend == int64(sym.Address) {
+					tpoffNoSymAddr = libpf.Address(r.Off)
 				}
 			}
 		}
@@ -121,16 +132,24 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*threadcontextData, er
 		return &threadcontextData{access: accessInitialExec, elfAddr: tpoffAddr, machine: ef.Machine}, nil
 	}
 
-	// Local-dynamic: the symbol is local to a shared object (not preemptible).
-	// The module-level relocation provides the module ID at runtime, the in-module
-	// offset is the symbol's static value.
+	// Symbol-less: the symbol is hidden/local to this object, so no
+	// relocation references it by name.
 	switch {
 	case tlsdescNoSymAddr != 0:
+		// Local-dynamic, GNU2/desc dialect: the module-level relocation
+		// resolves the module ID at runtime, the in-module offset is the
+		// symbol's static value.
 		return &threadcontextData{access: accessTLSDesc, elfAddr: tlsdescNoSymAddr,
 			offset: uint64(sym.Address), machine: ef.Machine}, nil
 	case tpmodNoSymAddr != 0:
+		// Local-dynamic, GNU dialect: same as above.
 		return &threadcontextData{access: accessLocalDynamic, elfAddr: tpmodNoSymAddr,
 			offset: uint64(sym.Address), machine: ef.Machine}, nil
+	case tpoffNoSymAddr != 0:
+		// Initial-exec: the loader folds the addend into the GOT slot's
+		// resolved value itself, same as the symbol-referencing case above,
+		// so no separate offset is added here.
+		return &threadcontextData{access: accessInitialExec, elfAddr: tpoffNoSymAddr, machine: ef.Machine}, nil
 	}
 
 	// No relocation references the symbol directly.

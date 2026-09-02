@@ -66,26 +66,26 @@ func TestTLSDescReturnsArg(t *testing.T) {
 			want: false,
 		},
 		"argument returned via another register": {
-			// ldr x1, [x0, #8]; mov x0, x1; ret -- same semantics, other shape.
+			// ldr x1, [x0, #8]; mov x0, x1; ret. Same semantics, other shape.
 			code: insns(0xf9400401, 0xaa0103e0, 0xd65f03c0),
 			want: true,
 		},
 		"unmodeled op clobbers x0": {
-			// ldr x0, [x0, #8]; ldp x0, x2, [x0]; ret -- the LDP overwrites x0
+			// ldr x0, [x0, #8]; ldp x0, x2, [x0]; ret. The LDP overwrites x0
 			// but the interpreter skips it, so without resolverModeledOp the
 			// stale argument reaches the RET and reads as static.
 			code: insns(0xf9400400, 0xa9400800, 0xd65f03c0),
 			want: false,
 		},
 		"arithmetic on x0 the interpreter drops": {
-			// ldr x0, [x0, #8]; sub x0, x0, x1; ret -- the tail of glibc's
+			// ldr x0, [x0, #8]; sub x0, x0, x1; ret. This is the tail of glibc's
 			// _dl_tlsdesc_undefweak. SUB's register-register form leaves x0
 			// stale, hence its absence from resolverModeledOp.
 			code: insns(0xf9400400, 0xcb010000, 0xd65f03c0),
 			want: false,
 		},
 		"wrong descriptor word": {
-			// ldr x0, [x0]; ret -- returns the resolver pointer, not the arg.
+			// ldr x0, [x0]; ret. Returns the resolver pointer, not the arg.
 			code: insns(0xf9400000, 0xd65f03c0),
 			want: false,
 		},

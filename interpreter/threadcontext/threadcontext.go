@@ -30,7 +30,7 @@ const (
 )
 
 // readUint64 reads a 64-bit value from remote memory. Unlike rm.Uint64, a
-// failed read is reported as an error rather than folded into 0 -- 0 is a
+// failed read is reported as an error rather than folded into 0. 0 is a
 // value the TLS access models below treat as meaningful (unresolved
 // relocation), so it must stay distinguishable from "the read itself failed".
 func readUint64(rm remotememory.RemoteMemory, addr libpf.Address) (uint64, error) {
@@ -45,9 +45,10 @@ const (
 	// minUserAddr is the default mmap_min_addr: the kernel maps nothing below
 	// it, so a value under it cannot be a pointer.
 	minUserAddr = 0x10000
-	// maxTLSModuleID bounds a plausible TLS module index. Loaders assign these
+	// maxTLSModuleID bounds a plausible TLS module index: far above any real
+	// module count, far below the smallest real pointer. Loaders assign these
 	// sequentially from 1.
-	maxTLSModuleID = 4096
+	maxTLSModuleID = 65536
 )
 
 // tlsIndex is the {module, offset} pair a dynamic TLS descriptor's argument
@@ -82,7 +83,7 @@ func readTLSIndex(rm remotememory.RemoteMemory, addr uint64) (*tlsIndex, error) 
 		// Unreadable: not a pointer, so a large static offset.
 		return nil, nil
 	}
-	if moduleID == 0 || moduleID > maxTLSModuleID {
+	if moduleID == 0 || moduleID >= maxTLSModuleID {
 		// Implausible module index: likewise a static offset.
 		return nil, nil
 	}
@@ -174,7 +175,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 
-	log.Debugf("Native thread labels TLS access=%v elfAddr=0x%08X offset=0x%08X",
+	log.Debugf("Native thread labels TLS access=%v elfAddr=0x%x offset=0x%x",
 		d.access, d.elfAddr, d.offset)
 
 	return d, nil
@@ -220,14 +221,15 @@ func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		}
 		// On x86-64 (TLS variant II, block below TP) a real offset can never
 		// be 0: the block's own size keeps it strictly negative. On aarch64
-		// (variant I, block above TP) 0 is ambiguous -- musl can legitimately
-		// place a module's block starting exactly at TP (no reserved gap),
-		// unlike glibc, which reserves 16 bytes above TP first. aarch64
-		// accepts 0 here, trading away detection of the unresolved-at-startup case.
+		// (variant I, block above TP) 0 is ambiguous. musl's TP sits past its
+		// 16-byte GAP_ABOVE_TP area, so a block can start right there. glibc's
+		// TP sits at the start of its own 16-byte TCB, so its block never
+		// starts before TP+16 (see getStaticTLSOffset). aarch64 accepts 0
+		// here, trading away detection of the unresolved-at-startup case.
 		if got == 0 && d.machine == elf.EM_X86_64 {
 			return nil, fmt.Errorf("unresolved TLS GOT slot")
 		}
-		return attachStatic(ebpf, pid, got+d.offset)
+		return attachStatic(ebpf, pid, got)
 
 	case accessGeneralDynamic:
 		// The GOT holds a tls_index {module_id, offset} pair.
@@ -239,10 +241,10 @@ func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		if err != nil {
 			return nil, err
 		}
-		return attachDynamic(pid, moduleID, rawOffset+d.offset)
+		return attachDynamic(pid, moduleID, rawOffset)
 
 	case accessLocalDynamic:
-		// The GOT holds the module_id; the in-module offset is the symbol value.
+		// The GOT holds the module_id. The in-module offset is the symbol value.
 		moduleID, err := readUint64(rm, bias+d.elfAddr)
 		if err != nil {
 			return nil, err
@@ -252,13 +254,15 @@ func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	case accessTLSDesc:
 		// The descriptor's first word is the resolver function pointer, set to
 		// a non-null address as soon as the dynamic linker processes the
-		// relocation -- unlike the second word, it can never legitimately be
+		// relocation. Unlike the second word, it can never legitimately be
 		// 0, making it the reliable "not yet relocated" signal.
 		//
 		// The argument word can't be used for that instead: musl's static
 		// resolver stores a real TP-relative offset there that is 0 whenever
-		// a module's static TLS block starts exactly at the thread pointer
-		// (glibc reserves 16 bytes above TP first, so this never happens for it).
+		// a module's static TLS block starts exactly at the thread pointer.
+		// That's legitimate since musl's TP already sits past its 16-byte
+		// GAP_ABOVE_TP reserved area (glibc's TP sits at the start of its own
+		// 16-byte TCB instead, so this never happens for it).
 		resolver, err := readUint64(rm, bias+d.elfAddr)
 		if err != nil {
 			return nil, err
@@ -315,6 +319,8 @@ func (d *threadcontextData) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libp
 	if static {
 		return attachStatic(ebpf, pid, arg+d.offset)
 	}
+	log.Debugf("PID %d: TLSDESC resolver 0x%x not recognized as the static form, "+
+		"falling back to argument dereference", pid, resolver)
 
 	// An unrecognized resolver (a loader we don't decode) leaves only the
 	// dereference. An unreadable argument is the expected outcome for a static
@@ -326,6 +332,8 @@ func (d *threadcontextData) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libp
 	if ti != nil {
 		return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
 	}
+	log.Debugf("PID %d: TLSDESC argument 0x%x not a readable tls_index, "+
+		"assuming static TP offset", pid, arg)
 	return attachStatic(ebpf, pid, arg+d.offset)
 }
 
@@ -354,27 +362,31 @@ func attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 // attachDynamic records a dynamic-TLS (DTV-based) access. Proc data is not
 // updated here: the DTV offset/multiplier are only known once libc info is
-// available (see Instance.UpdateLibcInfo).
+// available (see Instance.UpdateLibcInfo, which validates tlsOffset and
+// Dtv_info via NewDynamicTLSVarInfo). moduleID is checked here instead, so a
+// caller bug (e.g. a misread GOT slot) fails at attach time rather than
+// waiting on libc introspection. accessTLSDesc already filters moduleID
+// through this same bound in readTLSIndex; the other two callers don't, so
+// the check is shared here rather than duplicated per caller.
 func attachDynamic(pid libpf.PID, moduleID, tlsOffset uint64,
 ) (interpreter.Instance, error) {
-	tlsVar, err := support.NewDynamicTLSVarInfo(moduleID, tlsOffset)
-	if err != nil {
-		return nil, err
+	if moduleID == 0 || moduleID >= maxTLSModuleID {
+		return nil, fmt.Errorf("implausible dynamic TLS moduleID: %d", moduleID)
 	}
 
 	log.Debugf("PID %d dynamic TLS moduleID: %d, tls offset: 0x%08X", pid, moduleID, tlsOffset)
 
-	return &Instance{tlsVar: tlsVar}, nil
+	return &Instance{dynModuleID: moduleID, dynTLSOffset: tlsOffset}, nil
 }
 
 func (d *threadcontextData) Unload(_ interpreter.EbpfHandler) {
 }
 
 type Instance struct {
-	// tlsVar is the dynamic-TLS layout resolved at attach time, still missing
-	// Dtv_info (filled in by UpdateLibcInfo). Unused for static TLS, which
-	// installs its proc data in attachStatic.
-	tlsVar support.TLSVarInfo
+	// dynModuleID and dynTLSOffset are the dynamic-TLS coordinates resolved at
+	// attach time. Unused for static TLS, which installs its proc data in
+	// attachStatic.
+	dynModuleID, dynTLSOffset uint64
 	// procDataWritten is true once proc data has actually been installed in
 	// eBPF: immediately for static TLS (attachStatic), or once libc DTV info
 	// arrives for dynamic TLS (UpdateLibcInfo). Detach must not delete proc
@@ -404,8 +416,10 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID, i
 	if i.procDataWritten || !info.HasDTVInfo() {
 		return nil
 	}
-	tlsVar := i.tlsVar
-	tlsVar.Dtv_info = info.DTVInfo
+	tlsVar, err := support.NewDynamicTLSVarInfo(i.dynModuleID, i.dynTLSOffset, info.DTVInfo)
+	if err != nil {
+		return fmt.Errorf("dynamic TLS var for PID %d: %w", pid, err)
+	}
 	procInfo := support.ThreadContextProcInfo{Tls: tlsVar}
 	if err := ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return err

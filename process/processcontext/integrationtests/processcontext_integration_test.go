@@ -122,6 +122,18 @@ func Test_ProcessContext(t *testing.T) {
 		"glibc_lib_ld":  {exeName: "processctx_lib_glibc_ld"},
 		"musl_lib_ld":   {exeName: "processctx_lib_musl_ld"},
 
+		// Initial-exec on a hidden symbol: the relocation carrying the
+		// runtime-resolved TP offset becomes symbol-less.
+		"glibc_lib_ie_hidden": {exeName: "processctx_lib_glibc_ie_hidden"},
+		"musl_lib_ie_hidden":  {exeName: "processctx_lib_musl_ie_hidden"},
+
+		// Local-dynamic, desc dialect, with a second hidden TLS variable in
+		// the same object: both get their own symbol-less TLSDESC
+		// relocation, exercising resolveTLSAccess's addend-based
+		// disambiguation between them.
+		"glibc_lib_ld_desc": {exeName: "processctx_lib_glibc_ld_desc"},
+		"musl_lib_ld_desc":  {exeName: "processctx_lib_musl_ld_desc"},
+
 		// dlopen'd libraries: the module is loaded after startup, exercising the
 		// dynamic-TLS resolution path (DTV based) for both dialects.
 		"glibc_dlopen":     {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
@@ -133,7 +145,7 @@ func Test_ProcessContext(t *testing.T) {
 		// allocates the descriptor's tls_index on the brk heap, which for a
 		// non-PIE process sits below 4 GiB, in the same range as a plausible
 		// static TP-relative offset. On aarch64 only readTLSIndex's dereference
-		// separates the two; on x86-64 the argument's sign already does.
+		// separates the two. On x86-64 the argument's sign already does.
 		// The tunable disables the static TLS surplus, which glibc would
 		// otherwise use for a module this small, making the descriptor static.
 		"glibc_dlopen_nopie": {

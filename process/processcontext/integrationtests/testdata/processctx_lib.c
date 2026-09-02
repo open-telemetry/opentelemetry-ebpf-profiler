@@ -22,6 +22,19 @@ __attribute__((visibility("hidden")))
 #endif
 __thread otel_thread_ctx_v1_t *otel_thread_ctx_v1;
 
+#ifdef EXTRA_HIDDEN_TLS_VAR
+// A second hidden TLS variable in the same object: with the desc dialect and
+// local-dynamic model, this and otel_thread_ctx_v1 each get their own
+// symbol-less TLSDESC relocation, so resolveTLSAccess must tell them apart by
+// addend rather than picking whichever relocation it visits first.
+__attribute__((visibility("hidden")))
+__thread long other_hidden_tls_var;
+
+__attribute__((constructor)) static void touch_other_hidden_tls_var(void) {
+  other_hidden_tls_var = 1;
+}
+#endif
+
 int init_process_context(void) {
   const char *attribute_key_map[] = {"http_route", "http_method", "user_id",
                                      NULL};
