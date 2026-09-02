@@ -153,8 +153,8 @@ func (t *Trace) APMHash() TraceHash {
 		// to escaping to heap (allocation).
 		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
 	}
-	// make instead of nil avoids a heap allocation
-	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	// Avoid a heap allocation by reusing the stack-allocated buffer.
+	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
 	t.cachedHash = traceHash
 	return traceHash
 }
@@ -179,8 +179,8 @@ func (t *Trace) Hash() TraceHash {
 		n := putUint64(buf[:], uint64(frame.AddressOrLineno))
 		_, _ = h.Write(buf[:n])
 	}
-	// make instead of nil avoids a heap allocation
-	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	// Avoid a heap allocation by reusing the stack-allocated buffer.
+	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
 	t.cachedHash = traceHash
 	return traceHash
 }
