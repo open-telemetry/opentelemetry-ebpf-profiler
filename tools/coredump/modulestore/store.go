@@ -25,8 +25,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
@@ -393,7 +394,6 @@ func (store *Store) IsPresentLocally(id ID) (bool, error) {
 // ListRemoteModules creates a map of all modules present in the remote storage and their date
 // of last change.
 func (store *Store) ListRemoteModules() (map[ID]time.Time, error) {
-
 	paginator := s3.NewListObjectsV2Paginator(store.s3client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(store.bucket),
 		Prefix: aws.String(s3KeyPrefix),

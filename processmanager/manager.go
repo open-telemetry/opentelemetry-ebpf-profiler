@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -28,12 +30,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -69,6 +71,7 @@ type Config struct {
 	KernelSymbolizer      *kallsyms.Symbolizer
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
+	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
 }
 
@@ -112,6 +115,13 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
+	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+1)
+	// Cloned: the enricher closure outlives New, and the caller owns cfg.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
+		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
+	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
+
+
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
@@ -126,7 +136,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
-		metaEnrichers:            cfg.ProcessMetaEnrichers,
+		metaEnrichers:            metaEnrichers,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
@@ -163,6 +173,9 @@ func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	monitorInterval time.Duration,
 ) {
+	if !metrics.Enabled() {
+		return
+	}
 	periodiccaller.Start(ctx, monitorInterval, func() {
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
@@ -329,15 +342,9 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 		return ""
 	}
 	var serviceName string
-	var traceHash libpf.TraceHash
-	traceHashComputed := false
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
-			if !traceHashComputed {
-				traceHash = traceutil.HashTrace(trace)
-				traceHashComputed = true
-			}
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
+			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, trace.Hash(), count)
 			if serviceName != "" {
 				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
 					serviceName,
@@ -364,8 +371,8 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // due to frameCache not being synced. If the tracer is later updated to distribute
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
-	procMeta := pm.metaForPID(bpfTrace.PID)
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
+	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -378,6 +385,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        procMeta.EnvVariables,
+		ResourceAttrs:  resourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,
@@ -454,4 +462,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
+
+	return trace
 }

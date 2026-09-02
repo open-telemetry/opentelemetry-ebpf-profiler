@@ -165,7 +165,7 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 			index, support.UnwindInfoMaxEntries)
 	}
 
-	cmd := (*support.UnwindInfo)(unsafe.Pointer(uintptr(emc.ctx.unwindInfoArray) +
+	cmd := (*support.UnwindInfo)(unsafe.Add(emc.ctx.unwindInfoArray,
 		uintptr(index)*C.sizeof_UnwindInfo))
 	*cmd = info
 	return nil
@@ -177,7 +177,7 @@ func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
 	entSize := C.sizeof_StackDelta
 	deltas := C.malloc(C.size_t(len(deltaArrays) * entSize))
 	for index, delta := range deltaArrays {
-		info := (*C.StackDelta)(unsafe.Pointer(uintptr(deltas) + uintptr(index*entSize)))
+		info := (*C.StackDelta)(unsafe.Add(deltas, uintptr(index*entSize)))
 		*info = C.StackDelta{
 			addrLow:    C.u16(delta.AddressLow),
 			unwindInfo: C.u16(delta.UnwindInfo),

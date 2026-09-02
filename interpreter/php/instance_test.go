@@ -208,7 +208,7 @@ func TestGetFunction_NullPointer(t *testing.T) {
 	}
 
 	_, err = instance.getFunction(0, 0)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "null pointer")
 }
 

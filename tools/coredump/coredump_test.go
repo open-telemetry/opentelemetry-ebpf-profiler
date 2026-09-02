@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/cloudstore"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
@@ -68,7 +69,7 @@ func TestCoreDumps(t *testing.T) {
 			// reads). The map is mutated in place by the helper, so we can
 			// just iterate the post-run state.
 			for addr, hits := range faults {
-				require.Greaterf(t, hits, 0,
+				require.Positivef(t, hits,
 					"fault address 0x%x was never visited by "+
 						"bpf_probe_read_user_with_test_fault", addr)
 			}

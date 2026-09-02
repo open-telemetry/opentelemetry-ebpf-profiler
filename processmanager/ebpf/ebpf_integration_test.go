@@ -55,8 +55,6 @@ func TestLPM(t *testing.T) {
 	impl := loadTracers(t)
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			prefix := lpm.Prefix{
 				Key:    test.page,

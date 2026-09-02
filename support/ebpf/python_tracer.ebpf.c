@@ -78,6 +78,12 @@ static EBPF_INLINE ErrorCode process_python_frame(
   void *py_codeobject = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_code]);
   *py_frameobjectptr  = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
 
+  // Python 3.14 stores f_executable as a _PyStackRef, whose low bit can mark
+  // references to immortal objects. Earlier versions use aligned PyObject pointers,
+  // so clearing the tag is a no-op for them.
+  // https://github.com/python/cpython/commit/b2afe2aae487ebf89897e22c01d9095944fd334f
+  py_codeobject = (void *)((u64)py_codeobject & ~1ULL);
+
   // Stop unwinding if `f_executable` is None. See comment when getting the
   // ´noneStruct´ address in python.go for details.
   void *noneStructAddr = (void *)pyinfo->noneStructAddr;

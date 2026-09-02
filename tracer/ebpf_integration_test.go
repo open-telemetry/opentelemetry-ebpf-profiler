@@ -7,7 +7,6 @@ package tracer_test
 
 import (
 	"context"
-	"math"
 	"os"
 	"runtime"
 	"slices"
@@ -21,13 +20,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/otel/metric/noop"
+
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	"go.opentelemetry.io/otel/metric/noop"
 )
 
 func TestMain(m *testing.M) {
@@ -63,6 +63,7 @@ func forceContextSwitch() {
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
+	t.Helper()
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
 
@@ -108,8 +109,8 @@ func TestTracerErrorPropagation(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
-		VerboseMode:            true,
+
+		VerboseMode: true,
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -151,8 +152,8 @@ func TestTracerMapMonitorsError(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
-		VerboseMode:            true,
+
+		VerboseMode: true,
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -178,8 +179,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
-		VerboseMode:            true,
+
+		VerboseMode: true,
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -236,7 +237,6 @@ Loop:
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
@@ -274,12 +274,12 @@ func TestAllTracers(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
-				Intervals:               &mockIntervals{},
-				InterpretersConfig:      interpreterconfig.AllInterpreters(),
-				SamplesPerSecond:        20,
-				ProbabilisticInterval:   100,
-				ProbabilisticThreshold:  100,
-				OffCPUThreshold:         uint32(math.MaxUint32 / 100),
+				Intervals:              &mockIntervals{},
+				InterpretersConfig:     interpreterconfig.AllInterpreters(),
+				SamplesPerSecond:       20,
+				ProbabilisticInterval:  100,
+				ProbabilisticThreshold: 100,
+
 				VerboseMode:             true,
 				PIDNamespaceTranslation: tc.enablePIDNamespaceTranslation,
 			})

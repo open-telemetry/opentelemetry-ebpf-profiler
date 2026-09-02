@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/collector/component"
+
 	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
@@ -46,18 +48,6 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 	}
 }
 
-// Probe holds the type and configuration for a single probe entry.
-// All fields except "type" are probe-specific and collected via mapstructure's
-// remain feature, so the YAML is flat (no nested "config:" block):
-//
-//	probes:
-//	  - type: kprobe
-//	    symbol: vfs_open
-type Probe struct {
-	Type   string         `mapstructure:"type"`
-	Config map[string]any `mapstructure:",remain"`
-}
-
 // Config is the configuration for the collector.
 type Config struct {
 	ReporterInterval        time.Duration                     `mapstructure:"reporter_interval"`
@@ -73,7 +63,6 @@ type Config struct {
 	SendIdleFrames          bool                              `mapstructure:"send_idle_frames"`
 	FilterMinProcessAge     time.Duration                     `mapstructure:"filter_min_process_age"`
 	VerboseMode             bool                              `mapstructure:"verbose_mode"`
-	OffCPUThreshold         float64                           `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars          string                            `mapstructure:"include_env_vars"`
 	MapScaleFactor          uint                              `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                              `mapstructure:"bpf_verifier_log_level"`
@@ -85,7 +74,7 @@ type Config struct {
 	OBIProcessCtx           bool                              `mapstructure:"obi_process_ctx"`
 	PIDNamespaceTranslation bool                              `mapstructure:"pid_namespace_translation"`
 	TargetCPUIDs            string                            `mapstructure:"pin_cpu_ids"`
-	Probes                  []Probe                           `mapstructure:"probes"`
+	Probes                  []component.ID                    `mapstructure:"probes"`
 	ResourceAttributes      metadata.ResourceAttributesConfig `mapstructure:"resource_attributes"`
 
 	// Configuration options that users can not set directly:
@@ -99,6 +88,14 @@ type Config struct {
 func (cfg *Config) Validate() error {
 	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
 		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
+	}
+
+	if cfg.ReporterInterval <= 0 {
+		return fmt.Errorf("invalid reporter interval: %s", cfg.ReporterInterval)
+	}
+
+	if cfg.MonitorInterval <= 0 {
+		return fmt.Errorf("invalid monitor interval: %s", cfg.MonitorInterval)
 	}
 
 	if cfg.SamplesPerSecond < 1 {
@@ -126,12 +123,6 @@ func (cfg *Config) Validate() error {
 			"invalid argument for probabilistic-interval: use " +
 				"a duration between 1 and 5 minutes",
 		)
-	}
-
-	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
-		return errors.New(
-			"invalid argument for off-cpu-threshold. The value " +
-				"should be in the range [0..1]. 0 disables off-cpu profiling")
 	}
 
 	if cfg.FilterMinProcessAge < 0 {

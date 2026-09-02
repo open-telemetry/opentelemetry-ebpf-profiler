@@ -14,6 +14,7 @@ import (
 
 	"github.com/open-telemetry/sig-profiling/profcheck"
 
+	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -653,7 +654,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Samples().Len())
 	sample := prof.Samples().At(0)
-	assert.Len(t, sample.Values().AsRaw(), 0)
+	assert.Empty(t, sample.Values().AsRaw())
 	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 
 	// Check that the mapping table contains our native frame mapping
@@ -692,7 +693,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// Verify SpanID and TraceID are set via Link
 	linkIndex := sample.LinkIndex()
-	assert.Greater(t, linkIndex, int32(0), "Sample should have a link set (index > 0, since 0 is dummy)")
+	assert.Positive(t, linkIndex, "Sample should have a link set (index > 0, since 0 is dummy)")
 	link := dic.LinkTable().At(int(linkIndex))
 	expectedSpanID := pcommon.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}
 	expectedTraceID := pcommon.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
@@ -732,7 +733,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundComm, "Sample should have Comm attribute set")
 	assert.True(t, foundTID, "Sample should have TID attribute set")
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
-
 }
 
 func TestStackTableOrder(t *testing.T) {
@@ -865,4 +865,157 @@ func TestGenerate_Validate(t *testing.T) {
 		CheckDictionaryDuplicates: true,
 		CheckSampleTimestampShape: true}).Check(&data)
 	require.NoError(t, err)
+}
+
+func singleEventTree(rk samples.ResourceKey, resourceAttrs attribute.Set) samples.TraceEventsTree {
+	filePath := libpf.Intern("/bin/svc")
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(7, 8),
+			FileName: filePath,
+		}),
+	})
+	return samples.TraceEventsTree{
+		rk: samples.ResourceToProfiles{
+			ResourceAttrs: resourceAttrs,
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
+					{}: &samples.TraceEvents{
+						Frames:     singleFrameTrace(libpf.NativeFrame, mapping, 0x10, "f", filePath, 1),
+						Timestamps: []uint64{uint64(time.Unix(1010, 0).UnixNano())},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestGenerate_ProcessContextResource(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	resourceAttrs := attribute.NewSet(
+		attribute.String("service.namespace", "team-a"),
+		attribute.String("service.instance.id", "instance-42"),
+		attribute.String("deployment.environment", "prod"),
+		attribute.Int("not-a-string", 7),
+		semconv.ServiceName("proto-svc"),
+		attribute.StringSlice("service.tags", []string{"tag1", "tag2"}),
+		attribute.Slice("mixed.values", attribute.StringValue("s"), attribute.Int64Value(2)),
+		attribute.Map("service.metadata",
+			attribute.String("nested.key", "nested-value"),
+			attribute.Int("nested.count", 7)),
+		attribute.Bool("service.active", true),
+		attribute.Float64("service.weight", 3.14),
+		attribute.KeyValue{Key: "service.blob", Value: attribute.ByteSliceValue([]byte{1, 2, 3})},
+		attribute.BoolSlice("service.flags", []bool{true, false}),
+		attribute.Int64Slice("service.ports", []int64{80, 443}),
+		attribute.Float64Slice("service.weights", []float64{1.5, 2.5}),
+		attribute.Map("deep.map",
+			attribute.KeyValue{Key: "slice", Value: attribute.SliceValue(
+				attribute.StringValue("a"), attribute.Int64Value(1))},
+			attribute.KeyValue{Key: "map", Value: attribute.MapValue(
+				attribute.String("k", "v"))}),
+		attribute.Slice("deep.slice",
+			attribute.MapValue(attribute.String("k", "v")),
+			attribute.SliceValue(attribute.StringValue("inner"))),
+	)
+
+	tree := singleEventTree(samples.ResourceKey{
+		ExecutablePath: libpf.Intern("/bin/svc"),
+		PID:            42,
+	}, resourceAttrs)
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
+
+	expected := map[string]any{
+		"service.namespace":            "team-a",
+		"service.instance.id":          "instance-42",
+		"deployment.environment":       "prod",
+		"not-a-string":                 int64(7),
+		string(semconv.ServiceNameKey): "proto-svc",
+		"service.tags":                 []any{"tag1", "tag2"},
+		"mixed.values":                 []any{"s", int64(2)},
+		"service.metadata": map[string]any{
+			"nested.key":   "nested-value",
+			"nested.count": int64(7),
+		},
+		"service.active":  true,
+		"service.weight":  3.14,
+		"service.blob":    []byte{1, 2, 3},
+		"service.flags":   []any{true, false},
+		"service.ports":   []any{int64(80), int64(443)},
+		"service.weights": []any{1.5, 2.5},
+		"deep.map": map[string]any{
+			"slice": []any{"a", int64(1)},
+			"map":   map[string]any{"k": "v"},
+		},
+		"deep.slice": []any{
+			map[string]any{"k": "v"},
+			[]any{"inner"},
+		},
+		string(semconv.ProcessPIDKey):            int64(42),
+		string(semconv.ProcessExecutablePathKey): "/bin/svc",
+		string(semconv.ProcessExecutableNameKey): "svc",
+	}
+	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+// EMPTY attribute values are valid OTLP and must reach the wire as empty
+// pcommon values, at every nesting level, rather than being dropped.
+func TestGenerate_ProcessContextResource_EmptyValues(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	tree := singleEventTree(samples.ResourceKey{
+		ExecutablePath: libpf.Intern("/bin/svc"),
+		PID:            42,
+	}, attribute.NewSet(
+		attribute.String("set", "v"),
+		attribute.KeyValue{Key: "empty"},
+		attribute.Slice("slice", attribute.StringValue("a"), attribute.Value{}),
+		attribute.Map("map", attribute.String("kept", "v"), attribute.KeyValue{Key: "gone"}),
+	))
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
+
+	expected := map[string]any{
+		"set":                                    "v",
+		"empty":                                  nil,
+		"slice":                                  []any{"a", nil},
+		"map":                                    map[string]any{"kept": "v", "gone": nil},
+		string(semconv.ProcessPIDKey):            int64(42),
+		string(semconv.ProcessExecutablePathKey): "/bin/svc",
+		string(semconv.ProcessExecutableNameKey): "svc",
+	}
+	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	tree := singleEventTree(samples.ResourceKey{
+		ExecutablePath: libpf.Intern("/bin/svc"),
+		PID:            99,
+		APMServiceName: "apm-svc",
+	}, attribute.Set{})
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
+
+	expected := map[string]any{
+		string(semconv.ServiceNameKey):           "apm-svc",
+		string(semconv.ProcessPIDKey):            int64(99),
+		string(semconv.ProcessExecutablePathKey): "/bin/svc",
+		string(semconv.ProcessExecutableNameKey): "svc",
+	}
+	assert.Equal(t, expected, attrs.AsRaw())
 }

@@ -3,15 +3,12 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
-	"math"
+	"strings"
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/collector/confmap"
-
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -77,6 +74,14 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
+	envVars := libpf.Set[string]{}
+	for envVar := range strings.SplitSeq(c.config.IncludeEnvVars, ",") {
+		envVar = strings.TrimSpace(envVar)
+		if envVar != "" {
+			envVars[envVar] = libpf.Void{}
+		}
+	}
+
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:           c.reporter,
@@ -93,7 +98,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:   c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
-		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
+		IncludeEnvVars:          envVars,
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
@@ -118,13 +123,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
-
-	if c.config.OffCPUThreshold > 0.0 {
-		if err := trc.StartOffCPUProfiling(); err != nil {
-			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
-		}
-		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
-	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
@@ -155,42 +153,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
-	if err := c.enableProbes(ctx, trc); err != nil {
-		c.cancelFunc() // stop the startTraceHandling goroutine
-		return fmt.Errorf("failed to enable probes: %w", err)
-	}
-
 	return nil
-}
-
-func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
-	for i, p := range c.config.Probes {
-		probe, err := createProbe(p.Type, p.Config)
-		if err != nil {
-			return fmt.Errorf("probe %d: %w", i, err)
-		}
-
-		if err := trc.Enable(ctx, probe); err != nil {
-			return fmt.Errorf("probe %d (%s): %w", i, p.Type, err)
-		}
-
-		log.Infof("Enabled probe %d (%s)", i, p.Type)
-	}
-
-	return nil
-}
-
-func createProbe(probeType string, cfg map[string]any) (tracer.Probe, error) {
-	switch probeType {
-	case "kprobe":
-		var kcfg kprobe.Config
-		if err := confmap.NewFromStringMap(cfg).Unmarshal(&kcfg); err != nil {
-			return nil, fmt.Errorf("decoding kprobe config: %w", err)
-		}
-		return kprobe.New(kcfg)
-	default:
-		return nil, fmt.Errorf("unknown probe type %q", probeType)
-	}
 }
 
 // Shutdown stops the controller
@@ -209,6 +172,13 @@ func (c *Controller) Shutdown() {
 			c.tracer.Close()
 		}
 	})
+}
+
+// EnableProbe enables a probe on the running tracer. It must be called after
+// Start has completed. The probe requires the kprobe unwinder chain, which is
+// loaded automatically when probes is non-empty in the config.
+func (c *Controller) EnableProbe(ctx context.Context, p tracer.Probe) error {
+	return c.tracer.Enable(ctx, p)
 }
 
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {

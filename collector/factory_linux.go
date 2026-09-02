@@ -87,7 +87,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 					envVars[envVar] = libpf.Void{}
 				}
 			}
-			controllerOption.processMetaEnrichers = append(controllerOption.processMetaEnrichers, process.NewEnvVarsEnricher(envVars))
+			controllerOption.processMetaEnrichers = append(controllerOption.processMetaEnrichers, process.NewEnvVarsEnricher(envVars, libpf.Set[string]{}))
 		}
 
 		controlerCfg := &controller.Config{

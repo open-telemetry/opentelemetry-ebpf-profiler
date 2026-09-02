@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -62,7 +61,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
 	}
-	traceHash := traceutil.HashTrace(trace)
+	traceHash := trace.Hash()
 
 	eventsTree := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&eventsTree)
@@ -75,6 +74,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	rtp := (*eventsTree)[key]
+	// Compared by hash to skip the map write-back when nothing changed.
+	if meta.ResourceAttrs.Equivalent() != rtp.ResourceAttrs.Equivalent() {
+		rtp.ResourceAttrs = meta.ResourceAttrs
+		(*eventsTree)[key] = rtp
+	}
 	if _, exists := rtp.Events[meta.ProfileType]; !exists {
 		rtp.Events[meta.ProfileType] = make(samples.SampleToEvents)
 	}

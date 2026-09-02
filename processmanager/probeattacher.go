@@ -24,7 +24,9 @@ type ProbeAttacher interface {
 	// Attach is called for each matching mapping seen for a PID.
 	// The implementation is responsible for opening and managing per-PID
 	// kernel resources (e.g. a uprobe link restricted to that PID).
-	Attach(pr process.Process) error
+	// The mapping is valid only for the duration of the call. Implementations
+	// that retain it must copy the value and intern mapping.Path.
+	Attach(pr process.Process, mapping *process.RawMapping) error
 
 	// Detach is called when a matched process exits. The implementation must
 	// close all per-process resources opened in Attach.
@@ -32,8 +34,8 @@ type ProbeAttacher interface {
 }
 
 // RegisterProbeAttacher registers a per-process probe attacher. SynchronizeProcess
-// calls Match for each new executable mapping; Attach is called once for any PID
-// that has at least one matching mapping. Detach is called on process exit.
+// calls Match for each new executable mapping and Attach for every matching mapping.
+// Detach is called on process exit.
 func (pm *ProcessManager) RegisterProbeAttacher(a ProbeAttacher) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

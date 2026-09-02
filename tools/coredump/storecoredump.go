@@ -72,7 +72,7 @@ type remoteReaderWithModuleFallback struct {
 }
 
 func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, error) {
-	n, err := r.scd.CoredumpProcess.ReadAt(p, addr)
+	n, err := r.scd.ReadAt(p, addr)
 	if err == nil {
 		return n, nil
 	}
