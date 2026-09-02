@@ -30,6 +30,5 @@ func createExtension(_ context.Context, _ extension.Settings, cfg component.Conf
 	c := cfg.(*Config)
 	return &offCPUExtension{p: &probe{
 		threshold: uint32(c.Threshold * math.MaxUint32),
-		links:     make([]link.Link, 0),
 	}}, nil
 }
