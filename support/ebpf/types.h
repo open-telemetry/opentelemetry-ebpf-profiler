@@ -634,7 +634,7 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
 } ApmCorrelationBuf;
 
 // Defines the format of the OTel thread context TLS buffer, published by an
-// instrumented process per OTEP #4719. The attribute payload follows
+// instrumented process per OTEP #4947. The attribute payload follows
 // immediately after this struct.
 typedef struct __attribute__((packed)) ThreadContextBuf {
   ApmTraceID trace_id;

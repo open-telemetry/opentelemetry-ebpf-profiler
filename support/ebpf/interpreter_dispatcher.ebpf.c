@@ -273,30 +273,55 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  // Read the pointer to the thread context buffer from the TLS variable.
-  u64 thread_context_buf_ptr;
+  // Find the address of the otel_thread_ctx_v1 variable itself.
+  void *var_addr;
   if (proc->tls.module_id == 0) {
     // Static TLS. The offset is TP-relative and signed: negative on x86-64,
     // where the static block sits below the thread pointer.
-    s64 tls_offset = proc->tls.tls_offset;
+    var_addr = (void *)(tsd_base + (s64)proc->tls.tls_offset);
+  } else {
+    // Dynamic TLS. Inlined from dtv_read (rather than calling it) to
+    // special-case an unallocated DTV slot below; dtv_read's other callers
+    // don't need that distinction.
+    //
+    // DTV access is always indirect: TP+offset yields a pointer to the DTV
+    // array, which must be dereferenced before indexing by module ID.
+    const void *dtv_ptr;
     if (bpf_probe_read_user(
-          &thread_context_buf_ptr,
-          sizeof(thread_context_buf_ptr),
-          (void *)(tsd_base + tls_offset))) {
+          &dtv_ptr, sizeof(dtv_ptr), (void *)(tsd_base + proc->tls.dtv_info.offset))) {
       increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
-      DEBUG_PRINT("Failed to read thread context buffer pointer from static TLS");
+      DEBUG_PRINT("Failed to read DTV pointer for native thread labels");
       return;
     }
-  } else if (dtv_read(
-               &proc->tls.dtv_info,
-               (void *)tsd_base,
-               proc->tls.module_id,
-               proc->tls.tls_offset,
-               (void **)&thread_context_buf_ptr)) {
-    // Not double counting: dtv_read's metricID_UnwindErrBadDTVRead is shared
-    // with its other callers.
+
+    // Index into the DTV to find this module's TLS block base address.
+    // DTV layout: [generation, module1_block, module2_block, ...]
+    // Entry size varies: 8 bytes (musl) or 16 bytes (glibc).
+    void *tls_block;
+    u64 dtv_entry_offset = (u64)proc->tls.module_id * proc->tls.dtv_info.multiplier;
+    if (bpf_probe_read_user(&tls_block, sizeof(tls_block), (void *)(dtv_ptr + dtv_entry_offset))) {
+      increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
+      DEBUG_PRINT("Failed to read DTV entry for native thread labels");
+      return;
+    }
+
+    // TLS_DTV_UNALLOCATED: this thread hasn't touched the module's TLS block
+    // yet, e.g. right after a dlopen that predates the thread. Same as the
+    // null buffer pointer below, this is expected and would swamp the error
+    // counter if counted as one.
+    if (tls_block == (void *)-1) {
+      DEBUG_PRINT("Thread context unpublished: DTV entry unallocated");
+      return;
+    }
+
+    var_addr = tls_block + (s64)proc->tls.tls_offset;
+  }
+
+  // Read the pointer to the thread context buffer from the TLS variable.
+  u64 thread_context_buf_ptr;
+  if (bpf_probe_read_user(&thread_context_buf_ptr, sizeof(thread_context_buf_ptr), var_addr)) {
     increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
-    DEBUG_PRINT("Failed to read thread context buffer pointer from DTV");
+    DEBUG_PRINT("Failed to read thread context buffer pointer");
     return;
   }
 
@@ -306,6 +331,9 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
+  // OTEP #4947's concurrency model rules out a writer running while we're here:
+  // we only ever interrupt the thread that owns this buffer, so this read (and
+  // the payload read below) can't race a write. No re-check of valid needed.
   ThreadContextBuf thread_context_buf;
   if (bpf_probe_read_user(
         &thread_context_buf, sizeof(thread_context_buf), (void *)thread_context_buf_ptr)) {
@@ -426,8 +454,10 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // path did not claim the custom labels union.
   maybe_add_go_custom_labels(ctx, record);
 
-  // Go labels win the union, so this must read after the Go dispatch. Its trace
-  // and span IDs override apmint and the OTel span map above.
+  // Reached only when Go didn't claim the custom-labels union above: Go labels
+  // and thread context share the same trace fields and are mutually exclusive,
+  // Go taking precedence. When this does run, its trace/span IDs override the
+  // apmint and OTel span map values already written above.
   maybe_add_thread_context_info(trace);
 
   send_trace(ctx, trace);
