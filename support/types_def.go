@@ -99,9 +99,9 @@ const (
 )
 
 const (
-	CustomLabelsTypeNone   = C.CUSTOM_LABELS_TYPE_NONE
-	CustomLabelsTypeNative = C.CUSTOM_LABELS_TYPE_NATIVE
-	CustomLabelsTypeGo     = C.CUSTOM_LABELS_TYPE_GO
+	CustomLabelsTypeNone          = C.CUSTOM_LABELS_TYPE_NONE
+	CustomLabelsTypeThreadContext = C.CUSTOM_LABELS_TYPE_THREAD_CONTEXT
+	CustomLabelsTypeGo            = C.CUSTOM_LABELS_TYPE_GO
 )
 
 type ApmSpanID C.ApmSpanID

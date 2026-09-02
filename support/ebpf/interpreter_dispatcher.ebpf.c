@@ -341,7 +341,7 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     // Same counter as the header read: both mean the buffer is unreadable.
     increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
   } else {
-    trace->custom_labels_type      = CUSTOM_LABELS_TYPE_NATIVE;
+    trace->custom_labels_type      = CUSTOM_LABELS_TYPE_THREAD_CONTEXT;
     trace->custom_labels_data.size = thread_context_buf.attrs_data_size;
     increment_metric(metricID_UnwindThreadContextReadSuccesses);
   }

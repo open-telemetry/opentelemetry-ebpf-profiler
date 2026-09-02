@@ -89,9 +89,9 @@ const (
 )
 
 const (
-	CustomLabelsTypeNone   = 0x0
-	CustomLabelsTypeNative = 0x1
-	CustomLabelsTypeGo     = 0x2
+	CustomLabelsTypeNone          = 0x0
+	CustomLabelsTypeThreadContext = 0x1
+	CustomLabelsTypeGo            = 0x2
 )
 
 type ApmSpanID [8]byte

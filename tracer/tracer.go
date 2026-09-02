@@ -1094,7 +1094,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 				trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
 			}
 		}
-	case support.CustomLabelsTypeNative:
+	case support.CustomLabelsTypeThreadContext:
 		if size := int(ptr.Custom_labels_data.Size); size > len(ptr.Custom_labels_data.Data) {
 			// eBPF clamps this. Exceeding it means the two sides disagree on the
 			// layout, so nothing in the payload can be trusted.
