@@ -271,16 +271,26 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  // Read the pointer to the thread context buffer from the TLS variable. The
-  // variable is resolved as static (module_id == 0) or dynamic (DTV-based) TLS.
+  // Read the pointer to the thread context buffer from the TLS variable.
   u64 thread_context_buf_ptr;
-  if (tls_read(
-        &proc->dtv_info,
-        (void *)tsd_base,
-        proc->module_id,
-        proc->tls_offset,
-        (void **)&thread_context_buf_ptr)) {
-    DEBUG_PRINT("Failed to read thread context buffer pointer");
+  if (proc->module_id == 0) {
+    // Static TLS. The offset is TP-relative and signed: negative on x86-64,
+    // where the static block sits below the thread pointer.
+    s64 tls_offset = proc->tls_offset;
+    if (bpf_probe_read_user(
+          &thread_context_buf_ptr,
+          sizeof(thread_context_buf_ptr),
+          (void *)(tsd_base + tls_offset))) {
+      DEBUG_PRINT("Failed to read thread context buffer pointer from static TLS");
+      return;
+    }
+  } else if (dtv_read(
+               &proc->dtv_info,
+               (void *)tsd_base,
+               proc->module_id,
+               proc->tls_offset,
+               (void **)&thread_context_buf_ptr)) {
+    DEBUG_PRINT("Failed to read thread context buffer pointer from DTV");
     return;
   }
 

@@ -576,7 +576,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     }
 
     void *ec_ptr;
-    if (tls_read(
+    if (dtv_read(
           &rubyinfo->dtv_info,
           (void *)tsd_base,
           rubyinfo->tls_module_id,
