@@ -334,16 +334,16 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     increment_metric(metricID_UnwindThreadContextAttrsTruncated);
     thread_context_buf.attrs_data_size = sizeof(trace->custom_labels_data.data);
   }
-  if (!bpf_probe_read_user(
+  if (bpf_probe_read_user(
         &trace->custom_labels_data.data,
         thread_context_buf.attrs_data_size,
         (void *)(thread_context_buf_ptr + sizeof(thread_context_buf)))) {
+    // Same counter as the header read: both mean the buffer is unreadable.
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+  } else {
     trace->custom_labels_type      = CUSTOM_LABELS_TYPE_NATIVE;
     trace->custom_labels_data.size = thread_context_buf.attrs_data_size;
     increment_metric(metricID_UnwindThreadContextReadSuccesses);
-  } else {
-    // Same counter as the header read: both mean the buffer is unreadable.
-    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
   }
 
   // WARN: we print this as little endian

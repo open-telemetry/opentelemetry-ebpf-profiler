@@ -56,8 +56,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
     }
     lbl->val[vlen] = 0;
   }
-  out->len                         = num_to_read;
-  record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
+  out->len = num_to_read;
 
   return true;
 }
@@ -140,7 +139,6 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
     }
   }
 
-  record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
   return true;
 }
 
@@ -199,7 +197,9 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
     pid,
     (unsigned long)record->customLabelsState.go_m_ptr);
   bool success = get_go_custom_labels(record);
-  if (!success) {
+  if (success) {
+    record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
+  } else {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
 
