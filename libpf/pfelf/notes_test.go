@@ -67,6 +67,36 @@ func TestVisitNotesReturnsNilWhenVisitorStops(t *testing.T) {
 	assert.Equal(t, []uint64{NamespaceLinux, NoteGnuBuildId}, visited)
 }
 
+func TestVisitNoteSections(t *testing.T) {
+	other := testELFNote("LINUX", 0, []byte("not a build ID"))
+	sdt := testELFNote("stapsdt", 3, []byte("descriptor"))
+	data := append(append([]byte{}, other...), sdt...)
+	f := &File{
+		elfReader: bytes.NewReader(data),
+		Sections: []Section{
+			{SectionHeader: elf.SectionHeader{Name: ".note.other", Type: elf.SHT_NOTE,
+				Offset: 0, Size: uint64(len(other))}},
+			{SectionHeader: elf.SectionHeader{Name: ".note.stapsdt", Type: elf.SHT_NOTE,
+				Offset: uint64(len(other)), Size: uint64(len(sdt))}},
+		},
+	}
+
+	var visited []uint64
+	err := f.VisitNoteSections([]string{".note.stapsdt"}, func(note uint64, desc []byte) bool {
+		visited = append(visited, note)
+		assert.Equal(t, []byte("descriptor"), desc)
+		return true
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{NoteStapSDT}, visited)
+
+	err = f.VisitNoteSections([]string{".note.missing"}, func(_ uint64, _ []byte) bool {
+		t.Fatal("visitor must not be called")
+		return true
+	})
+	require.ErrorIs(t, err, ErrNoteNotFound)
+}
+
 func TestGetBuildIDVisitsAllProgramNoteSegments(t *testing.T) {
 	expected := "5883092a3cf39b3f4a8b5289b409829651c3ada3"
 	desc, err := hex.DecodeString(expected)
