@@ -72,6 +72,9 @@ func parseProbeMode(s string) (tracer.ProbeMode, error) {
 }
 
 func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
+	if g.probeLink != nil {
+		return fmt.Errorf("kprobe already loaded")
+	}
 	originID, err := reg.Register(&samples.TypeMetadata{
 		SampleType: "events",
 		SampleUnit: "count",
