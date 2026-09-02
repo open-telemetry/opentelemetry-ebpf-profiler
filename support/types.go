@@ -157,6 +157,11 @@ type DTVInfo struct {
 	Multiplier uint8
 	Pad_cgo_0  [1]byte
 }
+type TLSVarInfo struct {
+	Tls_offset int32
+	Module_id  uint32
+	Dtv_info   DTVInfo
+}
 type Trace struct {
 	Pid                uint32
 	Tid                uint32
@@ -185,7 +190,7 @@ type UnwindInfo struct {
 }
 
 type ApmIntProcInfo struct {
-	Offset uint64
+	Tls TLSVarInfo
 }
 type BEAMProcInfo struct {
 	Bias                   uint64
@@ -316,9 +321,7 @@ type RubyProcInfo struct {
 	Pad_cgo_0                    [4]byte
 }
 type ThreadContextProcInfo struct {
-	Tls_offset int32
-	Module_id  uint32
-	Dtv_info   DTVInfo
+	Tls TLSVarInfo
 }
 type V8ProcInfo struct {
 	Version                      uint32
@@ -347,7 +350,7 @@ const (
 	Sizeof_StackDelta = 0x4
 	Sizeof_Trace      = 0x62d8
 
-	sizeof_ApmIntProcInfo        = 0x8
+	sizeof_ApmIntProcInfo        = 0xc
 	sizeof_DotnetProcInfo        = 0x4
 	sizeof_PHPProcInfo           = 0x18
 	sizeof_RubyProcInfo          = 0x60

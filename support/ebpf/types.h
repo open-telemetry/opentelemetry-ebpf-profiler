@@ -1160,11 +1160,11 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_MASK  0x0000000f
 #define PSR_MODE_EL0t  0x00000000
 
-typedef struct ApmIntProcInfo {
-  u64 tls_offset;
-} ApmIntProcInfo;
-
-typedef struct ThreadContextProcInfo {
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS. Shared by interpreters that resolve a TLS symbol,
+// even ones that (like ApmIntProcInfo below) only ever populate the static
+// case and leave module_id/dtv_info zeroed.
+typedef struct TLSVarInfo {
   // tls_offset is the variable's offset: TP-relative for static TLS
   // (local-exec / initial-exec, when module_id == 0), or the offset within the
   // module's TLS block for dynamic TLS.
@@ -1174,6 +1174,14 @@ typedef struct ThreadContextProcInfo {
   u32 module_id;
   // dtv_info locates the DTV for dynamic TLS (unused when module_id == 0).
   DTVInfo dtv_info;
+} TLSVarInfo;
+
+typedef struct ApmIntProcInfo {
+  TLSVarInfo tls;
+} ApmIntProcInfo;
+
+typedef struct ThreadContextProcInfo {
+  TLSVarInfo tls;
 } ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H

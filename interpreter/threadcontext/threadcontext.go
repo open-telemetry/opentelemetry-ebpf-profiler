@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -330,19 +329,6 @@ func (d *threadcontextData) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libp
 	return attachStatic(ebpf, pid, arg+d.offset)
 }
 
-// s32FromUint64 narrows v to an int32, rejecting values that don't fit.
-// x86-64 local-exec offsets are computed as a uint64 underflow (a small
-// negative number stored via wraparound), so int32(int64(v)) recovers the
-// right value for realistic magnitudes but would silently wrap on anything
-// larger -- worth rejecting rather than trusting.
-func s32FromUint64(v uint64) (int32, error) {
-	s := int64(v)
-	if s != int64(int32(s)) {
-		return 0, fmt.Errorf("value %#x does not fit in s32", v)
-	}
-	return int32(s), nil
-}
-
 // attachStatic stores a static TP-relative TLS offset (no DTV indirection).
 // Callers are responsible for rejecting an unresolved runtime read before
 // calling this: unlike accessLocalExec/accessInitialExec, the TLSDesc-static
@@ -350,17 +336,15 @@ func s32FromUint64(v uint64) (int32, error) {
 func attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	tlsOffset uint64,
 ) (interpreter.Instance, error) {
-	offset, err := s32FromUint64(tlsOffset)
+	// module_id == 0 marks static TLS: no DTV indirection at unwind time.
+	tlsVar, err := support.NewStaticTLSVarInfo(tlsOffset)
 	if err != nil {
 		return nil, fmt.Errorf("TLS offset: %w", err)
 	}
 
 	log.Debugf("PID %d tls offset: 0x%08X", pid, tlsOffset)
 
-	// module_id == 0 marks static TLS: no DTV indirection at unwind time.
-	procInfo := support.ThreadContextProcInfo{
-		Tls_offset: offset,
-	}
+	procInfo := support.ThreadContextProcInfo{Tls: tlsVar}
 	if err := ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
@@ -373,31 +357,24 @@ func attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
 // available (see Instance.UpdateLibcInfo).
 func attachDynamic(pid libpf.PID, moduleID, tlsOffset uint64,
 ) (interpreter.Instance, error) {
-	if moduleID == 0 {
-		return nil, fmt.Errorf("unexpected value 0 for moduleID in dynamic TLS")
-	}
-	if moduleID > math.MaxUint32 {
-		return nil, fmt.Errorf("moduleID %#x does not fit in u32", moduleID)
-	}
-	offset, err := s32FromUint64(tlsOffset)
+	tlsVar, err := support.NewDynamicTLSVarInfo(moduleID, tlsOffset)
 	if err != nil {
-		return nil, fmt.Errorf("TLS offset: %w", err)
+		return nil, err
 	}
 
 	log.Debugf("PID %d dynamic TLS moduleID: %d, tls offset: 0x%08X", pid, moduleID, tlsOffset)
 
-	return &Instance{
-		tlsOffset: offset,
-		moduleID:  uint32(moduleID),
-	}, nil
+	return &Instance{tlsVar: tlsVar}, nil
 }
 
 func (d *threadcontextData) Unload(_ interpreter.EbpfHandler) {
 }
 
 type Instance struct {
-	tlsOffset int32
-	moduleID  uint32
+	// tlsVar is the dynamic-TLS layout resolved at attach time, still missing
+	// Dtv_info (filled in by UpdateLibcInfo). Unused for static TLS, which
+	// installs its proc data in attachStatic.
+	tlsVar support.TLSVarInfo
 	// procDataWritten is true once proc data has actually been installed in
 	// eBPF: immediately for static TLS (attachStatic), or once libc DTV info
 	// arrives for dynamic TLS (UpdateLibcInfo). Detach must not delete proc
@@ -427,11 +404,9 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID, i
 	if i.procDataWritten || !info.HasDTVInfo() {
 		return nil
 	}
-	procInfo := support.ThreadContextProcInfo{
-		Tls_offset: i.tlsOffset,
-		Module_id:  i.moduleID,
-		Dtv_info:   info.DTVInfo,
-	}
+	tlsVar := i.tlsVar
+	tlsVar.Dtv_info = info.DTVInfo
+	procInfo := support.ThreadContextProcInfo{Tls: tlsVar}
 	if err := ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return err
 	}

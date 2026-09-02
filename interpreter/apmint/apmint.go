@@ -120,7 +120,11 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 	// Read TLS offset from the TLS descriptor.
 	tlsOffset := rm.Uint64(bias + d.tlsDescElfAddr + 8)
-	procInfo := support.ApmIntProcInfo{Offset: tlsOffset}
+	tlsVar, err := support.NewStaticTLSVarInfo(tlsOffset)
+	if err != nil {
+		return nil, fmt.Errorf("APM integration TLS offset: %w", err)
+	}
+	procInfo := support.ApmIntProcInfo{Tls: tlsVar}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}

@@ -224,11 +224,13 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     return;
   }
 
-  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
+  // Static TLS only: apmint does not support dynamic TLS agent libraries.
+  s64 tls_offset = proc->tls.tls_offset;
+  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + tls_offset);
 
   void *apm_corr_buf_ptr;
   if (bpf_probe_read_user(
-        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
+        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + tls_offset))) {
     increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
     DEBUG_PRINT("Failed to read APM correlation buffer pointer");
     return;
@@ -273,10 +275,10 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 
   // Read the pointer to the thread context buffer from the TLS variable.
   u64 thread_context_buf_ptr;
-  if (proc->module_id == 0) {
+  if (proc->tls.module_id == 0) {
     // Static TLS. The offset is TP-relative and signed: negative on x86-64,
     // where the static block sits below the thread pointer.
-    s64 tls_offset = proc->tls_offset;
+    s64 tls_offset = proc->tls.tls_offset;
     if (bpf_probe_read_user(
           &thread_context_buf_ptr,
           sizeof(thread_context_buf_ptr),
@@ -286,10 +288,10 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
       return;
     }
   } else if (dtv_read(
-               &proc->dtv_info,
+               &proc->tls.dtv_info,
                (void *)tsd_base,
-               proc->module_id,
-               proc->tls_offset,
+               proc->tls.module_id,
+               proc->tls.tls_offset,
                (void **)&thread_context_buf_ptr)) {
     // Not double counting: dtv_read's metricID_UnwindErrBadDTVRead is shared
     // with its other callers.

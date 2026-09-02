@@ -119,6 +119,7 @@ type StackDeltaPageKey C.StackDeltaPageKey
 type SystemAnalysis C.SystemAnalysis
 type TSDInfo C.TSDInfo
 type DTVInfo C.DTVInfo
+type TLSVarInfo C.TLSVarInfo
 type Trace C.Trace
 type UnwindInfo C.UnwindInfo
 

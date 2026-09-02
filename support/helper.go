@@ -4,7 +4,11 @@
 // support maps the definitions from headers in the C world into a nice go way
 package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"math"
+)
 
 const PIDPageMappingInfoFlagUsesAnonymousMappings = 1 << 0
 
@@ -26,4 +30,48 @@ func DecodeBiasAndUnwindProgram(biasAndUnwindProgram uint64) (bias uint64, unwin
 	bias = biasAndUnwindProgram & 0x00FFFFFFFFFFFFFF
 	unwindProgram = uint8(biasAndUnwindProgram >> 56)
 	return bias, unwindProgram
+}
+
+// s32TLSOffset narrows a TLS offset to the s32 the eBPF side stores.
+//
+// x86-64 static TLS offsets are computed as a uint64 underflow (a small
+// negative number stored via wraparound): int32(int64(v)) recovers the right
+// value for realistic magnitudes but would silently wrap on anything larger,
+// so a value that doesn't fit is rejected rather than trusted.
+func s32TLSOffset(tlsOffset uint64) (int32, error) {
+	s := int64(tlsOffset)
+	offset := int32(s)
+	if s != int64(offset) {
+		return 0, fmt.Errorf("TLS offset %#x does not fit in s32", tlsOffset)
+	}
+	return offset, nil
+}
+
+// NewStaticTLSVarInfo builds a TLSVarInfo for a variable in static TLS,
+// located at a TP-relative offset with no DTV indirection (module_id == 0).
+func NewStaticTLSVarInfo(tlsOffset uint64) (TLSVarInfo, error) {
+	offset, err := s32TLSOffset(tlsOffset)
+	if err != nil {
+		return TLSVarInfo{}, err
+	}
+	return TLSVarInfo{Tls_offset: offset}, nil
+}
+
+// NewDynamicTLSVarInfo builds a TLSVarInfo for a variable in dynamic TLS,
+// located by module ID and an offset within that module's TLS block.
+//
+// Dtv_info is left zeroed: it is only known once libc has been introspected,
+// so the caller must fill it in before handing the result to eBPF.
+func NewDynamicTLSVarInfo(moduleID, tlsOffset uint64) (TLSVarInfo, error) {
+	if moduleID == 0 {
+		return TLSVarInfo{}, errors.New("unexpected value 0 for moduleID in dynamic TLS")
+	}
+	if moduleID > math.MaxUint32 {
+		return TLSVarInfo{}, fmt.Errorf("moduleID %#x does not fit in u32", moduleID)
+	}
+	offset, err := s32TLSOffset(tlsOffset)
+	if err != nil {
+		return TLSVarInfo{}, err
+	}
+	return TLSVarInfo{Tls_offset: offset, Module_id: uint32(moduleID)}, nil
 }
