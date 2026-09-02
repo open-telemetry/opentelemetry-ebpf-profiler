@@ -141,7 +141,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	// A file with no TLS segment cannot define a thread-local, so skip the
 	// .symtab walk findSymbol falls back to. That walk allocates a Go string
 	// per symbol and runs for every mapped executable and library.
-	if getTLSProg(ef) == nil {
+	if ef.ProgByType(elf.PT_TLS) == nil {
 		return nil, nil
 	}
 
@@ -181,7 +181,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	return d, nil
 }
 
-type data struct {
+type threadcontextData struct {
 	// access selects how the TLS variable address is resolved at attach time.
 	access tlsAccess
 	// elfAddr is the (unbiased) ELF address of the TLS descriptor or GOT slot
@@ -199,19 +199,19 @@ type data struct {
 	machine elf.Machine
 }
 
-var _ interpreter.Data = &data{}
+var _ interpreter.Data = &threadcontextData{}
 
-func (d data) String() string {
+func (d *threadcontextData) String() string {
 	return fmt.Sprintf("Native thread labels (%v elfAddr=0x%x offset=0x%x)",
 		d.access, d.elfAddr, d.offset)
 }
 
-func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
+func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	switch d.access {
 	case accessLocalExec:
-		return d.attachStatic(ebpf, pid, d.offset)
+		return attachStatic(ebpf, pid, d.offset)
 
 	case accessInitialExec:
 		// The GOT slot holds the variable's TP-relative offset directly.
@@ -228,7 +228,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		if got == 0 && d.machine == elf.EM_X86_64 {
 			return nil, fmt.Errorf("unresolved TLS GOT slot")
 		}
-		return d.attachStatic(ebpf, pid, got+d.offset)
+		return attachStatic(ebpf, pid, got+d.offset)
 
 	case accessGeneralDynamic:
 		// The GOT holds a tls_index {module_id, offset} pair.
@@ -282,7 +282,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 // attachTLSDesc resolves a relocated TLS descriptor whose argument is either a
 // TP-relative offset (static TLS) or a pointer to a tls_index (dynamic TLS).
-func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
+func (d *threadcontextData) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	rm remotememory.RemoteMemory, resolver, arg uint64,
 ) (interpreter.Instance, error) {
 	if d.machine == elf.EM_X86_64 {
@@ -290,7 +290,7 @@ func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		// is always negative and a tls_index pointer never is. Exact, unlike
 		// the dereference the variant I path below has to fall back on.
 		if int64(arg) < 0 {
-			return d.attachStatic(ebpf, pid, arg+d.offset)
+			return attachStatic(ebpf, pid, arg+d.offset)
 		}
 		ti, err := readTLSIndex(rm, arg)
 		if err != nil {
@@ -314,7 +314,7 @@ func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return nil, err
 	}
 	if static {
-		return d.attachStatic(ebpf, pid, arg+d.offset)
+		return attachStatic(ebpf, pid, arg+d.offset)
 	}
 
 	// An unrecognized resolver (a loader we don't decode) leaves only the
@@ -327,7 +327,7 @@ func (d data) attachTLSDesc(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	if ti != nil {
 		return attachDynamic(pid, ti.moduleID, ti.offset+d.offset)
 	}
-	return d.attachStatic(ebpf, pid, arg+d.offset)
+	return attachStatic(ebpf, pid, arg+d.offset)
 }
 
 // s32FromUint64 narrows v to an int32, rejecting values that don't fit.
@@ -347,7 +347,7 @@ func s32FromUint64(v uint64) (int32, error) {
 // Callers are responsible for rejecting an unresolved runtime read before
 // calling this: unlike accessLocalExec/accessInitialExec, the TLSDesc-static
 // caller can legitimately pass 0 here (see the accessTLSDesc case in Attach).
-func (d data) attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
+func attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	tlsOffset uint64,
 ) (interpreter.Instance, error) {
 	offset, err := s32FromUint64(tlsOffset)
@@ -392,7 +392,7 @@ func attachDynamic(pid libpf.PID, moduleID, tlsOffset uint64,
 	}, nil
 }
 
-func (d data) Unload(_ interpreter.EbpfHandler) {
+func (d *threadcontextData) Unload(_ interpreter.EbpfHandler) {
 }
 
 type Instance struct {

@@ -17,7 +17,7 @@ import (
 type tlsAccess uint8
 
 const (
-	// accessInvalid is the zero value, so a zero data is not mistaken for a
+	// accessInvalid is the zero value, so a zero threadcontextData is not mistaken for a
 	// descriptor at ELF address 0.
 	accessInvalid tlsAccess = iota
 	// accessTLSDesc: a TLS descriptor (GNU2/desc dialect) whose resolved argument
@@ -73,7 +73,7 @@ func (a tlsAccess) String() string {
 // symbol but the module (symbol index 0), because the per-variable offset is
 // resolved separately in code. In that case the in-module offset is the
 // symbol's static value (offset).
-func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
+func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*threadcontextData, error) {
 	var tlsdescAddr, tpmodAddr, tpoffAddr libpf.Address
 	// Module-level relocations (not referencing any symbol) are local-dynamic
 	// candidates: we keep the first one of each dialect as a fallback.
@@ -112,13 +112,13 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	switch {
 	case tlsdescAddr != 0:
 		// General-dynamic, GNU2/desc dialect.
-		return &data{access: accessTLSDesc, elfAddr: tlsdescAddr, machine: ef.Machine}, nil
+		return &threadcontextData{access: accessTLSDesc, elfAddr: tlsdescAddr, machine: ef.Machine}, nil
 	case tpmodAddr != 0:
 		// General-dynamic, GNU dialect.
-		return &data{access: accessGeneralDynamic, elfAddr: tpmodAddr, machine: ef.Machine}, nil
+		return &threadcontextData{access: accessGeneralDynamic, elfAddr: tpmodAddr, machine: ef.Machine}, nil
 	case tpoffAddr != 0:
 		// Initial-exec.
-		return &data{access: accessInitialExec, elfAddr: tpoffAddr, machine: ef.Machine}, nil
+		return &threadcontextData{access: accessInitialExec, elfAddr: tpoffAddr, machine: ef.Machine}, nil
 	}
 
 	// Local-dynamic: the symbol is local to a shared object (not preemptible).
@@ -126,10 +126,10 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 	// offset is the symbol's static value.
 	switch {
 	case tlsdescNoSymAddr != 0:
-		return &data{access: accessTLSDesc, elfAddr: tlsdescNoSymAddr,
+		return &threadcontextData{access: accessTLSDesc, elfAddr: tlsdescNoSymAddr,
 			offset: uint64(sym.Address), machine: ef.Machine}, nil
 	case tpmodNoSymAddr != 0:
-		return &data{access: accessLocalDynamic, elfAddr: tpmodNoSymAddr,
+		return &threadcontextData{access: accessLocalDynamic, elfAddr: tpmodNoSymAddr,
 			offset: uint64(sym.Address), machine: ef.Machine}, nil
 	}
 
@@ -141,7 +141,7 @@ func resolveTLSAccess(ef *pfelf.File, sym *libpf.Symbol) (*data, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get static TLS offset: %v", err)
 		}
-		return &data{access: accessLocalExec, offset: tlsOffset, machine: ef.Machine}, nil
+		return &threadcontextData{access: accessLocalExec, offset: tlsOffset, machine: ef.Machine}, nil
 	}
 
 	return nil, errors.New("unsupported TLS model")
@@ -151,20 +151,11 @@ func roundUp(value, alignment uint64) uint64 {
 	return (value + alignment - 1) &^ (alignment - 1)
 }
 
-func getTLSProg(ef *pfelf.File) *pfelf.Prog {
-	for _, prog := range ef.Progs {
-		if prog.Type == elf.PT_TLS {
-			return &prog
-		}
-	}
-	return nil
-}
-
 // getStaticTLSOffset computes the thread-pointer-relative offset of a local-exec
 // TLS variable defined in the main executable's static TLS block. sym.Address is
 // the symbol's offset within the PT_TLS image.
 func getStaticTLSOffset(ef *pfelf.File, sym *libpf.Symbol) (uint64, error) {
-	tlsProg := getTLSProg(ef)
+	tlsProg := ef.ProgByType(elf.PT_TLS)
 	if tlsProg == nil {
 		return 0, fmt.Errorf("failed to locate TLS segment")
 	}
