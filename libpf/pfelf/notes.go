@@ -31,10 +31,14 @@ const (
 	NamespaceLinux
 	NamespaceGNU
 	NamespaceGo
+	NamespaceStapSDT
 
 	NoteGnuBuildId = NamespaceGNU + 0x3
 
 	NoteGoBuildId = NamespaceGo + 0x4
+
+	// NoteStapSDT is a SystemTap SDT (USDT) probe note.
+	NoteStapSDT = NamespaceStapSDT + 0x3
 )
 
 // visitNotes parses and visits all notes from pfbufio.Reader.
@@ -67,6 +71,8 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 				id = NamespaceGNU
 			case "Go":
 				id = NamespaceGo
+			case "stapsdt":
+				id = NamespaceStapSDT
 			}
 		case pfbufio.ErrBufferTooSmall:
 			if _, err = rdr.Discard(alignedSize); err != nil {

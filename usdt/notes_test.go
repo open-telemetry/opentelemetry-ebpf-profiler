@@ -15,71 +15,54 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
-func TestParseSDTNotes(t *testing.T) {
-	data := append(
-		buildSDTNote(sdtNoteOwner, sdtNoteType, 0x1200, 0x1000, 0x2100,
-			"otel_memory", "alloc", "8@%rdi"),
-		buildSDTNote(sdtNoteOwner, sdtNoteType, 0x1300, 0x1000, 0,
-			"otel_memory", "free", "8@%rdi")...,
-	)
-
-	notes, err := parseSDTNotes(data)
+func TestParseSDTDescriptor(t *testing.T) {
+	note, err := parseSDTDescriptor(buildSDTDescriptor(
+		0x1200, 0x1000, 0x2100, "otel_memory", "alloc", "8@%rdi"))
 	require.NoError(t, err)
-	require.Len(t, notes, 2)
 	assert.Equal(t, sdtNote{
 		provider:  "otel_memory",
 		name:      "alloc",
 		location:  0x1200,
 		base:      0x1000,
 		semaphore: 0x2100,
-	}, notes[0])
-	assert.Equal(t, "free", notes[1].name)
-	assert.Zero(t, notes[1].semaphore)
+	}, note)
 }
 
-func TestParseSDTNotesSkipsOtherNotes(t *testing.T) {
-	data := append(
-		buildSDTNote("other", sdtNoteType, 1, 2, 3, "provider", "probe", ""),
-		buildSDTNote(sdtNoteOwner, 1, 1, 2, 3, "provider", "probe", "")...,
-	)
-
-	notes, err := parseSDTNotes(data)
+func TestParseSDTDescriptorNoSemaphore(t *testing.T) {
+	note, err := parseSDTDescriptor(buildSDTDescriptor(
+		0x1300, 0x1000, 0, "otel_memory", "free", "8@%rdi"))
 	require.NoError(t, err)
-	assert.Empty(t, notes)
+	assert.Equal(t, "free", note.name)
+	assert.Zero(t, note.semaphore)
 }
 
-func TestParseSDTNotesRejectsMalformedData(t *testing.T) {
-	valid := buildSDTNote(sdtNoteOwner, sdtNoteType, 1, 2, 3, "provider", "probe", "")
-	shortDesc := buildRawSDTNote(sdtNoteOwner, sdtNoteType, make([]byte, 23))
-	missingProviderTerminator := buildRawSDTNote(sdtNoteOwner, sdtNoteType,
-		append(make([]byte, 24), []byte("provider")...))
-	missingNameTerminator := buildRawSDTNote(sdtNoteOwner, sdtNoteType,
-		append(make([]byte, 24), []byte("provider\x00probe")...))
+func TestParseSDTDescriptorRejectsMalformed(t *testing.T) {
+	valid := buildSDTDescriptor(1, 2, 3, "provider", "probe", "")
 
 	tests := []struct {
 		name string
-		data []byte
+		desc []byte
 	}{
-		{name: "header", data: valid[:11]},
-		{name: "owner", data: valid[:13]},
-		{name: "descriptor", data: valid[:len(valid)-1]},
-		{name: "short descriptor", data: shortDesc},
-		{name: "provider terminator", data: missingProviderTerminator},
-		{name: "name terminator", data: missingNameTerminator},
+		{name: "short descriptor", desc: make([]byte, 23)},
+		{name: "missing provider terminator",
+			desc: append(make([]byte, 24), []byte("provider")...)},
+		{name: "missing name terminator",
+			desc: append(make([]byte, 24), []byte("provider\x00probe")...)},
+		{name: "truncated addresses", desc: valid[:20]},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parseSDTNotes(tc.data)
+			_, err := parseSDTDescriptor(tc.desc)
 			assert.Error(t, err)
 		})
 	}
 }
 
-func FuzzParseSDTNotes(f *testing.F) {
+func FuzzParseSDTDescriptor(f *testing.F) {
 	f.Add([]byte(nil))
-	f.Add(buildSDTNote(sdtNoteOwner, sdtNoteType, 1, 2, 3, "provider", "probe", ""))
+	f.Add(buildSDTDescriptor(1, 2, 3, "provider", "probe", ""))
 	f.Fuzz(func(_ *testing.T, data []byte) {
-		_, _ = parseSDTNotes(data)
+		_, _ = parseSDTDescriptor(data)
 	})
 }
 
@@ -130,11 +113,11 @@ func TestELFFileOffset(t *testing.T) {
 	assert.Equal(t, uint64(0x420), offset)
 
 	_, err = elfFileOffset(f, 0x2020, true)
-	assert.Error(t, err)
+	require.Error(t, err)
 	_, err = elfFileOffset(f, 0x2150, false)
-	assert.Error(t, err, "memory-only segment data has no file offset")
+	require.Error(t, err, "memory-only segment data has no file offset")
 	_, err = elfFileOffset(f, 0x3000, false)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
@@ -164,7 +147,8 @@ func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
 	}}, points)
 }
 
-func buildSDTNote(owner string, noteType uint32, location, base, semaphore uint64,
+// buildSDTDescriptor builds the binary descriptor payload for a single SDT note.
+func buildSDTDescriptor(location, base, semaphore uint64,
 	provider, name, arguments string,
 ) []byte {
 	desc := make([]byte, 24)
@@ -177,18 +161,5 @@ func buildSDTNote(owner string, noteType uint32, location, base, semaphore uint6
 	desc = append(desc, 0)
 	desc = append(desc, arguments...)
 	desc = append(desc, 0)
-	return buildRawSDTNote(owner, noteType, desc)
-}
-
-func buildRawSDTNote(owner string, noteType uint32, desc []byte) []byte {
-	name := append([]byte(owner), 0)
-	note := make([]byte, 12)
-	binary.LittleEndian.PutUint32(note[0:4], uint32(len(name)))
-	binary.LittleEndian.PutUint32(note[4:8], uint32(len(desc)))
-	binary.LittleEndian.PutUint32(note[8:12], noteType)
-	note = append(note, name...)
-	note = append(note, make([]byte, int(align4(uint64(len(name))))-len(name))...)
-	note = append(note, desc...)
-	note = append(note, make([]byte, int(align4(uint64(len(desc))))-len(desc))...)
-	return note
+	return desc
 }

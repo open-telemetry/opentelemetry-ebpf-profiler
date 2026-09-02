@@ -13,7 +13,7 @@ import (
 )
 
 // Discoverer finds USDT attachment points and caches results by backing-file identity.
-// The parse cache is not synchronised; callers serialise access via the
+// The parse cache is not synchronized; callers serialize access via the
 // processmanager lock (see processinfo.Attach).
 type Discoverer struct {
 	parseCache *lru.LRU[util.OnDiskFileIdentifier, []AttachmentPoint]

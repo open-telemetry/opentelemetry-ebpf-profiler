@@ -15,11 +15,8 @@ import (
 )
 
 const (
-	sdtNoteType  = 3
-	sdtNoteOwner = "stapsdt"
-
-	// Bound allocations when parsing an untrusted ELF file.
-	maxSDTSectionSize = 16 << 20
+	sdtNoteSection = ".note.stapsdt"
+	sdtBaseSection = ".stapsdt.base"
 )
 
 // sdtNote is the raw, address-based representation stored in an SDT note.
@@ -32,120 +29,67 @@ type sdtNote struct {
 	semaphore uint64
 }
 
-// readSDTNotes reads every SystemTap note section and returns the address of
+// readSDTNotes reads every SystemTap note and returns the address of
 // `.stapsdt.base`, which is needed to undo prelink address adjustments.
 func readSDTNotes(f *pfelf.File) ([]sdtNote, uint64, error) {
-	if err := f.LoadSections(); err != nil {
-		return nil, 0, err
-	}
-
-	var baseAddr uint64
-	for i := range f.Sections {
-		if f.Sections[i].Name == ".stapsdt.base" {
-			baseAddr = f.Sections[i].Addr
-			break
-		}
-	}
-
 	var notes []sdtNote
-	for i := range f.Sections {
-		section := &f.Sections[i]
-		if section.Name != ".note.stapsdt" {
-			continue
+	var parseErr error
+	err := f.VisitNoteSections([]string{sdtNoteSection}, func(id uint64, desc []byte) bool {
+		// A note section may contain records owned by other producers.
+		if id != pfelf.NoteStapSDT {
+			return true
 		}
-		if section.Type != elf.SHT_NOTE {
-			return nil, 0, fmt.Errorf("section %s has type %s", section.Name, section.Type)
-		}
-		if section.FileSize > maxSDTSectionSize {
-			return nil, 0, fmt.Errorf("section %s is too large: %d", section.Name, section.FileSize)
-		}
-		data, err := section.Data(maxSDTSectionSize)
+		note, err := parseSDTDescriptor(desc)
 		if err != nil {
-			return nil, 0, fmt.Errorf("read section %s: %w", section.Name, err)
+			parseErr = err
+			return false
 		}
-		parsed, err := parseSDTNotes(data)
-		if err != nil {
-			return nil, 0, err
-		}
-		notes = append(notes, parsed...)
+		notes = append(notes, note)
+		return true
+	})
+	if parseErr != nil {
+		return nil, 0, parseErr
 	}
-	if len(notes) > 0 && baseAddr == 0 {
-		return nil, 0, errors.New("SDT notes found without a valid .stapsdt.base section")
+	if err != nil && !errors.Is(err, pfelf.ErrNoteNotFound) {
+		return nil, 0, fmt.Errorf("read section %s: %w", sdtNoteSection, err)
 	}
-	return notes, baseAddr, nil
+	if len(notes) == 0 {
+		return nil, 0, nil
+	}
+
+	base := f.Section(sdtBaseSection)
+	if base == nil || base.Addr == 0 {
+		return nil, 0, fmt.Errorf("SDT notes found without a valid %s section", sdtBaseSection)
+	}
+	return notes, base.Addr, nil
 }
 
-// parseSDTNotes decodes the ELF note stream. Format references:
+// parseSDTDescriptor decodes the descriptor of one SDT note. Format references:
 //   - https://sourceware.org/systemtap/wiki/UserSpaceProbeImplementation
 //   - https://docs.ebpf.io/linux/concepts/usdt/
 //
-// Each record contains a 12-byte header followed by a four-byte-aligned owner
-// and descriptor. An SDT descriptor starts with three little-endian 64-bit
-// addresses followed by provider, name, and arguments as NUL-terminated
-// strings. This matches the ELF64,
-// little-endian files accepted by pfelf. We do not need the arguments yet.
-func parseSDTNotes(data []byte) ([]sdtNote, error) {
-	const headerSize = 12
-	var notes []sdtNote
-
-	for offset := 0; offset < len(data); {
-		if len(data)-offset < headerSize {
-			return nil, errors.New("truncated SDT note header")
-		}
-
-		namesz := binary.LittleEndian.Uint32(data[offset:])
-		descsz := binary.LittleEndian.Uint32(data[offset+4:])
-		noteType := binary.LittleEndian.Uint32(data[offset+8:])
-		offset += headerSize
-
-		nameLen := align4(uint64(namesz))
-		descLen := align4(uint64(descsz))
-		if nameLen > uint64(len(data)-offset) {
-			return nil, errors.New("truncated SDT note owner")
-		}
-		name := data[offset : offset+int(namesz)]
-		offset += int(nameLen)
-		if descLen > uint64(len(data)-offset) {
-			return nil, errors.New("truncated SDT note descriptor")
-		}
-		desc := data[offset : offset+int(descsz)]
-		offset += int(descLen)
-
-		// A note section may contain records owned by other producers.
-		if noteType != sdtNoteType || string(bytes.TrimRight(name, "\x00")) != sdtNoteOwner {
-			continue
-		}
-		if len(desc) < 24 {
-			return nil, errors.New("SDT note descriptor is too short")
-		}
-
-		provider, rest, ok := cutCString(desc[24:])
-		if !ok {
-			return nil, errors.New("SDT note provider is not terminated")
-		}
-		name, _, ok = cutCString(rest)
-		if !ok {
-			return nil, errors.New("SDT note name is not terminated")
-		}
-
-		notes = append(notes, sdtNote{
-			provider:  string(provider),
-			name:      string(name),
-			location:  binary.LittleEndian.Uint64(desc[0:8]),
-			base:      binary.LittleEndian.Uint64(desc[8:16]),
-			semaphore: binary.LittleEndian.Uint64(desc[16:24]),
-		})
+// The descriptor starts with three little-endian 64-bit addresses followed by
+// provider, name, and arguments as NUL-terminated strings. This matches the
+// ELF64, little-endian files accepted by pfelf.
+func parseSDTDescriptor(desc []byte) (sdtNote, error) {
+	if len(desc) < 24 {
+		return sdtNote{}, errors.New("SDT note descriptor is too short")
 	}
-	return notes, nil
-}
-
-func cutCString(data []byte) ([]byte, []byte, bool) {
-	value, rest, ok := bytes.Cut(data, []byte{0})
-	return value, rest, ok
-}
-
-func align4(value uint64) uint64 {
-	return (value + 3) &^ 3
+	provider, rest, ok := bytes.Cut(desc[24:], []byte{0})
+	if !ok {
+		return sdtNote{}, errors.New("SDT note provider is not terminated")
+	}
+	name, _, ok := bytes.Cut(rest, []byte{0})
+	if !ok {
+		return sdtNote{}, errors.New("SDT note name is not terminated")
+	}
+	return sdtNote{
+		provider:  string(provider),
+		name:      string(name),
+		location:  binary.LittleEndian.Uint64(desc[0:8]),
+		base:      binary.LittleEndian.Uint64(desc[8:16]),
+		semaphore: binary.LittleEndian.Uint64(desc[16:24]),
+	}, nil
 }
 
 // adjustedSDTAddress applies the difference between the note's link-time
