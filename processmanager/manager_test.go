@@ -2,8 +2,10 @@ package processmanager
 
 import (
 	"os"
+	"path"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"unique"
@@ -63,6 +65,54 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
 	require.Equal(t, 1, pm.frameCache.Len())
+}
+
+// enrichEnvVars runs the configured enrichers against a synthetic
+// /proc/PID/environ holding env.
+func enrichEnvVars(t *testing.T, pm *ProcessManager, env ...string) process.Meta {
+	t.Helper()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(path.Join(dir, "environ"),
+		[]byte(strings.Join(env, "\000")+"\000"), 0o600))
+	var meta process.Meta
+	for _, e := range pm.metaEnrichers {
+		e.EnrichMeta(dir+"/", &meta)
+	}
+	return meta
+}
+
+func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
+	requestedEnvVars := libpf.Set[string]{"FOO": {}}
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		IncludeEnvVars:        requestedEnvVars,
+	})
+	require.NoError(t, err)
+
+	meta := enrichEnvVars(t, pm,
+		"FOO=foo", "OTEL_SERVICE_NAME=svc", "OTEL_RESOURCE_ATTRIBUTES=k=v", "BAR=bar")
+
+	// Only the user-requested env vars may be reported.
+	assert.Equal(t, map[libpf.String]libpf.String{
+		libpf.Intern("FOO"): libpf.Intern("foo"),
+	}, meta.EnvVariables)
+
+	// The env vars used to derive process context are captured for internal use only.
+	assert.Equal(t, map[libpf.String]libpf.String{
+		libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("svc"),
+		libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=v"),
+	}, meta.InternalEnvVariables)
+
+	// New must not add the internal env vars to the caller's set.
+	assert.Equal(t, libpf.Set[string]{"FOO": {}}, requestedEnvVars)
+
+	// Later mutations of the caller's set must not reach the enricher.
+	requestedEnvVars["BAR"] = libpf.Void{}
+	meta = enrichEnvVars(t, pm, "BAR=bar")
+	assert.Empty(t, meta.EnvVariables)
 }
 
 func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {

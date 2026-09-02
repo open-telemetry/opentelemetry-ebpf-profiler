@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -40,6 +42,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: linter
@@ -53,6 +57,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: formatter
@@ -72,6 +78,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Cross compile
@@ -91,6 +99,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Cache coredump modules
@@ -128,6 +138,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
@@ -144,6 +156,8 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -199,6 +213,8 @@ jobs:
           sudo dpkg-reconfigure man-db
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install dependencies
         run: |
           sudo apt-get update -y
@@ -228,3 +244,25 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           support/run-tests.sh ${{ matrix.kernel }}
+
+  # Not in the qemu matrix: that initramfs cannot load shared libraries.
+  host-integration-tests:
+    name: Integration tests (processcontext ${{ matrix.target_arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Clone code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Install musl-dev
+        run: |
+          sudo apt-get update -y
+          sudo apt-get -y --no-install-recommends --no-install-suggests install musl-dev
+      - name: Run host integration tests
+        run: make host-integration-tests
