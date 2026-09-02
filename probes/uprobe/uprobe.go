@@ -168,7 +168,7 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	p.mu.Lock()
 	if p.unloaded {
 		p.mu.Unlock()
-		// closing link due unloaded probe
+		// closing link due to unloaded probe
 		return lnk.Close()
 	}
 	p.links[pid] = append(p.links[pid], lnk)
