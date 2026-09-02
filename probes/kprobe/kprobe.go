@@ -123,7 +123,9 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 func (g *probe) Unload() error {
 	if g.probeLink != nil {
-		return g.probeLink.Close()
+		err := g.probeLink.Close()
+		g.probeLink = nil
+		return err
 	}
 	return nil
 }

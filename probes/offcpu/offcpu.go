@@ -7,6 +7,7 @@ package offcpu // import "go.opentelemetry.io/ebpf-profiler/probes/offcpu"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -93,7 +94,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 }
 
 // attachPrograms attaches the loaded eBPF programs to the scheduler hooks and
-// returns a composite link that closes all attachments on Close.
+// stores the resulting links.
 func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeContext) error {
 	kprobeProg, ok := ebpfProgs["finish_task_switch"]
 	if !ok {
@@ -154,11 +155,13 @@ func schedTimesSize(threshold uint32) uint32 {
 }
 
 func (p *probe) Unload() error {
+	var errs error
 	for i := range p.links {
 		err := p.links[i].Close()
 		if err != nil {
-			return err
+			errs = errors.Join(err, errs)
 		}
 	}
-	return nil
+	p.links = nil
+	return errs
 }

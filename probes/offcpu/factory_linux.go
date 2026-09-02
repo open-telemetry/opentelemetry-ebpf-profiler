@@ -9,7 +9,6 @@ import (
 	"context"
 	"math"
 
-	"github.com/cilium/ebpf/link"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
 
