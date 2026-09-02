@@ -131,7 +131,9 @@ type beamInstance struct {
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindBEAM), ProgName: "unwind_beam"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

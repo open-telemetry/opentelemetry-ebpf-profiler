@@ -51,8 +51,13 @@ type apmProcessStorage struct {
 	TraceSocketPath string
 }
 
-// Loader implements interpreter.Loader.
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName},
+	})
+}
+
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !isPotentialAgentLib(info.FileName()) {
 		return nil, nil
 	}

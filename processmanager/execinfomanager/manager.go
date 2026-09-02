@@ -15,18 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
-	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -96,44 +85,7 @@ func NewExecutableInfoManager(
 	ebpf pmebpf.EbpfHandler,
 	interpretersConfig interpreterconfig.Config,
 ) (*ExecutableInfoManager, error) {
-	// Initialize interpreter loaders.
-	loaders := make([]interpreter.Loader, 0)
-	if !interpretersConfig.Perl.IsDisabled() {
-		loaders = append(loaders, perl.GetLoader(interpretersConfig.Perl))
-	}
-	if !interpretersConfig.Python.IsDisabled() {
-		loaders = append(loaders, python.GetLoader(interpretersConfig.Python))
-	}
-	if !interpretersConfig.PHP.IsDisabled() {
-		loaders = append(loaders, php.GetLoader(interpretersConfig.PHP))
-		loaders = append(loaders, php.GetOpcacheLoader(interpretersConfig.PHP))
-	}
-	if !interpretersConfig.Hotspot.IsDisabled() {
-		loaders = append(loaders, hotspot.GetLoader(interpretersConfig.Hotspot))
-	}
-	if !interpretersConfig.Ruby.IsDisabled() {
-		loaders = append(loaders, ruby.GetLoader(interpretersConfig.Ruby))
-	}
-	if !interpretersConfig.V8.IsDisabled() {
-		loaders = append(loaders, nodev8.GetLoader(interpretersConfig.V8))
-	}
-	if !interpretersConfig.Dotnet.IsDisabled() {
-		loaders = append(loaders, dotnet.GetLoader(interpretersConfig.Dotnet))
-	}
-	// The Go runtime offsets are needed for native stack unwinding across the
-	// Go runtime and by the labels program. Load them whenever Go support is
-	// enabled, independent of the labels and symbolization sub-toggles.
-	if !interpretersConfig.Go.IsDisabled() {
-		loaders = append(loaders, golang.GetLoader(interpretersConfig.Go))
-	}
-	if !interpretersConfig.BEAM.IsDisabled() {
-		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))
-	}
-	if !interpretersConfig.LuaJIT.IsDisabled() {
-		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
-	}
-
-	loaders = append(loaders, apmint.Loader)
+	loaders := interpretersConfig.Loaders()
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
@@ -367,8 +319,8 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	var matches []interpreter.Data //nolint:prealloc
 
 	// Ask all interpreter loaders whether they want to handle this executable.
-	for _, load := range state.interpreterLoaders {
-		data, err := load(state.ebpf, loaderInfo)
+	for _, loader := range state.interpreterLoaders {
+		data, err := loader.Load(state.ebpf, loaderInfo)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.

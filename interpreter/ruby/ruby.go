@@ -1457,7 +1457,9 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindRuby), ProgName: "unwind_ruby"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
