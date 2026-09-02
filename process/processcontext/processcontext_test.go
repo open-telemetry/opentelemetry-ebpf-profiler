@@ -310,7 +310,7 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			ctx, err := read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
+			ctx, err := read(mappingAddr, 0, rm, tt.lastPublishedAtNs, 0)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
@@ -418,7 +418,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			result, err := read(libpf.Address(contextMappingAddr), pid, proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.Equal(t,
 				Info{
@@ -465,7 +465,7 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 1))
 	mock.writeAt(payloadAddr, payload)
 
-	info, err := read(libpf.Address(0x1000),
+	info, err := read(libpf.Address(0x1000), 0,
 		remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 	require.NoError(t, err)
 

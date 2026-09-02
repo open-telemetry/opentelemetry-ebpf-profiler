@@ -28,6 +28,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 const (
@@ -111,14 +112,16 @@ type header struct {
 // read reads ProcessContext from remote process memory at addr.
 // Returns errInvalidContext if the process has no ProcessContext memory region.
 // Retries concurrent updates up to maxAttempts times, or defaultMaxAttempts if 0.
-func read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+func read(addr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64, maxAttempts int,
+) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
 	var lastErr error
 
 	for range maxAttempts {
-		processCtx, err := readOnce(addr, rm, lastPublishedAtNs)
+		processCtx, err := readOnce(addr, pid, rm, lastPublishedAtNs)
 		if err == nil {
 			return processCtx, nil
 		}
@@ -130,7 +133,9 @@ func read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 	return Info{}, lastErr
 }
 
-func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
+func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64,
+) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",
@@ -172,7 +177,7 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 		// The read is now known coherent, so this is a real fault (unsupported
 		// schema version, or a malformed publisher) rather than a torn read.
 		// Every native label from this process is dropped until it is fixed.
-		log.Warnf("failed to read thread context: %v", threadCtxErr)
+		log.Warnf("PID %d: failed to read thread context: %v", pid, threadCtxErr)
 	}
 
 	return ctx, nil
@@ -201,7 +206,7 @@ func Resolve(
 		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
 		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
 
-		ctx, err := read(addr, rm, old.publishedAtNs, 0)
+		ctx, err := read(addr, pid, rm, old.publishedAtNs, 0)
 		switch {
 		case err == nil:
 			ctx.resolved = true
@@ -337,12 +342,15 @@ func (t *threadContextInfo) DecodeLabels(data []byte) map[libpf.String]libpf.Str
 			break
 		}
 		val := data[2 : 2+valueLen]
-		valStr := libpf.Intern(pfunsafe.ToString(val))
 		data = data[2+valueLen:]
 		if keyIndex >= len(t.attributeKeyMap) {
 			continue
 		}
-		labels[t.attributeKeyMap[keyIndex]] = valStr
+		valid, ok := stringutil.ValidUTF8Prefix(val)
+		if !ok {
+			continue
+		}
+		labels[t.attributeKeyMap[keyIndex]] = libpf.Intern(pfunsafe.ToString(valid))
 	}
 	return labels
 }

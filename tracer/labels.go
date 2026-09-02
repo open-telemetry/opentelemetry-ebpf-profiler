@@ -34,32 +34,17 @@ func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
 	return b, true
 }
 
-// validateValue is lenient on a custom label value: fixed-width eBPF buffers
-// can clip a multi-byte rune in half, so on invalid trailing bytes we salvage
-// the longest valid UTF-8 prefix rather than discard the whole label. ok=false
-// (and bumping the drop counter) fires only when the salvage is empty, i.e.
-// the input was non-empty garbage rather than mid-rune truncation. The returned
-// slice aliases buf; copy or intern before the buffer is reused.
+// validateValue is lenient on a custom label value: see stringutil.ValidUTF8Prefix.
+// ok=false (and bumping the drop counter) fires only when nothing of the value
+// is valid UTF-8. The returned slice aliases buf; copy or intern before the
+// buffer is reused.
 func (v *customLabelValidator) validateValue(buf []byte) ([]byte, bool) {
-	b := stringutil.CString(buf)
-	pos := len(b)
-	if !utf8.Valid(b) {
-		// Walk forward; stop at the first invalid byte. This recovers the entire
-		// valid prefix of a mid-rune truncation in one pass.
-		pos = 0
-		for pos < len(b) {
-			r, size := utf8.DecodeRune(b[pos:])
-			if r == utf8.RuneError && size == 1 {
-				break
-			}
-			pos += size
-		}
-		if pos == 0 {
-			v.droppedInvalidValue.Add(1)
-			return nil, false
-		}
+	b, ok := stringutil.ValidUTF8Prefix(stringutil.CString(buf))
+	if !ok {
+		v.droppedInvalidValue.Add(1)
+		return nil, false
 	}
-	return b[:pos], true
+	return b, true
 }
 
 // getAndResetMetrics reports and resets the counters of custom labels dropped

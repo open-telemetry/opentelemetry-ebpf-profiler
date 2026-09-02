@@ -6,6 +6,7 @@ package stringutil // import "go.opentelemetry.io/ebpf-profiler/stringutil"
 import (
 	"bytes"
 	"strings"
+	"unicode/utf8"
 )
 
 var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
@@ -18,6 +19,26 @@ func CString(buf []byte) []byte {
 		return before
 	}
 	return buf
+}
+
+// ValidUTF8Prefix returns the longest valid-UTF8 prefix of buf. A fixed-width
+// eBPF buffer can clip a multi-byte rune in half, so this salvages the valid
+// part rather than rejecting the whole value. ok is false only when nothing of
+// buf is valid UTF-8 (a non-empty buf whose salvage is empty). The returned
+// slice aliases buf.
+func ValidUTF8Prefix(buf []byte) (prefix []byte, ok bool) {
+	if utf8.Valid(buf) {
+		return buf, true
+	}
+	pos := 0
+	for pos < len(buf) {
+		r, size := utf8.DecodeRune(buf[pos:])
+		if r == utf8.RuneError && size == 1 {
+			break
+		}
+		pos += size
+	}
+	return buf[:pos], pos > 0
 }
 
 // FieldsN splits the string s around each instance of one or more consecutive ASCII space
