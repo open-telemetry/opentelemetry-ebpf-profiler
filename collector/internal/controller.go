@@ -162,7 +162,7 @@ func (c *Controller) Shutdown(_ context.Context) error {
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}
-	c.probes = c.probes[:0]
+	c.probes = nil
 
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
