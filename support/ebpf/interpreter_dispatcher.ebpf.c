@@ -314,9 +314,6 @@ static EBPF_INLINE int unwind_stop_impl(struct pt_regs *ctx, bool defer_off_cpu)
   }
   // TEMPORARY HACK END
 
-  // Must be last since it may not return (it will call send_trace).
-  maybe_add_go_custom_labels(ctx, record);
-
   if (defer_off_cpu && trace->origin == origin_id_off_cpu) {
     u32 host_tid = trace->value;
     trace->value = 0;
@@ -325,6 +322,9 @@ static EBPF_INLINE int unwind_stop_impl(struct pt_regs *ctx, bool defer_off_cpu)
     }
     return 0;
   }
+
+  // Must be last since it may not return (it will call send_trace).
+  maybe_add_go_custom_labels(ctx, record);
 
   send_trace(ctx, trace);
 

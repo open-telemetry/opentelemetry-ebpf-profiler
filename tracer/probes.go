@@ -183,6 +183,7 @@ func (c *ProbeContext) sysVarSetters() []sysVar {
 		{"inverse_pac_mask", sv.inverse_pac_mask},
 		{"tpbase_offset", sv.tpbase_offset},
 		{"task_stack_offset", sv.task_stack_offset},
+		{"task_pid_offset", sv.task_pid_offset},
 		{"stack_ptregs_offset", sv.stack_ptregs_offset},
 		{"vma_lookup_enabled", sv.vma_lookup_enabled},
 		{"vma_vm_file_offset", sv.vma_vm_file_offset},
@@ -310,6 +311,31 @@ func (c *ProbeContext) LoadTracepointUnwinders(
 	progs []ProgLoaderHelper,
 	bpfVerifierLogLevel uint32,
 ) error {
+	return c.loadTracepointUnwinders(
+		coll, ebpfProgs, tailcallMap, progs, bpfVerifierLogLevel, false)
+}
+
+// LoadBTFTracepointUnwinders loads a tracing-type copy of the enabled unwinder
+// chain compatible with a tp_btf entry program.
+func (c *ProbeContext) LoadBTFTracepointUnwinders(
+	coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32,
+) error {
+	return c.loadTracepointUnwinders(
+		coll, ebpfProgs, tailcallMap, progs, bpfVerifierLogLevel, true)
+}
+
+func (c *ProbeContext) loadTracepointUnwinders(
+	coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32,
+	useBTF bool,
+) error {
 	if err := syncVariablesToMapSpecs(coll); err != nil {
 		return err
 	}
@@ -339,7 +365,7 @@ func (c *ProbeContext) LoadTracepointUnwinders(
 	allProgs = append(allProgs, c.unwinders...)
 	allProgs = append(allProgs, progs...)
 	return loadTracepointUnwinders(coll, ebpfProgs, tailcallMap, allProgs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp, useBTF)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs

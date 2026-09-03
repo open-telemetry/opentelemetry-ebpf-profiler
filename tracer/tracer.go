@@ -856,7 +856,7 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 func loadTracepointUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
-	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
+	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map, useBTF bool,
 ) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
@@ -874,7 +874,13 @@ func loadTracepointUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*c
 		}
 		progSpec = progSpec.Copy()
 
-		if !unwinder.NoTailCallTarget && progName != "tracepoint_unwind_stop" {
+		if useBTF && !unwinder.NoTailCallTarget {
+			progSpec.Name = "tracepoint_" + unwinder.Name
+			progSpec.Type = cebpf.Tracing
+			progSpec.AttachType = cebpf.AttachTraceRawTp
+			progSpec.AttachTo = "sched_switch"
+			progSpec.SectionName = "tp_btf/sched_switch"
+		} else if !unwinder.NoTailCallTarget && progName != "tracepoint_unwind_stop" {
 			progSpec.Name = "tracepoint_" + unwinder.Name
 			progSpec.Type = cebpf.TracePoint
 			progSpec.AttachType = cebpf.AttachNone
