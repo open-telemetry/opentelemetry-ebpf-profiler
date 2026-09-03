@@ -157,10 +157,7 @@ func schedTimesSize(threshold uint32) uint32 {
 func (p *probe) Unload() error {
 	var errs error
 	for i := range p.links {
-		err := p.links[i].Close()
-		if err != nil {
-			errs = errors.Join(err, errs)
-		}
+		errs = errors.Join(errs, p.links[i].Close())
 	}
 	p.links = nil
 	return errs
