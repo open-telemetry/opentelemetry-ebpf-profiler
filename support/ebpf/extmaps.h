@@ -7,6 +7,7 @@
 extern struct perf_progs_t perf_progs;
 extern struct per_cpu_records_t per_cpu_records;
 extern struct per_cpu_records_kp_t per_cpu_records_kp;
+extern struct off_cpu_traces_t off_cpu_traces;
 extern struct pid_page_to_mapping_info_t pid_page_to_mapping_info;
 extern struct metrics_t metrics;
 extern struct report_events_t report_events;

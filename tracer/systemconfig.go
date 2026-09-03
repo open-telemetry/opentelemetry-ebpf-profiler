@@ -35,6 +35,7 @@ type SysConfigVars struct {
 	inverse_pac_mask         uint64
 	tpbase_offset            uint64
 	task_stack_offset        uint32
+	task_pid_offset          uint32
 	stack_ptregs_offset      uint32
 	vma_lookup_enabled       bool
 	vma_vm_file_offset       uint32
@@ -163,6 +164,12 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool) error 
 		return err
 	}
 	vars.task_stack_offset = uint32(stackOffset)
+
+	pidOffset, err := calculateFieldOffset(taskStruct, "pid")
+	if err != nil {
+		return err
+	}
+	vars.task_pid_offset = uint32(pidOffset)
 
 	if needTPBase {
 		tpbaseOffset, err := calculateFieldOffset(taskStruct, getTSDBaseFieldSpec())
@@ -645,6 +652,9 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["task_stack_offset"].Set(rodataVars.task_stack_offset); err != nil {
 		return fmt.Errorf("failed to set task_stack_offset: %v", err)
+	}
+	if err := coll.Variables["task_pid_offset"].Set(rodataVars.task_pid_offset); err != nil {
+		return fmt.Errorf("failed to set task_pid_offset: %v", err)
 	}
 	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
 		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)

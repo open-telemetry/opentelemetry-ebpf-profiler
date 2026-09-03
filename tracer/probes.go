@@ -22,10 +22,78 @@ import (
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
+	unwinders        []ProgLoaderHelper
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+}
+
+// CollectionSpecWithUnwinders returns a filtered collection containing the
+// requested probe resources and the enabled stack unwinder programs. The
+// unwinder programs can then be loaded as a program type compatible with the
+// probe's entry point.
+func (c *ProbeContext) CollectionSpecWithUnwinders(
+	extraMaps []string,
+	extraProgs []string,
+	extraVars []string,
+) (*cebpf.CollectionSpec, error) {
+	return c.collectionSpecWithUnwinders(extraMaps, extraProgs, extraVars, tracepointProgramName)
+}
+
+// CollectionSpecWithProbeUnwinders returns a filtered collection containing
+// the requested probe resources and kprobe-compatible unwinder programs.
+func (c *ProbeContext) CollectionSpecWithProbeUnwinders(
+	extraMaps []string,
+	extraProgs []string,
+	extraVars []string,
+) (*cebpf.CollectionSpec, error) {
+	return c.collectionSpecWithUnwinders(extraMaps, extraProgs, extraVars, probeProgramName)
+}
+
+func (c *ProbeContext) collectionSpecWithUnwinders(
+	extraMaps []string,
+	extraProgs []string,
+	extraVars []string,
+	programName func(ProgLoaderHelper) string,
+) (*cebpf.CollectionSpec, error) {
+	coll, err := c.CollectionSpecWith(extraMaps, extraProgs, extraVars)
+	if err != nil {
+		return nil, err
+	}
+	full, err := support.LoadCollectionSpec()
+	if err != nil {
+		return nil, fmt.Errorf("loading collection spec for unwinders: %w", err)
+	}
+	for _, unwinder := range c.unwinders {
+		name := programName(unwinder)
+		prog, ok := full.Programs[name]
+		if !ok {
+			return nil, fmt.Errorf("unwinder program %q not found", name)
+		}
+		coll.Programs[name] = prog.Copy()
+	}
+	if !c.sysVars.vma_lookup_enabled {
+		disableVMAHelperCalls(coll)
+	}
+	return coll, nil
+}
+
+func probeProgramName(prog ProgLoaderHelper) string {
+	if !prog.NoTailCallTarget {
+		return "kprobe_" + prog.Name
+	}
+	return prog.Name
+}
+
+func tracepointProgramName(prog ProgLoaderHelper) string {
+	if !prog.NoTailCallTarget && prog.ProgID == uint32(support.ProgUnwindStop) {
+		return "tracepoint_unwind_stop"
+	}
+	if !prog.NoTailCallTarget {
+		return "kprobe_" + prog.Name
+	}
+	return prog.Name
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -115,6 +183,7 @@ func (c *ProbeContext) sysVarSetters() []sysVar {
 		{"inverse_pac_mask", sv.inverse_pac_mask},
 		{"tpbase_offset", sv.tpbase_offset},
 		{"task_stack_offset", sv.task_stack_offset},
+		{"task_pid_offset", sv.task_pid_offset},
 		{"stack_ptregs_offset", sv.stack_ptregs_offset},
 		{"vma_lookup_enabled", sv.vma_lookup_enabled},
 		{"vma_vm_file_offset", sv.vma_vm_file_offset},
@@ -226,8 +295,77 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	if perCPURecordsKp == nil {
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
-	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
+	allProgs := make([]ProgLoaderHelper, 0, len(c.unwinders)+len(progs))
+	allProgs = append(allProgs, c.unwinders...)
+	allProgs = append(allProgs, progs...)
+	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, allProgs,
 		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+}
+
+// LoadTracepointUnwinders loads a tracepoint-compatible copy of the enabled
+// unwinder chain and the probe entry programs described by progs.
+func (c *ProbeContext) LoadTracepointUnwinders(
+	coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32,
+) error {
+	return c.loadTracepointUnwinders(
+		coll, ebpfProgs, tailcallMap, progs, bpfVerifierLogLevel, false)
+}
+
+// LoadBTFTracepointUnwinders loads a tracing-type copy of the enabled unwinder
+// chain compatible with a tp_btf entry program.
+func (c *ProbeContext) LoadBTFTracepointUnwinders(
+	coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32,
+) error {
+	return c.loadTracepointUnwinders(
+		coll, ebpfProgs, tailcallMap, progs, bpfVerifierLogLevel, true)
+}
+
+func (c *ProbeContext) loadTracepointUnwinders(
+	coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32,
+	useBTF bool,
+) error {
+	if err := syncVariablesToMapSpecs(coll); err != nil {
+		return err
+	}
+	if rodataSpec, ok := coll.Maps[".rodata.var"]; ok {
+		rodataMap, err := cebpf.NewMap(rodataSpec)
+		if err != nil {
+			return fmt.Errorf("creating .rodata.var: %w", err)
+		}
+		defer rodataMap.Close()
+		if err := rewriteMaps(coll, map[string]*cebpf.Map{".rodata.var": rodataMap}); err != nil {
+			return err
+		}
+	}
+	perfProgs := c.maps["perf_progs"]
+	if perfProgs == nil {
+		return fmt.Errorf("perf_progs map not available")
+	}
+	perCPURecords := c.maps["per_cpu_records"]
+	if perCPURecords == nil {
+		return fmt.Errorf("per_cpu_records map not available")
+	}
+	perCPURecordsKp := c.maps["per_cpu_records_kp"]
+	if perCPURecordsKp == nil {
+		return fmt.Errorf("per_cpu_records_kp map not available")
+	}
+	allProgs := make([]ProgLoaderHelper, 0, len(c.unwinders)+len(progs))
+	allProgs = append(allProgs, c.unwinders...)
+	allProgs = append(allProgs, progs...)
+	return loadTracepointUnwinders(coll, ebpfProgs, tailcallMap, allProgs,
+		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp, useBTF)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -423,19 +561,15 @@ type PostTraceHandler interface {
 // registered to intercept traces before symbolization or receive them after
 // symbolization, respectively.
 //
-// Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
-// startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
-// Without the chain the probe attaches successfully but its tail calls into
-// kprobe_progs silently miss, producing no stack samples.
-//
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:    t.ebpfMaps,
-		sysVars: t.sysConfigVars,
-		reg:     t.origins,
+		maps:      t.ebpfMaps,
+		sysVars:   t.sysConfigVars,
+		unwinders: t.unwinders,
+		reg:       t.origins,
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},

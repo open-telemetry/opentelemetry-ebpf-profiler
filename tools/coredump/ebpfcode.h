@@ -8,6 +8,16 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// The coredump harness exercises stack unwinding, not scheduler or BPF map
+// behavior. Define placeholders for the off-CPU symbols referenced by
+// unwind_stop() so that the production routing code remains compiled in tests.
+struct off_cpu_traces_t {
+  u8 unused;
+};
+
+struct off_cpu_traces_t off_cpu_traces;
+u16 origin_id_off_cpu = UINT16_MAX - 1;
+
 struct cgo_ctx {
   jmp_buf jmpbuf;
   u64 id, tp_base;
