@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -17,16 +16,37 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
+
+const (
+	defaultMapEntries = 4096
+	// MaxMapEntries caps pending trace payloads at approximately 1 GiB.
+	MaxMapEntries = (1 << 30) / support.Sizeof_Trace
+
+	// ModeTracepoint unwinds when a task switches out and completes the sample
+	// from the same sched_switch tracepoint when that task switches back in.
+	ModeTracepoint Mode = "tracepoint"
+	// ModeTracepointKprobe retains the previous sched_switch plus
+	// finish_task_switch kprobe implementation.
+	ModeTracepointKprobe Mode = "tracepoint-kprobe"
+)
+
+// Mode selects the scheduler hooks used for off-CPU profiling.
+type Mode string
 
 // Config holds the YAML configuration for the off-CPU probe.
 //
 //	extensions:
 //	   offcpu:
-//	     threshold: 0.1		# capture probability in ]0.0, 1.0]
+//	     threshold: 0.1     # capture probability in ]0.0, 1.0]
+//	     map_entries: 8192  # optional pending trace capacity; 0 uses 4096
+//	     mode: tracepoint    # or tracepoint-kprobe; empty defaults to tracepoint
 type Config struct {
-	Threshold float64 `mapstructure:"threshold"`
+	Threshold  float64 `mapstructure:"threshold"`
+	MapEntries uint    `mapstructure:"map_entries"`
+	Mode       Mode    `mapstructure:"mode"`
 }
 
 // Validate implements confmap.Validator.
@@ -34,12 +54,21 @@ func (cfg *Config) Validate() error {
 	if cfg.Threshold <= 0.0 || cfg.Threshold > 1.0 {
 		return fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
 	}
+	if cfg.MapEntries > MaxMapEntries {
+		return fmt.Errorf("offcpu: map entries %d exceeds limit (max: %d)",
+			cfg.MapEntries, MaxMapEntries)
+	}
+	if cfg.Mode != "" && cfg.Mode != ModeTracepoint && cfg.Mode != ModeTracepointKprobe {
+		return fmt.Errorf("offcpu: unsupported mode %q", cfg.Mode)
+	}
 	return nil
 }
 
 type probe struct {
-	threshold uint32
-	links     []link.Link
+	threshold  uint32
+	mapEntries uint32
+	mode       Mode
+	links      []link.Link
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
@@ -52,9 +81,20 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("registering off-CPU origin: %w", err)
 	}
 
-	coll, err := probeCtx.CollectionSpecWith(
-		[]string{"sched_times"},
-		[]string{"finish_task_switch", "tracepoint__sched_switch"},
+	switch p.mode {
+	case "", ModeTracepoint:
+		return p.loadTracepoint(originID, probeCtx)
+	case ModeTracepointKprobe:
+		return p.loadTracepointKprobe(originID, probeCtx)
+	default:
+		return fmt.Errorf("unsupported off-CPU mode %q", p.mode)
+	}
+}
+
+func (p *probe) loadTracepoint(originID uint16, probeCtx *tracer.ProbeContext) error {
+	coll, err := probeCtx.CollectionSpecWithUnwinders(
+		[]string{"off_cpu_traces", "tracepoint_progs"},
+		[]string{"tracepoint__sched_switch"},
 		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
 	)
 	if err != nil {
@@ -68,16 +108,61 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("set origin_id_off_cpu: %w", err)
 	}
 
-	// Resize sched_times proportionally to the capture probability so that
-	// infrequent sampling doesn't waste memory and heavy sampling doesn't drop events.
-	coll.Maps["sched_times"].MaxEntries = schedTimesSize(p.threshold)
+	coll.Maps["off_cpu_traces"].MaxEntries = traceMapSize(p.mapEntries)
+
+	traceMap, err := cebpf.NewMap(coll.Maps["off_cpu_traces"])
+	if err != nil {
+		return fmt.Errorf("creating off_cpu_traces map: %w", err)
+	}
+	defer traceMap.Close()
+
+	tailcallMap, err := cebpf.NewMap(coll.Maps["tracepoint_progs"])
+	if err != nil {
+		return fmt.Errorf("creating tracepoint_progs map: %w", err)
+	}
+	defer tailcallMap.Close()
+
+	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{
+		"off_cpu_traces":   traceMap,
+		"tracepoint_progs": tailcallMap,
+	}); err != nil {
+		return err
+	}
+
+	ebpfProgs := make(map[string]*cebpf.Program)
+	if err := probeCtx.LoadTracepointUnwinders(coll, ebpfProgs, tailcallMap,
+		[]tracer.ProgLoaderHelper{
+			{Name: "tracepoint__sched_switch", NoTailCallTarget: true, Enable: true},
+		}, 0); err != nil {
+		return err
+	}
+
+	return p.attachTracepointProgram(ebpfProgs, "tracepoint__sched_switch")
+}
+
+func (p *probe) loadTracepointKprobe(originID uint16, probeCtx *tracer.ProbeContext) error {
+	coll, err := probeCtx.CollectionSpecWithProbeUnwinders(
+		[]string{"sched_times"},
+		[]string{"finish_task_switch", "tracepoint__sched_switch_legacy"},
+		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := coll.Variables["off_cpu_threshold"].Set(p.threshold); err != nil {
+		return fmt.Errorf("set off_cpu_threshold: %w", err)
+	}
+	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
+		return fmt.Errorf("set origin_id_off_cpu: %w", err)
+	}
+	coll.Maps["sched_times"].MaxEntries = traceMapSize(p.mapEntries)
 
 	schedMap, err := cebpf.NewMap(coll.Maps["sched_times"])
 	if err != nil {
 		return fmt.Errorf("creating sched_times map: %w", err)
 	}
 	defer schedMap.Close()
-
 	if err := probeCtx.RewriteMaps(coll, map[string]*cebpf.Map{"sched_times": schedMap}); err != nil {
 		return err
 	}
@@ -85,24 +170,35 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	ebpfProgs := make(map[string]*cebpf.Program)
 	if err := probeCtx.LoadProbeUnwinders(coll, ebpfProgs, []tracer.ProgLoaderHelper{
 		{Name: "finish_task_switch", NoTailCallTarget: true, Enable: true},
-		{Name: "tracepoint__sched_switch", NoTailCallTarget: true, Enable: true},
+		{Name: "tracepoint__sched_switch_legacy", NoTailCallTarget: true, Enable: true},
 	}, 0); err != nil {
 		return err
 	}
 
-	return p.attachPrograms(ebpfProgs, probeCtx)
+	return p.attachTracepointKprobePrograms(ebpfProgs, probeCtx)
 }
 
-// attachPrograms attaches the loaded eBPF programs to the scheduler hooks and
-// stores the resulting links.
-func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeContext) error {
+func (p *probe) attachTracepointProgram(ebpfProgs map[string]*cebpf.Program, name string) error {
+	tpProg, ok := ebpfProgs[name]
+	if !ok {
+		return fmt.Errorf("%s program not found after loading", name)
+	}
+
+	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
+	if err != nil {
+		return fmt.Errorf("attaching sched_switch tracepoint: %w", err)
+	}
+	p.links = append(p.links, tpLink)
+
+	return nil
+}
+
+func (p *probe) attachTracepointKprobePrograms(ebpfProgs map[string]*cebpf.Program,
+	probeCtx *tracer.ProbeContext,
+) error {
 	kprobeProg, ok := ebpfProgs["finish_task_switch"]
 	if !ok {
 		return fmt.Errorf("finish_task_switch program not found after loading")
-	}
-	tpProg, ok := ebpfProgs["tracepoint__sched_switch"]
-	if !ok {
-		return fmt.Errorf("tracepoint__sched_switch program not found after loading")
 	}
 
 	kmod, err := probeCtx.KernelSymbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
@@ -115,7 +211,6 @@ func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tr
 	}
 
 	attached := false
-	// Attach to all symbols with the prefix finish_task_switch.
 	for _, sym := range syms {
 		kl, err := link.Kprobe(string(sym.Name), kprobeProg, nil)
 		if err != nil {
@@ -130,28 +225,14 @@ func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tr
 			len(syms))
 	}
 
-	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
-	if err != nil {
-		return fmt.Errorf("attaching sched_switch tracepoint: %w", err)
-	}
-	p.links = append(p.links, tpLink)
-
-	return nil
+	return p.attachTracepointProgram(ebpfProgs, "tracepoint__sched_switch_legacy")
 }
 
-// schedTimesSize calculates the size of the sched_times map based on the
-// configured off-cpu threshold. Assumes an upper bound of 1000 Hz scheduler
-// events and 3s average off-CPU time, scaled by the capture probability.
-// Result is clamped to [16, 4096].
-func schedTimesSize(threshold uint32) uint32 {
-	size := uint32((4096 * uint64(threshold)) / math.MaxUint32)
-	if size < 16 {
-		return 16
+func traceMapSize(configured uint32) uint32 {
+	if configured > 0 {
+		return configured
 	}
-	if size > 4096 {
-		return 4096
-	}
-	return size
+	return defaultMapEntries
 }
 
 func (p *probe) Unload() error {
