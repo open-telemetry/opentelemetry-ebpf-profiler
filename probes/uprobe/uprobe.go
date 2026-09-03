@@ -196,10 +196,7 @@ func (p *probe) Unload() error {
 	var unloadErrs error
 	for pid, pidLinks := range p.links {
 		for _, lnk := range pidLinks {
-			err := lnk.Close()
-			if err != nil {
-				unloadErrs = errors.Join(unloadErrs, err)
-			}
+			unloadErrs = errors.Join(unloadErrs, lnk.Close())
 		}
 		delete(p.links, pid)
 	}
