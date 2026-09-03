@@ -92,9 +92,24 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 }
 
 func (p *probe) loadTracepoint(originID uint16, probeCtx *tracer.ProbeContext) error {
+	if err := p.loadTracepointVariant(originID, probeCtx, true); err == nil {
+		return nil
+	} else {
+		log.Warnf("BTF sched_switch tracepoint unavailable, falling back to regular tracepoint: %v", err)
+	}
+	return p.loadTracepointVariant(originID, probeCtx, false)
+}
+
+func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeContext,
+	useBTF bool,
+) error {
+	entryProgram := "tracepoint__sched_switch"
+	if useBTF {
+		entryProgram = "tp_btf__sched_switch"
+	}
 	coll, err := probeCtx.CollectionSpecWithUnwinders(
 		[]string{"off_cpu_traces", "tracepoint_progs"},
-		[]string{"tracepoint__sched_switch"},
+		[]string{entryProgram},
 		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
 	)
 	if err != nil {
@@ -130,14 +145,23 @@ func (p *probe) loadTracepoint(originID uint16, probeCtx *tracer.ProbeContext) e
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
-	if err := probeCtx.LoadTracepointUnwinders(coll, ebpfProgs, tailcallMap,
-		[]tracer.ProgLoaderHelper{
-			{Name: "tracepoint__sched_switch", NoTailCallTarget: true, Enable: true},
-		}, 0); err != nil {
+	defer closePrograms(ebpfProgs)
+	entry := []tracer.ProgLoaderHelper{
+		{Name: entryProgram, NoTailCallTarget: true, Enable: true},
+	}
+	if useBTF {
+		err = probeCtx.LoadBTFTracepointUnwinders(coll, ebpfProgs, tailcallMap, entry, 0)
+	} else {
+		err = probeCtx.LoadTracepointUnwinders(coll, ebpfProgs, tailcallMap, entry, 0)
+	}
+	if err != nil {
 		return err
 	}
 
-	return p.attachTracepointProgram(ebpfProgs, "tracepoint__sched_switch")
+	if useBTF {
+		return p.attachBTFTracepointProgram(ebpfProgs, entryProgram)
+	}
+	return p.attachTracepointProgram(ebpfProgs, entryProgram)
 }
 
 func (p *probe) loadTracepointKprobe(originID uint16, probeCtx *tracer.ProbeContext) error {
@@ -191,6 +215,25 @@ func (p *probe) attachTracepointProgram(ebpfProgs map[string]*cebpf.Program, nam
 	p.links = append(p.links, tpLink)
 
 	return nil
+}
+
+func (p *probe) attachBTFTracepointProgram(ebpfProgs map[string]*cebpf.Program, name string) error {
+	tpProg, ok := ebpfProgs[name]
+	if !ok {
+		return fmt.Errorf("%s program not found after loading", name)
+	}
+	tpLink, err := link.AttachTracing(link.TracingOptions{Program: tpProg})
+	if err != nil {
+		return fmt.Errorf("attaching sched_switch BTF tracepoint: %w", err)
+	}
+	p.links = append(p.links, tpLink)
+	return nil
+}
+
+func closePrograms(progs map[string]*cebpf.Program) {
+	for _, prog := range progs {
+		_ = prog.Close()
+	}
 }
 
 func (p *probe) attachTracepointKprobePrograms(ebpfProgs map[string]*cebpf.Program,

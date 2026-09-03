@@ -42,6 +42,9 @@ BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 // origin_id_off_cpu is set during load time.
 BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
 
+// task_pid_offset is resolved from kernel BTF during load time.
+BPF_RODATA_VAR(u32, task_pid_offset, 0)
+
 // Stable 64-bit layout of the sched/sched_switch tracepoint payload. Only
 // next_pid is consumed, but the preceding fields establish its byte offset.
 struct sched_switch_args {
@@ -55,16 +58,11 @@ struct sched_switch_args {
   s32 next_prio;
 };
 
-// tracepoint__sched_switch accounts for a task switching in, then samples and
-// unwinds the current task at the point where it switches out. This follows the
-// same single-tracepoint model as BCC's offcputime.
-SEC("tracepoint/sched/sched_switch")
-int tracepoint__sched_switch(struct sched_switch_args *ctx)
+static EBPF_INLINE int sched_switch(void *ctx, u32 next_tid)
 {
   u64 ts = bpf_ktime_get_ns();
 
   // Complete a previously captured trace for the task being switched in.
-  u32 next_tid        = ctx->next_pid;
   Trace *stored_trace = bpf_map_lookup_elem(&off_cpu_traces, &next_tid);
   if (stored_trace) {
     if (ts >= stored_trace->ktime) {
@@ -97,6 +95,25 @@ int tracepoint__sched_switch(struct sched_switch_args *ctx)
   // completed trace. It is replaced by the duration before the trace is sent.
   return collect_trace_from_current_task(
     (struct pt_regs *)ctx, origin_id_off_cpu, pid, tid, ts, host_tid);
+}
+
+// tracepoint__sched_switch is the compatibility entry point for kernels that
+// do not support BTF-enabled raw tracepoints.
+SEC("tracepoint/sched/sched_switch")
+int tracepoint__sched_switch(struct sched_switch_args *ctx)
+{
+  return sched_switch(ctx, ctx->next_pid);
+}
+
+// tp_btf__sched_switch is preferred when supported: it avoids copying the
+// regular tracepoint payload and provides the next task directly.
+SEC("tp_btf/sched_switch")
+int tp_btf__sched_switch(u64 *ctx)
+{
+  struct task_struct *next = (struct task_struct *)ctx[2];
+  u32 next_tid             = 0;
+  bpf_probe_read_kernel(&next_tid, sizeof(next_tid), (u8 *)next + task_pid_offset);
+  return sched_switch(ctx, next_tid);
 }
 
 // tracepoint__sched_switch_legacy is the switch-out half of the previous
