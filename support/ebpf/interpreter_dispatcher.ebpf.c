@@ -250,7 +250,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
-static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_stop_impl(struct pt_regs *ctx, bool defer_off_cpu)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -317,10 +317,34 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // Must be last since it may not return (it will call send_trace).
   maybe_add_go_custom_labels(ctx, record);
 
+  if (defer_off_cpu && trace->origin == origin_id_off_cpu) {
+    u32 host_tid = trace->value;
+    trace->value = 0;
+    if (bpf_map_update_elem(&off_cpu_traces, &host_tid, trace, BPF_ANY) < 0) {
+      DEBUG_PRINT("Failed to store off-CPU trace for TID %u", host_tid);
+    }
+    return 0;
+  }
+
   send_trace(ctx, trace);
 
   return 0;
 }
+
+static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
+{
+  return unwind_stop_impl(ctx, false);
+}
 MULTI_USE_FUNC(unwind_stop)
+
+// Tracepoint unwinding needs a distinct stop program: off-CPU traces are held
+// until the same task is scheduled again and their duration is known. Keeping
+// this map reference out of the regular perf/kprobe stop programs also lets the
+// off-CPU probe own the lifecycle and configured size of off_cpu_traces.
+SEC("tracepoint/unwind_stop")
+int tracepoint_unwind_stop(struct pt_regs *ctx)
+{
+  return unwind_stop_impl(ctx, true);
+}
 
 char _license[] SEC("license") = "GPL";

@@ -150,7 +150,7 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+TEST_INTEGRATION_BINARY_DIRS := tracer probes/offcpu processmanager/ebpf kallsyms support interpreter/go/integrationtests
 
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata

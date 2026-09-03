@@ -81,6 +81,20 @@ func TestIntersectCPURanges(t *testing.T) {
 	}
 }
 
+func TestTracepointProgramName(t *testing.T) {
+	require.Equal(t, "tracepoint_unwind_stop", tracepointProgramName(ProgLoaderHelper{
+		ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop",
+	}))
+	require.Equal(t, "kprobe_unwind_native", tracepointProgramName(ProgLoaderHelper{
+		ProgID: uint32(support.ProgUnwindNative), Name: "unwind_native",
+	}))
+	// Entry programs aren't tail-call targets, and their zero-value program ID
+	// must not make them look like PROG_UNWIND_STOP.
+	require.Equal(t, "tracepoint__sched_switch", tracepointProgramName(ProgLoaderHelper{
+		Name: "tracepoint__sched_switch", NoTailCallTarget: true,
+	}))
+}
+
 func TestDisableVMAHelperCalls(t *testing.T) {
 	findVMA := asm.FnFindVma.Call().WithSymbol("find_vma")
 	getTask := asm.FnGetCurrentTaskBtf.Call()
