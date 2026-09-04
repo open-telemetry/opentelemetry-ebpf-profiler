@@ -622,20 +622,27 @@ func (f *File) visitBuildIDNoteSections(visitor func(uint64, []byte) bool) error
 	if f.InsideCore {
 		return ErrNoteNotFound
 	}
+	return f.VisitNoteSections([]string{".note.gnu.build-id", ".note.go.buildid", ".notes"},
+		visitor)
+}
 
+// VisitNoteSections iterates the notes in the SHT_NOTE sections with the given names.
+// The visitor must make copies of the 'data' it keeps after return.
+// It returns ErrNoteNotFound if no named section exists, and nil once all notes
+// have been visited or the visitor stopped iteration.
+func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bool) error {
 	if err := f.LoadSections(); err != nil {
-		return ErrNoteNotFound
+		return err
 	}
 
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
 	visited := false
-	buildIDSections := []string{".note.gnu.build-id", ".note.go.buildid", ".notes"}
 	for i := range f.Sections {
 		section := &f.Sections[i]
 		if section.Type != elf.SHT_NOTE || section.Size == 0 ||
-			!slices.Contains(buildIDSections, section.Name) {
+			!slices.Contains(names, section.Name) {
 			continue
 		}
 		visited = true

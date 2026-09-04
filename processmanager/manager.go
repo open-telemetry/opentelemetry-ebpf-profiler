@@ -40,8 +40,9 @@ import (
 )
 
 const (
-	// Maximum size of the LRU cache holding the executables' ELF information.
-	elfInfoCacheSize = 16384
+	// ELFInfoCacheSize is the maximum size of the LRU cache holding the executables'
+	// ELF information. It is exported so other packages (e.g. usdt) can share it.
+	ELFInfoCacheSize = 16384
 
 	// TTL of entries in the LRU cache holding the executables' ELF information.
 	elfInfoCacheTTL = 6 * time.Hour
@@ -85,7 +86,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
-	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
+	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](ELFInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create elfInfoCache: %v", err)
