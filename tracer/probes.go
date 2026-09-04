@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -22,7 +21,6 @@ import (
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
-	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
@@ -348,12 +346,6 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 	}, nil
 }
 
-// AddLink registers a global link to be stored and closed by the tracer on shutdown.
-// Use this for system-wide hooks, like kprobes, perf events and tracepoints.
-func (c *ProbeContext) AddLink(lnk link.Link) {
-	c.links = append(c.links, lnk)
-}
-
 // AddAttacher registers a per-process attacher with the process manager.
 // ProcessManager calls Match/Attach as new mappings appear and Detach on process exit.
 func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
@@ -369,9 +361,15 @@ type ProbeRegistrar interface {
 // Probe defines the interface that allows custom stack unwinding trigger points.
 type Probe interface {
 	// Load configures the probe. It registers one or more origin IDs via reg,
-	// then registers its kernel attachment via probeCtx: call AddLink for a
-	// system-wide hook, or AddAttacher for per-process PID-filtered attachment.
+	// then establishes kernel attachments via probeCtx and/or by managing links
+	// directly. System-wide attachments (kprobes, tracepoints, perf events) should
+	// be managed by the probe itself. Per-process PID-filtered
+	// attachments can be registered via AddAttacher to hook into lifecycle management of the
+	// the ProcessManager.
 	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
+
+	// Unload closes all kernel links opened by the probe. Called on shutdown.
+	Unload() error
 }
 
 // PreTraceHandler is an optional interface that Probe implementations may
@@ -415,9 +413,8 @@ type PostTraceHandler interface {
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
-// Links registered via AddLink are stored and closed on tracer shutdown. Attachers
-// registered via AddAttacher receive per-process lifecycle callbacks from the
-// ProcessManager.
+// Attachers registered via AddAttacher receive per-process lifecycle callbacks
+// from the ProcessManager.
 //
 // If the probe satisfies PreTraceHandler and/or PostTraceHandler, it is
 // registered to intercept traces before symbolization or receive them after
@@ -444,22 +441,6 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
-	}
-
-	if len(probeCtx.links) > 0 {
-		h := t.hooks.WLock()
-		if h.closed {
-			t.hooks.WUnlock(&h)
-			for _, lnk := range probeCtx.links {
-				lnk.Close()
-			}
-			return fmt.Errorf("tracer is already closed")
-		}
-		for i, lnk := range probeCtx.links {
-			key := hookPoint{group: "probe", name: fmt.Sprintf("%p/%d", p, i)}
-			h.m[key] = lnk
-		}
-		t.hooks.WUnlock(&h)
 	}
 
 	if pth, ok := p.(PreTraceHandler); ok {

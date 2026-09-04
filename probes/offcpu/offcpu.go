@@ -7,6 +7,7 @@ package offcpu // import "go.opentelemetry.io/ebpf-profiler/probes/offcpu"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -38,6 +39,7 @@ func (cfg *Config) Validate() error {
 
 type probe struct {
 	threshold uint32
+	links     []link.Link
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
@@ -88,12 +90,12 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return err
 	}
 
-	return attachPrograms(ebpfProgs, probeCtx)
+	return p.attachPrograms(ebpfProgs, probeCtx)
 }
 
 // attachPrograms attaches the loaded eBPF programs to the scheduler hooks and
-// returns a composite link that closes all attachments on Close.
-func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeContext) error {
+// stores the resulting links.
+func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeContext) error {
 	kprobeProg, ok := ebpfProgs["finish_task_switch"]
 	if !ok {
 		return fmt.Errorf("finish_task_switch program not found after loading")
@@ -120,7 +122,7 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 			log.Warnf("Failed to attach kprobe to %s: %v", sym.Name, err)
 			continue
 		}
-		probeCtx.AddLink(kl)
+		p.links = append(p.links, kl)
 		attached = true
 	}
 	if !attached {
@@ -132,7 +134,7 @@ func attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tracer.ProbeC
 	if err != nil {
 		return fmt.Errorf("attaching sched_switch tracepoint: %w", err)
 	}
-	probeCtx.AddLink(tpLink)
+	p.links = append(p.links, tpLink)
 
 	return nil
 }
@@ -150,4 +152,13 @@ func schedTimesSize(threshold uint32) uint32 {
 		return 4096
 	}
 	return size
+}
+
+func (p *probe) Unload() error {
+	var errs error
+	for i := range p.links {
+		errs = errors.Join(errs, p.links[i].Close())
+	}
+	p.links = nil
+	return errs
 }

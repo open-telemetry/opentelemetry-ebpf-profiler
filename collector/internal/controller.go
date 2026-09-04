@@ -7,6 +7,7 @@ package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 
@@ -38,6 +39,7 @@ type Controller struct {
 	onShutdown   func() error
 	errorMode    config.ErrorMode
 	extensionIDs []component.ID
+	probes       []tracer.Probe
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -105,7 +107,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 func (c *Controller) Start(ctx context.Context, host component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
-			c.ctlr.Shutdown()
+			c.Shutdown(ctx)
 			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
 			return nil
 		}
@@ -114,7 +116,7 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 
 	if err := c.enableProbes(ctx, host); err != nil {
 		if c.errorMode == config.IgnoreError {
-			c.ctlr.Shutdown()
+			c.Shutdown(ctx)
 			log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
 			return nil
 		}
@@ -141,9 +143,11 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 		if !ok {
 			return fmt.Errorf("extension %q does not implement ProbeExtension", id)
 		}
-		if err := c.ctlr.EnableProbe(ctx, pp.Probe()); err != nil {
+		probe := pp.Probe()
+		if err := c.ctlr.EnableProbe(ctx, probe); err != nil {
 			return fmt.Errorf("enabling probe from extension %q: %w", id, err)
 		}
+		c.probes = append(c.probes, probe)
 		log.Infof("Enabled probe from extension %q", id)
 	}
 	return nil
@@ -151,9 +155,17 @@ func (c *Controller) enableProbes(ctx context.Context, host component.Host) erro
 
 // Shutdown the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
+	var shutdownErr error
+	for _, probe := range c.probes {
+		if err := probe.Unload(); err != nil {
+			shutdownErr = errors.Join(shutdownErr, err)
+		}
+	}
+	c.probes = nil
+
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
-		return c.onShutdown()
+		shutdownErr = errors.Join(shutdownErr, c.onShutdown())
 	}
-	return nil
+	return shutdownErr
 }

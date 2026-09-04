@@ -19,6 +19,7 @@ package uprobe // import "go.opentelemetry.io/ebpf-profiler/probes/uprobe"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sync"
@@ -57,8 +58,9 @@ type probe struct {
 	// prog is the shared eBPF program loaded once in Load, reused across Attach calls.
 	prog *cebpf.Program
 
-	mu    sync.Mutex
-	links map[libpf.PID][]link.Link
+	mu       sync.Mutex
+	unloaded bool
+	links    map[libpf.PID][]link.Link
 }
 
 func (p *probe) String() string {
@@ -164,6 +166,11 @@ func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	}
 
 	p.mu.Lock()
+	if p.unloaded {
+		p.mu.Unlock()
+		// closing link due to unloaded probe
+		return lnk.Close()
+	}
 	p.links[pid] = append(p.links[pid], lnk)
 	p.mu.Unlock()
 	return nil
@@ -180,4 +187,19 @@ func (p *probe) Detach(pid libpf.PID) {
 	for _, lnk := range links {
 		lnk.Close()
 	}
+}
+
+func (p *probe) Unload() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.unloaded = true
+	var unloadErrs error
+	for pid, pidLinks := range p.links {
+		for _, lnk := range pidLinks {
+			unloadErrs = errors.Join(unloadErrs, lnk.Close())
+		}
+		delete(p.links, pid)
+	}
+
+	return unloadErrs
 }
