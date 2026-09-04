@@ -9,39 +9,32 @@ import (
 	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// Discover returns the USDT attachment points in an executable file-backed
-// mapping. If individual notes cannot be resolved, it returns the valid points
-// together with an error describing the skipped notes. Results are cached by
+// Discover returns the USDT attachment points for an ELF file identified by
+// fileID. The ELF is opened lazily via ref, so a cache hit avoids any I/O.
+// If individual notes cannot be resolved, it returns the valid points together
+// with an error describing the skipped notes. Results are cached by
 // backing-file identity, including empty and partial results.
 func (d *Discoverer) Discover(
-	pr process.Process,
-	mapping *process.RawMapping,
+	ref *pfelf.Reference,
+	fileID util.OnDiskFileIdentifier,
 ) ([]AttachmentPoint, error) {
-	if !mapping.IsExecutable() || mapping.IsAnonymous() {
-		return nil, nil
-	}
-
-	fileID := mapping.GetOnDiskFileIdentifier()
 	if cached, ok := d.parseCache.Get(fileID); ok {
 		return slices.Clone(cached), nil
 	}
 
-	// OpenELFMapping uses /proc/<pid>/map_files/<start>-<end>, so this also
-	// works for deleted files and mappings in another mount namespace.
-	ef, err := process.OpenELFMapping(pr, mapping)
+	ef, err := ref.GetELF()
 	if err != nil {
-		// Executable mappings are not necessarily ELF files. Cache expected
-		// misses so they are not retried on every process synchronization.
+		// The backing file may not be an ELF. Cache expected misses so
+		// they are not retried on every process synchronization.
 		if errors.Is(err, pfelf.ErrNotELF) {
 			d.parseCache.Add(fileID, nil)
 			return nil, nil
 		}
-		return nil, fmt.Errorf("open ELF mapping: %v", err)
+		return nil, fmt.Errorf("open ELF: %v", err)
 	}
-	defer ef.Close()
 
 	notes, sectionBase, err := readSDTNotes(ef)
 	if err != nil {

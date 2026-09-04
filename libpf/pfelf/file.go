@@ -622,9 +622,6 @@ func (f *File) visitBuildIDNoteSections(visitor func(uint64, []byte) bool) error
 	if f.InsideCore {
 		return ErrNoteNotFound
 	}
-	if err := f.LoadSections(); err != nil {
-		return ErrNoteNotFound
-	}
 	return f.VisitNoteSections([]string{".note.gnu.build-id", ".note.go.buildid", ".notes"},
 		visitor)
 }
