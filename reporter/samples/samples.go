@@ -24,9 +24,14 @@ type TraceEventMeta struct {
 	CPU            uint32
 	ProfileType    *TypeMetadata
 	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	// AllocSize is the raw, un-weighted allocation size in bytes for
+	// TraceOriginHeapAlloc events (see libpf.EbpfTrace.Size); combined with
+	// Value (the byte-weighted estimator) it lets consumers derive an
+	// unbiased object-count estimate. Zero/unused for all other origins.
+	AllocSize int64
+	PID, TID  libpf.PID
+	SpanID    libpf.APMSpanID
+	TraceID   libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -35,6 +40,9 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	Values     []int64
+	// AllocSizes holds the per-event TraceEventMeta.AllocSize, index-aligned
+	// with Values. Only populated for TraceOriginHeapAlloc.
+	AllocSizes []int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -96,6 +104,36 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+}
+
+// SourceProfile is a set of samples sharing the same sample type schema,
+// produced by a probe's SampleSource implementation at each collection interval.
+type SourceProfile struct {
+	// SampleTypes describes each value column (name + unit).
+	SampleTypes []SourceSampleType
+	// Samples are the data rows.
+	Samples []SourceSample
+}
+
+// SourceSampleType describes a single value column in a SourceProfile.
+type SourceSampleType struct {
+	Type string // e.g. "inuse_space"
+	Unit string // e.g. "bytes"
+}
+
+// SourceSample is a single sample row produced by a SampleSource probe.
+type SourceSample struct {
+	PID       libpf.PID
+	TraceHash libpf.TraceHash
+	Frames    libpf.Frames
+	Values    []int64 // one per SampleType, positional
+}
+
+// ProcessMeta holds per-process metadata needed when building OTLP
+// resource attributes for profile export.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
 }
 
 // TypeMetadata describes how profiling events of a particular kind

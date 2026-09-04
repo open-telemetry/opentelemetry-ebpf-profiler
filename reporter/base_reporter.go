@@ -95,14 +95,40 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.Values = append(events.Values, meta.Value)
+		if meta.AllocSize != 0 {
+			events.AllocSizes = append(events.AllocSizes, meta.AllocSize)
+		}
 		return nil
 	}
 
-	rtp.Events[meta.ProfileType][sampleKey] = &samples.TraceEvents{
+	newEvents := &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		Values:     []int64{meta.Value},
 		Labels:     trace.CustomLabels,
+	}
+	if meta.AllocSize != 0 {
+		newEvents.AllocSizes = []int64{meta.AllocSize}
+	}
+	rtp.Events[meta.ProfileType][sampleKey] = newEvents
+	return nil
+}
+
+// SetSampleSources sets the callback for collecting probe-produced profiles.
+func (b *baseReporter) SetSampleSources(fn func() []samples.SourceProfile) {
+	b.cfg.SampleSources = fn
+}
+
+// SetProcessMetaForPID sets the process metadata resolver for profile resource attributes.
+func (b *baseReporter) SetProcessMetaForPID(fn func(libpf.PID) samples.ProcessMeta) {
+	b.cfg.ProcessMetaForPID = fn
+}
+
+// collectSourceProfiles invokes the registered SampleSources callback, if any,
+// and returns the resulting profiles.
+func (b *baseReporter) collectSourceProfiles() []samples.SourceProfile {
+	if b.cfg.SampleSources != nil {
+		return b.cfg.SampleSources()
 	}
 	return nil
 }
