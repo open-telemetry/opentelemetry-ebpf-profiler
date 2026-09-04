@@ -6,7 +6,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
+static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, u64 tid)
 {
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();
@@ -18,6 +18,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
   Trace *trace = &record->trace;
 
   // Use COMM as a marker for our test traces. COMM[3] serves as test case ID.
+  bpf_get_current_comm(trace->comm, sizeof(trace->comm));
   trace->comm[0] = 0xAA;
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
@@ -26,7 +27,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
 
   trace->comm[3] = 1;
   trace->pid     = pid;
-  trace->tid     = pid;
+  trace->tid     = tid;
 
   u64 *data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
   if (data) {
@@ -60,7 +61,7 @@ int tracepoint_integration__sched_switch(void *ctx)
 
   printt("pid %d in integration test", pid);
 
-  send_sample_traces(ctx, pid);
+  send_sample_traces(ctx, pid, tid);
 
   return 0;
 }
