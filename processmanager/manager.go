@@ -115,18 +115,12 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		ks = cfg.KernelSymbolizer
 	}
 
-	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
+	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+1)
 	// Cloned: the enricher closure outlives New, and the caller owns cfg.
 	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
 		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
-
-	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
-	if err != nil {
-		log.Debugf("Failed to detect self container ID via inode: %v", err)
-	} else {
-		metaEnrichers = append(metaEnrichers, selfContainerEnricher)
-	}
 	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
+
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
