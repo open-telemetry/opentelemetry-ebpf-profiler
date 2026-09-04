@@ -17,7 +17,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 func TestCollectorReporterReportTraceEvent(t *testing.T) {
@@ -61,7 +60,7 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 			r, err := NewCollector(&Config{}, next)
 			require.NoError(t, err)
 			if err := r.ReportTraceEvent(tt.trace, tt.meta); err != nil &&
-				!errors.Is(err, errUnknownOrigin) {
+				!errors.Is(err, errUnknownProfileType) {
 				t.Fatal(err)
 			}
 		})
@@ -69,15 +68,13 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 }
 
 func TestCollectorReporterShutdown(t *testing.T) {
-	var cancelled atomic.Bool
+	var canceled atomic.Bool
 	consumerStarted := make(chan struct{})
 	next, err := xconsumer.NewProfiles(func(ctx context.Context, _ pprofile.Profiles) error {
 		close(consumerStarted)
-		select {
-		case <-ctx.Done():
-			cancelled.Store(true)
-			return nil
-		}
+		<-ctx.Done()
+		canceled.Store(true)
+		return nil
 	})
 	require.NoError(t, err)
 
@@ -88,8 +85,8 @@ func TestCollectorReporterShutdown(t *testing.T) {
 
 	traceEventsPtr := r.traceEvents.WLock()
 	tree := (*traceEventsPtr)
-	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
-		support.TraceOriginProbe: {
+	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeProbe: {
 			{}: {
 				Frames: func() libpf.Frames {
 					frames := make(libpf.Frames, 0, 1)
@@ -112,6 +109,6 @@ func TestCollectorReporterShutdown(t *testing.T) {
 	<-consumerStarted
 	cancelFn()
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		assert.True(collect, cancelled.Load())
+		assert.True(collect, canceled.Load())
 	}, 5*time.Second, 100*time.Millisecond, "consumer did not exit after context cancellation")
 }

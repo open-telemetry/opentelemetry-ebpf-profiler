@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"unsafe"
 
@@ -110,6 +111,10 @@ type dotnetCdac struct {
 			ChunkIndex              uint
 			Flags                   uint
 			SizeOf                  uint `json:"!"`
+		}
+		// https://github.com/dotnet/runtime/blob/v9.0.0/src/coreclr/debug/runtimeinfo/datadescriptor.h#L332-L335
+		DynamicMethodDesc struct {
+			MethodName uint
 		}
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/method.hpp#L2163
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/method.hpp#L2344
@@ -234,6 +239,10 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 }
 
 func (d *dotnetData) Unload(_ interpreter.EbpfHandler) {
+}
+
+func (i *dotnetInstance) UsesAnonymousMappings() bool {
+	return true
 }
 
 func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address) (dotnetCdac, error) {
@@ -371,6 +380,20 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 		}
 	}
 	vms.RealCodeHeader.SizeOf = vms.RealCodeHeader.MethodDesc + 8
+
+	// Validate that all struct sizes used for allocations are within bounds.
+	// The JSON descriptor is read from target memory and is attacker-controlled.
+	structs := reflect.ValueOf(&cdac.Types).Elem()
+	for i := 0; i < structs.NumField(); i++ {
+		sizeOf := structs.Field(i).FieldByName("SizeOf")
+		if !sizeOf.IsValid() {
+			continue
+		}
+		if s := sizeOf.Uint(); s > maxDotnetStructSize {
+			return dotnetCdac{}, fmt.Errorf("%s.SizeOf value %d out of bounds",
+				structs.Type().Field(i).Name, s)
+		}
+	}
 
 	// Calculated masks
 	cdac.calculated.MethodDescTokenRemainderMask = (1 << cdac.Globals.MethodDescTokenRemainderBitCount) - 1

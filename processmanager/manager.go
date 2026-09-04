@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
+	"maps"
 	"slices"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -20,6 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -27,27 +30,25 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
-	// Maximum size of the LRU cache holding the executables' ELF information.
-	elfInfoCacheSize = 16384
+	// ELFInfoCacheSize is the maximum size of the LRU cache holding the executables'
+	// ELF information. It is exported so other packages (e.g. usdt) can share it.
+	ELFInfoCacheSize = 16384
 
 	// TTL of entries in the LRU cache holding the executables' ELF information.
 	elfInfoCacheTTL = 6 * time.Hour
 
-	// Maximum size of the LRU cache for frames.
-	frameCacheSize = 16384
-
-	// TTL of entries in the frame cache.
-	frameCacheLifetime = 5 * time.Minute
+	// DefaultFrameCacheSize is the default maximum size of the LRU cache for frames.
+	DefaultFrameCacheSize uint32 = 16384
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -59,47 +60,74 @@ var (
 	errPIDGone = errors.New("interpreter process gone")
 )
 
+// Config contains the dependencies and options used to create a ProcessManager.
+type Config struct {
+	InterpretersConfig    interpreterconfig.Config
+	MonitorInterval       time.Duration
+	ExecutableUnloadDelay time.Duration
+	EbpfHandler           pmebpf.EbpfHandler
+	TraceReporter         reporter.TraceReporter
+	ExecutableReporter    reporter.ExecutableReporter
+	StackDeltaProvider    nativeunwind.StackDeltaProvider
+	KernelSymbolizer      *kallsyms.Symbolizer
+	FrameCacheSize        uint32
+	FilterErrorFrames     bool
+	IncludeEnvVars        libpf.Set[string]
+	ProcessMetaEnrichers  []process.MetaEnricher
+}
+
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monitorInterval time.Duration,
-	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
-	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
-	if exeReporter == nil {
-		exeReporter = executableReporterStub{}
+func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
+	if cfg.ExecutableReporter == nil {
+		cfg.ExecutableReporter = executableReporterStub{}
+	}
+	if cfg.FrameCacheSize == 0 {
+		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
-	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
+	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](ELFInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create elfInfoCache: %v", err)
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	frameCache, err := lru.New[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](cfg.FrameCacheSize, hashFrameCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
+	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
 
-	periodiccaller.Start(ctx, executableUnloadDelay, func() {
-		err := em.CleanupUnused(executableUnloadDelay)
+	periodiccaller.Start(ctx, cfg.ExecutableUnloadDelay, func() {
+		err := em.CleanupUnused(cfg.ExecutableUnloadDelay)
 		if err != nil {
 			log.Errorf("Failed to cleanup unused executables: %v", err)
 		}
 	})
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
+	var ks kallsyms.Resolver
+	if cfg.KernelSymbolizer != nil {
+		ks = cfg.KernelSymbolizer
+	}
 
-	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
+	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
+	// Cloned: the enricher closure outlives New, and the caller owns cfg.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
+		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
+
+	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	} else {
+		metaEnrichers = append(metaEnrichers, selfContainerEnricher)
 	}
+	metaEnrichers = append(metaEnrichers, cfg.ProcessMetaEnrichers...)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
@@ -107,19 +135,19 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 		interpreters:             interpreters,
 		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
-		ebpf:                     ebpf,
+		ebpf:                     cfg.EbpfHandler,
 		elfInfoCache:             elfInfoCache,
 		frameCache:               frameCache,
-		traceReporter:            traceReporter,
-		exeReporter:              exeReporter,
+		traceReporter:            cfg.TraceReporter,
+		exeReporter:              cfg.ExecutableReporter,
+		kernelSymbols:            ks,
 		metricsAddSlice:          metrics.AddSlice,
-		filterErrorFrames:        filterErrorFrames,
-		includeEnvVars:           includeEnvVars,
-		selfCgroupIno:            selfCgroupIno,
-		selfContainerID:          selfContainerID,
+		filterErrorFrames:        cfg.FilterErrorFrames,
+		metaEnrichers:            metaEnrichers,
+		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
-	collectInterpreterMetrics(ctx, pm, monitorInterval)
+	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
 
 	return pm, nil
 }
@@ -152,6 +180,9 @@ func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	monitorInterval time.Duration,
 ) {
+	if !metrics.Enabled() {
+		return
+	}
 	periodiccaller.Start(ctx, monitorInterval, func() {
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
@@ -216,6 +247,39 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 
 	return fmt.Errorf("no matching interpreter instance (of len %d): %w",
 		len(pm.interpreters[pid]), errSymbolizationNotSupported)
+}
+
+func (pm *ProcessManager) appendKernelFrames(addrs []uint64, dst *libpf.Frames) (uint64, uint64) {
+	var cacheHit, cacheMiss uint64
+
+	snapshot := pm.kernelSymbols.Snapshot()
+	for _, addr := range addrs {
+		address := libpf.Address(addr)
+		// Kernel/module symbols are the common case. BPF JIT addresses do not
+		// overlap module ranges, so cache probe order does not change
+		// ResolveAddress precedence.
+		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.KernelGeneration())); ok {
+			cacheHit++
+			*dst = append(*dst, cached...)
+			continue
+		}
+		if cached, ok := pm.frameCache.Get(kernelFrameCacheKey(address, snapshot.BPFGeneration())); ok {
+			cacheHit++
+			*dst = append(*dst, cached...)
+			continue
+		}
+
+		resolution, resolved := snapshot.ResolveAddress(address)
+		frame, cacheable := symbolizeKernelFrame(address, resolution)
+		if resolved && cacheable {
+			cacheMiss++
+			pm.frameCache.Add(kernelFrameCacheKey(address, resolution.Generation), libpf.Frames{frame})
+		}
+
+		*dst = append(*dst, frame)
+	}
+
+	return cacheHit, cacheMiss
 }
 
 // convertFrame converts one host Frame to one or more libpf.Frames. It returns true
@@ -285,15 +349,9 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 		return ""
 	}
 	var serviceName string
-	var traceHash libpf.TraceHash
-	traceHashComputed := false
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
-			if !traceHashComputed {
-				traceHash = traceutil.HashTrace(trace)
-				traceHashComputed = true
-			}
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
+			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, trace.Hash(), count)
 			if serviceName != "" {
 				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
 					serviceName,
@@ -310,16 +368,18 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 }
 
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
-	h := fnv.New32a()
-	h.Write(pfunsafe.FromSlice(fk.data[:]))
-	return h.Sum32()
+	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
-// HandleTrace processes and reports the given host.Trace. This function
-// is not re-entrant due to frameCache not being synced. If the tracer is
-// later updated to distribute trace handling to goroutine pool, the caching
-// strategy needs to be updated accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
+// HandleTrace processes and reports the given eBPF trace. Process metadata
+// is looked up here rather than at trace-receive time as EbpfTrace carries
+// only data sourced from eBPF. If the process has already exited and been evicted,
+// the trace is reported without that enrichment. This function is not re-entrant
+// due to frameCache not being synced. If the tracer is later updated to distribute
+// trace handling to a goroutine pool, the caching strategy needs to be updated
+// accordingly.
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
+	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -327,28 +387,39 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CpuID,
-		ProcessName:    bpfTrace.ProcessName,
-		ExecutablePath: bpfTrace.ExecutablePath,
-		ContainerID:    bpfTrace.ContainerID,
-		Origin:         bpfTrace.Origin,
+		ExecutablePath: procMeta.Executable,
+		ContainerID:    procMeta.ContainerID,
+		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
-		EnvVars:        bpfTrace.EnvVars,
+		EnvVars:        procMeta.EnvVariables,
+		ResourceAttrs:  resourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
+		ExtraMeta:      procMeta.ExtraMeta,
 	}
 
 	pid := bpfTrace.PID
-	kernelFramesLen := len(bpfTrace.KernelFrames)
 	trace := &libpf.Trace{
-		Frames:       make(libpf.Frames, kernelFramesLen, kernelFramesLen+int(bpfTrace.NumFrames)),
+		Frames:       make(libpf.Frames, 0, int(bpfTrace.NumKernelFrames)+int(bpfTrace.NumFrames)),
 		CustomLabels: bpfTrace.CustomLabels,
 	}
-	copy(trace.Frames, bpfTrace.KernelFrames)
 
 	cacheMiss := uint64(0)
 	cacheHit := uint64(0)
 
-	for frames := libpf.EbpfFrame(bpfTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
+	numKernelFrames := int(bpfTrace.NumKernelFrames)
+	if numKernelFrames > len(bpfTrace.FrameData) {
+		log.Errorf("Kernel frame count %d exceeds frame data length %d", numKernelFrames, len(bpfTrace.FrameData))
+		numKernelFrames = len(bpfTrace.FrameData)
+	}
+	if numKernelFrames > 0 {
+		hits, misses := pm.appendKernelFrames(bpfTrace.FrameData[:numKernelFrames], &trace.Frames)
+		cacheHit += hits
+		cacheMiss += misses
+	}
+
+	userFrameData := bpfTrace.FrameData[numKernelFrames:]
+	for frames := libpf.EbpfFrame(userFrameData); len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
 		if frame.Flags().Error() {
 			if !pm.filterErrorFrames {
@@ -366,7 +437,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.Get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)
@@ -398,4 +469,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
+
+	return trace
 }

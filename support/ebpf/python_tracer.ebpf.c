@@ -78,6 +78,12 @@ static EBPF_INLINE ErrorCode process_python_frame(
   void *py_codeobject = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_code]);
   *py_frameobjectptr  = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
 
+  // Python 3.14 stores f_executable as a _PyStackRef, whose low bit can mark
+  // references to immortal objects. Earlier versions use aligned PyObject pointers,
+  // so clearing the tag is a no-op for them.
+  // https://github.com/python/cpython/commit/b2afe2aae487ebf89897e22c01d9095944fd334f
+  py_codeobject = (void *)((u64)py_codeobject & ~1ULL);
+
   // Stop unwinding if `f_executable` is None. See comment when getting the
   // ´noneStruct´ address in python.go for details.
   void *noneStructAddr = (void *)pyinfo->noneStructAddr;
@@ -284,25 +290,33 @@ python_step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_fra
 }
 
 // python_step_native processes one native frame at an interpreter boundary
-// and updates *unwinder.
-static EBPF_INLINE ErrorCode python_step_native(PerCPURecord *record, int *unwinder)
+// and updates *unwinder. Go frames are handed to PROG_UNWIND_NATIVE via *delegate_go.
+static EBPF_INLINE ErrorCode
+python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_go)
 {
   Trace *trace = &record->trace;
   *unwinder    = PROG_UNWIND_STOP;
+  *delegate_go = false;
 
   increment_metric(metricID_UnwindNativeAttempts);
-  ErrorCode error = push_native(
-    &record->state,
-    trace,
-    record->state.text_section_id,
-    record->state.text_section_offset,
-    record->state.return_address);
-  if (error) {
-    return error;
-  }
+  // ra is read before unwinding, which marks the frame non-leaf and overwrites it. The push
+  // comes after, because unwind_one_frame may hand a Go frame over to PROG_UNWIND_NATIVE,
+  // which then pushes this same frame itself.
+  u64 file = record->state.text_section_id;
+  u64 line = record->state.text_section_offset;
+  bool ra  = record->state.return_address;
 
   bool stop;
-  error = unwind_one_frame(record, &stop);
+  ErrorCode error = unwind_one_frame(record, &stop, delegate_go);
+  if (*delegate_go) {
+    *unwinder = PROG_UNWIND_NATIVE;
+    return ERR_OK;
+  }
+
+  ErrorCode push_error = push_native(&record->state, trace, file, line, ra);
+  if (push_error) {
+    return push_error;
+  }
   if (error || stop) {
     return error;
   }
@@ -356,9 +370,14 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
       case PROG_UNWIND_PYTHON:
         error = python_step_python(record, pyinfo, &py_frame, &unwinder);
         break;
-      case PROG_UNWIND_NATIVE:
-        error = python_step_native(record, &unwinder);
+      case PROG_UNWIND_NATIVE: {
+        bool delegate_go = false;
+        error = python_step_native(record, &unwinder, &delegate_go);
+        if (delegate_go) {
+          goto save_python_cursor;
+        }
         break;
+      }
       default:
         goto exit;
       }
@@ -368,6 +387,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
       }
     }
 
+  save_python_cursor:
     record->pythonUnwindState.py_frame = py_frame;
   }
 

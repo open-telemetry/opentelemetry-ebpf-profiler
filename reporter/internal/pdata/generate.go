@@ -4,21 +4,20 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
-	"fmt"
 	"path/filepath"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/otel/attribute"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -85,7 +84,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars)
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars,
+			toEvents.ResourceAttrs)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -93,12 +93,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, origin := range []libpf.Origin{
-			support.TraceOriginSampling,
-			support.TraceOriginOffCPU,
-			support.TraceOriginProbe,
-		} {
-			if len(toEvents.Events[origin]) == 0 {
+		for profileType, events := range toEvents.Events {
+			if len(events) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
@@ -106,12 +102,11 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				origin, toEvents.Events[origin], prof,
+				profileType, events, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 		}
-
 	}
 
 	// Populate the ProfilesDictionary tables.
@@ -146,37 +141,27 @@ func (p *Pdata) setProfile(
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
-	origin libpf.Origin,
+	profileType *samples.TypeMetadata,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
-	st := profile.SampleType()
-	switch origin {
-	case support.TraceOriginSampling:
+	if profileType.PeriodType != "" {
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add("cpu"))
-		pt.SetUnitStrindex(stringSet.Add("nanoseconds"))
-
-		st.SetTypeStrindex(stringSet.Add("samples"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(stringSet.Add("off_cpu"))
-		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
-	case support.TraceOriginProbe:
-		st.SetTypeStrindex(stringSet.Add("events"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	default:
-		// Should never happen
-		return fmt.Errorf("generating profile for unsupported origin %d", origin)
+		pt.SetTypeStrindex(stringSet.Add(profileType.PeriodType))
+		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
 	}
+
+	st := profile.SampleType()
+	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
+	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
 
 	for sampleKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if origin == support.TraceOriginOffCPU {
+		if profileType.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
@@ -190,7 +175,6 @@ func (p *Pdata) setProfile(
 				l := dic.LinkTable().AppendEmpty()
 				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
 				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
-
 			}
 			sample.SetLinkIndex(link)
 		}
@@ -299,23 +283,78 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
-	if resource.APMServiceName != "" {
-		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
+func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
+	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set) {
+	// service.name, container.id, process.pid, process.executable.{path,name}
+	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 5)
+	for iter := resourceAttrs.Iter(); iter.Next(); {
+		kv := iter.Attribute()
+		setAttributeValue(dst.PutEmpty(string(kv.Key)), kv.Value)
 	}
-	if resource.ContainerID != libpf.NullString {
-		attrs.PutStr(string(semconv.ContainerIDKey), resource.ContainerID.String())
+	if resourceKey.APMServiceName != "" {
+		dst.PutStr(string(semconv.ServiceNameKey), resourceKey.APMServiceName)
+	}
+	if resourceKey.ContainerID != libpf.NullString {
+		dst.PutStr(string(semconv.ContainerIDKey), resourceKey.ContainerID.String())
 	}
 
-	attrs.PutInt(string(semconv.ProcessPIDKey), resource.PID)
+	dst.PutInt(string(semconv.ProcessPIDKey), resourceKey.PID)
 
-	if resource.ExecutablePath != libpf.NullString {
-		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
-		_, exeName := filepath.Split(resource.ExecutablePath.String())
-		attrs.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
+	if resourceKey.ExecutablePath != libpf.NullString {
+		dst.PutStr(string(semconv.ProcessExecutablePathKey), resourceKey.ExecutablePath.String())
+		_, exeName := filepath.Split(resourceKey.ExecutablePath.String())
+		dst.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
 	}
 
 	for key, value := range envVars {
-		attrs.PutStr("process.environment_variable."+key.String(), value.String())
+		dst.PutStr("process.environment_variable."+key.String(), value.String())
+	}
+}
+
+// setAttributeValue writes src into dst. dst is already inserted in its
+// container, so a case that writes nothing yields an empty pcommon value.
+func setAttributeValue(dst pcommon.Value, src attribute.Value) {
+	switch src.Type() {
+	case attribute.BOOL:
+		dst.SetBool(src.AsBool())
+	case attribute.INT64:
+		dst.SetInt(src.AsInt64())
+	case attribute.FLOAT64:
+		dst.SetDouble(src.AsFloat64())
+	case attribute.STRING:
+		dst.SetStr(src.AsString())
+	case attribute.BYTESLICE:
+		dst.SetEmptyBytes().FromRaw(src.AsByteSlice())
+	case attribute.BOOLSLICE:
+		setSliceValue(dst, src.AsBoolSlice(), pcommon.Value.SetBool)
+	case attribute.INT64SLICE:
+		setSliceValue(dst, src.AsInt64Slice(), pcommon.Value.SetInt)
+	case attribute.FLOAT64SLICE:
+		setSliceValue(dst, src.AsFloat64Slice(), pcommon.Value.SetDouble)
+	case attribute.STRINGSLICE:
+		setSliceValue(dst, src.AsStringSlice(), pcommon.Value.SetStr)
+	case attribute.SLICE:
+		setSliceValue(dst, src.AsSlice(), setAttributeValue)
+	case attribute.MAP:
+		kvs := src.AsMap()
+		m := dst.SetEmptyMap()
+		m.EnsureCapacity(len(kvs))
+		for _, kv := range kvs {
+			setAttributeValue(m.PutEmpty(string(kv.Key)), kv.Value)
+		}
+	case attribute.EMPTY:
+		// A published empty value, and dst already is one.
+	default:
+		// Reachable only if otel adds an attribute.Type.
+		log.Warnf("setAttributeValue: no pcommon representation for %s, "+
+			"emitting empty", src.Type())
+	}
+}
+
+func setSliceValue[T any](dst pcommon.Value, values []T, set func(pcommon.Value, T)) {
+	sl := dst.SetEmptySlice()
+	sl.EnsureCapacity(len(values))
+	for _, v := range values {
+		set(sl.AppendEmpty(), v)
 	}
 }

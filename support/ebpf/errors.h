@@ -127,6 +127,10 @@ typedef enum ErrorCode {
   // Ruby: Unable to read objspace flags
   ERR_RUBY_READ_OBJSPACE_FLAGS = 3033,
 
+  // Ruby: Native resume requested after Ruby JIT, but unwinding was stopped because JIT frames
+  // cannot resume native unwinding
+  ERR_RUBY_JIT_NATIVE_RESUME_UNSUPPORTED = 3034,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 
@@ -182,6 +186,15 @@ typedef enum ErrorCode {
   // Native: Code is running in x86_64 32-bit compat mode.
   ERR_NATIVE_X64_32BIT_COMPAT_MODE = 4017,
 
+  // Native: The instruction pointer is in an executable mapping that cannot be unwound
+  ERR_NATIVE_UNSUPPORTED_MAPPING = 4018,
+
+  // Native: No VMA contains the current instruction pointer
+  ERR_NATIVE_NO_VMA = 4019,
+
+  // Native: The instruction pointer is in a non-executable VMA
+  ERR_NATIVE_NON_EXECUTABLE_VMA = 4020,
+
   // V8: Encountered a bad frame pointer during V8 unwinding
   ERR_V8_BAD_FP = 5000,
 
@@ -222,7 +235,19 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // LuaJIT: No entry for this process exists in the LuaJIT process info array
+  ERR_LUAJIT_NO_PROC_INFO = 8000,
+
+  // Go: required runtime offsets or layout are missing or invalid
+  ERR_GO_NO_OFFSETS = 9000,
+
+  // Go: asmcgocall unwind could not recover the caller frame
+  ERR_GO_ASMCGOCALL_UNWIND_FAILURE = 9001,
+
+  // Go: failed to read g and runtime.m prefix
+  ERR_GO_RUNTIME_LOAD_FAILURE = 9002
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

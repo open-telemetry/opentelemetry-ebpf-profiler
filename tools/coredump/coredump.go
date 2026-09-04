@@ -179,9 +179,16 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}
 
-	manager, err := pm.New(todo, interpretersConfig, monitorInterval, executableUnloadDelay,
-		&coredumpEbpfMaps, &traceReporter, nil, elfunwindinfo.NewStackDeltaProvider(),
-		false, libpf.Set[string]{})
+	manager, err := pm.New(todo, pm.Config{
+		InterpretersConfig:    interpretersConfig,
+		MonitorInterval:       monitorInterval,
+		ExecutableUnloadDelay: executableUnloadDelay,
+		EbpfHandler:           &coredumpEbpfMaps,
+		TraceReporter:         &traceReporter,
+		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
+		FrameCacheSize:        pm.DefaultFrameCacheSize,
+		IncludeEnvVars:        libpf.Set[string]{},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}
@@ -203,7 +210,7 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
 		// Symbolize traces with interpreter manager
-		manager.HandleTrace(&ebpfCtx.trace)
+		manager.HandleTrace(&ebpfCtx.trace, nil)
 		info = append(info, ThreadInfo{
 			LWP:    thread.LWP,
 			Frames: traceReporter.frames,

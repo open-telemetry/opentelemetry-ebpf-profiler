@@ -25,9 +25,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -104,14 +107,16 @@ var (
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
 
-	unknownCfunc     = libpf.Intern("<unknown cfunc>")
-	cfuncDummyFile   = libpf.Intern("<cfunc>")
-	rubyGcFrame      = libpf.Intern("(garbage collection)")
-	rubyGcRunning    = libpf.Intern("(running)")
-	rubyGcMarking    = libpf.Intern("(marking)")
-	rubyGcSweeping   = libpf.Intern("(sweeping)")
-	rubyGcCompacting = libpf.Intern("(compacting)")
-	rubyGcDummyFile  = libpf.Intern("<gc>")
+	unknownCfunc      = libpf.Intern("<unknown cfunc>")
+	cfuncDummyFile    = libpf.Intern("<cfunc>")
+	rubyGcFrame       = libpf.Intern("(garbage collection)")
+	rubyGcRunning     = libpf.Intern("(running)")
+	rubyGcMarking     = libpf.Intern("(marking)")
+	rubyGcSweeping    = libpf.Intern("(sweeping)")
+	rubyGcCompacting  = libpf.Intern("(compacting)")
+	rubyGcDummyFile   = libpf.Intern("<gc>")
+	rubyJitDummyFrame = libpf.Intern("<unknown jit code>")
+	rubyJitDummyFile  = libpf.Intern("<jitted code>")
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &rubyData{}
 	_ interpreter.Instance = &rubyInstance{}
@@ -376,6 +381,7 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		procInfo:          &cdata,
 		globalSymbolsAddr: r.globalSymbolsAddr + bias,
 		addrToString:      addrToString,
+		prefixes:          make(map[lpm.Prefix]uint32),
 		memPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 512)
@@ -425,6 +431,7 @@ type rubyInstance struct {
 
 	// lastId is a cached copy index of the final entry in the global symbol table
 	lastId uint32
+
 	// globalSymbolsAddr is the offset of the global symbol table, for looking up ruby symbolic ids
 	globalSymbolsAddr libpf.Address
 
@@ -437,10 +444,32 @@ type rubyInstance struct {
 	// maxSize is the largest number we did see in the last reporting interval for size
 	// in getRubyLineNo.
 	maxSize atomic.Uint32
+
+	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation.
+	// Entries are pruned each SynchronizeMappings call; the map size is bounded by the LPM
+	// representation of the single Ruby JIT region (typically only a handful of prefixes).
+	prefixes map[lpm.Prefix]uint32
+	// mappingGeneration is the current generation (so old entries can be pruned)
+	mappingGeneration uint32
 }
 
 func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.Ruby, pid)
+	var err error
+	err = ebpf.DeleteProcData(libpf.Ruby, pid)
+
+	for prefix := range r.prefixes {
+		if err2 := ebpf.DeletePidInterpreterMapping(pid, prefix); err2 != nil {
+			err = errors.Join(err,
+				fmt.Errorf("failed to remove ruby prefix 0x%x/%d: %v",
+					prefix.Key, prefix.Length, err2))
+		}
+	}
+
+	return err
+}
+
+func (r *rubyInstance) UsesAnonymousMappings() bool {
+	return true
 }
 
 // UpdateLibcInfo is called when libc introspection data becomes available.
@@ -1009,7 +1038,7 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
 		methodName, err = r.getStringCached(methodNamePtr, r.readRubyString)
 		if err != nil {
-			log.Warnf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
+			log.Debugf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
 		}
 	}
 
@@ -1049,7 +1078,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		cframe = true
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for cfunc")
+			return fmt.Errorf("unable to read method definition for cfunc")
 		}
 
 		originalId := r.rm.Uint64(methodDefinition + libpf.Address(vms.rb_method_definition_struct.original_id))
@@ -1067,7 +1096,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for CME")
+			return fmt.Errorf("unable to read method definition for CME")
 		}
 
 		methodBody := r.rm.Ptr(methodDefinition + libpf.Address(vms.rb_method_definition_struct.body))
@@ -1115,8 +1144,17 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 			SourceLine:   0,
 		})
 		return nil
+	case support.RubyFrameTypeJit:
+		label := rubyJitDummyFrame
+		frames.Append(&libpf.Frame{
+			Type:         libpf.RubyFrame,
+			FunctionName: label,
+			SourceFile:   rubyJitDummyFile,
+			SourceLine:   0,
+		})
+		return nil
 	default:
-		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d)", frameAddrType)
+		return fmt.Errorf("unable to get CME or ISEQ from frame address (%d)", frameAddrType)
 	}
 
 	if cme && r.r.hasClassPath {
@@ -1125,7 +1163,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		if err != nil {
 			// Failing to read the class name is not a fatal error, keep going with just the method name
 			// and provide an incomplete label rather than nothing at all.
-			log.Errorf("Failed to read class name for cme (%d): %v", frameAddrType, err)
+			log.Debugf("Failed to read class name for cme (%d): %v", frameAddrType, err)
 		}
 	}
 
@@ -1141,7 +1179,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		lineNo, err := r.getRubyLineNo(cfpIseq, uint64(pc))
 		if err != nil {
 			lineNo = 0
-			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+			log.Debugf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
 		}
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType)
 		if err != nil {
@@ -1214,13 +1252,11 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 	baseLabelStr := baseLabel.String()
 	labelLength := len(labelStr)
 	baseLabelLength := len(baseLabelStr)
-	prefixLen := max(
+	prefixLen := min(
 		// Ensure prefixLen doesn't exceed label length (defensive programming)
-		labelLength-baseLabelLength, 0)
+		max(
 
-	if prefixLen > labelLength {
-		prefixLen = labelLength
-	}
+			labelLength-baseLabelLength, 0), labelLength)
 
 	qualifiedStr := qualified.String()
 
@@ -1242,6 +1278,127 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 
 	// Get the prefix from label and concatenate with qualifiedMethodName
 	return libpf.Intern(profileLabel)
+}
+
+// findJITRegion detects the Ruby JIT code reservation from process memory mappings.
+// Ruby reserves address ranges via rb_jit_reserve_addr_space() and then uses
+// mprotect to activate pages as r-x or temporarily rw. Code GC can turn pages
+// back into PROT_NONE, so the reservation may appear as multiple VMAs.
+// On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
+// giving it a path like "[anon:Ruby:rb_jit_reserve_addr_space]". Otherwise we use
+// a conservative fallback spanning the observed anonymous executable mappings.
+// This includes non-executable holes between executable fragments, but does not
+// extend through a trailing anonymous mapping whose ownership cannot be proven.
+// Returns (start, end, found).
+func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
+	var jitStart, jitEnd uint64
+	labelFound := false
+
+	for idx := range mappings {
+		m := &mappings[idx]
+
+		// Check for prctl-labeled JIT region. These mappings may be ---p (PROT_NONE),
+		// rw-p while YJIT is writing, or r-xp when executable.
+		if strings.Contains(m.Path, "jit_reserve_addr_space") {
+			if !labelFound || m.Vaddr < jitStart {
+				jitStart = m.Vaddr
+			}
+			if !labelFound || m.Vaddr+m.Length > jitEnd {
+				jitEnd = m.Vaddr + m.Length
+			}
+			labelFound = true
+		}
+	}
+	if labelFound {
+		return jitStart, jitEnd, true
+	}
+
+	anonExecFound := false
+	for idx := range mappings {
+		m := &mappings[idx]
+		if !m.IsExecutable() || !m.IsAnonymous() {
+			continue
+		}
+
+		if !anonExecFound || m.Vaddr < jitStart {
+			jitStart = m.Vaddr
+		}
+		if !anonExecFound || m.Vaddr+m.Length > jitEnd {
+			jitEnd = m.Vaddr + m.Length
+		}
+		anonExecFound = true
+	}
+	if anonExecFound {
+		return jitStart, jitEnd, true
+	}
+
+	return 0, 0, false
+}
+
+func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
+	pid := pr.PID()
+	r.mappingGeneration++
+
+	log.Debugf("Synchronizing ruby mappings")
+
+	// Register one prefix set for the labeled reservation or the conservative
+	// executable envelope. Non-executable gaps inside either range are safe to
+	// include because they cannot be sampled as PCs.
+	jitStart, jitEnd, jitFound := findJITRegion(mappings)
+	if !jitFound {
+		jitStart = 0
+		jitEnd = 0
+	}
+
+	var prefixes []lpm.Prefix
+	if jitFound {
+		var err error
+		prefixes, err = lpm.CalculatePrefixList(jitStart, jitEnd)
+		if err != nil {
+			return fmt.Errorf("ruby jit region lpm failure %#x-%#x: %w", jitStart, jitEnd, err)
+		}
+	}
+
+	// Publish the JIT range before publishing new interpreter prefixes. Once a
+	// prefix is visible to eBPF, samples in that range may enter the Ruby unwinder
+	// and need procInfo to already contain the matching range for JIT-frame checks.
+	if r.procInfo.Jit_start != jitStart || r.procInfo.Jit_end != jitEnd {
+		updatedProcInfo := *r.procInfo
+		updatedProcInfo.Jit_start = jitStart
+		updatedProcInfo.Jit_end = jitEnd
+		if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(&updatedProcInfo)); err != nil {
+			return err
+		}
+		r.procInfo.Jit_start = jitStart
+		r.procInfo.Jit_end = jitEnd
+		log.Debugf("Updated JIT region %#x-%#x in ruby proc info", jitStart, jitEnd)
+	}
+
+	for _, prefix := range prefixes {
+		if _, exists := r.prefixes[prefix]; !exists {
+			if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
+				support.ProgUnwindRuby, 0, 0); err != nil {
+				return fmt.Errorf("failed to publish Ruby JIT prefix %#v; JIT proc data was "+
+					"already published and mapping state may be partial until the next "+
+					"synchronization: %w", prefix, err)
+			}
+		}
+		r.prefixes[prefix] = r.mappingGeneration
+	}
+
+	// Remove prefixes not seen.
+	for prefix, gen := range r.prefixes {
+		if gen == r.mappingGeneration {
+			continue
+		}
+		if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
+			log.Debugf("Failed to delete Ruby prefix %#v: %v", prefix, err)
+		}
+		delete(r.prefixes, prefix)
+	}
+
+	return nil
 }
 
 func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -1300,7 +1457,9 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindRuby), ProgName: "unwind_ruby"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -1412,7 +1571,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to visit symbols: %v", err)
+		log.Debugf("failed to visit symbols: %v", err)
 	}
 
 	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
@@ -1427,7 +1586,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to locate TLS descriptor: %v", err)
+		log.Debugf("failed to locate TLS descriptor: %v", err)
 	}
 
 	// For statically-linked ruby, extract the direct TP-relative offset from
@@ -1437,7 +1596,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if isBinRuby {
 		offset, ecErr := extractEcTLSOffset(ef)
 		if ecErr != nil {
-			log.Warnf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+			log.Debugf("failed to extract EC TLS offset for static ruby: %v", ecErr)
 		} else {
 			staticTLSOffset = offset
 		}
@@ -1451,7 +1610,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false
 	}, pfelf.RelDTPMOD64); err != nil {
-		log.Warnf("failed to find DTPMOD64 relocation: %v", err)
+		log.Debugf("failed to find DTPMOD64 relocation: %v", err)
 	}
 
 	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, dtpmod offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x",
@@ -1559,6 +1718,13 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vms.vm_struct.gc_objspace = 1248
 		} else {
 			vms.vm_struct.gc_objspace = 1272
+		}
+		if version >= rubyVersion(4, 0, 6) {
+			// Ruby 4.0.6 inserted rb_vm_t.master_box before root_box,
+			// shifting the gc.objspace field by one pointer.
+			// https://github.com/ruby/ruby/blob/v4.0.6/vm_core.h
+			// https://github.com/ruby/ruby/commit/99aac00fa13c03f71d3a4d89686e447f2950df68
+			vms.vm_struct.gc_objspace += 8
 		}
 		vms.objspace.flags = 28
 	default:
@@ -1715,6 +1881,14 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 				vms.rb_ractor_struct.running_ec = 0x138
 			} else {
 				vms.rb_ractor_struct.running_ec = 0x148
+			}
+			if version >= rubyVersion(4, 0, 6) {
+				// Ruby 4.0.6 added runnable_hot_th and runnable_hot_th_waiting
+				// to struct rb_thread_sched, which is embedded in
+				// rb_ractor_struct.threads before running_ec.
+				// https://github.com/ruby/ruby/blob/v4.0.6/thread_pthread.h
+				// https://github.com/ruby/ruby/commit/21a2595676d2d3df0eccd3af74065e2ba2a876b5
+				vms.rb_ractor_struct.running_ec += 8
 			}
 		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {

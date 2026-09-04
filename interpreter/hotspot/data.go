@@ -25,6 +25,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
+const (
+	// maxIntrospectionStride bounds the per-entry size of the introspection
+	// tables. Real VMStruct/VMType entries are well below 256 bytes.
+	maxIntrospectionStride = 256
+	// maxIntrospectionEntries bounds the number of introspection table entries
+	// parsed; real JVM tables hold a few thousand entries.
+	maxIntrospectionEntries = 1 << 17
+	// maxClassSize caps the size of any per-class struct read from the target
+	// JVM. All real HotSpot classes are well below this value.
+	maxClassSize = 64 * 1024
+)
+
 // hotspotIntrospectionTable contains the resolved ELF symbols for an introspection table
 type hotspotIntrospectionTable struct {
 	skipBaseDref               bool
@@ -246,14 +258,21 @@ func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 		base = rm.Ptr(base)
 	}
 
-	if base == 0 || stride == 0 {
+	if base == 0 || stride == 0 || stride > maxIntrospectionStride {
 		return fmt.Errorf("bad introspection table data (%#x / %d)", base, stride)
 	}
 
 	// Parse the introspection table
 	e := make([]byte, stride)
 	vm := reflect.ValueOf(&vmd.vmStructs).Elem()
-	for addr := base; true; addr += stride {
+	// end is the first address we are not willing to parse. Computing it up
+	// front (instead of counting iterations) makes the bound explicit; base is
+	// already validated to be non-zero above.
+	end := base + libpf.Address(maxIntrospectionEntries)*stride
+	if end < base {
+		return fmt.Errorf("introspection table range overflow")
+	}
+	for addr := base; addr < end; addr += stride {
 		if err := rm.Read(addr, e); err != nil {
 			return err
 		}
@@ -383,6 +402,10 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 }
 
 func (d *hotspotData) Unload(_ interpreter.EbpfHandler) {
+}
+
+func (i *hotspotInstance) UsesAnonymousMappings() bool {
+	return true
 }
 
 // locateJvmciVMStructs attempts to heuristically locate the JVMCI VM structs by
@@ -617,12 +640,24 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 		return vmd, nil
 	}
 
+	if err := vmd.validateVMStructSizes(); err != nil {
+		vmd.err = err
+		return vmd, nil
+	}
+
+	return vmd, nil
+}
+
+// validateVMStructSizes verifies that all struct sizes used for allocation are
+// bounded. The sizes originate in the target JVM's introspection tables which are
+// attacker-influenceable, so every unexpected value must be rejected up front.
+func (vmd *hotspotVMData) validateVMStructSizes() error {
+	vms := &vmd.vmStructs
 	if vms.Symbol.Sizeof > 32 {
 		// Additional sanity for Symbol.Sizeof which normally is
 		// just 8 byte or so. The getSymbol() hard codes the first read
 		// as 128 bytes and it needs to be more than this.
-		vmd.err = fmt.Errorf("JVM Symbol.Sizeof value %d", vms.Symbol.Sizeof)
-		return vmd, nil
+		return fmt.Errorf("JVM Symbol.Sizeof value %d", vms.Symbol.Sizeof)
 	}
 
 	// Verify that all struct fields are within limits
@@ -634,6 +669,10 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 			continue
 		}
 		maxOffset := sizeOf.Uint()
+		if maxOffset > maxClassSize {
+			return fmt.Errorf("%s.Sizeof value %d exceeds bounds", structs.Type().Field(i).Name,
+				maxOffset)
+		}
 		for j := 0; j < klass.NumField(); j++ {
 			field := klass.Field(j)
 			if field.Kind() == reflect.Map {
@@ -641,16 +680,14 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 			}
 
 			if field.Uint() > maxOffset {
-				vmd.err = fmt.Errorf("%s.%s offset %v is larger than class size %v",
+				return fmt.Errorf("%s.%s offset %v is larger than class size %v",
 					structs.Type().Field(i).Name,
 					klass.Type().Field(j).Name,
 					field.Uint(), maxOffset)
-				return vmd, nil
 			}
 		}
 	}
-
-	return vmd, nil
+	return nil
 }
 
 func newHotspotData(filename string, ef *pfelf.File) (interpreter.Data, error) {

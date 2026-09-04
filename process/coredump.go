@@ -9,12 +9,13 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"bytes"
+	"cmp"
 	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"io"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -91,20 +92,6 @@ const (
 	AT_SYSINFO_EHDR = 33
 )
 
-// getAlignedBytes returns 'size' bytes from source slice, and progresses the
-// source slice by 'size' aligned to next 4 byte boundary. Used to parse notes.
-func getAlignedBytes(rdr io.Reader, size uint32) ([]byte, error) {
-	if size == 0 {
-		return []byte{}, nil
-	}
-	alignedSize := (size + 3) &^ 3
-	buf := make([]byte, alignedSize)
-	if n, err := rdr.Read(buf); n != int(alignedSize) || err != nil {
-		return nil, err
-	}
-	return buf[:size], nil
-}
-
 // OpenCoredump opens the named file as a coredump.
 func OpenCoredump(name string) (*CoredumpProcess, error) {
 	f, err := pfelf.Open(name)
@@ -178,11 +165,21 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		noteErrors = errors.Join(noteErrors, err)
 		return noteErrors == nil
 	})
+	if errors.Is(err, pfelf.ErrNoteNotFound) {
+		err = nil
+	}
 	err = errors.Join(noteErrors, err)
 	if err != nil {
 		_ = f.Close()
 		return nil, err
 	}
+
+	// PT_LOAD entries are collected before notes are parsed. NT_FILE mappings
+	// without a matching PT_LOAD entry are appended later, so restore the
+	// address order provided by /proc/PID/maps before exposing the mappings.
+	slices.SortFunc(cd.mappings, func(a, b RawMapping) int {
+		return cmp.Compare(a.Vaddr, b.Vaddr)
+	})
 
 	return cd, nil
 }
@@ -215,8 +212,8 @@ func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
 }
 
-func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
-	return ProcessMeta{}
+func (cd *CoredumpProcess) GetProcessMeta(_ []MetaEnricher) Meta {
+	return Meta{}
 }
 
 func (cd *CoredumpProcess) GetExe() (libpf.String, error) {

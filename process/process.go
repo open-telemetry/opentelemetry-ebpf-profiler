@@ -18,8 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -60,8 +61,9 @@ var (
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
-	pid libpf.PID
-	tid libpf.PID
+	pid      libpf.PID
+	tid      libpf.PID
+	procBase string // "/proc/<pid>/"
 
 	mainThreadExit bool
 	remoteMemory   remotememory.RemoteMemory
@@ -90,6 +92,7 @@ func New(pid, tid libpf.PID) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
+		procBase:     "/proc/" + strconv.Itoa(int(pid)) + "/",
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
 	}
 }
@@ -103,47 +106,35 @@ func (sp *systemProcess) GetMachineData() MachineData {
 }
 
 func (sp *systemProcess) GetExe() (libpf.String, error) {
-	str, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+	str, err := os.Readlink(sp.procBase + "exe")
 	if err != nil {
 		return libpf.NullString, err
 	}
+	// The kernel appends " (deleted)" to the symlink target when the
+	// executable has been removed from disk. Strip it so callers get
+	// the original path.
+	str = strings.TrimSuffix(str, " (deleted)")
 	return libpf.Intern(str), nil
 }
 
-func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
-	var processName libpf.String
+func (sp *systemProcess) GetProcessMeta(enrichers []MetaEnricher) Meta {
 	exePath, _ := sp.GetExe()
-	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
-		processName = libpf.Intern(pfunsafe.ToString(name))
-	}
-
-	var envVarMap map[libpf.String]libpf.String
-	if len(cfg.IncludeEnvVars) > 0 {
-		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
-			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
-			// environ has environment variables separated by a null byte (hex: 00)
-			for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
-				var fields [2]string
-				if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
-					continue
-				}
-				if _, ok := cfg.IncludeEnvVars[fields[0]]; ok {
-					envVarMap[libpf.Intern(fields[0])] = libpf.Intern(fields[1])
-				}
-			}
-		}
-	}
 
 	containerID, err := extractContainerID(sp.pid)
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
-	return ProcessMeta{
-		Name:         processName,
-		Executable:   exePath,
-		ContainerID:  containerID,
-		EnvVariables: envVarMap,
+
+	pMeta := Meta{
+		Executable:  exePath,
+		ContainerID: containerID,
 	}
+
+	for _, e := range enrichers {
+		e.EnrichMeta(sp.procBase, &pMeta)
+	}
+
+	return pMeta
 }
 
 // parseContainerID parses cgroup v1 and v2 container IDs
@@ -186,14 +177,77 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	return parseContainerID(cgroupFile), nil
 }
 
-// CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
+// cgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
 // the cgroup namespace root visible to the given process, unaffected by namespace masking.
-func CgroupRootInode(pid libpf.PID) (uint64, error) {
+func cgroupRootInode(procBase string) (uint64, error) {
 	var st unix.Stat_t
-	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
+	if err := unix.Stat(filepath.Join(procBase, "root/sys/fs/cgroup"), &st); err != nil {
 		return 0, err
 	}
 	return st.Ino, nil
+}
+
+// NewEnvVarsEnricher returns a MetaEnricher that captures the process's
+// environment variables into Meta.EnvVariables and Meta.InternalEnvVariables.
+// A name in both sets is captured into both.
+func NewEnvVarsEnricher(reported, internal libpf.Set[string]) MetaEnricher {
+	return MetaEnricherFunc(func(procBase string, meta *Meta) {
+		envVars, err := os.ReadFile(procBase + "environ")
+		if err != nil {
+			return
+		}
+		// environ has environment variables separated by a null byte (hex: 00)
+		for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
+			var fields [2]string
+			if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
+				continue
+			}
+			_, wantReported := reported[fields[0]]
+			_, wantInternal := internal[fields[0]]
+			if !wantReported && !wantInternal {
+				continue
+			}
+			name, value := libpf.Intern(fields[0]), libpf.Intern(fields[1])
+			if wantReported {
+				if meta.EnvVariables == nil {
+					meta.EnvVariables = make(map[libpf.String]libpf.String)
+				}
+				meta.EnvVariables[name] = value
+			}
+			if wantInternal {
+				if meta.InternalEnvVariables == nil {
+					meta.InternalEnvVariables = make(map[libpf.String]libpf.String, len(internal))
+				}
+				meta.InternalEnvVariables[name] = value
+			}
+		}
+	})
+}
+
+// NewSelfContainerIDEnricher returns a MetaEnricher that sets the container ID on
+// Meta when the process shares the profiler's cgroup root and standard cgroup-based
+// detection returned no result. The profiler's own container ID is detected once at
+// construction time and reused for every subsequent process. If detection fails the
+// returned enricher is a no-op.
+func NewSelfContainerIDEnricher() (MetaEnricher, error) {
+	selfContainerID, selfCgroupIno, err := detectSelfContainerIDViaInode()
+	if err != nil {
+		return nil, err
+	}
+	return MetaEnricherFunc(func(procBase string, meta *Meta) {
+		if meta.ContainerID != libpf.NullString || selfContainerID == libpf.NullString {
+			return
+		}
+		ino, err := cgroupRootInode(procBase)
+		if err != nil {
+			return
+		}
+		if ino == selfCgroupIno {
+			meta.ContainerID = selfContainerID
+		} else {
+			log.Debugf("Process %s cgroup inode (%d) doesn't match profiler (%d)", procBase, ino, selfCgroupIno)
+		}
+	}), nil
 }
 
 // DetectSelfContainerIDViaInode detects the current process's container ID by matching
@@ -204,7 +258,7 @@ func CgroupRootInode(pid libpf.PID) (uint64, error) {
 // namespace masking. This function walks the host's cgroup tree (via
 // /proc/1/root/sys/fs/cgroup) to find the directory whose inode matches, then extracts
 // the container ID from its path.
-func DetectSelfContainerIDViaInode() (libpf.String, uint64, error) {
+func detectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 	const hostCgroupRoot = "/proc/1/root/sys/fs/cgroup"
 
 	var selfStat unix.Stat_t
@@ -305,10 +359,6 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			flags |= elf.PF_X
 		}
 
-		// Ignore non-readable and non-executable mappings
-		if flags&(elf.PF_R|elf.PF_X) == 0 {
-			continue
-		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
 			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
@@ -320,38 +370,51 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			numParseErrors++
 			continue
 		}
-		major, err := strconv.ParseUint(devs[0], 16, 64)
+		major, err := strconv.ParseUint(devs[0], 16, 32)
 		if err != nil {
-			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			log.Debugf("major device: failed to convert %s to uint32: %v", devs[0], err)
 			numParseErrors++
 			continue
 		}
-		minor, err := strconv.ParseUint(devs[1], 16, 64)
+		minor, err := strconv.ParseUint(devs[1], 16, 32)
 		if err != nil {
-			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			log.Debugf("minor device: failed to convert %s to uint32: %v", devs[1], err)
 			numParseErrors++
 			continue
 		}
-		device := major<<8 + minor
+		// Encode like stat(2) st_dev: the legacy major<<8|minor neither matches an
+		// fstat result nor stays unique once the minor exceeds 8 bits.
+		device := unix.Mkdev(uint32(major), uint32(minor))
 
 		var path string
 		if inode == 0 {
-			if fields[5] == "[vdso]" {
+			switch fieldValue := fields[5]; {
+			case fieldValue == "[vdso]":
 				// Map to something filename looking with synthesized inode
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			} else if fields[5] == "" {
+			case fieldValue == "":
 				// This is an anonymous mapping, keep it
-			} else if strings.HasPrefix(fields[5], "[anon:") {
-				// Keep named anonymous mapping
-				path = fields[5]
-			} else {
+			case strings.HasPrefix(fieldValue, "[anon:"):
+				// This is an anonymous mapping named with prctl(PR_SET_VMA), keep the name
+				path = trimMappingPath(fieldValue)
+			default:
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {
 			path = trimMappingPath(fields[5])
+		}
+
+		// Ignore non-readable and non-executable mappings except anonymous
+		// reservations. Ruby JIT uses PROT_NONE anonymous VMAs for the unused tail
+		// of the executable reservation, and interpreters need to see them to detect
+		// the full reserved area.
+		mappingForPredicate := RawMapping{Path: path}
+		anonymousMapping := mappingForPredicate.IsAnonymous()
+		if flags&(elf.PF_R|elf.PF_X) == 0 && !anonymousMapping {
+			continue
 		}
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
@@ -391,7 +454,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 }
 
 func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
-	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
+	mapsFile, err := os.Open(sp.procBase + "maps")
 	if err != nil {
 		return 0, err
 	}
@@ -422,7 +485,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 		}
 
 		log.Debugf("TID: %v extracting mappings", sp.tid)
-		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
+		mapsFileAlt, err := os.Open(fmt.Sprintf("%stask/%d/maps", sp.procBase, sp.tid))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
 		// allow for a future iteration to try extracting mappings from a different thread.
@@ -480,7 +543,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
-		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
+		rootPath := fmt.Sprintf("%stask/%d/root", sp.procBase, sp.tid)
 		f, err := openInRoot(rootPath, m.Path)
 		if err != nil {
 			return nil, err
@@ -492,7 +555,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		}
 		return f, nil
 	}
-	filename := fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
+	filename := fmt.Sprintf("%smap_files/%x-%x", sp.procBase, m.Vaddr, m.Vaddr+m.Length)
 	return os.Open(filename)
 }
 

@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6a
+	MetricIDBeginCumulative = 0x75
 )
 
 const (
@@ -86,13 +86,6 @@ const (
 	HSTSIDStackDeltaScale = 0x8
 	HSTSIDSegMapBit       = 0x0
 	HSTSIDSegMapMask      = 0xffffffffffffff
-)
-
-const (
-	TraceOriginUnknown  = 0x0
-	TraceOriginSampling = 0x1
-	TraceOriginOffCPU   = 0x2
-	TraceOriginProbe    = 0x3
 )
 
 type ApmSpanID [8]byte
@@ -165,7 +158,7 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
-	Origin             uint32
+	Origin             uint16
 	Value              uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
@@ -194,14 +187,16 @@ type BEAMProcInfo struct {
 type DotnetProcInfo struct {
 	Version uint32
 }
-type GoLabelsOffsets struct {
+type GoRuntimeOffsets struct {
 	M_offset               uint32
+	M_gsignal              uint32
 	Curg                   uint32
 	Labels                 uint32
 	Hmap_count             uint32
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -288,6 +283,8 @@ type RubyProcInfo struct {
 	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
+	Jit_start                    uint64
+	Jit_end                      uint64
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
@@ -336,7 +333,7 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x48
+	sizeof_RubyProcInfo   = 0x60
 )
 
 const (
@@ -354,17 +351,17 @@ const (
 	UnwindRegX86RDI  uint8 = 0x7
 	UnwindRegX86R8   uint8 = 0x8
 
-	UnwindFlagCommand    uint8 = 0x1
-	UnwindFlagFrame      uint8 = 0x2
-	UnwindFlagLeafOnly   uint8 = 0x4
-	UnwindFlagDerefCfa   uint8 = 0x8
-	UnwindFlagRegisterRA uint8 = 0x10
+	UnwindFlagCommand  uint8 = 0x1
+	UnwindFlagFrame    uint8 = 0x2
+	UnwindFlagLeafOnly uint8 = 0x4
+	UnwindFlagDerefCfa uint8 = 0x8
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandGoAsmcgocall int32 = 0x5
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
@@ -401,6 +398,10 @@ const (
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
+	RubyFrameTypeJit      = 0x5
+
+	LJCframeSpaceX86 = 0x50
+	LJCframeSpaceArm = 0xd0
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -500,4 +501,15 @@ var MetricsTranslation = []metrics.MetricID{
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 	0x68: metrics.IDUnwindErrBadDTVRead,
 	0x69: metrics.IDBPFRingbufOutputErr,
+	0x6a: metrics.IDUnwindNativeErrNoVMA,
+	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
+	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
+	0x6d: metrics.IDUnwindLuaJITAttempts,
+	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x6f: metrics.IDSamplesSkippedProcessTooNew,
+	0x70: metrics.IDNumSyncsFromPrctl,
+	0x71: metrics.IDNumPriorityEventDeferred,
+	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

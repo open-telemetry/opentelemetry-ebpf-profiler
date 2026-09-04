@@ -4,7 +4,6 @@
 package elfunwindinfo
 
 import (
-	"debug/elf"
 	"testing"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -58,12 +57,12 @@ func TestGoStrategy(t *testing.T) {
 		file   string
 		result strategy
 	}{
-		{"foo.go", strategyFramePointer},
+		{"foo.go", strategyUnknown},
 		{"foo.s", strategyDeltasWithoutFrame},
 		{"go/src/crypto/elliptic/p256_asm.go", strategyDeltasWithFrame},
 	}
 	for _, x := range res {
-		s := getSourceFileStrategy(elf.EM_X86_64, x.file, strategyFramePointer)
+		s := getSourceFileStrategyX86(x.file)
 		assert.Equal(t, x.result, s)
 	}
 }
@@ -89,13 +88,13 @@ func TestParseGoPclntab(t *testing.T) {
 			require.NoError(t, err)
 
 			ee := elfExtractor{
-				file:   ef,
-				hooks:  &extractionFilter{},
-				deltas: &sdtypes.StackDeltaArray{},
+				file:      ef,
+				hooks:     &extractionFilter{},
+				intervals: &sdtypes.IntervalData{},
 			}
 			err = ee.parseGoPclntab()
 			require.NoError(t, err)
-			assert.NotEmpty(t, *ee.deltas)
+			assert.NotEmpty(t, ee.intervals.Blocks)
 		})
 	}
 }

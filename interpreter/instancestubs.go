@@ -16,6 +16,10 @@ import (
 type InstanceStubs struct {
 }
 
+func (is *InstanceStubs) UsesAnonymousMappings() bool {
+	return false
+}
+
 func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
 	process.Process, []process.RawMapping) error {
 	return nil

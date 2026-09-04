@@ -29,7 +29,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -48,6 +47,12 @@ var (
 func pythonVer(major, minor uint16) uint16 {
 	return major*0x100 + minor
 }
+
+const (
+	// maxPyMemberDefs caps the number of PyMemberDef entries traversed when
+	// reading introspection data; real tables hold a few dozen entries.
+	maxPyMemberDefs = 256
+)
 
 func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	// Py_Version is referenced in CPython internals for versioned Python binaries.
@@ -99,7 +104,9 @@ type pythonData struct {
 			Data uint `name:"data"`
 		}
 		PyCodeObject struct {
-			Sizeof         uint
+			// Sizeof is PyCode_Type.tp_basicsize read from target memory; the
+			// maxValue tag bounds it to prevent forged-size allocation bombs.
+			Sizeof         uint `maxValue:"4096"`
 			ArgCount       uint `name:"co_argcount"`
 			KwOnlyArgCount uint `name:"co_kwonlyargcount"`
 			Flags          uint `name:"co_flags"`
@@ -640,6 +647,31 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	return reflect.Value{}
 }
 
+// maxValueTag is the struct tag that bounds an introspection field read from
+// target memory.
+const maxValueTag = "maxValue"
+
+// validateMaxValue rejects a value read from target memory that is 0 (a failed
+// read) or exceeds the field's maxValue struct tag, if any.
+func validateMaxValue(structType reflect.Type, fieldName string, value uint64) error {
+	field, ok := structType.FieldByName(fieldName)
+	if !ok {
+		return nil
+	}
+	maxStr, ok := field.Tag.Lookup(maxValueTag)
+	if !ok {
+		return nil
+	}
+	maxVal, err := strconv.ParseUint(maxStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid %s maxValue tag %q: %v", fieldName, maxStr, err)
+	}
+	if value == 0 || value > maxVal {
+		return fmt.Errorf("unexpected %s size %d (max %d)", fieldName, value, maxVal)
+	}
+	return nil
+}
+
 func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolName,
 	vmObj any,
 ) error {
@@ -653,6 +685,9 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	reflection := reflect.ValueOf(vmObj).Elem()
 	if f := reflection.FieldByName("Sizeof"); f.IsValid() {
 		size := rm.Uint64(typedataAddress + vms.PyTypeObject.BasicSize)
+		if err := validateMaxValue(reflection.Type(), "Sizeof", size); err != nil {
+			return err
+		}
 		f.SetUint(size)
 	}
 
@@ -661,7 +696,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 		return nil
 	}
 
-	for addr := membersPtr; true; addr += vms.PyMemberDef.Sizeof {
+	membersEnd := membersPtr + maxPyMemberDefs*vms.PyMemberDef.Sizeof
+	for addr := membersPtr; addr < membersEnd; addr += vms.PyMemberDef.Sizeof {
 		memberName := rm.StringPtr(addr + libpf.Address(vms.PyMemberDef.Name))
 		if memberName == "" {
 			break
@@ -741,7 +777,9 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindPython), ProgName: "unwind_python"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -977,9 +1015,9 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 		Start: uint64(interp.Address),
 		End:   uint64(interp.Address) + interp.Size,
 	})
-	coldRange, err := findColdRange(ef, code, interp)
+	coldRange, err := findColdRange(info, ef, code, interp)
 	if err != nil {
-		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
+		log.Debugf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)
@@ -988,11 +1026,10 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 }
 
 // findColdRange finds a relative jump from the _PyEval_EvalFrameDefault outside itself
-// (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the range of the .cold
-// symbol using an instance of elfunwindinfo.EhFrameTable.
+// (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the .cold range.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
+func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
 	if ef.Machine != elf.EM_X86_64 {
 		return util.Range{}, nil
 	}
@@ -1000,16 +1037,11 @@ func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Rang
 	if err != nil || dst == 0 {
 		return util.Range{}, err
 	}
-	t, err := elfunwindinfo.NewEhFrameTable(ef)
-	if err != nil {
-		return util.Range{}, err
+	if bb := info.Intervals().Find(uint64(dst)); bb != nil {
+		return util.Range{
+			Start: bb.Start,
+			End:   bb.End,
+		}, nil
 	}
-	fde, err := t.LookupFDE(dst)
-	if err != nil {
-		return util.Range{}, err
-	}
-	return util.Range{
-		Start: uint64(fde.PCBegin),
-		End:   uint64(fde.PCBegin + fde.PCRange),
-	}, nil
+	return util.Range{}, errors.New("cold range not found")
 }

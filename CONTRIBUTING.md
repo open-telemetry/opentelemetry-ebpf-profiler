@@ -81,6 +81,17 @@ Rewriting Git history makes it difficult to keep track of iterations during
 code review.
 All pull requests are squashed to a single commit upon merge to `main`.
 
+### Rerunning Failed Workflows
+
+PR authors can rerun failed GitHub Actions workflows by commenting `/rerun` on the pull
+request. This will automatically rerun all failed workflow runs for the PR's latest commit.
+
+Example rerun comment:
+
+```
+/rerun
+```
+
 ### How to Receive Comments
 
 * If the PR is not ready for review, please put `[WIP]` in the title,
@@ -202,30 +213,3 @@ To become a Code Owner, add your GitHub username to the
 [CODEOWNERS](.github/CODEOWNERS) file with an entry for all files related to
 the component code. Be sure to tag the existing Code Owners, if any, within
 the PR to ensure they receive a notification.
-
-### Maintainers
-
-- [Christos Kalkanis](https://github.com/christos68k), Elastic
-- [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana
-- [Felix Geisendörfer](https://github.com/felixge), Datadog
-- [Timo Teräs](https://github.com/fabled)
-
-For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
-
-### Approvers
-
-- [Damien Mathieu](https://github.com/dmathieu), Elastic
-- [Florian Lehner](https://github.com/florianl), Elastic
-- [Joel Höner](https://github.com/athre0z)
-- [Roger Coll](https://github.com/rogercoll), Elastic
-- [Tim Rühsen](https://github.com/rockdaboot)
-
-For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
-
-### Become an Approver or a Maintainer
-
-See the [community membership document in OpenTelemetry community
-repo](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md).
-
-[Approver]: #approvers
-[Maintainer]: #maintainers

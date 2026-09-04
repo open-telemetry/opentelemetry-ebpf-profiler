@@ -4,6 +4,8 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"hash/fnv"
+	"strconv"
 	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
@@ -126,18 +128,44 @@ func (frames *Frames) Append(frame *Frame) {
 type Trace struct {
 	CustomLabels map[String]String
 	Frames       Frames
+
+	// cachedHash memoizes the result of Hash().
+	// invalidTraceHash means the hash has not been computed yet.
+	cachedHash TraceHash
 }
 
-// EbpfTrace represents a stack trace from Ebpf code.
+// Hash returns the trace's hash, computing and caching it on the first call.
+// The result is memoized: mutating Frames after the first call is not
+// reflected in subsequent calls. This method is not thread-safe.
+func (t *Trace) Hash() TraceHash {
+	if t.cachedHash != invalidTraceHash {
+		return t.cachedHash
+	}
+	var buf [24]byte
+	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
+	h := fnv.New128a()
+	for _, uniqueFrame := range t.Frames {
+		frame := uniqueFrame.Value()
+		fileID := FileID{}
+		if frame.Mapping.Valid() {
+			fileID = frame.Mapping.Value().File.Value().FileID
+		}
+		_, _ = h.Write(fileID.Bytes())
+		// Using FormatUint() or putting AppendUint() into a function leads
+		// to escaping to heap (allocation).
+		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
+	}
+	// make instead of nil avoids a heap allocation
+	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	t.cachedHash = traceHash
+	return traceHash
+}
+
+// EbpfTrace holds data sourced from eBPF.
 type EbpfTrace struct {
-	EnvVars          map[String]String
-	ProcessName      String
-	ExecutablePath   String
-	ContainerID      String
 	CustomLabels     map[String]String
 	Comm             Comm
 	FrameData        []uint64
-	KernelFrames     Frames
 	FrameDataBuf     [3072]uint64
 	Value            int64
 	KTime            int64
@@ -145,7 +173,8 @@ type EbpfTrace struct {
 	TID              PID
 	PID              PID
 	NumFrames        uint16
-	Origin           Origin
+	NumKernelFrames  uint16
+	Origin           uint16
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
 }
@@ -154,14 +183,20 @@ type EbpfFrame []uint64
 
 // The below code must match ebpf tracemgmt.h frame_header() layout.
 
-// NewEbpfFrame creates a new EbpfFrame slice with given header information.
-// Typically used for testing only.
-func NewEbpfFrame(ty FrameType, ff FrameFlags, l uint8, data uint64) []uint64 {
+// NewEbpfFrameHeader creates the first word of an eBPF frame.
+// Typically used for testing and synthetic cache keys only.
+func NewEbpfFrameHeader(ty FrameType, ff FrameFlags, l uint8, data uint64) uint64 {
 	val := uint64(ty) << 60
 	val |= uint64(ff) << 56
 	val |= uint64(l) << 52
+	return val | data
+}
+
+// NewEbpfFrame creates a new EbpfFrame slice with given header information.
+// Typically used for testing only.
+func NewEbpfFrame(ty FrameType, ff FrameFlags, l uint8, data uint64) []uint64 {
 	ef := make([]uint64, l)
-	ef[0] = val | data
+	ef[0] = NewEbpfFrameHeader(ty, ff, l, data)
 	return ef
 }
 

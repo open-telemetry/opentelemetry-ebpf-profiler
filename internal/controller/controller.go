@@ -3,7 +3,6 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -85,25 +84,26 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		TraceReporter:          c.reporter,
-		Intervals:              intervals,
-		InterpretersConfig:     c.config.Interpreters,
-		FilterErrorFrames:      !c.config.SendErrorFrames,
-		FilterIdleFrames:       !c.config.SendIdleFrames,
-		SamplesPerSecond:       c.config.SamplesPerSecond,
-		MapScaleFactor:         int(c.config.MapScaleFactor),
-		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
-		VerboseMode:            c.config.VerboseMode,
-		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
-		ProbabilisticInterval:  c.config.ProbabilisticInterval,
-		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
-		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
-		IncludeEnvVars:         envVars,
-		ProbeLinks:             c.config.ProbeLinks,
-		LoadProbe:              c.config.LoadProbe,
-		ExecutableReporter:     c.config.ExecutableReporter,
-		BPFFSRoot:              c.config.BPFFSRoot,
-		OBIProcessCtx:          c.config.OBIProcessCtx,
+		TraceReporter:           c.reporter,
+		Intervals:               intervals,
+		InterpretersConfig:      c.config.Interpreters,
+		FilterErrorFrames:       !c.config.SendErrorFrames,
+		FilterIdleFrames:        !c.config.SendIdleFrames,
+		FilterMinProcessAge:     c.config.FilterMinProcessAge,
+		SamplesPerSecond:        c.config.SamplesPerSecond,
+		MapScaleFactor:          int(c.config.MapScaleFactor),
+		FrameCacheSize:          uint32(c.config.FrameCacheSize),
+		KernelVersionCheck:      !c.config.NoKernelVersionCheck,
+		VerboseMode:             c.config.VerboseMode,
+		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
+		ProbabilisticInterval:   c.config.ProbabilisticInterval,
+		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
+		IncludeEnvVars:          envVars,
+		ExecutableReporter:      c.config.ExecutableReporter,
+		BPFFSRoot:               c.config.BPFFSRoot,
+		OBIProcessCtx:           c.config.OBIProcessCtx,
+		PIDNamespaceTranslation: c.config.PIDNamespaceTranslation,
+		ProcessMetaEnrichers:    c.config.ProcessMetaEnrichers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -119,24 +119,10 @@ func (c *Controller) Start(ctx context.Context) error {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(); err != nil {
+	if err := trc.AttachTracer(c.config.PinnedCPUIDs); err != nil {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
-
-	if c.config.OffCPUThreshold > 0.0 {
-		if err := trc.StartOffCPUProfiling(); err != nil {
-			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
-		}
-		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
-	}
-
-	if len(c.config.ProbeLinks) > 0 {
-		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
-			return fmt.Errorf("failed to attach probes: %v", err)
-		}
-		log.Info("Attached probes")
-	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
@@ -154,6 +140,14 @@ func (c *Controller) Start(ctx context.Context) error {
 	// This log line is used in our system tests to verify if that the agent has started.
 	// So if you change this log line update also the system test.
 	log.Info("Attached sched monitor")
+
+	// A missing prctl monitor only delays discovery of process context mappings;
+	// core profiling is unaffected, so warn and continue rather than aborting.
+	if err := trc.AttachPrctlMonitor(); err != nil {
+		log.Warnf("Failed to attach prctl monitor: %v", err)
+	} else {
+		log.Info("Attached prctl monitor")
+	}
 
 	if err := c.startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
@@ -178,6 +172,13 @@ func (c *Controller) Shutdown() {
 			c.tracer.Close()
 		}
 	})
+}
+
+// EnableProbe enables a probe on the running tracer. It must be called after
+// Start has completed. The probe requires the kprobe unwinder chain, which is
+// loaded automatically when probes is non-empty in the config.
+func (c *Controller) EnableProbe(ctx context.Context, p tracer.Probe) error {
+	return c.tracer.Enable(ctx, p)
 }
 
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {

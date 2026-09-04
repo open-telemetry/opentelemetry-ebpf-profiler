@@ -9,8 +9,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 )
 
 func BenchmarkPythonInterpreter(b *testing.B) {
@@ -23,7 +24,9 @@ func TestPythonInterpreter(t *testing.T) {
 	testPythonInterpreter(t)
 }
 
-func testPythonInterpreter(t testing.TB) {
+func testPythonInterpreter(tb testing.TB) {
+	tb.Helper()
+
 	// 00010000 	4D 89 F2 	mov 	r10, r14
 	// 00010003 	45 0F B6 36 	movzx 	r14d, byte ptr [r14]
 	// 00010007 	48 8D 05 2D B3 35 00 	lea 	rax, [rip + 0x35b32d]
@@ -45,7 +48,7 @@ func testPythonInterpreter(t testing.TB) {
 	r14 := it.Regs.Get(R14)
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
-		t.Fatal(err)
+		tb.Fatal(err)
 	}
 	actual := it.Regs.Get(RAX)
 	expected := expression.Mem(
@@ -59,7 +62,7 @@ func testPythonInterpreter(t testing.TB) {
 		8,
 	)
 	if !actual.Match(expected) {
-		t.Fatal()
+		tb.Fatal()
 	}
 }
 
@@ -140,6 +143,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 }
 
 func assertEval(t *testing.T, left, right expression.Expression) {
+	t.Helper()
 	if !left.Match(right) {
 		assert.Failf(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
 		t.Logf("left  %s", left.DebugString())
@@ -171,6 +175,72 @@ func TestMoveSignExtend(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 	pattern := expression.SignExtend(expression.Mem(expression.Imm(7), 2), 64)
 	require.True(t, i.Regs.Get(RAX).Match(pattern))
+}
+
+func TestSub(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		code []byte
+		reg  x86asm.Reg
+		// want is a func so the mem case can build its expectation from the
+		// interpreter's own (pointer-identity) register expressions.
+		want     func(it *Interpreter) expression.Expression
+		symbolic bool // assert the result did not fold to a constant
+	}{
+		{
+			name: "imm",
+			// mov rdx,0x1000 ; sub rdx,0xc ; mov rdx,[rdx+0x43c]
+			// -> [0x1000 - 0xc + 0x43c] = [0x1430]
+			code: []byte{
+				0x48, 0xba, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x48, 0x83, 0xea, 0x0c,
+				0x48, 0x8b, 0x92, 0x3c, 0x04, 0x00, 0x00,
+			},
+			reg: x86asm.RDX,
+			want: func(*Interpreter) expression.Expression {
+				return expression.Mem8(expression.Imm(0x1430))
+			},
+		},
+		{
+			name: "reg",
+			// mov rax,0x1000 ; mov rcx,0xc ; sub rax,rcx ; mov rax,[rax+0x43c]
+			// %rcx holds a known immediate, so -1*rcx folds to the same [0x1430].
+			code: []byte{
+				0x48, 0xb8, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x48, 0xb9, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+				0x48, 0x29, 0xc8,
+				0x48, 0x8b, 0x80, 0x3c, 0x04, 0x00, 0x00,
+			},
+			reg: x86asm.RAX,
+			want: func(*Interpreter) expression.Expression {
+				return expression.Mem8(expression.Imm(0x1430))
+			},
+		},
+		{
+			name: "mem",
+			// mov rax,[rbx] ; sub rax,[rbx]. A memory operand is symbolic, so
+			// rax becomes X + (-1*X) with X = Mem8(rbx) and does not cancel.
+			code: []byte{0x48, 0x8b, 0x03, 0x48, 0x2b, 0x03},
+			reg:  x86asm.RAX,
+			want: func(it *Interpreter) expression.Expression {
+				x := expression.Mem8(it.Regs.GetX86(x86asm.RBX))
+				return expression.Add(x, expression.Multiply(expression.Imm(^uint64(0)), x))
+			},
+			symbolic: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := NewInterpreterWithCode(tc.code)
+			_, err := it.Loop()
+			require.ErrorIs(t, err, io.EOF)
+			got := it.Regs.GetX86(tc.reg)
+			assertEval(t, got, tc.want(it))
+			if tc.symbolic {
+				require.False(t, got.Match(expression.Imm(0)),
+					"X + (-1*X) with symbolic X must not fold to 0")
+			}
+		})
+	}
 }
 
 func TestRIPRelativeAddressing(t *testing.T) {
@@ -217,4 +287,56 @@ func TestRIPRelativeAddressing(t *testing.T) {
 	expectedExpr := expression.ZeroExtend(expression.Mem(expectedAddr, 8), 64)
 
 	assertEval(t, rcxVal, expectedExpr)
+}
+
+func TestDisplacementSignExtension(t *testing.T) {
+	// x86asm zero-extends 32-bit displacements, so immFromDisp must recover the
+	// sign for backward references while leaving a full 64-bit moffs address
+	// intact. Cover both immFromDisp call sites (MemArg and the RIP-relative
+	// MOV special case) plus the moffs64 form.
+	mem8 := func(addr uint64) expression.Expression {
+		return expression.ZeroExtend(expression.Mem(expression.Imm(addr), 8), 64)
+	}
+	for _, tc := range []struct {
+		name string
+		code []byte
+		base uint64
+		reg  x86asm.Reg
+		want expression.Expression
+	}{
+		{
+			// lea -0x1d13(%rip),%rdx at 0x6d96c -> 0x6bc60 (MemArg path).
+			name: "lea-negative-rip",
+			code: []byte{0x48, 0x8d, 0x15, 0xed, 0xe2, 0xff, 0xff},
+			base: 0x6d96c,
+			reg:  x86asm.RDX,
+			want: expression.Imm(0x6bc60),
+		},
+		{
+			// mov -0x1234(%rip),%rax at 0x10000: RIP=0x10007 -> [0xedd3]
+			// (RIP-relative MOV path, not MemArg).
+			name: "mov-negative-rip",
+			code: []byte{0x48, 0x8b, 0x05, 0xcc, 0xed, 0xff, 0xff},
+			base: 0x10000,
+			reg:  x86asm.RAX,
+			want: mem8(0xedd3),
+		},
+		{
+			// movabs rax, [0x1122334455667788]: the moffs64 form carries a full
+			// 64-bit address that must not be truncated to 32 bits.
+			name: "moffs64-full-width",
+			code: []byte{0x48, 0xa1, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11},
+			base: 0,
+			reg:  x86asm.RAX,
+			want: mem8(0x1122334455667788),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := NewInterpreterWithCode(tc.code)
+			it.CodeAddress = expression.Imm(tc.base)
+			_, err := it.Step()
+			require.NoError(t, err)
+			assertEval(t, it.Regs.GetX86(tc.reg), tc.want)
+		})
+	}
 }

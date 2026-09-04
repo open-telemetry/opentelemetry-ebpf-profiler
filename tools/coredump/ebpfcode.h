@@ -5,6 +5,7 @@
 #include "../../support/ebpf/types.h"
 #include <setjmp.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 
 struct cgo_ctx {
@@ -36,6 +37,7 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/go_labels.ebpf.c"
 #include "../../support/ebpf/hotspot_tracer.ebpf.c"
 #include "../../support/ebpf/interpreter_dispatcher.ebpf.c"
+#include "../../support/ebpf/luajit_tracer.ebpf.c"
 #include "../../support/ebpf/native_stack_trace.ebpf.c"
 #include "../../support/ebpf/perl_tracer.ebpf.c"
 #include "../../support/ebpf/php_tracer.ebpf.c"
@@ -49,6 +51,10 @@ void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_
   // Initialize variables set via RODATA.
   inverse_pac_mask        = new_inv_pac_mask;
   ruby_skip_native_resume = new_ruby_skip_native_resume;
+
+  // collect_trace rejects origin == 0. Use UINT16_MAX as a placeholder since
+  // the coredump test harness has no real origin registry.
+  origin_id_sampling = UINT16_MAX;
 }
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
@@ -97,6 +103,7 @@ int bpf_tail_call(void *ctx, UNUSED void *map, int index)
   case PROG_UNWIND_DOTNET: rc = unwind_dotnet(ctx); break;
   case PROG_UNWIND_DOTNET10: rc = unwind_dotnet10(ctx); break;
   case PROG_UNWIND_BEAM: rc = unwind_beam(ctx); break;
+  case PROG_UNWIND_LUAJIT: rc = unwind_luajit(ctx); break;
   case PROG_GO_LABELS: rc = go_labels(ctx); break;
   default: return -1;
   }

@@ -15,8 +15,8 @@ import (
 const (
 	// Some DSOs have few limited .eh_frame FDEs (e.g. PLT), and additional
 	// FDEs are in .debug_frame or external debug file. This controls how many
-	// intervals are needed to not follow .gnu_debuglink.
-	numIntervalsToOmitDebugLink = 20
+	// basic blocks are needed to not follow .gnu_debuglink.
+	numBlocksToOmitDebugLink = 8
 )
 
 // extractionFilter is used to filter in .eh_frame data when a better source
@@ -30,53 +30,24 @@ type extractionFilter struct {
 	// stub code with synthesized stack deltas.
 	entryStart, entryEnd uintptr
 
-	// entryPending is true if the entry stub stack delta has not been added.
-	entryPending bool
-
 	// ehFrames is true if .eh_frame stack deltas are found
 	ehFrames bool
 
 	// golangFrames is true if .gopclntab stack deltas are found
 	golangFrames bool
-
-	// unsortedFrames is set if stack deltas from unsorted source are found
-	unsortedFrames bool
 }
 
 var _ ehframeHooks = &extractionFilter{}
 
-// addEntryDeltas generates the entry stub stack deltas.
-func (f *extractionFilter) addEntryDeltas(deltas *sdtypes.StackDeltaArray) {
-	deltas.AddEx(sdtypes.StackDelta{
-		Address: uint64(f.entryStart),
-		Hints:   sdtypes.UnwindHintKeep,
-		Info:    sdtypes.UnwindInfoStop,
-	}, !f.unsortedFrames)
-	deltas.Add(sdtypes.StackDelta{
-		Address: uint64(f.entryEnd),
-		Info:    sdtypes.UnwindInfoInvalid,
-	})
-	f.ehFrames = true
-	f.entryPending = false
-}
-
-func (f *extractionFilter) fdeUnsorted() {
-	f.unsortedFrames = true
-}
-
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
-func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool {
+func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
 	// Drop FDEs inside the gopclntab area
 	if f.start <= fde.ipStart && fde.ipStart+fde.ipLen <= f.end {
 		return false
 	}
 	// Seems .debug_frame sometimes has broken FDEs for zero address
-	if f.unsortedFrames && fde.ipStart == 0 {
+	if fde.ipStart == 0 {
 		return false
-	}
-	// Insert entry stub deltas to their sorted position.
-	if f.entryPending && fde.ipStart >= f.entryStart {
-		f.addEntryDeltas(deltas)
 	}
 	// Drop FDEs overlapping with the detected entry stub.
 	if fde.ipStart+fde.ipLen > f.entryStart && f.entryEnd >= fde.ipStart {
@@ -89,7 +60,7 @@ func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.Sta
 }
 
 // deltaHook is a stub to satisfy ehframeHooks interface
-func (f *extractionFilter) deltaHook(uintptr, *vmRegs, sdtypes.StackDelta) {
+func (f *extractionFilter) deltaHook(uintptr, *vmRegs, sdtypes.UnwindInfo) {
 }
 
 // golangHook reports the .gopclntab area
@@ -106,7 +77,7 @@ type elfExtractor struct {
 
 	hooks ehframeHooks
 
-	deltas *sdtypes.StackDeltaArray
+	intervals *sdtypes.IntervalData
 
 	// allowGenericRegs enables generation of unwinding using specific general purpose
 	// registers as CFA base. This is possible for code that does not call into other
@@ -140,10 +111,10 @@ func isLibGenericRegsAllowed(elfFile *pfelf.File) bool {
 
 // Extract takes a filename for a modern ELF file that is accessible
 // and provides the stack delta intervals in the interval parameter
-func Extract(filename string, interval *sdtypes.IntervalData) error {
+func Extract(filename string) (*sdtypes.IntervalData, error) {
 	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
 	defer elfRef.Close()
-	return ExtractELF(elfRef, interval)
+	return ExtractELF(elfRef)
 }
 
 // detectEntryCode matches machine code for known entry stubs, and detects its length.
@@ -174,68 +145,57 @@ func detectEntry(ef *pfelf.File) int {
 
 // ExtractELF takes a pfelf.Reference and provides the stack delta
 // intervals for it in the interval parameter.
-func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
+func ExtractELF(elfRef *pfelf.Reference) (*sdtypes.IntervalData, error) {
 	elfFile, err := elfRef.GetELF()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return extractFile(elfFile, elfRef, interval)
+	return extractFile(elfFile, elfRef)
 }
 
 // extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
 // debug link references if needed.
-func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
-	interval *sdtypes.IntervalData) (err error) {
+func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference) (*sdtypes.IntervalData, error) {
 	// Parse the stack deltas from the ELF
+	intervals := &sdtypes.IntervalData{}
 	filter := extractionFilter{}
-	deltas := sdtypes.StackDeltaArray{}
 	ee := elfExtractor{
 		ref:              elfRef,
 		file:             elfFile,
-		deltas:           &deltas,
+		intervals:        intervals,
 		hooks:            &filter,
 		allowGenericRegs: isLibGenericRegsAllowed(elfFile),
 	}
-
 	if entryLength := detectEntry(elfFile); entryLength != 0 {
-		filter.entryStart = uintptr(elfFile.Entry)
-		filter.entryEnd = filter.entryStart + uintptr(entryLength)
-		filter.entryPending = true
-	}
+		bb := sdtypes.BasicBlock{
+			Start: elfFile.Entry,
+			End:   elfFile.Entry + uint64(entryLength),
+		}
+		bb.Deltas.Add(0, sdtypes.UnwindInfoStop)
+		intervals.Add(bb)
 
-	if err = ee.parseGoPclntab(); err != nil {
-		return fmt.Errorf("failure to parse golang stack deltas: %v", err)
+		filter.entryStart = uintptr(bb.Start)
+		filter.entryEnd = uintptr(bb.End)
+		filter.ehFrames = true
 	}
-	if err = ee.parseEHFrame(); err != nil {
-		return fmt.Errorf("failure to parse eh_frame stack deltas: %v", err)
+	if err := ee.parseGoPclntab(); err != nil {
+		return nil, fmt.Errorf("failure to parse golang stack deltas: %v", err)
 	}
-	if err = ee.parseDebugFrame(elfFile); err != nil {
-		return fmt.Errorf("failure to parse debug_frame stack deltas: %v", err)
+	if err := ee.parseEHFrame(); err != nil {
+		return nil, fmt.Errorf("failure to parse eh_frame stack deltas: %v", err)
 	}
-	if ee.ref != nil && len(deltas) < numIntervalsToOmitDebugLink {
+	if err := ee.parseDebugFrame(elfFile); err != nil {
+		return nil, fmt.Errorf("failure to parse debug_frame stack deltas: %v", err)
+	}
+	if ee.ref != nil && len(intervals.Blocks) < numBlocksToOmitDebugLink {
 		// There is only few stack deltas. See if we find the .gnu_debuglink
 		// debug information for additional .debug_frame stack deltas.
-		if err = ee.extractDebugDeltas(); err != nil {
-			return fmt.Errorf("failure to parse debug stack deltas: %v", err)
+		if err := ee.extractDebugDeltas(); err != nil {
+			return nil, fmt.Errorf("failure to parse debug stack deltas: %v", err)
 		}
 	}
-	if filter.entryPending {
-		filter.addEntryDeltas(ee.deltas)
+	if filter.ehFrames {
+		intervals.Sort()
 	}
-
-	// If multiple sources were merged, sort them.
-	if filter.unsortedFrames || (filter.ehFrames && filter.golangFrames) {
-		deltas.Sort()
-
-		dedup := deltas[0:0]
-		for i := 0; i < len(deltas); i++ {
-			dedup.Add(deltas[i])
-		}
-		deltas = dedup
-	}
-
-	*interval = sdtypes.IntervalData{
-		Deltas: deltas,
-	}
-	return nil
+	return intervals, nil
 }

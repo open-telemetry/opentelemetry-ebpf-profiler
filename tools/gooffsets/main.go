@@ -12,16 +12,18 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-type goLabelsOffsets struct {
+type goRuntimeOffsets struct {
 	mOffset             uint32
+	mGsignal            uint32
 	curg                uint32
 	labels              uint32
 	hmapCount           uint32
 	hmapLog2BucketCount uint32
 	hmapBuckets         uint32
+	schedBpOff          uint32
 }
 
-func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
+func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 	d, err := f.DWARF()
 	if err != nil {
 		return nil, err
@@ -35,6 +37,13 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 	if g == nil {
 		return nil, errors.New("type runtime.g not found")
 	}
+	// ReadChildTypeAndOffset repositions the reader to the field's type entry, so
+	// we re-seek to g.Offset before each sequential read from g's children.
+	r.Seek(g.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
 	mPType, mOffset, err := ReadChildTypeAndOffset(r, "m")
 	if err != nil {
 		return nil, err
@@ -43,6 +52,31 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 		return nil, errors.New("type of m in runtime.g is not a pointer")
 	}
 
+	// Read the gobuf offset within g and the bp offset within gobuf, reported as a single
+	// bp offset within g.
+	r.Seek(g.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
+	schedType, schedOffset, err := ReadChildTypeAndOffset(r, "sched")
+	if err != nil {
+		return nil, err
+	}
+	r.Seek(schedType.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
+	_, schedBpOff, err := ReadChildTypeAndOffset(r, "bp")
+	if err != nil {
+		return nil, err
+	}
+	r.Seek(schedType.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
 	mType, err := ReadType(r, mPType)
 	if err != nil {
 		return nil, err
@@ -52,6 +86,13 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 	_, err = r.Next()
 	if err != nil {
 		return nil, err
+	}
+	gsignalPType, gsignalOffset, err := ReadChildTypeAndOffset(r, "gsignal")
+	if err != nil {
+		return nil, err
+	}
+	if gsignalPType.Tag != dwarf.TagPointerType {
+		return nil, errors.New("type of gsignal in m is not a pointer")
 	}
 
 	r.Seek(mType.Offset)
@@ -82,10 +123,12 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 	}
 
 	if semver.Compare(version, "v1.24.0") >= 0 {
-		return &goLabelsOffsets{
-			mOffset: uint32(mOffset),
-			curg:    uint32(curgOffset),
-			labels:  uint32(labelsOffset),
+		return &goRuntimeOffsets{
+			mOffset:    uint32(mOffset),
+			mGsignal:   uint32(gsignalOffset),
+			curg:       uint32(curgOffset),
+			labels:     uint32(labelsOffset),
+			schedBpOff: uint32(schedOffset + schedBpOff),
 		}, nil
 	}
 
@@ -112,13 +155,15 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 		return nil, err
 	}
 
-	return &goLabelsOffsets{
+	return &goRuntimeOffsets{
 		mOffset:             uint32(mOffset),
+		mGsignal:            uint32(gsignalOffset),
 		curg:                uint32(curgOffset),
 		labels:              uint32(labelsOffset),
 		hmapCount:           uint32(countOffset),
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
+		schedBpOff:          uint32(schedOffset + schedBpOff),
 	}, nil
 }
 
@@ -158,10 +203,12 @@ func main() {
 	fmt.Printf(`"%s": {
 `, version)
 	fmt.Printf("\tm_offset:               %d,\n", offs.mOffset)
+	fmt.Printf("\tm_gsignal:              %d,\n", offs.mGsignal)
 	fmt.Printf("\tcurg:                   %d,\n", offs.curg)
 	fmt.Printf("\tlabels:                 %d,\n", offs.labels)
 	fmt.Printf("\thmap_count:             %d,\n", offs.hmapCount)
 	fmt.Printf("\thmap_log2_bucket_count: %d,\n", offs.hmapLog2BucketCount)
 	fmt.Printf("\thmap_buckets:           %d,\n", offs.hmapBuckets)
+	fmt.Printf("\tsched_bp_off:           %d,\n", offs.schedBpOff)
 	fmt.Println("},")
 }

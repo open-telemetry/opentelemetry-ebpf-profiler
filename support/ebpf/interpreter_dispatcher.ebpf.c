@@ -3,6 +3,7 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "go_runtime.h"
 #include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -17,6 +18,17 @@ struct per_cpu_records_t {
   __type(value, PerCPURecord);
   __uint(max_entries, 1);
 } per_cpu_records SEC(".maps");
+
+// per_cpu_records_kp is a second per-CPU record used by the probe unwinder.
+// At load time loadProbeUnwinders repoints its get_per_cpu_record() from
+// per_cpu_records to this map, so a perf sampler interrupting an in-flight uprobe
+// unwind (uprobes are not covered by bpf_prog_active) cannot clobber its record.
+struct per_cpu_records_kp_t {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __type(key, int);
+  __type(value, PerCPURecord);
+  __uint(max_entries, 1);
+} per_cpu_records_kp SEC(".maps");
 
 // metrics maps metric ID to a value
 struct metrics_t {
@@ -138,70 +150,22 @@ struct apm_int_procs_t {
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
-static EBPF_INLINE u64 go_get_g_register(UNUSED UnwindState *state)
-{
-#if defined(__aarch64__)
-  // On aarch64 for !iscgo programs the g is only stored in r28 register.
-  // CGO_ENABLED can be true even when runtime.iscgo is false; then we want to retrieve g from r28.
-  // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
-  return state->r28;
-#else
-  return 0;
-#endif
-}
-
-static EBPF_INLINE u64 go_get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
-{
-  u64 g_register = go_get_g_register(state);
-
-  if (offs->tls_offset == 0) {
-    DEBUG_PRINT("cl: TLS offset for g pointer missing; using register fallback if available");
-    return g_register;
-  }
-
-  u64 g_addr     = 0;
-  void *tls_base = NULL;
-  if (tsd_get_base(&tls_base) < 0) {
-    DEBUG_PRINT("cl: failed to get tsd base; using register fallback if available");
-    return g_register;
-  }
-  DEBUG_PRINT(
-    "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
-
-  if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
-    DEBUG_PRINT(
-      "cl: failed to read g_addr, tls_base(%lx); using register fallback if available",
-      (unsigned long)tls_base);
-  }
-
-  return g_addr ? g_addr : g_register;
-}
-
-static EBPF_INLINE void *go_get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
-{
-  u64 g_addr = go_get_g_ptr(offs, state);
-  if (!g_addr) {
-    return NULL;
-  }
-
-  DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", (unsigned long)g_addr, offs->m_offset);
-  void *m_ptr_addr;
-  if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
-    DEBUG_PRINT("cl: failed m_ptr_addr");
-    return NULL;
-  }
-  DEBUG_PRINT("cl: m_ptr_addr 0x%lx", (unsigned long)m_ptr_addr);
-  return m_ptr_addr;
-}
+// go_labels_disabled gates Go custom-label extraction. It mirrors the Go labels
+// configuration (Config.IsLabelsDisabled). The Go runtime offsets are loaded
+// independently whenever Go support is enabled.
+BPF_RODATA_VAR(bool, go_labels_disabled, true)
 
 static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
 {
-  u32 pid                  = record->trace.pid;
-  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
-  if (!offsets) {
-    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
+  if (go_labels_disabled) {
     return;
   }
+
+  if (record->goOffsets.m_offset == 0) {
+    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", record->trace.pid);
+    return;
+  }
+  GoRuntimeOffsets *offsets = &record->goOffsets;
 
   void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
   if (!m_ptr_addr) {
@@ -311,6 +275,8 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
       state->unwind_error = ERR_EMPTY_STACK;
     }
   }
+
+  refine_missing_mapping_error(state, record->usesAnonymousMappings);
 
   // If unwinding was aborted due to a critical error, push an error frame.
   if (state->unwind_error) {

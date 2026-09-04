@@ -4,11 +4,41 @@
 package python
 
 import (
+	"reflect"
 	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestValidateMaxValue(t *testing.T) {
+	type testStruct struct {
+		Sizeof uint `maxValue:"4096"`
+		Plain  uint
+	}
+	structType := reflect.TypeFor[testStruct]()
+
+	cases := []struct {
+		name      string
+		fieldName string
+		value     uint64
+		wantSizeE bool
+	}{
+		{"oversized 1GiB", "Sizeof", 1 << 30, true},
+		{"zero", "Sizeof", 0, true},
+		{"just over cap", "Sizeof", 4096 + 1, true},
+		{"at cap", "Sizeof", 4096, false},
+		{"nominal", "Sizeof", 224, false},
+		{"untagged", "Plain", 1 << 40, false},
+		{"missing field", "Nope", 123, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateMaxValue(structType, tc.fieldName, tc.value)
+			assert.Equal(t, tc.wantSizeE, err != nil, "err: %v", err)
+		})
+	}
+}
 
 func TestFrozenNameToFileName(t *testing.T) {
 	tests := map[string]struct {

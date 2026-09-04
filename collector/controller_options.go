@@ -1,10 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux && (amd64 || arm64)
+
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -13,9 +17,10 @@ type Option interface {
 }
 
 type controllerOption struct {
-	executableReporter reporter.ExecutableReporter
-	reporterFactory    func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	onShutdown         func() error
+	executableReporter   reporter.ExecutableReporter
+	processMetaEnrichers []process.MetaEnricher
+	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
+	onShutdown           func() error
 }
 
 type optFunc func(*controllerOption) *controllerOption
@@ -43,6 +48,18 @@ func WithOnShutdown(onShutdown func() error) Option {
 func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.reporterFactory = reporterFactory
+		return option
+	})
+}
+
+// WithProcessMetaEnricher registers a hook that is called once per process when it
+// is first observed and when its executable changes. The enricher may read from /proc or other sources and store
+// arbitrary key-value pairs in process.Meta.ExtraMeta. Those values are propagated
+// to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
+// resource or sample attributes on outgoing profiles.
+func WithProcessMetaEnricher(enrichers ...process.MetaEnricher) Option {
+	return optFunc(func(option *controllerOption) *controllerOption {
+		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
 		return option
 	})
 }

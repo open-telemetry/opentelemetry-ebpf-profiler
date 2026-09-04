@@ -119,6 +119,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 var (
@@ -136,7 +137,9 @@ var (
 // GetLoader returns the loader for ProcessManager to recognize and hook the HotSpot
 // libjvm for enabling JVM unwinding and symbolization.
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindHotspot), ProgName: "unwind_hotspot"},
+	})
 }
 
 func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

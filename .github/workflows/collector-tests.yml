@@ -16,22 +16,26 @@ concurrency:
 
 permissions:
   contents: read
-  issues: write
 
 jobs:
   test:
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Set up Go Stable
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       - name: Cache coredump modules
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/coredump/modulecache
           key: coredumps-collector-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
@@ -66,6 +70,9 @@ jobs:
           issuegenerator -path /tmp/testresults
 
   otelcol-ebpf-profiler:
+    permissions:
+      contents: read
+      issues: write
     strategy:
       matrix:
         include:
@@ -76,9 +83,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Set up Go Stable
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       - name: Clone Collector

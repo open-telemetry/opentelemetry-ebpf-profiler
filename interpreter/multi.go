@@ -90,6 +90,15 @@ func (m *MultiInstance) Detach(ebpf EbpfHandler, pid libpf.PID) error {
 	return errors.Join(errs...)
 }
 
+func (m *MultiInstance) UsesAnonymousMappings() bool {
+	for _, instance := range m.instances {
+		if instance.UsesAnonymousMappings() {
+			return true
+		}
+	}
+	return false
+}
+
 // SynchronizeMappings synchronizes mappings for all interpreter instances.
 func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
 	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping,

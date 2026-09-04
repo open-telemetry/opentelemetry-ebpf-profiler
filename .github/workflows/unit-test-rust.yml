@@ -28,13 +28,38 @@ jobs:
           - { target_arch: arm64, runner: ubuntu-24.04-arm, rust_target: aarch64-unknown-linux-musl }
     steps:
       - name: Clone code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           targets: ${{ matrix.rust_target }}
-          toolchain: 1.96.0
+          toolchain: 1.98.1
       - name: Install protoc
-        uses: ./.github/workflows/protoc
+        shell: bash
+        env:
+          PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
+          INSTALL_DIR: "/usr/local"
+        run: |
+          ARCH=$(uname -m)
+          case "$ARCH" in
+            x86_64)
+              PB_FILE="protoc-24.4-linux-x86_64.zip"
+              ;;
+            aarch64|arm64)
+              PB_FILE="protoc-24.4-linux-aarch_64.zip"
+              ;;
+            *)
+              echo "Unsupported architecture: $ARCH"
+              exit 1
+              ;;
+          esac
+          wget -nv "$PB_URL/$PB_FILE"
+          sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
+          sudo chmod +xr "$INSTALL_DIR/bin/protoc"
+          sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
+          sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
+          rm "$PB_FILE"
       - name: Tests
         run: make rust-tests

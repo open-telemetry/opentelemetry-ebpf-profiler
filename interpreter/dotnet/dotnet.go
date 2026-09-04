@@ -108,6 +108,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -119,6 +120,10 @@ const (
 	// maxBoundsSize is the maximum size of boundary debug info (for a method)
 	// that we accept as valid. This is to prevent OOM situation.
 	maxBoundsSize = 16 * 1024
+
+	// maxDotnetStructSize caps the size of any per-struct read from target
+	// memory. All real CoreCLR struct sizes are well below this value.
+	maxDotnetStructSize = 64 * 1024
 )
 
 var (
@@ -140,7 +145,10 @@ var dotnetGlobalInit = sync.OnceValue(func() error {
 })
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindDotnet), ProgName: "unwind_dotnet"},
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindDotnet10), ProgName: "unwind_dotnet10"},
+	})
 }
 
 func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

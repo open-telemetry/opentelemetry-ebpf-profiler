@@ -4,19 +4,25 @@
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
+	"go.opentelemetry.io/otel/attribute"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 type TraceEventMeta struct {
 	Comm           libpf.Comm
-	ProcessName    libpf.String
 	ExecutablePath libpf.String
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
+	// ExtraMeta holds key-value pairs produced by a processmanager.ProcessMetaEnricher.
+	// It is nil when no enricher is configured. Consumers can access this via
+	// SampleAttrProducer.CollectExtraSampleMeta to attach process-level attributes.
+	ExtraMeta      map[libpf.String]string
 	APMServiceName string
+	ResourceAttrs  attribute.Set
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
-	Origin         libpf.Origin
+	ProfileType    *TypeMetadata
 	Value          int64
 	PID, TID       libpf.PID
 	SpanID         libpf.APMSpanID
@@ -42,8 +48,15 @@ type ResourceToProfiles struct {
 	// comparable.
 	EnvVars map[libpf.String]libpf.String
 
+	// ResourceAttrs are the OTel resource attributes from ProcessContext,
+	// if available. Deliberately not part of ResourceKey: refreshing them as
+	// samples arrive lets a late-detected process context apply to the whole
+	// reporting period. The latest value always wins, an empty one included,
+	// so a cleared context drops attribution instead of leaving it stale.
+	ResourceAttrs attribute.Set
+
 	// Events holds the actual profiling information.
-	Events map[libpf.Origin]SampleToEvents
+	Events map[*TypeMetadata]SampleToEvents
 }
 
 // SampleToEvents maps a unique trace hash with its meta data to
@@ -83,4 +96,25 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+}
+
+// TypeMetadata describes how profiling events of a particular kind
+// should be interpreted and exported as an OTel profile.
+type TypeMetadata struct {
+	// PeriodType describes what is measured per period (e.g. "cpu").
+	// Empty means this profile type has no period (e.g. event-driven kinds).
+	PeriodType string
+
+	// PeriodUnit is the unit for PeriodType (e.g. "nanoseconds").
+	PeriodUnit string
+
+	// SampleType describes what a single sample represents (e.g. "samples").
+	SampleType string
+
+	// SampleUnit is the unit for SampleType (e.g. "count").
+	SampleUnit string
+
+	// ReportValues indicates whether a sample's value should be included
+	// in the exported sample (e.g. off-CPU durations).
+	ReportValues bool
 }

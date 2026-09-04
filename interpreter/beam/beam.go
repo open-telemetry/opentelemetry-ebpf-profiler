@@ -16,6 +16,7 @@ import (
 	"unsafe"
 
 	"github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
@@ -130,7 +131,9 @@ type beamInstance struct {
 }
 
 func GetLoader(_ Config) interpreter.Loader {
-	return loader
+	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindBEAM), ProgName: "unwind_beam"},
+	})
 }
 
 func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -151,7 +154,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Slice off the null-terminator before parsing
 	otpRelease, err := strconv.ParseUint(string(otpReleaseString[:len(otpReleaseString)-1]), 10, 32)
 	if err != nil || otpRelease > 255 {
-		return nil, fmt.Errorf("Invalid OTP Release: %v", otpReleaseString)
+		return nil, fmt.Errorf("invalid OTP Release: %v", otpReleaseString)
 	}
 
 	_, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)
@@ -340,6 +343,10 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 }
 
 func (d *beamData) Unload(_ interpreter.EbpfHandler) {
+}
+
+func (i *beamInstance) UsesAnonymousMappings() bool {
+	return true
 }
 
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {

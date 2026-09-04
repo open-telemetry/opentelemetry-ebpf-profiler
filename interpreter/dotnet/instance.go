@@ -109,6 +109,18 @@ var codeName = []string{
 	codeDynamic:                   "dynamic",
 }
 
+var stubFrameName = func() []libpf.String {
+	names := make([]libpf.String, len(codeName))
+	for codeType, name := range codeName {
+		names[codeType] = libpf.Intern("[stub: " + name + "]")
+	}
+	return names
+}()
+
+// stubDynamicFrameName is the fallback frame name for dynamic methods whose
+// friendly name cannot be resolved.
+var stubDynamicFrameName = stubFrameName[codeDynamic]
+
 // dotnetMapping reflects mapping of PE file to process.
 type dotnetMapping struct {
 	start, end uint64
@@ -124,8 +136,42 @@ type stringsHeapEntry struct {
 	gen  uint64
 }
 
+// dotnetRangeSection reflects the set of lpm prefixes for one range section.
 type dotnetRangeSection struct {
 	prefixes []lpm.Prefix
+}
+
+// rangeWalker carries per-walk state for walking a
+// RangeSectionMap/RangeSectionList/RangeList. It deduplicates every pointer
+// touched during the walk so that aliased or cyclic structures cannot cause
+// exponential traversal or infinite loops.
+type rangeWalker struct {
+	// seenAddress records every address visited while walking: map levels,
+	// fragment lists and RangeSections all live in the same address space, so
+	// seeing the same address in any context means it was already processed.
+	seenAddress map[libpf.Address]libpf.Void
+}
+
+// maxRangeSectionWalkNodes caps the number of distinct addresses that a
+// single RangeSectionMap/RangeSectionList/RangeList walk may visit. A
+// legitimate .NET process will never come close to this limit; it exists
+// to bound memory growth when the target's in-memory structures are
+// corrupt or adversarially crafted.
+const maxRangeSectionWalkNodes = 1 << 20
+
+// markSeen records addr and reports whether it is newly seen (true) or was
+// already visited (false). It returns an error when the walk has exceeded
+// maxRangeSectionWalkNodes, preventing unbounded memory growth on corrupt or
+// adversarially crafted target structures.
+func (w *rangeWalker) markSeen(addr libpf.Address) (bool, error) {
+	if _, ok := w.seenAddress[addr]; ok {
+		return false, nil
+	}
+	if len(w.seenAddress) >= maxRangeSectionWalkNodes {
+		return false, fmt.Errorf("range walk exceeded %d-node limit", maxRangeSectionWalkNodes)
+	}
+	w.seenAddress[addr] = libpf.Void{}
+	return true, nil
 }
 
 type dotnetInstance struct {
@@ -164,8 +210,6 @@ type dotnetInstance struct {
 
 	ranges map[libpf.Address]dotnetRangeSection
 
-	rangeSectionSeen map[libpf.Address]libpf.Void
-
 	// moduleToPEInfo maps Module* to it's peInfo. Since a dotnet instance will have
 	// limited number of PE files mapped in, this is a map instead of a LRU.
 	moduleToPEInfo map[libpf.Address]*peInfo
@@ -190,7 +234,7 @@ type dotnetInstance struct {
 func (i *dotnetInstance) appendStubFrame(frames *libpf.Frames, codeType uint) {
 	frames.Append(&libpf.Frame{
 		Type:         libpf.DotnetFrame,
-		FunctionName: libpf.Intern("[stub: " + codeName[codeType] + "]"),
+		FunctionName: stubFrameName[codeType],
 	})
 }
 
@@ -246,7 +290,15 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 	stubName := codeName[codeType]
 	log.Debugf("Found %s stub range list head at %x", stubName, headPtr)
 	blockNum := 0
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 	for blockPtr := headPtr + 0x8; blockPtr != 0; blockNum++ {
+		fresh, err := w.markSeen(blockPtr)
+		if err != nil {
+			return
+		}
+		if !fresh {
+			return
+		}
 		if err := i.rm.Read(blockPtr, block); err != nil {
 			log.Debugf("Failed to read %s stub range block %d: %v",
 				stubName, blockNum, err)
@@ -340,8 +392,16 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 	vms := &i.d.Get().Types
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
 	ptr := i.rm.Ptr(i.codeRangeListPtr)
 	for ptr != 0 {
+		fresh, err := w.markSeen(ptr)
+		if err != nil {
+			return err
+		}
+		if !fresh {
+			break
+		}
 		if err := i.rm.Read(ptr, rangeSection); err != nil {
 			return err
 		}
@@ -356,23 +416,32 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 // walkRangeSectionMapFragments walks a RangeSectionMap::RangeSectionFragment list and processes
 // the RangeSections from it.
 func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	fragmentPtr libpf.Address,
+	fragmentPtr libpf.Address, w *rangeWalker,
 ) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L974
 	vms := &i.d.Get().Types
 	fragment := make([]byte, 4*8)
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	for fragmentPtr != 0 {
+		fresh, err := w.markSeen(fragmentPtr)
+		if err != nil {
+			return err
+		}
+		if !fresh {
+			break
+		}
 		if err := i.rm.Read(fragmentPtr, fragment); err != nil {
 			return fmt.Errorf("failed to read fragment: %v", err)
 		}
 		// Remove collectible bit
 		fragmentPtr = npsr.Ptr(fragment, 0) &^ 1
 		rangeSectionPtr := npsr.Ptr(fragment, 24)
-		if _, ok := i.rangeSectionSeen[rangeSectionPtr]; ok {
+		if fresh, err = w.markSeen(rangeSectionPtr); err != nil {
+			return err
+		}
+		if !fresh {
 			continue
 		}
-		i.rangeSectionSeen[rangeSectionPtr] = libpf.Void{}
 
 		if err := i.rm.Read(rangeSectionPtr, rangeSection); err != nil {
 			return fmt.Errorf("failed to read range section: %v", err)
@@ -386,7 +455,7 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 
 // walkRangeSectionMapLevel walks recursively a level index of a RangeSectionMap.
 func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	levelMapPtr libpf.Address, level uint,
+	levelMapPtr libpf.Address, level uint, w *rangeWalker,
 ) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L999-L1002
 	const maxLevel = 5
@@ -403,11 +472,18 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 			continue
 		}
 		if level < maxLevel {
-			if err := i.walkRangeSectionMapLevel(ebpf, pid, ptr, level+1); err != nil {
+			fresh, err := w.markSeen(ptr)
+			if err != nil {
+				return err
+			}
+			if !fresh {
+				continue
+			}
+			if err := i.walkRangeSectionMapLevel(ebpf, pid, ptr, level+1, w); err != nil {
 				return err
 			}
 		} else {
-			if err := i.walkRangeSectionMapFragments(ebpf, pid, ptr); err != nil {
+			if err := i.walkRangeSectionMapFragments(ebpf, pid, ptr, w); err != nil {
 				return err
 			}
 		}
@@ -417,10 +493,8 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 
 // walkRangeSectionMap processes a dotnet8 RangeSectionMap to enumerate all RangeSections
 func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	i.rangeSectionSeen = make(map[libpf.Address]libpf.Void)
-	err := i.walkRangeSectionMapLevel(ebpf, pid, i.codeRangeListPtr, 1)
-	i.rangeSectionSeen = nil
-	return err
+	w := &rangeWalker{seenAddress: make(map[libpf.Address]libpf.Void)}
+	return i.walkRangeSectionMapLevel(ebpf, pid, i.codeRangeListPtr, 1, w)
 }
 
 // resolveStringsHeapAddr returns the absolute process address of the #Strings
@@ -493,6 +567,16 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	tokenRemainder &= cdac.calculated.MethodDescTokenRemainderMask
 	chunkIndex := npsr.Uint8(methodDesc, vms.MethodDesc.ChunkIndex)
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
+	dynamicName := libpf.NullString
+	if classification == mcDynamic {
+		dynamicName = stubDynamicFrameName
+		if vms.DynamicMethodDesc.MethodName != 0 {
+			if name := libpf.Intern(i.rm.StringPtr(methodDescPtr +
+				libpf.Address(vms.DynamicMethodDesc.MethodName))); name != libpf.NullString {
+				dynamicName = name
+			}
+		}
+	}
 
 	// Calculate the offset to the owning MethodDescChunk structure
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L2321-L2328
@@ -525,12 +609,13 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
 	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
-	if err != nil {
+	if err != nil && classification != mcDynamic {
 		return nil, err
 	}
 
 	method := &dotnetMethod{
 		classification: classification,
+		dynamicName:    dynamicName,
 		index:          index,
 		module:         module,
 	}
@@ -729,7 +814,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	}
 
 	if err := i.d.walkRangeSectionsMethod(i, ebpf, pr.PID()); err != nil {
-		log.Infof("Failed to walk code ranges: %v", err)
+		log.Debugf("Failed to walk code ranges: %v", err)
 	}
 	if i.precodeStubManagerPtr != 0 {
 		if vms.PrecodeStubManager.StubPrecodeRangeList != 0 {
@@ -857,7 +942,19 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		if err != nil {
 			return err
 		}
-		if method.index == 0 || method.classification == mcDynamic {
+		if method.classification == mcDynamic {
+			frame := &libpf.Frame{
+				Type:         libpf.DotnetFrame,
+				FunctionName: method.dynamicName,
+			}
+			if method.module != nil {
+				frame.SourceFile = method.module.simpleName
+				frame.Mapping = method.module.mapping
+			}
+			frames.Append(frame)
+			break
+		}
+		if method.index == 0 {
 			i.appendStubFrame(frames, codeDynamic)
 			break
 		}

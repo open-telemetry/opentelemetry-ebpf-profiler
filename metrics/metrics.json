@@ -2153,5 +2153,82 @@
     "name": "GoLabelsDroppedInvalidValue",
     "field": "agent.golabels.dropped.invalid_value",
     "id": 294
+  },
+  {
+    "description": "Number of times bpf_find_vma found no VMA for the current PC",
+    "type": "counter",
+    "name": "UnwindNativeErrNoVMA",
+    "field": "bpf.native.errors.no_vma",
+    "id": 295
+  },
+  {
+    "description": "Number of native-only anonymous executable VMA misses suppressed in eBPF",
+    "type": "counter",
+    "name": "UnwindNativeErrUnsupportedAnonymousMapping",
+    "field": "bpf.native.errors.unsupported_anonymous_mapping",
+    "id": 296
+  },
+  {
+    "description": "Number of times the current PC was found in a non-executable VMA",
+    "type": "counter",
+    "name": "UnwindNativeErrNonExecutableVMA",
+    "field": "bpf.native.errors.non_executable_vma",
+    "id": 297
+  },
+  {
+    "description": "Number of attempted LuaJIT unwinds",
+    "type": "counter",
+    "name": "UnwindLuaJITAttempts",
+    "field": "bpf.luajit.attempts",
+    "id": 298
+  },
+  {
+    "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
+    "type": "counter",
+    "name": "UnwindLuaJITErrNoProcInfo",
+    "field": "bpf.luajit.errors.no_proc_info",
+    "id": 299
+  },
+  {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 300
+  },
+  {
+    "description": "Number of PID resynchronizations triggered by the prctl monitor",
+    "type": "counter",
+    "name": "NumSyncsFromPrctl",
+    "field": "bpf.num_syncs_from_prctl",
+    "id": 301
+  },
+  {
+    "description": "Number of priority PID events deferred (recorded but not signalled) due to rate limiting",
+    "type": "counter",
+    "name": "NumPriorityEventDeferred",
+    "field": "bpf.num_priority_event_deferred",
+    "id": 302
+  },
+  {
+    "description": "Number of attempted Go asmcgocall stack-switch unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallAttempts",
+    "field": "bpf.go.asmcgocall_attempts",
+    "id": 303
+  },
+  {
+    "description": "Number of successful Go asmcgocall unwinds",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallSuccess",
+    "field": "bpf.go.asmcgocall_success",
+    "id": 304
+  },
+  {
+    "description": "Number of Go asmcgocall unwind failures",
+    "type": "counter",
+    "name": "UnwindGoAsmcgocallUnwindFailure",
+    "field": "bpf.go.errors.asmcgocall_unwind_failure",
+    "id": 305
   }
 ]

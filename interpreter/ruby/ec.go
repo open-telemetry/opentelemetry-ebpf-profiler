@@ -31,7 +31,7 @@ func extractEcTLSOffset(ef *pfelf.File) (int64, error) {
 			if s.Name == symbolName {
 				data, readErr := ef.VirtualMemory(int64(s.Address), int(s.Size), 2048)
 				if readErr != nil {
-					log.Errorf("Failed to read memory for %s: %v", symbolName, readErr)
+					log.Debugf("Failed to read memory for %s: %v", symbolName, readErr)
 				} else {
 					code = data
 					sym.Address = s.Address

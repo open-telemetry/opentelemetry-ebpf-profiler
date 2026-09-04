@@ -1,4 +1,4 @@
-# Introduction
+# OpenTelemetry eBPF Profiler
 
 This repository implements a whole-system, cross-language profiler for Linux via
 eBPF.
@@ -29,33 +29,6 @@ eBPF.
 - Support for native `inline frames`, which provide insights into compiler
   optimizations and offer a higher precision of function call chains.
 
-## Building
-
-We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
-and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
-
-To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
-and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
-supported in any way, can be dropped in the future and should not be deployed in production.
-
-## Platform Requirements
-The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
-
- For **Linux**, the following steps apply:
-  1. Build the agent for your current machine's architecture:
-     ```sh
-     make agent
-     ```
-     Or `make debug-agent` for debug build.
-  2. To cross-compile for a different architecture (e.g. arm64):
-     ```sh
-     make agent TARGET_ARCH=arm64
-     ```
-The resulting binary will be named `ebpf-profiler` in the current directory.
-
-## Other OSes
-Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
-
 ## Supported Linux kernel version
 
 The minimum required Linux kernel version has increased with certain commits. Specifically:
@@ -69,18 +42,40 @@ The project maintains its minimum supported kernel version in line with the lowe
 
 It should be noted that certain distributions incorporate eBPF features from newer kernels into their supported versions. When this occurs, the distribution's stated kernel version does not accurately reflect its true eBPF capabilities and will not prevent us from increasing the minimum supported version. On such kernels, the `no-kernel-version-check` configuration option can be used to bypass the checks and allow the profiler to execute.
 
-## Alternative Build (Without Docker)
+## Building
+
+We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
+and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
+
+To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
+and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
+supported in any way, can be dropped in the future and should not be deployed in production.
+
+### Platform Requirements
+The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
+
+ For **Linux**, the following steps apply:
+ 1. Build the agent for your current machine's architecture:
+     ```sh
+     make agent
+     ```
+ 2. To cross-compile for a different architecture (e.g. arm64):
+     ```sh
+     make agent TARGET_ARCH=arm64
+     ```
+The resulting binary will be named `ebpf-profiler` in the current directory.
+
+### Other OSes
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
+
+### Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
 make
 ```
-or
-```sh
-make debug
-```
 This will build the profiler natively on your machine.
 
-## Building `otelcol-ebpf-profiler` locally (Without Docker)
+### Building `otelcol-ebpf-profiler` locally (Without Docker)
 You can build the local `otelcol-ebpf-profiler` binary by running:
 ```sh
 make otelcol-ebpf-profiler
@@ -90,7 +85,7 @@ or to cross-compile for a different architecture (e.g. arm64):
 make otelcol-ebpf-profiler TARGET_ARCH=arm64
 ```
 
-See [local.example.yml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
+See [local.example.yaml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
 
 ## Running
 
@@ -112,6 +107,7 @@ The agent loads the eBPF program and its maps, starts unwinding and reports
 captured traces to the backend.
 
 ## Open Source Backends
+
 As the OTel Profiles signal is still in development, mature production-ready
 backends have yet to emerge. The following open source projects can be used as backends:
 
@@ -124,28 +120,68 @@ backends have yet to emerge. The following open source projects can be used as b
 - [Pyroscope](https://github.com/grafana/pyroscope) — an open source continuous
   profiling database that natively supports ingesting OTel profiling data.
 
-## Development
+## Contributing
 
-To understand how this project works and learn more about profiling, check out [Profiling internals](doc/internals.md)
+We welcome contributions of all kinds: bug reports, feature requests,
+documentation improvements and code. Everyone is welcome to open issues and
+send pull requests.
 
-# Legal
+Before contributing, please read the [contributing
+guidelines](CONTRIBUTING.md). They cover the development prerequisites, how to
+build and test your changes, the pull request workflow, and how PRs get
+reviewed and merged.
 
-## Licensing Information
+To understand how this project works and learn more about profiling, check out
+[Profiling internals](doc/internals.md).
+
+This project is developed by the OpenTelemetry Profiling SIG, which meets
+regularly. See the OpenTelemetry
+[community repository](https://github.com/open-telemetry/community) for the
+meeting schedule, and join us in the
+[#otel-profiles](https://cloud-native.slack.com/archives/C03J794L0BV) channel
+on the [CNCF Slack](https://slack.cncf.io/) for discussions and questions.
+
+### Maintainers
+
+- [Felix Geisendörfer](https://github.com/felixge), Datadog
+- [Christos Kalkanis](https://github.com/christos68k), Elastic
+- [Timo Teräs](https://github.com/fabled)
+
+For more information about the maintainer role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
+
+### Approvers
+
+- [Roger Coll](https://github.com/rogercoll), Elastic
+- [Florian Lehner](https://github.com/florianl), Elastic
+- [Damien Mathieu](https://github.com/dmathieu), Elastic
+- [Tim Rühsen](https://github.com/rockdaboot)
+
+For more information about the approver role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
+
+### Emeritus
+
+- [Dmitry Filimonov](https://github.com/petethepig), Maintainer
+- [Joel Höner](https://github.com/athre0z), Approver
+
+For more information about the emeritus role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
+
+### Become an Approver or a Maintainer
+
+See the [community membership document in OpenTelemetry community
+repo](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md).
+
+## Legal
+
+### Licensing Information
 
 This project is licensed under the Apache License 2.0 (Apache-2.0).
 [Apache License 2.0](LICENSE)
 
 The eBPF source code is licensed under the GPL 2.0 license.
 [GPL 2.0](support/ebpf/LICENSE)
-
-### Emeritus
-
-- [Dmitry Filimonov](https://github.com/petethepig), Maintainer
-- [Joel Höner](https://github.com/athre0z), Approver
-- [Tim Rühsen](https://github.com/rockdaboot), Approver
-
-For more information about the emeritus role, see the
-[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
 
 ## Licenses of dependencies
 

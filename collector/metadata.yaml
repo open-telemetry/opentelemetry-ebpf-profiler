@@ -1,5 +1,6 @@
 type: profiling
 github_project: open-telemetry/opentelemetry-ebpf-profiler
+scope_name: go.opentelemetry.io/ebpf-profiler
 
 status:
   disable_codecov_badge: true

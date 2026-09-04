@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -13,6 +14,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
+
+type nopEbpf struct{ interpreter.EbpfHandler }
+
+func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) error {
+	return nil
+}
 
 func BenchmarkGolang(b *testing.B) {
 	pc, _, _, ok := runtime.Caller(1)
@@ -33,17 +40,16 @@ func BenchmarkGolang(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create hostID: %v", err)
 	}
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
 
 	b.ReportAllocs()
 	for b.Loop() {
-		gD, err := GetLoader(Config{})(nil, loaderInfo)
+		gD, err := GetLoader(Config{}).Load(nil, interpreter.NewLoaderInfo(hostFileID, elfRef, nil))
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)
 		}
 
-		gI, err := gD.Attach(nil, libpfPID, 0x0, rm)
+		gI, err := gD.Attach(nopEbpf{}, libpfPID, 0x0, rm)
 		if err != nil {
 			b.Fatalf("Failed to create instance: %v", err)
 		}

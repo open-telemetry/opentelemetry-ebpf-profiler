@@ -4,16 +4,19 @@
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
+	"errors"
 	"fmt"
+	"go/version"
 	"sync/atomic"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 var (
@@ -23,124 +26,132 @@ var (
 )
 
 type goData struct {
-	refs atomic.Int32
-
-	fileID  host.FileID
-	version string
+	fileID    host.FileID
+	goVersion string
+	offsets   support.GoRuntimeOffsets
 
 	pclntab *elfunwindinfo.Gopclntab
+	// refs only tracks the pclntab lifetime.
+	// without it there is nothing to reference-count.
+	refs atomic.Int32
 }
 
 type goInstance struct {
 	interpreter.InstanceStubs
+	d *goData
 
 	// Go symbolization metrics
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
-
-	d *goData
 }
 
-func GetLoader(_ Config) interpreter.Loader {
-	return loader
+var errDecodeSymbol = errors.New("failed to decode symbol")
+var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
+
+func (d *goData) unref() {
+	if d.pclntab == nil {
+		return
+	}
+	if d.refs.Add(-1) == 0 {
+		_ = d.pclntab.Close()
+	}
 }
 
-func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
-	interpreter.Data, error) {
-	ef, err := info.GetELF()
+func (d *goData) String() string {
+	return "Go " + d.goVersion
+}
+
+func (d *goData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	if err := ebpf.UpdateProcData(libpf.Go, pid, unsafe.Pointer(&d.offsets)); err != nil {
+		return nil, err
+	}
+	if d.pclntab != nil {
+		d.refs.Add(1)
+	}
+	return &goInstance{d: d}, nil
+}
+
+func (i *goInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	err := ebpf.DeleteProcData(libpf.Go, pid)
+	i.d.unref()
+	return err
+}
+
+func (d *goData) Unload(_ interpreter.EbpfHandler) {
+	d.unref()
+}
+
+func GetLoader(cfg Config) interpreter.Loader {
+	resources := []interpreter.InterpreterResource{{MapName: BPFMapName}}
+	if !cfg.IsLabelsDisabled() {
+		resources = append(resources, interpreter.InterpreterResource{
+			ProgID: uint32(support.ProgGoLabels), ProgName: "go_labels",
+		})
+	}
+	return interpreter.NewLoader(
+		func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+			return loader(cfg, info)
+		},
+		resources,
+	)
+}
+
+func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+	file, err := info.GetELF()
 	if err != nil {
 		return nil, err
 	}
-	goVersion, err := ef.GoVersion()
-	if goVersion == "" || err != nil {
-		return nil, err
+	if !file.IsGolang() {
+		return nil, nil
+	}
+	if !file.IsExecutable() {
+		// Go plugins are shared objects that share the runtime with the main
+		// binary. The offsets we need are determined by the main binary so there
+		// is no reason to create a duplicate instance for a plugin.
+		log.Debugf("file %s is a Go shared library, skipping", info.FileName())
+		return nil, nil
 	}
 
-	pclntab, err := elfunwindinfo.NewGopclntab(ef)
-	if pclntab == nil {
-		return nil, err
+	goVersion := file.GoVersion()
+	if goVersion == "" {
+		// unable to extract, usually limited to old coredump tests
+		goVersion = "go1.16"
+		log.Debugf("file %s go version failed, assuming: %v", info.FileName(), goVersion)
+	} else {
+		log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
 	}
 
-	g := &goData{
-		fileID:  info.FileID(),
-		version: goVersion,
-		pclntab: pclntab,
-	}
-	g.refs.Store(1)
-	return g, nil
-}
-
-func (g *goData) unref() {
-	if g.refs.Add(-1) == 0 {
-		_ = g.pclntab.Close()
-	}
-}
-
-func (g *goData) String() string {
-	return "Golang symbolizer " + g.version
-}
-
-func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	g.refs.Add(1)
-	return &goInstance{d: g}, nil
-}
-
-func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	g.unref()
-}
-
-func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDGoSymbolizationSuccess,
-			Value: metrics.MetricValue(g.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDGoSymbolizationFailure,
-			Value: metrics.MetricValue(g.failCount.Swap(0)),
-		},
-	}, nil
-}
-
-func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
-	g.d.unref()
-	return nil
-}
-
-func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error {
-	if !ef.Type().IsInterpType(libpf.Native) {
-		return interpreter.ErrMismatchInterpreterType
-	}
-	// Skip native frames that do not belong to this Go binary.
-	if host.FileID(ef.Variable(0)) != g.d.fileID {
-		return interpreter.ErrMismatchInterpreterType
+	if version.Compare(goVersion, "go1.28") >= 0 {
+		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.27)", goVersion)
 	}
 
-	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
-	defer sfCounter.DefaultToFailure()
-
-	address := ef.Data()
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(address))
-	if fn == "" {
-		return fmt.Errorf("failed to symbolize 0x%x", address)
+	offsets := getOffsets(goVersion)
+	tlsOffset, err := extractTLSGOffset(file)
+	switch {
+	case errors.Is(err, libpf.ErrSymbolNotFound):
+		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
+	case errors.Is(err, errDecodeSymbol), errors.Is(err, errRuntimeIsCgoUnavailable):
+		log.Debugf("In %s: %v", info.FileName(), err)
+	case errors.Is(err, nil):
+		// Nothing to do - just continue
+	default:
+		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
 	}
-	// See comment about return address handling in ProcessManager.convertFrame
-	if ef.Flags().ReturnAddress() {
-		address--
-	}
-	frames.Append(&libpf.Frame{
-		Type:            libpf.GoFrame,
-		AddressOrLineno: libpf.AddressOrLineno(address),
-		Mapping:         mapping,
-		FunctionName:    libpf.Intern(fn),
-		SourceFile:      libpf.Intern(sourceFile),
-		SourceLine:      libpf.SourceLineno(lineNo),
-	})
-	sfCounter.ReportSuccess()
-	return nil
-}
+	offsets.Tls_offset = tlsOffset
 
-func (g *goInstance) ReleaseResources() error {
-	return g.d.pclntab.SetDontNeed()
+	d := &goData{
+		fileID:    info.FileID(),
+		goVersion: goVersion,
+		offsets:   offsets,
+	}
+	if !cfg.IsSymbolizationDisabled() {
+		pclntab, err := elfunwindinfo.NewGopclntab(file)
+		if err != nil {
+			return nil, err
+		}
+		d.pclntab = pclntab
+		d.refs.Store(1)
+	}
+	return d, nil
 }

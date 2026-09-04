@@ -12,6 +12,7 @@ package main
 // this, definitions must be placed in preambles in other files, or in C source files.
 
 import (
+	"fmt"
 	"math/bits"
 	"unsafe"
 
@@ -110,7 +111,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 	case unsafe.Pointer(&C.dotnet_procs), unsafe.Pointer(&C.perl_procs),
 		unsafe.Pointer(&C.php_procs), unsafe.Pointer(&C.py_procs),
 		unsafe.Pointer(&C.hotspot_procs), unsafe.Pointer(&C.ruby_procs),
-		unsafe.Pointer(&C.v8_procs):
+		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_procs):
 		if innerMap, ok := ctx.maps[mapdef]; ok {
 			if val, ok := innerMap[*(*C.u32)(keyptr)]; ok {
 				return val
@@ -130,18 +131,12 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		return stackDeltaInnerMap
 	case unsafe.Pointer(&C.unwind_info_array):
 		key := uintptr(*(*C.u32)(keyptr))
-		return unsafe.Pointer(uintptr(ctx.unwindInfoArray) + key*C.sizeof_UnwindInfo)
+		return unsafe.Add(ctx.unwindInfoArray, key*C.sizeof_UnwindInfo)
 	case stackDeltaInnerMap:
 		key := uintptr(*(*C.u32)(keyptr))
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
-			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
+			return unsafe.Add(deltas, key*C.sizeof_StackDelta)
 		}
-	case unsafe.Pointer(&C.metrics), unsafe.Pointer(&C.report_events),
-		unsafe.Pointer(&C.reported_pids), unsafe.Pointer(&C.pid_events), unsafe.Pointer(&C.inhibit_events),
-		unsafe.Pointer(&C.apm_int_procs), unsafe.Pointer(&C.go_labels_procs):
-		return unsafe.Pointer(uintptr(0))
-	default:
-		log.Errorf("Map at 0x%x not found", mapdef)
 	}
 	return unsafe.Pointer(uintptr(0))
 }
@@ -149,7 +144,13 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 //export __bpf_copy_frame
 func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 	ctx := ebpfContextMap[id]
+	if trace.num_kernel_frames != 0 {
+		panic(fmt.Sprintf("coredump trace unexpectedly contains %d kernel frames",
+			uint16(trace.num_kernel_frames)))
+	}
 	sz := trace.frame_data_len
 	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.frame_data[:sz]))
 	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
+	ctx.trace.NumFrames = uint16(trace.num_frames)
+	ctx.trace.NumKernelFrames = 0
 }
