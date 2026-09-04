@@ -156,6 +156,14 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// sampleSources are probes that implement SampleSource and produce
+	// additional profiles at each collection interval.
+	sampleSources []SampleSource
+
+	// metricsProviders are probes that implement MetricsProvider and expose
+	// operational metrics collected once per report interval.
+	metricsProviders []MetricsProvider
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -167,6 +175,11 @@ type Tracer struct {
 // when the tracer should be stopped.
 func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
+}
+
+// ProcessManager returns the process manager.
+func (t *Tracer) ProcessManager() *pm.ProcessManager {
+	return t.processManager
 }
 
 // signalDone closes the done channel to indicate an unrecoverable error.
@@ -1013,6 +1026,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
 		Value:            int64(ptr.Value),
+		Ptr:              ptr.Ptr,
+		Size:             ptr.Size,
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 	}

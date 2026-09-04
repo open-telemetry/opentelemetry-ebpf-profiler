@@ -704,6 +704,24 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
+	// Number of heap allocs dropped in eBPF due to per-PID live-heap cap
+	IDHeapPerPIDLimitHit = 306
+
+	// Number of heap allocs dropped in eBPF due to global live-heap map full
+	IDHeapLiveMapFull = 307
+
+	// Number of PIDs that failed to be added to heap_live_pids (map full)
+	IDHeapLivePIDMapFull = 308
+
+	// Current number of live heap entries tracked globally
+	IDLiveHeapEntries = 309
+
+	// Number of heap malloc samples received per reporting interval
+	IDHeapAllocSamples = 310
+
+	// Number of heap free samples received per reporting interval
+	IDHeapFreeSamples = 311
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 306
+	IDMax = 312
 )

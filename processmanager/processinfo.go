@@ -570,16 +570,9 @@ func (c *interpreterMappingCollector) mappings() []process.RawMapping {
 // SynchronizeProcess triggers ProcessManager to update its internal information
 // about a process. It synchronizes executable mappings for the given PID by
 // parsing /proc/PID/maps and building the internal mapping state directly in
-// a single pass. This method will be called when a PID is first encountered or
-// when the eBPF code encounters an address in an executable mapping that HA has
-// no information on. Therefore, executable mapping synchronization takes place
-// lazily on-demand, and map/unmap operations are not precisely tracked (reduce
-// processing load). This means that at any point, we may have cached stale (or
-// miss) executable mappings. The expectation is that stale mappings will
-// disappear and new mappings cached at the next synchronization triggered by
-// process exit or unknown address encountered.
-//
-// TODO: Periodic synchronization of mappings for every tracked PID.
+// a single pass. This method is called when a PID is first encountered, when the
+// eBPF code encounters an unknown executable mapping, and periodically to pick
+// up mapping changes which do not otherwise generate a synchronization event.
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
@@ -858,31 +851,35 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 }
 
-// CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.
+// CleanupPIDs periodically resynchronizes mappings for tracked live processes
+// and removes processes that have exited.
 // NOTE: Exported only for tracer.
 func (pm *ProcessManager) CleanupPIDs() {
-	deadPids := make([]libpf.PID, 0, 16)
-
 	pm.mu.RLock()
+	pids := make([]libpf.PID, 0, len(pm.pidToProcessInfo))
 	for pid := range pm.pidToProcessInfo {
-		if live, _ := isPIDLive(pid); !live {
-			deadPids = append(deadPids, pid)
-		}
+		pids = append(pids, pid)
 	}
 	pm.mu.RUnlock()
 
-	for _, pid := range deadPids {
+	deadPIDCount := 0
+	for _, pid := range pids {
+		if live, _ := isPIDLive(pid); live {
+			pm.SynchronizeProcess(process.New(pid, pid))
+			continue
+		}
 		pm.processPIDExit(pid)
+		deadPIDCount++
 	}
 
-	if len(deadPids) > 0 {
-		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
+	if deadPIDCount > 0 {
+		log.Debugf("Cleaned up %d dead PIDs", deadPIDCount)
 	}
 }
 
-// metaForPID returns the process metadata and process-context resource
+// MetaForPID returns the process metadata and process-context resource
 // attributes for pid, read under one lock.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set) {
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) (process.Meta, attribute.Set) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {

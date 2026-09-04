@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "nextId": 3,
+  "todos": [
+    {
+      "id": 1,
+      "text": "Open a separate PR against main to make ProbeAttacher.Attach receive the matched *process.RawMapping, add forwarding tests, ask Florian to review, then rebase PR1 and attach uprobes to the actual mapped file.",
+      "done": true,
+      "createdAt": 1787298060579,
+      "completedAt": 1787301716275
+    },
+    {
+      "id": 2,
+      "text": "Fix and generalise heap probe payload handling: retain allocation size in the live userspace tracker so inuse_objects uses weighted_bytes / size (currently it counts sampled live allocations), and revisit the generic Trace value/ptr/size origin-specific side channel, including parsing USDT argument-location descriptors instead of assuming fixed ABI registers.",
+      "done": false,
+      "createdAt": 1788181787326
+    }
+  ]
+}
