@@ -121,7 +121,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		vms.zend_string.val)
 
 	if fname != "" && !util.IsValidString(fname) {
-		log.Debugf("Extracted invalid PHP function name at 0x%x '%v'", addr, []byte(fname))
+		log.Debug("Extracted invalid PHP function name", "address", addr, "name", []byte(fname))
 		fname = ""
 	}
 
@@ -133,7 +133,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		if classNameStrPtr != 0 {
 			className := i.rm.String(classNameStrPtr + vms.zend_string.val)
 			if className != "" && !util.IsValidString(className) {
-				log.Debugf("Extracted invalid PHP class name at 0x%x", addr)
+				log.Debug("Extracted invalid PHP class name", "address", addr)
 				className = ""
 			}
 			// Combine class name and function name using PHP's ClassName::methodName convention.
@@ -160,8 +160,8 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		sourceAddr := npsr.Ptr(fobj, vms.zend_function.op_array_filename)
 		sourceFileName = i.rm.String(sourceAddr + vms.zend_string.val)
 		if !util.IsValidString(sourceFileName) {
-			log.Debugf("Extracted invalid PHP source file name at 0x%x '%v'",
-				addr, []byte(sourceFileName))
+			log.Debug("Extracted invalid PHP source file name",
+				"address", addr, "name", []byte(sourceFileName))
 			sourceFileName = ""
 		}
 
