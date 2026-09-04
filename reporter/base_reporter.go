@@ -4,8 +4,12 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"slices"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -40,6 +44,41 @@ type baseReporter struct {
 }
 
 var errUnknownProfileType = errors.New("unknown trace profile type")
+
+type customLabel struct {
+	key   string
+	value string
+}
+
+func hashCustomLabels(labels map[libpf.String]libpf.String) libpf.TraceHash {
+	if len(labels) == 0 {
+		return libpf.TraceHash{}
+	}
+
+	ordered := make([]customLabel, 0, len(labels))
+	for key, value := range labels {
+		ordered = append(ordered, customLabel{key: key.String(), value: value.String()})
+	}
+	slices.SortFunc(ordered, func(a, b customLabel) int {
+		if cmp := strings.Compare(a.key, b.key); cmp != 0 {
+			return cmp
+		}
+		return strings.Compare(a.value, b.value)
+	})
+
+	h := fnv.New128a()
+	var size [4]byte
+	for _, label := range ordered {
+		binary.LittleEndian.PutUint32(size[:], uint32(len(label.key)))
+		_, _ = h.Write(size[:])
+		_, _ = h.Write([]byte(label.key))
+		binary.LittleEndian.PutUint32(size[:], uint32(len(label.value)))
+		_, _ = h.Write(size[:])
+		_, _ = h.Write([]byte(label.value))
+	}
+	labelHash, _ := libpf.TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	return labelHash
+}
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
@@ -84,13 +123,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	sampleKey := samples.SampleKey{
-		Hash:      traceHash,
-		Comm:      meta.Comm,
-		TID:       int64(meta.TID),
-		CPU:       int64(meta.CPU),
-		SpanID:    meta.SpanID,
-		TraceID:   meta.TraceID,
-		ExtraMeta: extraMeta,
+		Hash:             traceHash,
+		CustomLabelsHash: hashCustomLabels(trace.CustomLabels),
+		Comm:             meta.Comm,
+		TID:              int64(meta.TID),
+		CPU:              int64(meta.CPU),
+		SpanID:           meta.SpanID,
+		TraceID:          meta.TraceID,
+		ExtraMeta:        extraMeta,
 	}
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
