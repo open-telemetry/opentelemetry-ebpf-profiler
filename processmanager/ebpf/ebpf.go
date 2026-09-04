@@ -527,8 +527,8 @@ func (impl *ebpfMapsImpl) DeleteExeIDToStackDeltas(fileID host.FileID, mapID uin
 	return nil
 }
 
-// UpdateStackDeltaPages adds fileID/page with given information to eBPF map. If the entry exists,
-// it will return an error. Otherwise the key/value pairs will be appended to the hash.
+// UpdateStackDeltaPages adds fileID/page combinations with given information to the eBPF map.
+// Existing entries for these fileID/page keys are overwritten.
 func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
 	mapID uint16, firstPageAddr uint64,
 ) error {
@@ -551,10 +551,33 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		firstDelta += uint32(numDeltas)
 	}
 
-	_, err := impl.StackDeltaPageToInfo.BatchUpdate(
+	// The kernel never reads attr->batch.flags for batch updates, and only
+	// accepts BPF_F_LOCK in attr->batch.elem_flags. BPF_NOEXIST is silently ignored in Flags.
+	// We cannot pass BPF_NOEXIST as attr->batch.elem_flags because it will get
+	// rejected due to a discrepancy between the source code and documentation.
+	// See https://github.com/torvalds/linux/blob/e8f897f4afef0031fe618a8e94127a0934896aba/kernel/bpf/syscall.c#L1754
+	inserted, err := impl.StackDeltaPageToInfo.BatchUpdate(
 		ptrCastMarshaler[support.StackDeltaPageKey](keys),
 		ptrCastMarshaler[support.StackDeltaPageInfo](values),
-		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
+		nil)
+	if err != nil {
+		// The batch stops at the first failing element and keeps everything inserted before it.
+		if errors.Is(err, unix.E2BIG) {
+			// E2BIG returns the exact number of inserted keys, so we can batch delete them.
+			if _, derr := impl.StackDeltaPageToInfo.BatchDelete(
+				ptrCastMarshaler[support.StackDeltaPageKey](keys[:inserted]), nil); derr == nil {
+				return impl.trackMapError(
+					metrics.IDStackDeltaPageToInfoBatchUpdate, err)
+			}
+		}
+		// Pre-loop errors and failed batch deletes report an unreliable count, so safely remove every attempted key.
+		for i := range keys {
+			if derr := impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&keys[i])); derr != nil &&
+				!errors.Is(derr, cebpf.ErrKeyNotExist) {
+				err = errors.Join(err, derr)
+			}
+		}
+	}
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
 }
 
