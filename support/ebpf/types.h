@@ -953,15 +953,13 @@ typedef struct UnwindInfo {
 #define UNWIND_REG_X86_R15 12
 
 // Flag to indicate a command (used inside Go stack delta generation only)
-#define UNWIND_FLAG_COMMAND     (1 << 0)
+#define UNWIND_FLAG_COMMAND   (1 << 0)
 // Flag to indicate that a full LR+FR frame is present on aarch64
-#define UNWIND_FLAG_FRAME       (1 << 1)
+#define UNWIND_FLAG_FRAME     (1 << 1)
 // Flag to indicate that unwinding is valid on leaf frames only (uses untracked register)
-#define UNWIND_FLAG_LEAF_ONLY   (1 << 2)
+#define UNWIND_FLAG_LEAF_ONLY (1 << 2)
 // Flag to indicate that the resolve CFA value should be dereferenced
-#define UNWIND_FLAG_DEREF_CFA   (1 << 3)
-// Flag to indicate that the return address is in a register
-#define UNWIND_FLAG_REGISTER_RA (1 << 4)
+#define UNWIND_FLAG_DEREF_CFA (1 << 3)
 
 // If flags has UNWIND_FLAG_DEREF_CFA set, the lowest bits of 'param' are used
 // as second adder as post-deref operation. This contains the mask for that.

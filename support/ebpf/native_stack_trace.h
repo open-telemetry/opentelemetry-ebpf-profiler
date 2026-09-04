@@ -314,23 +314,23 @@ unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
 
     // Resolve the frame's CFA (previous PC is fixed to CFA) address, and
     // the previous FP address if any.
-    state->cfa = cfa = unwind_calc_register_with_deref(
-      state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
-    u64 aux = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
-
-    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
-      // RA was recovered from a register (e.g. __vfork stores RA in %rdi).
-      // FP is not preserved across such calls, clear it for the next frame.
-      state->pc = aux;
-      state->fp = 0;
-      goto nonleaf_frame_ok;
-    }
+    bool deref = (info->flags & UNWIND_FLAG_DEREF_CFA) != 0;
+    u8 baseReg = info->baseReg & 0xf;
+    u8 raReg   = info->baseReg >> 4;
+    state->cfa = cfa = unwind_calc_register_with_deref(state, baseReg, param, deref);
+    u64 aux          = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
     if (aux) {
       bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
-    } else if (info->baseReg == UNWIND_REG_FP) {
+    } else if (baseReg == UNWIND_REG_FP || raReg == UNWIND_REG_FP) {
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
+    }
+
+    if (raReg != UNWIND_REG_INVALID) {
+      // RA was recovered from a register (e.g. __vfork stores RA in %rdi).
+      state->pc = unwind_calc_register(state, raReg, 0);
+      goto nonleaf_frame_ok;
     }
   }
 

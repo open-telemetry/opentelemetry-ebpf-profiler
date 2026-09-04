@@ -357,7 +357,9 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 }
 
 func GetOpcacheLoader(_ Config) interpreter.Loader {
-	return opcacheLoader
+	return interpreter.NewLoader(opcacheLoader, []interpreter.InterpreterResource{
+		{MapName: BPFMapName},
+	})
 }
 
 func opcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (

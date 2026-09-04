@@ -351,11 +351,10 @@ const (
 	UnwindRegX86RDI  uint8 = 0x7
 	UnwindRegX86R8   uint8 = 0x8
 
-	UnwindFlagCommand    uint8 = 0x1
-	UnwindFlagFrame      uint8 = 0x2
-	UnwindFlagLeafOnly   uint8 = 0x4
-	UnwindFlagDerefCfa   uint8 = 0x8
-	UnwindFlagRegisterRA uint8 = 0x10
+	UnwindFlagCommand  uint8 = 0x1
+	UnwindFlagFrame    uint8 = 0x2
+	UnwindFlagLeafOnly uint8 = 0x4
+	UnwindFlagDerefCfa uint8 = 0x8
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1
