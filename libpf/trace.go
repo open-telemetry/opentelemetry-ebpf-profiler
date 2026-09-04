@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"unique"
 
+	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
@@ -134,13 +136,9 @@ type Trace struct {
 	cachedHash TraceHash
 }
 
-// Hash returns the trace's hash, computing and caching it on the first call.
-// The result is memoized: mutating Frames after the first call is not
-// reflected in subsequent calls. This method is not thread-safe.
-func (t *Trace) Hash() TraceHash {
-	if t.cachedHash != invalidTraceHash {
-		return t.cachedHash
-	}
+// APMHash returns the trace's hash required by the APM Agent for correlation.
+// The result is not memoized.
+func (t *Trace) APMHash() TraceHash {
 	var buf [24]byte
 	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
 	h := fnv.New128a()
@@ -155,10 +153,47 @@ func (t *Trace) Hash() TraceHash {
 		// to escaping to heap (allocation).
 		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
 	}
-	// make instead of nil avoids a heap allocation
-	traceHash, _ := TraceHashFromBytes(h.Sum(make([]byte, 0, 16)))
+	// Avoid a heap allocation by reusing the stack-allocated buffer.
+	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
 	t.cachedHash = traceHash
 	return traceHash
+}
+
+// Hash returns the trace's hash for agent internal use only,
+// computing and caching it on the first call.
+// The result is memoized: mutating Frames after the first call is not
+// reflected in subsequent calls.
+func (t *Trace) Hash() TraceHash {
+	if t.cachedHash != InvalidTraceHash {
+		return t.cachedHash
+	}
+	var buf [24]byte
+	h := xxh3.New128()
+	for _, uniqueFrame := range t.Frames {
+		frame := uniqueFrame.Value()
+		fileID := FileID{}
+		if frame.Mapping.Valid() {
+			fileID = frame.Mapping.Value().File.Value().FileID
+		}
+		_, _ = h.Write(fileID.Bytes())
+		n := putUint64(buf[:], uint64(frame.AddressOrLineno))
+		_, _ = h.Write(buf[:n])
+	}
+	// Avoid a heap allocation by reusing the stack-allocated buffer.
+	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
+	t.cachedHash = traceHash
+	return traceHash
+}
+
+func putUint64(b []byte, v uint64) int {
+	for i := range 8 {
+		b[i] = byte(v)
+		v >>= 8
+		if v == 0 {
+			return i + 1
+		}
+	}
+	return 8
 }
 
 // EbpfTrace holds data sourced from eBPF.
