@@ -18,8 +18,9 @@ import (
 	"strings"
 	"sync"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -109,6 +110,10 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 	if err != nil {
 		return libpf.NullString, err
 	}
+	// The kernel appends " (deleted)" to the symlink target when the
+	// executable has been removed from disk. Strip it so callers get
+	// the original path.
+	str = strings.TrimSuffix(str, " (deleted)")
 	return libpf.Intern(str), nil
 }
 
@@ -182,25 +187,40 @@ func cgroupRootInode(procBase string) (uint64, error) {
 	return st.Ino, nil
 }
 
-// NewEnvVarsEnricher returns a MetaEnricher that captures a filtered subset of the
-// process's environment variables into Meta.EnvVariables.
-func NewEnvVarsEnricher(includeEnvVars libpf.Set[string]) MetaEnricher {
+// NewEnvVarsEnricher returns a MetaEnricher that captures the process's
+// environment variables into Meta.EnvVariables and Meta.InternalEnvVariables.
+// A name in both sets is captured into both.
+func NewEnvVarsEnricher(reported, internal libpf.Set[string]) MetaEnricher {
 	return MetaEnricherFunc(func(procBase string, meta *Meta) {
-		var envVarMap map[libpf.String]libpf.String
-		if envVars, err := os.ReadFile(procBase + "environ"); err == nil {
-			envVarMap = make(map[libpf.String]libpf.String, len(includeEnvVars))
-			// environ has environment variables separated by a null byte (hex: 00)
-			for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
-				var fields [2]string
-				if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
-					continue
+		envVars, err := os.ReadFile(procBase + "environ")
+		if err != nil {
+			return
+		}
+		// environ has environment variables separated by a null byte (hex: 00)
+		for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
+			var fields [2]string
+			if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
+				continue
+			}
+			_, wantReported := reported[fields[0]]
+			_, wantInternal := internal[fields[0]]
+			if !wantReported && !wantInternal {
+				continue
+			}
+			name, value := libpf.Intern(fields[0]), libpf.Intern(fields[1])
+			if wantReported {
+				if meta.EnvVariables == nil {
+					meta.EnvVariables = make(map[libpf.String]libpf.String)
 				}
-				if _, ok := includeEnvVars[fields[0]]; ok {
-					envVarMap[libpf.Intern(fields[0])] = libpf.Intern(fields[1])
+				meta.EnvVariables[name] = value
+			}
+			if wantInternal {
+				if meta.InternalEnvVariables == nil {
+					meta.InternalEnvVariables = make(map[libpf.String]libpf.String, len(internal))
 				}
+				meta.InternalEnvVariables[name] = value
 			}
 		}
-		meta.EnvVariables = envVarMap
 	})
 }
 

@@ -353,7 +353,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		if p.Filesz <= 0 {
 			continue
 		}
-		switch p.ProgHeader.Type {
+		switch p.Type {
 		case elf.PT_DYNAMIC:
 			rdr := pfbufio.NewReader(r, int64(p.Off), int64(p.Filesz))
 
@@ -419,7 +419,7 @@ func getString(section []byte, start int) (string, bool) {
 type NoMmapCloser libpf.Void
 
 // Close implements io.Closer interface.
-func (_ NoMmapCloser) Close() error {
+func (NoMmapCloser) Close() error {
 	return nil
 }
 

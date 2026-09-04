@@ -16,6 +16,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # zizmor: ignore[artipacked] Credentials are required by the tag push below.
+          persist-credentials: true
 
       - name: Configure Git
         run: |
@@ -29,8 +32,10 @@ jobs:
 
       - name: Create and push tag
         run: |
-          TAG_NAME="${{ steps.date.outputs.tag_name }}"
+          TAG_NAME="${STEPS_DATE_OUTPUTS_TAG_NAME}"
           # Create an annotated tag on the latest commit of the current branch (main)
-          git tag -a $TAG_NAME -m "$TAG_NAME"
+          git tag -a -m "$TAG_NAME" -- "$TAG_NAME"
           # Push the newly created tag to the remote repository
-          git push origin $TAG_NAME
+          git push origin "refs/tags/${TAG_NAME}"
+        env:
+          STEPS_DATE_OUTPUTS_TAG_NAME: ${{ steps.date.outputs.tag_name }}

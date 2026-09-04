@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -28,6 +30,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -114,9 +117,9 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	}
 
 	metaEnrichers := make([]process.MetaEnricher, 0, len(cfg.ProcessMetaEnrichers)+2)
-	if len(cfg.IncludeEnvVars) > 0 {
-		metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(cfg.IncludeEnvVars))
-	}
+	// Cloned: the enricher closure outlives New, and the caller owns cfg.
+	metaEnrichers = append(metaEnrichers, process.NewEnvVarsEnricher(
+		maps.Clone(cfg.IncludeEnvVars), processcontext.EnvVarSet()))
 
 	selfContainerEnricher, err := process.NewSelfContainerIDEnricher()
 	if err != nil {
@@ -376,7 +379,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta := pm.metaForPID(bpfTrace.PID)
+	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -389,6 +392,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        procMeta.EnvVariables,
+		ResourceAttrs:  resourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,

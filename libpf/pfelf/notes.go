@@ -142,7 +142,6 @@ func GetBuildIDFromNotesFile(filePath string) (string, error) {
 	defer file.Close()
 
 	return getBuildIDFromNotesFile(file)
-
 }
 
 // ParseDebugLink parses the name and CRC32 of the debug info file from the provided section data.

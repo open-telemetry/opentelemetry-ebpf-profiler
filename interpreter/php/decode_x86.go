@@ -6,10 +6,11 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 import (
 	"errors"
 
+	"golang.org/x/arch/x86/x86asm"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 // retrieveZendVMKindX86. This function reads the code blob and recovers

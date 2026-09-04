@@ -9,9 +9,10 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -23,6 +24,7 @@ type ProbeContext struct {
 	sysVars          SysConfigVars
 	links            []link.Link
 	registerAttacher func(pm.ProbeAttacher)
+	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
 }
 
@@ -437,6 +439,7 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		registerAttacher: func(a pm.ProbeAttacher) {
 			t.processManager.RegisterProbeAttacher(a)
 		},
+		KernelSymbolizer: t.kernelSymbolizer,
 	}
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {

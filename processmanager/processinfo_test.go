@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -585,7 +586,8 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Process first seen: gather and enrich metadata.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
 	require.Equal(1, enricherCalls)
-	require.Equal("foobar", pm.metaForPID(pid).ExtraMeta[key])
+	meta, _ := pm.metaForPID(pid)
+	require.Equal("foobar", meta.ExtraMeta[key])
 
 	// Unchanged executable: don't refetch metadata, don't enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
@@ -594,5 +596,6 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Executable changed: refetch metadata and enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
 	require.Equal(2, enricherCalls)
-	require.Equal("foobarbaz", pm.metaForPID(pid).ExtraMeta[key])
+	meta, _ = pm.metaForPID(pid)
+	require.Equal("foobarbaz", meta.ExtraMeta[key])
 }

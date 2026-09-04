@@ -14,5 +14,5 @@ var (
 )
 
 const (
-	ExtensionsStability = component.StabilityLevelDevelopment
+	ExtensionStability = component.StabilityLevelDevelopment
 )

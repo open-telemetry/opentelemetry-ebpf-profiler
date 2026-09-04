@@ -185,7 +185,7 @@ func TestParseCIE(t *testing.T) {
 			}
 			length, marker, err := fakeReader.parseLengthAndMarker()
 			require.NoError(t, err)
-			require.Equal(t, marker, int64(-1))
+			require.Equal(t, int64(-1), marker)
 
 			extracted, err := fakeReader.parseCIE(length)
 			require.NoError(t, err)
@@ -223,10 +223,10 @@ func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
 				fp:  vmReg{reg: regCFA, off: 0},
 			},
 			expected: sdtypes.UnwindInfo{
-				Flags:      support.UnwindFlagRegisterRA | support.UnwindFlagLeafOnly,
-				BaseReg:    support.UnwindRegSp,
+				BaseReg:    support.UnwindRegX86RDI<<4 | support.UnwindRegSp,
+				Flags:      support.UnwindFlagLeafOnly,
 				Param:      8,
-				AuxBaseReg: support.UnwindRegX86RDI,
+				AuxBaseReg: 0, // no FP rule (cfa=RSP, fp.off=0)
 			},
 		},
 		{
@@ -246,10 +246,10 @@ func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
 				fp:  vmReg{reg: regUndefined},      // FP not specified
 			},
 			expected: sdtypes.UnwindInfo{
-				Flags:      support.UnwindFlagRegisterRA | support.UnwindFlagLeafOnly,
-				BaseReg:    support.UnwindRegSp,
+				BaseReg:    support.UnwindRegX86RDI<<4 | support.UnwindRegSp,
+				Flags:      support.UnwindFlagLeafOnly,
 				Param:      0,
-				AuxBaseReg: support.UnwindRegX86RDI,
+				AuxBaseReg: 0, // no FP rule (fp undefined)
 			},
 		},
 	}

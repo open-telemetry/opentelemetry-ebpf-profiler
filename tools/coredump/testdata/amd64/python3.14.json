@@ -33,7 +33,6 @@
         "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
         "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
         "<module>+9 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:10",
-        "?+0x0",
         "python3.14+0x5454c6",
         "python3.14+0x53ffa0",
         "python3.14+0x6b741e",

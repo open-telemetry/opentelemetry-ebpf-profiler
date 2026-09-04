@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/extension"
+
 	"go.opentelemetry.io/ebpf-profiler/probes/uprobe/internal/metadata"
 )
 
@@ -19,7 +20,7 @@ func NewFactory() extension.Factory {
 		metadata.Type,
 		func() component.Config { return &Config{} },
 		createExtension,
-		metadata.ExtensionsStability,
+		metadata.ExtensionStability,
 	)
 }
 

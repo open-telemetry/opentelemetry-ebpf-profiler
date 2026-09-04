@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"

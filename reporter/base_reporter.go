@@ -74,6 +74,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	rtp := (*eventsTree)[key]
+	// Compared by hash to skip the map write-back when nothing changed.
+	if meta.ResourceAttrs.Equivalent() != rtp.ResourceAttrs.Equivalent() {
+		rtp.ResourceAttrs = meta.ResourceAttrs
+		(*eventsTree)[key] = rtp
+	}
 	if _, exists := rtp.Events[meta.ProfileType]; !exists {
 		rtp.Events[meta.ProfileType] = make(samples.SampleToEvents)
 	}
