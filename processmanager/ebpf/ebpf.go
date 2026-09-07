@@ -571,11 +571,16 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 			}
 		}
 		// Pre-loop errors and failed batch deletes report an unreliable count, so safely remove every attempted key.
+		var failed int
 		for i := range keys {
 			if derr := impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&keys[i])); derr != nil &&
 				!errors.Is(derr, cebpf.ErrKeyNotExist) {
-				err = errors.Join(err, derr)
+				failed++
 			}
+		}
+		if failed != 0 {
+			log.Debugf("Failed to delete %d of %d stack delta pages for FileID %x",
+				failed, len(keys), fileID)
 		}
 	}
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
