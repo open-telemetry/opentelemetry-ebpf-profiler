@@ -68,6 +68,9 @@ extern u16 origin_id_sampling;
 // origin_id_off_cpu is declared in off_cpu.ebpf.c
 extern u16 origin_id_off_cpu;
 
+// defer_off_cpu is declared in off_cpu.ebpf.c
+extern bool defer_off_cpu;
+
 // pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
 extern bool pid_ns_translation_enabled;
 
@@ -1046,7 +1049,7 @@ static inline EBPF_INLINE ErrorCode get_usermode_regs(
 
 #endif // TESTING_COREDUMP
 
-static inline EBPF_INLINE int collect_trace_impl(
+static inline EBPF_INLINE int collect_trace(
   struct pt_regs *ctx,
   u16 origin,
   u32 pid,
@@ -1126,18 +1129,12 @@ exit:
   return -1;
 }
 
-static inline EBPF_INLINE int
-collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
-{
-  return collect_trace_impl(ctx, origin, pid, tid, trace_timestamp, value, false);
-}
-
 // Tracepoint contexts aren't pt_regs. Force collection of the current task's
 // saved user registers instead of inspecting ctx.
 static inline EBPF_INLINE int collect_trace_from_current_task(
   struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
 {
-  return collect_trace_impl(ctx, origin, pid, tid, trace_timestamp, value, true);
+  return collect_trace(ctx, origin, pid, tid, trace_timestamp, value, true);
 }
 
 #endif

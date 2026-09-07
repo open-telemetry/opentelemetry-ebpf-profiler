@@ -652,10 +652,14 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "off_cpu_traces" || mapName == "tracepoint_progs" ||
-			mapName == "sched_times" {
+		if mapName == "tracepoint_progs" || mapName == "sched_times" {
 			// These maps are owned by the off-CPU probe and created on demand.
 			continue
+		}
+		if mapName == "off_cpu_traces" {
+			// The shared unwind-stop programs reference this map even when deferral
+			// is disabled. The off-CPU probe replaces it with its configured map.
+			mapSpec.MaxEntries = 1
 		}
 		if mapName == obiSpanTracesMap {
 			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
@@ -880,7 +884,7 @@ func loadTracepointUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*c
 			progSpec.AttachType = cebpf.AttachTraceRawTp
 			progSpec.AttachTo = "sched_switch"
 			progSpec.SectionName = "tp_btf/sched_switch"
-		} else if !unwinder.NoTailCallTarget && progName != "tracepoint_unwind_stop" {
+		} else if !unwinder.NoTailCallTarget {
 			progSpec.Name = "tracepoint_" + unwinder.Name
 			progSpec.Type = cebpf.TracePoint
 			progSpec.AttachType = cebpf.AttachNone

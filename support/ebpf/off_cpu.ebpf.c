@@ -42,6 +42,10 @@ BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 // origin_id_off_cpu is set during load time.
 BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
 
+// defer_off_cpu is enabled for tracepoint-only off-CPU profiling. It makes the
+// shared unwind-stop program retain completed traces until the task switches in.
+BPF_RODATA_VAR(bool, defer_off_cpu, false)
+
 // task_pid_offset is resolved from kernel BTF during load time.
 BPF_RODATA_VAR(u32, task_pid_offset, 0)
 
@@ -162,7 +166,7 @@ int finish_task_switch(struct pt_regs *ctx)
   u64 ts   = bpf_ktime_get_ns();
   u64 diff = ts - *start_ts;
   bpf_map_delete_elem(&sched_times, &pid_tgid);
-  return collect_trace(ctx, origin_id_off_cpu, pid, tid, ts, diff);
+  return collect_trace(ctx, origin_id_off_cpu, pid, tid, ts, diff, false);
 }
 
 // tracepoint__dummy is never loaded or called. It keeps tracepoint_progs

@@ -110,7 +110,7 @@ func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeCon
 	coll, err := probeCtx.CollectionSpecWithUnwinders(
 		[]string{"off_cpu_traces", "tracepoint_progs"},
 		[]string{entryProgram},
-		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
+		[]string{"off_cpu_threshold", "origin_id_off_cpu", "defer_off_cpu"},
 	)
 	if err != nil {
 		return err
@@ -121,6 +121,9 @@ func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeCon
 	}
 	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
 		return fmt.Errorf("set origin_id_off_cpu: %w", err)
+	}
+	if err := coll.Variables["defer_off_cpu"].Set(true); err != nil {
+		return fmt.Errorf("set defer_off_cpu: %w", err)
 	}
 
 	coll.Maps["off_cpu_traces"].MaxEntries = traceMapSize(p.mapEntries)

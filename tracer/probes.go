@@ -85,9 +85,6 @@ func probeProgramName(prog ProgLoaderHelper) string {
 }
 
 func tracepointProgramName(prog ProgLoaderHelper) string {
-	if !prog.NoTailCallTarget && prog.ProgID == uint32(support.ProgUnwindStop) {
-		return "tracepoint_unwind_stop"
-	}
 	if !prog.NoTailCallTarget {
 		return "kprobe_" + prog.Name
 	}
@@ -212,7 +209,8 @@ func (c *ProbeContext) applySystemVars(coll *cebpf.CollectionSpec) error {
 }
 
 // RewriteMaps rewrites program map references in coll. The tracer's shared maps are
-// merged with probeMaps; probe map names must not shadow tracer-owned map names.
+// merged with probeMaps; a probe map with the same name replaces the shared map for
+// this collection.
 // Only maps actually referenced by the probe's programs are rewritten; tracer-internal
 // maps that the probe does not use are silently skipped.
 func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map) error {
@@ -225,12 +223,12 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 		if k == ".rodata.var" {
 			continue
 		}
+		if _, overridden := probeMaps[k]; overridden {
+			continue
+		}
 		pool[k] = v
 	}
 	for k, v := range probeMaps {
-		if _, exists := pool[k]; exists {
-			return fmt.Errorf("probe map %q conflicts with a tracer-owned map", k)
-		}
 		pool[k] = v
 	}
 

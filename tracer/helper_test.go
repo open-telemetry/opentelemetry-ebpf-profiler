@@ -82,7 +82,7 @@ func TestIntersectCPURanges(t *testing.T) {
 }
 
 func TestTracepointProgramName(t *testing.T) {
-	require.Equal(t, "tracepoint_unwind_stop", tracepointProgramName(ProgLoaderHelper{
+	require.Equal(t, "kprobe_unwind_stop", tracepointProgramName(ProgLoaderHelper{
 		ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop",
 	}))
 	require.Equal(t, "kprobe_unwind_native", tracepointProgramName(ProgLoaderHelper{
