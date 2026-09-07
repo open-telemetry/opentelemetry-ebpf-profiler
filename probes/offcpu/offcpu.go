@@ -103,13 +103,18 @@ func (p *probe) loadTracepoint(originID uint16, probeCtx *tracer.ProbeContext) e
 func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeContext,
 	useBTF bool,
 ) error {
+	processFreeProgram, err := probeCtx.SchedProcessFreeProgramName()
+	if err != nil {
+		return err
+	}
+	processFreeProgram = "off_cpu_" + processFreeProgram
 	entryProgram := "tracepoint__sched_switch"
 	if useBTF {
 		entryProgram = "tp_btf__sched_switch"
 	}
 	coll, err := probeCtx.CollectionSpecWithUnwinders(
 		[]string{"off_cpu_traces", "tracepoint_progs"},
-		[]string{entryProgram},
+		[]string{entryProgram, processFreeProgram},
 		[]string{"off_cpu_threshold", "origin_id_off_cpu", "defer_off_cpu"},
 	)
 	if err != nil {
@@ -151,6 +156,7 @@ func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeCon
 	defer closePrograms(ebpfProgs)
 	entry := []tracer.ProgLoaderHelper{
 		{Name: entryProgram, NoTailCallTarget: true, Enable: true},
+		{Name: processFreeProgram, NoTailCallTarget: true, Enable: true},
 	}
 	if useBTF {
 		err = probeCtx.LoadBTFTracepointUnwinders(coll, ebpfProgs, tailcallMap, entry, 0)
@@ -162,9 +168,13 @@ func (p *probe) loadTracepointVariant(originID uint16, probeCtx *tracer.ProbeCon
 	}
 
 	if useBTF {
-		return p.attachBTFTracepointProgram(ebpfProgs, entryProgram)
+		if err := p.attachBTFTracepointProgram(ebpfProgs, entryProgram); err != nil {
+			return err
+		}
+	} else if err := p.attachTracepointProgram(ebpfProgs, entryProgram); err != nil {
+		return err
 	}
-	return p.attachTracepointProgram(ebpfProgs, entryProgram)
+	return p.attachSchedProcessFreeProgram(ebpfProgs, processFreeProgram)
 }
 
 func (p *probe) loadTracepointKprobe(originID uint16, probeCtx *tracer.ProbeContext) error {
@@ -217,6 +227,22 @@ func (p *probe) attachTracepointProgram(ebpfProgs map[string]*cebpf.Program, nam
 	}
 	p.links = append(p.links, tpLink)
 
+	return nil
+}
+
+func (p *probe) attachSchedProcessFreeProgram(ebpfProgs map[string]*cebpf.Program,
+	name string,
+) error {
+	prog, ok := ebpfProgs[name]
+	if !ok {
+		return fmt.Errorf("%s program not found after loading", name)
+	}
+
+	tpLink, err := link.Tracepoint("sched", "sched_process_free", prog, nil)
+	if err != nil {
+		return fmt.Errorf("attaching sched_process_free tracepoint: %w", err)
+	}
+	p.links = append(p.links, tpLink)
 	return nil
 }
 

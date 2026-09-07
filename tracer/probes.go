@@ -9,6 +9,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
@@ -25,6 +26,19 @@ type ProbeContext struct {
 	registerAttacher func(pm.ProbeAttacher)
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+}
+
+// SchedProcessFreeProgramName returns the sched_process_free program matching
+// the running kernel's tracepoint layout.
+func (c *ProbeContext) SchedProcessFreeProgramName() (string, error) {
+	major, minor, _, err := linux.GetCurrentKernelVersion()
+	if err != nil {
+		return "", fmt.Errorf("get kernel version: %w", err)
+	}
+	if major > 6 || (major == 6 && minor >= 16) {
+		return schedProcessFreeV2, nil
+	}
+	return schedProcessFreeV1, nil
 }
 
 // CollectionSpecWithUnwinders returns a filtered collection containing the
