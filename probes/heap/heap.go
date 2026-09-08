@@ -149,8 +149,8 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 
 	// Filter to our provider and probe names, and skip sites we've
 	// already attached. A single mapping may contain multiple USDT
-	// sites; SynchronizePIDs may also re-trigger Attach for the same
-	// mapping, so dedup by (fileID, name, offset).
+	// sites; Attach may also be retried for the same mapping, so dedup
+	// by (fileID, name, offset).
 	type candidate struct {
 		key   attachmentKey
 		point usdt.AttachmentPoint
@@ -167,6 +167,9 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 		}
 		key := attachmentKey{fileID: fileID, name: point.Name, offset: point.Location}
 		hp.mu.Lock()
+		// Bare read: for an unseen PID the inner map is nil, which reads as
+		// not-attached. The nil check and allocation only matter on the write
+		// path below, where writing to a nil map would panic.
 		_, attached := hp.attachments[pid][key]
 		hp.mu.Unlock()
 		if !attached {
@@ -241,6 +244,24 @@ func (hp *Probe) Detach(pid libpf.PID) {
 	}
 }
 
-// Unload implements tracer.Probe. The heap probe has no global kernel links;
-// per-PID resources are released via Detach.
-func (hp *Probe) Unload() error { return nil }
+// Unload implements tracer.Probe. Uprobe links are fd-backed, so the runtime
+// releases them automatically when the profiler exits; per-PID cleanup also
+// happens via Detach. We close any remaining links explicitly here so the
+// lifecycle is clear and does not rely on Detach being called for every PID
+// during shutdown.
+func (hp *Probe) Unload() error {
+	hp.mu.Lock()
+	attachments := hp.attachments
+	hp.attachments = make(map[libpf.PID]map[attachmentKey]link.Link)
+	hp.mu.Unlock()
+
+	for pid, byKey := range attachments {
+		for key, lnk := range byKey {
+			if err := lnk.Close(); err != nil {
+				log.Errorf("heap probe: unload PID %d probe %s at offset %#x: %v",
+					pid, key.name, key.offset, err)
+			}
+		}
+	}
+	return nil
+}

@@ -26,41 +26,20 @@
 BPF_RODATA_VAR(u16, origin_id_heap_alloc, 0)
 
 // ─────────────────────────────────────────────────────────────────────────
-// USDT argument helpers
+// USDT argument accessors: the registers holding the first three integer
+// arguments per the SysV/AAPCS calling conventions, read as ctx->usdt_argN.
 // ─────────────────────────────────────────────────────────────────────────
-
-static EBPF_INLINE u64 usdt_arg0(struct pt_regs *ctx)
-{
 #if defined(__x86_64__)
-  return ctx->di;
+  #define usdt_arg0 di
+  #define usdt_arg1 si
+  #define usdt_arg2 dx
 #elif defined(__aarch64__)
-  return ctx->regs[0];
+  #define usdt_arg0 regs[0]
+  #define usdt_arg1 regs[1]
+  #define usdt_arg2 regs[2]
 #else
   #error "Unsupported architecture"
 #endif
-}
-
-static EBPF_INLINE u64 usdt_arg1(struct pt_regs *ctx)
-{
-#if defined(__x86_64__)
-  return ctx->si;
-#elif defined(__aarch64__)
-  return ctx->regs[1];
-#else
-  #error "Unsupported architecture"
-#endif
-}
-
-static EBPF_INLINE u64 usdt_arg2(struct pt_regs *ctx)
-{
-#if defined(__x86_64__)
-  return ctx->dx;
-#elif defined(__aarch64__)
-  return ctx->regs[2];
-#else
-  #error "Unsupported architecture"
-#endif
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // heap:alloc(user, size, weighted_bytes)
@@ -72,16 +51,29 @@ static EBPF_INLINE u64 usdt_arg2(struct pt_regs *ctx)
 SEC("uprobe/heap_alloc")
 int uprobe_heap_alloc(struct pt_regs *ctx)
 {
-  u64 user           = usdt_arg0(ctx);
-  u64 size           = usdt_arg1(ctx);
-  u64 weighted_bytes = usdt_arg2(ctx);
+  u64 user           = ctx->usdt_arg0;
+  u64 size           = ctx->usdt_arg1;
+  u64 weighted_bytes = ctx->usdt_arg2;
 
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = (u32)(pid_tgid >> 32);
-  u32 tid      = (u32)pid_tgid;
+  u32 pid          = 0;
+  u32 tid          = 0;
+  u64 group_leader = 0;
+  if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
+    return 0;
+  }
 
-  DEBUG_PRINT("heap_usdt: alloc pid=%llu ptr=%llx", pid_tgid >> 32, user);
+  DEBUG_PRINT("heap_usdt: alloc pid=%u ptr=%llx", pid, user);
   DEBUG_PRINT("heap_usdt: alloc size=%llu weighted_bytes=%llu", size, weighted_bytes);
+
+  // Honour the min-process-age filter (-filter-min-process-age) just as the
+  // main perf-event path does in collect_trace(). Without this, heap
+  // allocations from short-lived processes would bypass a filter the operator
+  // explicitly enabled. Passing group_leader lets process_is_too_new() reuse
+  // it instead of re-reading it from the current task.
+  u64 trace_timestamp = bpf_ktime_get_ns();
+  if (process_is_too_new(trace_timestamp, group_leader)) {
+    return 0;
+  }
 
   // We can't use collect_trace() directly: it calls get_pristine_per_cpu_record()
   // internally, which would zero out the context values we set below, and its
@@ -99,7 +91,7 @@ int uprobe_heap_alloc(struct pt_regs *ctx)
   trace->origin = origin_id_heap_alloc;
   trace->pid    = pid;
   trace->tid    = tid;
-  trace->ktime  = bpf_ktime_get_ns();
+  trace->ktime  = trace_timestamp;
 
   // Transport the weighted byte value, allocation pointer, and raw size as the
   // context-value prefix. They must be written before the tail-call into the
