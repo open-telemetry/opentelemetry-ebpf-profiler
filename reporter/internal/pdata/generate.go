@@ -24,18 +24,18 @@ const (
 	ExecutableCacheLifetime = 1 * time.Hour
 )
 
-// hasAllocSizes reports whether any event in the set carries per-event
-// allocation sizes. When true, the reporter emits a paired object-count
-// profile alongside the primary byte-weighted profile.
+// hasValuesExtra reports whether any event in the set carries per-event
+// auxiliary values (TraceEvents.ValuesExtra). When true, the reporter emits
+// a paired object-count profile alongside the primary byte-weighted profile.
 //
 // Ideally probes would control their own OTLP output rather than the
 // reporter inferring intent from the data shape. Until the Probe API
 // supports that (e.g. a probe-supplied transform from accumulated events
-// to OTLP profiles), we use the structural presence of AllocSizes as
+// to OTLP profiles), we use the structural presence of ValuesExtra as
 // the signal.
-func hasAllocSizes(events samples.SampleToEvents) bool {
+func hasValuesExtra(events samples.SampleToEvents) bool {
 	for _, ev := range events {
-		if len(ev.AllocSizes) > 0 {
+		if len(ev.ValuesExtra) > 0 {
 			return true
 		}
 	}
@@ -44,7 +44,7 @@ func hasAllocSizes(events samples.SampleToEvents) bool {
 
 // profileKind is a sub-profile discriminator used when a single origin
 // produces more than one OTLP Profile message from the same event set.
-// For example, heap-alloc events that carry AllocSizes emit both a
+// For example, heap-alloc events that carry ValuesExtra emit both a
 // byte-weighted profile and an object-count profile; the kind tells
 // setProfile which value-type semantics to apply. Origins that emit
 // only one profile use profileKindDefault.
@@ -135,7 +135,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			// Both calls receive the same key slice so their samples are
 			// naturally aligned by index without needing a sort.
 			var keys []samples.SampleKey
-			if hasAllocSizes(events) {
+			if hasValuesExtra(events) {
 				keys = make([]samples.SampleKey, 0, len(events))
 				for k := range events {
 					keys = append(keys, k)
@@ -250,8 +250,9 @@ func (p *Pdata) setProfile(
 			// dividing by zero.
 			for i, weight := range traceInfo.Values {
 				objects := int64(1)
-				if i < len(traceInfo.AllocSizes) && traceInfo.AllocSizes[i] > 0 {
-					objects = max(weight/traceInfo.AllocSizes[i], 1)
+				// ValueExtra[1] carries the allocation size for heap origins.
+				if i < len(traceInfo.ValuesExtra) && traceInfo.ValuesExtra[i][1] > 0 {
+					objects = max(weight/int64(traceInfo.ValuesExtra[i][1]), 1)
 				}
 				sample.Values().Append(objects)
 			}

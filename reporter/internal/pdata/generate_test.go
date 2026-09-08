@@ -1046,10 +1046,10 @@ func TestHeapAllocProducesSpaceAndObjectsProfiles(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeHeapAlloc: {
 					{}: &samples.TraceEvents{
-						Frames:     frames,
-						Timestamps: timestamps,
-						Values:     []int64{128, 256},
-						AllocSizes: []int64{64, 128},
+						Frames:      frames,
+						Timestamps:  timestamps,
+						Values:      []int64{128, 256},
+						ValuesExtra: [][2]uint64{{0, 64}, {0, 128}},
 					},
 				},
 			},
@@ -1086,8 +1086,8 @@ func TestHeapAllocProducesSpaceAndObjectsProfiles(t *testing.T) {
 }
 
 // TestHeapAllocObjectsUsesAllocSizeWeighting verifies that alloc_objects is
-// derived from Values (byte-weight) divided by the per-event AllocSizes
-// (raw allocation size), not a flat count of 1 per sample, and that a
+// derived from Values (byte-weight) divided by the per-event allocation size
+// (ValuesExtra[i][1]), not a flat count of 1 per sample, and that a
 // missing/zero size falls back to 1 rather than dividing by zero.
 func TestHeapAllocObjectsUsesAllocSizeWeighting(t *testing.T) {
 	d, err := New(100, nil)
@@ -1116,8 +1116,8 @@ func TestHeapAllocObjectsUsesAllocSizeWeighting(t *testing.T) {
 						// weight=1000 @ size=100 -> 10 objects.
 						// weight=64 @ size=64 -> 1 object.
 						// weight=500 @ size=0 (unknown) -> falls back to 1.
-						Values:     []int64{1000, 64, 500},
-						AllocSizes: []int64{100, 64, 0},
+						Values:      []int64{1000, 64, 500},
+						ValuesExtra: [][2]uint64{{0, 100}, {0, 64}, {0, 0}},
 					},
 				},
 			},
