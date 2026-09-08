@@ -26,6 +26,7 @@ import (
 	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"golang.org/x/sync/errgroup"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -453,19 +454,29 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		}
 	}
 
-	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
-		cfg.BPFVerifierLogLevel); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
+	// The perf and the probe unwinders refer to disjoint sets of program
+	// specifications ("perf_" and "kprobe_" prefixed), and the probe unwinders only
+	// depend on already loaded maps, not on the loaded perf programs. Collect the load
+	// jobs of both so that all of them are verified by the kernel concurrently.
+	perfJobs, err := perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to prepare perf eBPF programs: %v", err)
 	}
 
 	// Load the tail call destinations so custom probes can use it.
-	// loadProbeUnwinders repoints the probe unwinder's per_cpu_records references
+	// probeUnwinderJobs repoints the probe unwinder's per_cpu_records references
 	// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
 	// the perf unwinder keeps per_cpu_records.
-	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
-		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD(),
-		ebpfMaps["per_cpu_records"].FD(), ebpfMaps["per_cpu_records_kp"]); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+	probeJobs, err := probeUnwinderJobs(coll, ebpfMaps["kprobe_progs"], tailCallProgs,
+		ebpfMaps["perf_progs"].FD(), ebpfMaps["per_cpu_records"].FD(),
+		ebpfMaps["per_cpu_records_kp"])
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to prepare kprobe eBPF programs: %v", err)
+	}
+
+	if err = loadPrograms(append(perfJobs, probeJobs...), cfg.BPFVerifierLogLevel,
+		ebpfProgs); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load unwinder eBPF programs: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
@@ -713,15 +724,11 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	return nil
 }
 
-// loadPerfUnwinders loads all perf eBPF Programs and their tail call targets.
-func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, tailCallProgs []ProgLoaderHelper,
-	bpfVerifierLogLevel uint32,
-) error {
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-	}
-
+// perfUnwinderJobs collects the load jobs for all perf eBPF programs and their tail
+// call targets. It only prepares the jobs, it does not load anything into the kernel.
+func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
+	tailCallProgs []ProgLoaderHelper,
+) ([]loadJob, error) {
 	progs := make([]ProgLoaderHelper, len(tailCallProgs)+3)
 	copy(progs, tailCallProgs)
 
@@ -743,6 +750,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 			Enable:           true,
 		})
 
+	jobs := make([]loadJob, 0, len(progs))
 	for _, unwindProg := range progs {
 		if !unwindProg.Enable {
 			continue
@@ -755,16 +763,18 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 
 		progSpec, ok := coll.Programs[unwindProgName]
 		if !ok {
-			return fmt.Errorf("program %s does not exist", unwindProgName)
+			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
-		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.ProgID, progSpec,
-			programOptions, unwindProg.NoTailCallTarget); err != nil {
-			return err
-		}
+		jobs = append(jobs, loadJob{
+			progID:           unwindProg.ProgID,
+			progSpec:         progSpec,
+			tailcallMap:      tailcallMap,
+			noTailCallTarget: unwindProg.NoTailCallTarget,
+		})
 	}
 
-	return nil
+	return jobs, nil
 }
 
 // progArrayReferences returns a list of instructions which load a specified tail
@@ -787,7 +797,7 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 	return insNos
 }
 
-// loadProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
+// loadProbeUnwinders reuses large parts of perfUnwinderJobs. By default all eBPF programs
 // are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
 // specification of these programs to xProbe eBPF programs and adjusts tail call maps.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
@@ -795,10 +805,21 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
 	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
 ) error {
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	jobs, err := probeUnwinderJobs(coll, tailcallMap, progs, perfTailCallMapFD,
+		perCPURecordsFD, perCPURecordsKprobeMap)
+	if err != nil {
+		return err
 	}
+	return loadPrograms(jobs, bpfVerifierLogLevel, ebpfProgs)
+}
 
+// probeUnwinderJobs rewrites the probe program specifications and collects their load
+// jobs. It only prepares the jobs, it does not load anything into the kernel.
+func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
+	progs []ProgLoaderHelper, perfTailCallMapFD int,
+	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
+) ([]loadJob, error) {
+	jobs := make([]loadJob, 0, len(progs))
 	for _, unwindProg := range progs {
 		if !unwindProg.Enable {
 			continue
@@ -811,14 +832,14 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 
 		progSpec, ok := coll.Programs[unwindProgName]
 		if !ok {
-			return fmt.Errorf("program %s does not exist", unwindProgName)
+			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
 		// Replace the prog array for the tail calls.
 		insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
 		for _, ins := range insns {
 			if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
-				return fmt.Errorf("failed to rewrite map ptr: %v", err)
+				return nil, fmt.Errorf("failed to rewrite map ptr: %v", err)
 			}
 		}
 
@@ -826,62 +847,158 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 		recInsns := progArrayReferences(perCPURecordsFD, progSpec.Instructions)
 		for _, ins := range recInsns {
 			if err := progSpec.Instructions[ins].AssociateMap(perCPURecordsKprobeMap); err != nil {
-				return fmt.Errorf("failed to rewrite per_cpu_records ptr: %v", err)
+				return nil, fmt.Errorf("failed to rewrite per_cpu_records ptr: %v", err)
 			}
 		}
 
-		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.ProgID, progSpec,
-			programOptions, unwindProg.NoTailCallTarget); err != nil {
-			return err
-		}
+		jobs = append(jobs, loadJob{
+			progID:           unwindProg.ProgID,
+			progSpec:         progSpec,
+			tailcallMap:      tailcallMap,
+			noTailCallTarget: unwindProg.NoTailCallTarget,
+		})
 	}
 
-	return nil
+	return jobs, nil
 }
 
-// loadProgram loads an eBPF program from progSpec and populates the related maps.
-func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
-	progID uint32, progSpec *cebpf.ProgramSpec, programOptions cebpf.ProgramOptions,
-	noTailCallTarget bool,
+// loadJob describes a single eBPF program that needs to be loaded into the kernel.
+type loadJob struct {
+	// progID is the tail call map index of the program, unused if noTailCallTarget.
+	progID uint32
+	// progSpec is the specification of the program to load. Each job refers to a
+	// distinct spec, so jobs can be verified concurrently.
+	progSpec *cebpf.ProgramSpec
+	// tailcallMap is the prog array the loaded program is registered in.
+	tailcallMap *cebpf.Map
+	// noTailCallTarget indicates the program is not the destination of a tail call.
+	noTailCallTarget bool
+	// prog is the loaded program, populated by loadPrograms.
+	prog *cebpf.Program
+	// err is the error returned by the kernel, populated by loadPrograms.
+	err error
+}
+
+// loadPrograms loads the given eBPF programs into the kernel and populates the related
+// maps.
+//
+// Loading a program is dominated by the time the kernel spends in the verifier, and each
+// program is verified independently of the others, so the programs are loaded
+// concurrently. Everything that mutates shared state (registering the programs and
+// updating the tail call maps) is done sequentially once all programs are loaded.
+func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
+	ebpfProgs map[string]*cebpf.Program,
 ) error {
+	if len(jobs) == 0 {
+		return nil
+	}
+
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	// Raise the memlock rlimit once for all programs. It is a process wide resource
+	// limit, so it must not be modified while other programs are being loaded.
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
 	}
 	defer restoreRlimit()
 
-	// Load the eBPF program into the kernel. If no error is returned,
-	// the eBPF program can be used/called/triggered from now on.
-	unwinder, err := cebpf.NewProgramWithOptions(progSpec, programOptions)
-	if err != nil {
-		// These errors tend to have hundreds of lines (or more),
-		// so we print each line individually.
-		if ve, ok := err.(*cebpf.VerifierError); ok {
-			for _, line := range ve.Log {
-				log.Errorf("%s", line)
+	eg := &errgroup.Group{}
+	eg.SetLimit(min(runtime.GOMAXPROCS(0), len(jobs)))
+	for i := range jobs {
+		job := &jobs[i]
+		eg.Go(func() error {
+			// Load the eBPF program into the kernel. If no error is returned,
+			// the eBPF program can be used/called/triggered from now on.
+			prog, err := cebpf.NewProgramWithOptions(job.progSpec, programOptions)
+			if err != nil {
+				// The error is only recorded here and reported once all loads
+				// have finished: verifier errors are hundreds of lines long and
+				// are logged line by line, so logging them from several
+				// goroutines would interleave them into an unreadable mess.
+				job.err = err
+				return err
 			}
-		} else {
-			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
-			for scanner.Scan() {
-				log.Errorf("%s", scanner.Text())
+			job.prog = prog
+			return nil
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		// Nothing references the programs that did load yet, and the caller only
+		// gets an error, so close them here rather than waiting for the GC.
+		for i := range jobs {
+			if jobs[i].prog != nil {
+				jobs[i].prog.Close()
 			}
 		}
-		return fmt.Errorf("failed to load %s", progSpec.Name)
+		return reportLoadErrors(jobs)
 	}
-	ebpfProgs[progSpec.Name] = unwinder
 
-	if noTailCallTarget {
-		return nil
+	for i := range jobs {
+		ebpfProgs[jobs[i].progSpec.Name] = jobs[i].prog
 	}
-	fd := uint32(unwinder.FD())
-	if err := tailcallMap.Update(unsafe.Pointer(&progID), unsafe.Pointer(&fd),
-		cebpf.UpdateAny); err != nil {
-		// Every eBPF program that is loaded within loadUnwinders can be the
-		// destination of a tail call of another eBPF program. If we can not update
-		// the eBPF map that manages these destinations our unwinding will fail.
-		return fmt.Errorf("failed to update tailcall map: %v", err)
+
+	for i := range jobs {
+		job := &jobs[i]
+		if job.noTailCallTarget {
+			continue
+		}
+		fd := uint32(job.prog.FD())
+		if err := job.tailcallMap.Update(unsafe.Pointer(&job.progID), unsafe.Pointer(&fd),
+			cebpf.UpdateAny); err != nil {
+			// Every eBPF program that is loaded within loadUnwinders can be the
+			// destination of a tail call of another eBPF program. If we can not update
+			// the eBPF map that manages these destinations our unwinding will fail.
+			return fmt.Errorf("failed to update tailcall map: %v", err)
+		}
 	}
 	return nil
+}
+
+// reportLoadErrors logs the failures recorded by loadPrograms and returns the error
+// of the first job that failed, in job order, so that the reported error does not
+// depend on the order in which the loads happened to complete.
+//
+// A single unsupported instruction usually makes every program fail, and the kernel
+// log of one failure is already hundreds of lines long, so only the first one is
+// logged in full and the others are summarized.
+func reportLoadErrors(jobs []loadJob) error {
+	var firstErr error
+	var alsoFailed []string
+	for i := range jobs {
+		job := &jobs[i]
+		if job.err == nil {
+			continue
+		}
+		if firstErr == nil {
+			logLoadError(job.err)
+			firstErr = fmt.Errorf("failed to load %s", job.progSpec.Name)
+			continue
+		}
+		alsoFailed = append(alsoFailed, job.progSpec.Name)
+	}
+	if len(alsoFailed) > 0 {
+		log.Errorf("%d other eBPF programs failed to load: %s",
+			len(alsoFailed), strings.Join(alsoFailed, ", "))
+	}
+	return firstErr
+}
+
+// logLoadError logs a program load error. These errors tend to have hundreds of
+// lines (or more), so we print each line individually.
+func logLoadError(err error) {
+	if ve, ok := errors.AsType[*cebpf.VerifierError](err); ok {
+		for _, line := range ve.Log {
+			log.Errorf("%s", line)
+		}
+		return
+	}
+	scanner := bufio.NewScanner(strings.NewReader(err.Error()))
+	for scanner.Scan() {
+		log.Errorf("%s", scanner.Text())
+	}
 }
 
 // enableEvent removes the entry of given eventType from the inhibitEvents map
