@@ -18,6 +18,9 @@ go fmt .
 # Set correct package path
 sed -i 's/^package support$/package support \/\/ import "go.opentelemetry.io\/ebpf-profiler\/support"/' types_gen.go
 
+# TLSVarInfo fields stay private: the constructors enforce the module_id/resolved invariants.
+sed -i '/^type TLSVarInfo struct {$/,/^}$/ s/^\t\([A-Z]\)/\t\l\1/' types_gen.go
+
 if ! diff types_gen.go types.go; then
     echo "Auto generated and existing code differ, please review and update support/types.go"
     exit 1
