@@ -53,14 +53,6 @@ const (
 
 	// TTL of entries in the LRU cache holding the .NET strings.
 	peInfoStringsCacheTTL = 1 * time.Hour
-
-	// maxTypeNestingDepth bounds the enclosing-class walk in resolveMethodName.
-	// The ECMA-335 II.22.32 NestedClass metadata that populates enclosingClass is
-	// untrusted (it comes from the profiled process' PE file) and may contain
-	// cycles or pathologically deep chains, either of which would otherwise spin
-	// the walk forever while growing the type name without bound. 64 is far
-	// beyond any legitimate source-level nesting depth.
-	maxTypeNestingDepth = 64
 )
 
 // peHash is a content-derived cache key for a dotnet PE file: SHA256 of the
@@ -894,11 +886,18 @@ func (pp *peParser) parseNestedClass() {
 				i, nestedClass, enclosingClass, numTypeDefs)
 			return
 		}
-		if nestedClass == enclosingClass {
-			// A type enclosing itself is a guaranteed cycle that would make the
-			// enclosing-class walk in resolveMethodName loop forever.
-			pp.err = fmt.Errorf("invalid NestedClass row %d: self-reference (index %d)",
-				i, nestedClass)
+		if enclosingClass >= nestedClass {
+			// ECMA-335 II.22 requires that "the definition of an enclosing class
+			// shall precede the definition of all classes it encloses". This data
+			// comes from the profiled process' PE file and is untrusted, so the
+			// constraint is enforced rather than assumed: it keeps every
+			// enclosing-class edge pointing at a strictly lower TypeDef index,
+			// which makes the chains walked by resolveMethodName acyclic by
+			// construction. A crafted PE could otherwise form a cycle and spin
+			// that walk forever, growing the type name without bound.
+			pp.err = fmt.Errorf("invalid NestedClass row %d: "+
+				"enclosing class %d does not precede nested class %d",
+				i, enclosingClass, nestedClass)
 			return
 		}
 		pp.info.typeSpecs[nestedClass-1].enclosingClass = enclosingClass
@@ -1265,16 +1264,10 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32,
 
 	typeSpec := &pi.typeSpecs[idx]
 	typeName := lookup(typeSpec.typeNameIdx).String()
-	for depth := 0; typeSpec.enclosingClass != 0; depth++ {
-		if depth >= maxTypeNestingDepth {
-			// The enclosing-class chain is cyclic or deeper than any
-			// legitimate type nesting. parseNestedClass rejects direct
-			// self-references, but longer cycles are only detectable here, so
-			// bail out with a sentinel instead of looping forever.
-			return libpf.Intern(fmt.Sprintf(
-				"<cyclic or too deep NestedClass metadata for method index %d>",
-				methodIdx))
-		}
+	// parseNestedClass enforces the ECMA-335 II.22 rule that an enclosing class
+	// precedes the classes it encloses, so each step here strictly decreases the
+	// TypeDef index and the walk always terminates.
+	for typeSpec.enclosingClass != 0 {
 		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
 		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
 		typeSpec = enclosingSpec
