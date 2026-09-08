@@ -26,41 +26,20 @@
 BPF_RODATA_VAR(u16, origin_id_heap_alloc, 0)
 
 // ─────────────────────────────────────────────────────────────────────────
-// USDT argument helpers
+// USDT argument accessors: the registers holding the first three integer
+// arguments per the SysV/AAPCS calling conventions, read as ctx->usdt_argN.
 // ─────────────────────────────────────────────────────────────────────────
-
-static EBPF_INLINE u64 usdt_arg0(struct pt_regs *ctx)
-{
 #if defined(__x86_64__)
-  return ctx->di;
+  #define usdt_arg0 di
+  #define usdt_arg1 si
+  #define usdt_arg2 dx
 #elif defined(__aarch64__)
-  return ctx->regs[0];
+  #define usdt_arg0 regs[0]
+  #define usdt_arg1 regs[1]
+  #define usdt_arg2 regs[2]
 #else
   #error "Unsupported architecture"
 #endif
-}
-
-static EBPF_INLINE u64 usdt_arg1(struct pt_regs *ctx)
-{
-#if defined(__x86_64__)
-  return ctx->si;
-#elif defined(__aarch64__)
-  return ctx->regs[1];
-#else
-  #error "Unsupported architecture"
-#endif
-}
-
-static EBPF_INLINE u64 usdt_arg2(struct pt_regs *ctx)
-{
-#if defined(__x86_64__)
-  return ctx->dx;
-#elif defined(__aarch64__)
-  return ctx->regs[2];
-#else
-  #error "Unsupported architecture"
-#endif
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // heap:alloc(user, size, weighted_bytes)
@@ -72,9 +51,9 @@ static EBPF_INLINE u64 usdt_arg2(struct pt_regs *ctx)
 SEC("uprobe/heap_alloc")
 int uprobe_heap_alloc(struct pt_regs *ctx)
 {
-  u64 user           = usdt_arg0(ctx);
-  u64 size           = usdt_arg1(ctx);
-  u64 weighted_bytes = usdt_arg2(ctx);
+  u64 user           = ctx->usdt_arg0;
+  u64 size           = ctx->usdt_arg1;
+  u64 weighted_bytes = ctx->usdt_arg2;
 
   u64 pid_tgid = bpf_get_current_pid_tgid();
   u32 pid      = pid_tgid >> 32;

@@ -242,6 +242,24 @@ func (hp *Probe) Detach(pid libpf.PID) {
 	}
 }
 
-// Unload implements tracer.Probe. The heap probe has no global kernel links;
-// per-PID resources are released via Detach.
-func (hp *Probe) Unload() error { return nil }
+// Unload implements tracer.Probe. Uprobe links are fd-backed, so the runtime
+// releases them automatically when the profiler exits; per-PID cleanup also
+// happens via Detach. We close any remaining links explicitly here so the
+// lifecycle is clear and does not rely on Detach being called for every PID
+// during shutdown.
+func (hp *Probe) Unload() error {
+	hp.mu.Lock()
+	attachments := hp.attachments
+	hp.attachments = make(map[libpf.PID]map[attachmentKey]link.Link)
+	hp.mu.Unlock()
+
+	for pid, byKey := range attachments {
+		for key, lnk := range byKey {
+			if err := lnk.Close(); err != nil {
+				log.Errorf("heap probe: unload PID %d probe %s at offset %#x: %v",
+					pid, key.name, key.offset, err)
+			}
+		}
+	}
+	return nil
+}

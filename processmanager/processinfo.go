@@ -851,22 +851,57 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 }
 
-// SynchronizePIDs is a periodic supplement to the on-demand SynchronizeProcess
-// calls that fire when the eBPF code encounters an unknown address. It picks
-// up mappings that would otherwise be missed because the mapped code is never
-// hit by a CPU sample (e.g. a sampler shim whose only entry points are USDT
-// sites loaded via dlopen). Dead processes are always cleaned up immediately.
+// SynchronizePIDs performs two independent jobs on each tick:
 //
-// To avoid a burst of synchronisations when many processes are tracked,
-// a stable queue of PIDs is built at the start of each cycle and drained
-// in batches over pidResyncCycles calls. Every PID gets exactly one
-// resync per cycle (~10 minutes at the default 2-minute interval).
+//  1. A liveness sweep over every tracked PID (a cheap kill(pid, 0) each) that
+//     reaps dead processes immediately. This always runs, so dead-PID cleanup
+//     stays prompt regardless of what else is enabled.
+//
+//  2. A mapping resync that re-runs SynchronizeProcess for live PIDs. This is
+//     only needed when a per-process probe is attached: it is a periodic
+//     supplement to the on-demand SynchronizeProcess calls that fire when the
+//     eBPF code hits an unknown address, picking up mappings that would
+//     otherwise be missed because the code is never hit by a CPU sample (e.g. a
+//     sampler shim whose only entry points are USDT sites loaded via dlopen).
+//     Plain CPU/off-CPU profiling does not need it, so when no ProbeAttacher is
+//     registered the resync is skipped entirely and only job 1 runs.
+//
+// To avoid a burst of synchronisations when many processes are tracked, the
+// resync builds a stable queue of PIDs at the start of each cycle and drains it
+// in batches over pidResyncCycles calls, giving every PID exactly one resync
+// per cycle (~10 minutes at the default 2-minute interval).
 //
 // Called every PIDCleanupInterval (currently 2 minutes) from
 // tracer.processPIDEvents.
 //
 // NOTE: Exported only for tracer.
 func (pm *ProcessManager) SynchronizePIDs() {
+	// Snapshot the tracked PIDs and whether any probe needs mapping resync.
+	pm.mu.RLock()
+	allPIDs := make([]libpf.PID, 0, len(pm.pidToProcessInfo))
+	for pid := range pm.pidToProcessInfo {
+		allPIDs = append(allPIDs, pid)
+	}
+	hasAttachers := len(pm.probeAttachers) > 0
+	pm.mu.RUnlock()
+
+	// Job 1: liveness sweep. Reap dead PIDs promptly, every tick.
+	deadPIDCount := 0
+	for _, pid := range allPIDs {
+		if live, _ := isPIDLive(pid); !live {
+			pm.processPIDExit(pid)
+			deadPIDCount++
+		}
+	}
+	if deadPIDCount > 0 {
+		log.Debugf("Cleaned up %d dead PIDs", deadPIDCount)
+	}
+
+	// Job 2: mapping resync, only when a per-process probe is attached.
+	if !hasAttachers {
+		return
+	}
+
 	// Rebuild the resync queue at the start of each cycle. This gives
 	// every tracked PID exactly one resync per cycle, regardless of map
 	// iteration order, and picks up PIDs added since the last cycle.
@@ -877,27 +912,27 @@ func (pm *ProcessManager) SynchronizePIDs() {
 			pm.pidResyncQueue = append(pm.pidResyncQueue, pid)
 		}
 		pm.mu.RUnlock()
+		pm.pidResyncCycleLen = len(pm.pidResyncQueue)
 	}
 
-	// Pop a batch from the front of the queue.
-	batchSize := min((len(pm.pidResyncQueue)+pidResyncCycles-1)/pidResyncCycles,
+	// Pop a batch from the front of the queue. Batch size is fixed from the
+	// queue length at the start of the cycle so each tick drains an equal
+	// 1/pidResyncCycles fraction of the original set. Because the batch size
+	// is fixed while the queue shrinks, the final batch of a cycle can be
+	// smaller than batchSize, so clamp to what remains.
+	batchSize := min((pm.pidResyncCycleLen+pidResyncCycles-1)/pidResyncCycles,
 		len(pm.pidResyncQueue))
 	batch := pm.pidResyncQueue[:batchSize]
 	pm.pidResyncQueue = pm.pidResyncQueue[batchSize:]
 
-	deadPIDCount := 0
 	for _, pid := range batch {
-		live, _ := isPIDLive(pid)
-		if !live {
-			pm.processPIDExit(pid)
-			deadPIDCount++
+		// Job 1 reaps dead PIDs, but a PID can die mid-cycle while still
+		// queued here. Skip dead ones rather than calling SynchronizeProcess,
+		// which would resurrect process info via getOrCreateProcessInfo.
+		if live, _ := isPIDLive(pid); !live {
 			continue
 		}
 		pm.SynchronizeProcess(process.New(pid, pid))
-	}
-
-	if deadPIDCount > 0 {
-		log.Debugf("Cleaned up %d dead PIDs", deadPIDCount)
 	}
 }
 
