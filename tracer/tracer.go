@@ -905,6 +905,21 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 	}
 	defer restoreRlimit()
 
+	// Start the most expensive programs first (longest-processing-time-first
+	// scheduling). Load times are dominated by a few programs -- unwind_python
+	// alone is ~30% of the total verification work -- so if one of those starts
+	// late it keeps running after everything else has finished, and it, rather
+	// than the total amount of work, determines how long this phase takes.
+	//
+	// The instruction count is only a coarse proxy for verifier cost: it ranks
+	// unwind_python and unwind_native, the two dominant programs, correctly, but
+	// it misranks cheaper ones (unwind_stop is large yet verifies quickly, while
+	// go_labels is small yet verifies slowly). That is sufficient here, because
+	// the schedule only depends on the expensive programs being started early.
+	slices.SortStableFunc(jobs, func(a, b loadJob) int {
+		return len(b.progSpec.Instructions) - len(a.progSpec.Instructions)
+	})
+
 	eg := &errgroup.Group{}
 	eg.SetLimit(min(runtime.GOMAXPROCS(0), len(jobs)))
 	for i := range jobs {
