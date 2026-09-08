@@ -7,6 +7,7 @@ package processcontext
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -209,7 +210,6 @@ func TestProcessContext_Read(t *testing.T) {
 			},
 			expectedResult: Info{
 				ResourceAttrs: expectedResourceAttrs(),
-				attributes:    expectedAttributes(),
 				publishedAtNs: 123456789,
 			},
 		},
@@ -311,15 +311,15 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			ctx, err := read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
+			result, err := read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedResult, ctx)
+				require.Equal(t, tt.expectedResult, result.info)
 			} else {
-				assert.Zero(t, ctx.ResourceAttrs.Len())
-				assert.Zero(t, ctx.attributes.Len())
-				assert.Zero(t, ctx.publishedAtNs)
+				assert.Zero(t, result.info.ResourceAttrs.Len())
+				assert.Nil(t, result.info.LabelDecoder())
+				assert.Zero(t, result.info.publishedAtNs)
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
@@ -424,10 +424,9 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.Equal(t,
 				Info{
 					ResourceAttrs: expectedResourceAttrs(),
-					attributes:    expectedAttributes(),
 					publishedAtNs: 123456789,
 				},
-				result)
+				result.info)
 
 		})
 	}
@@ -448,8 +447,11 @@ func expectedResourceAttrs() attribute.Set {
 	)
 }
 
-func expectedAttributes() attribute.Set {
-	return attribute.NewSet(attribute.String("custom.attribute", "custom-value"))
+func serviceName(t *testing.T, info Info) string {
+	t.Helper()
+	v, ok := info.ResourceAttrs.Value("service.name")
+	require.True(t, ok)
+	return v.AsString()
 }
 
 // An AnyValue with no variant set is a valid empty value per OTLP
@@ -471,7 +473,7 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 1))
 	mock.writeAt(payloadAddr, payload)
 
-	info, err := read(libpf.Address(0x1000),
+	result, err := read(libpf.Address(0x1000),
 		remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 	require.NoError(t, err)
 
@@ -479,7 +481,104 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 		attribute.String("set", "v"),
 		attribute.KeyValue{Key: "unset.oneof"},
 		attribute.KeyValue{Key: "absent.value"},
-	), info.ResourceAttrs)
+	), result.info.ResourceAttrs)
+}
+
+// tornTimestampReader simulates a concurrent publish observed between
+// readOnce's two coherence checks.
+type tornTimestampReader struct {
+	inner         io.ReaderAt
+	tsAddr        int64
+	first, second uint64
+	reads         int
+}
+
+func (r *tornTimestampReader) ReadAt(p []byte, off int64) (int, error) {
+	if off == r.tsAddr && len(p) == 8 {
+		r.reads++
+		ts := r.first
+		if r.reads > 1 {
+			ts = r.second
+		}
+		binary.LittleEndian.PutUint64(p, ts)
+		return len(p), nil
+	}
+	return r.inner.ReadAt(p, off)
+}
+
+func TestProcessContext_Read_ThreadContext(t *testing.T) {
+	buildPayload := func(t *testing.T, threadAttrs ...*commonpb.KeyValue) []byte {
+		t.Helper()
+		payload, err := proto.Marshal(&processcontextpb.ProcessContext{
+			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
+				{Key: "service.name", Value: strVal("test-service")},
+			}},
+			Attributes: threadAttrs,
+		})
+		require.NoError(t, err)
+		return payload
+	}
+
+	validSchema := []*commonpb.KeyValue{
+		attr(threadCtxSchemaVersionKey, strVal(supportedThreadCtxSchemaVersion)),
+		attr(threadCtxKeyMapKey, arrVal(strVal("route"), strVal("method"))),
+	}
+	malformedSchema := []*commonpb.KeyValue{
+		attr(threadCtxSchemaVersionKey, strVal("v99")),
+	}
+
+	t.Run("valid schema reaches Info.threadCtx", func(t *testing.T) {
+		payload := buildPayload(t, validSchema...)
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
+		mock.writeAt(0x2000, payload)
+
+		result, err := read(libpf.Address(0x1000), remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
+		require.NoError(t, err)
+
+		decoder := result.info.LabelDecoder()
+		require.NotNil(t, decoder)
+		labels, dropped := decoder.DecodeLabels(append([]byte{0, 3}, "/rt"...))
+		assert.Zero(t, dropped)
+		assert.Equal(t,
+			map[libpf.String]libpf.String{libpf.Intern("route"): libpf.Intern("/rt")},
+			labels)
+	})
+
+	t.Run("malformed schema is non-fatal", func(t *testing.T) {
+		payload := buildPayload(t, malformedSchema...)
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
+		mock.writeAt(0x2000, payload)
+
+		result, err := read(libpf.Address(0x1000), remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
+		require.NoError(t, err)
+		require.Error(t, result.threadCtxErr)
+		assert.Equal(t, "test-service", serviceName(t, result.info))
+		assert.Nil(t, result.info.LabelDecoder())
+	})
+
+	// A schema fault seen during a torn read is not a fault: the bytes it was
+	// decoded from were never coherent. The recheck must win, and threadCtxErr
+	// must not reach the caller for it to log.
+	t.Run("torn read wins over a payload fault", func(t *testing.T) {
+		payload := buildPayload(t, malformedSchema...)
+		mock := newMockReader()
+		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
+		mock.writeAt(0x2000, payload)
+
+		reader := &tornTimestampReader{
+			inner:  mock,
+			tsAddr: 0x1000 + int64(monotonicPublishedAtNsOffset),
+			first:  1,
+			second: 2,
+		}
+
+		result, err := readOnce(libpf.Address(0x1000),
+			remotememory.RemoteMemory{ReaderAt: reader}, 0)
+		require.ErrorIs(t, err, errConcurrentUpdate)
+		assert.Zero(t, result)
+	})
 }
 
 func TestAttributesFromEnvVars(t *testing.T) {
@@ -643,12 +742,6 @@ func TestAttributesFromEnvVars(t *testing.T) {
 func TestResolve(t *testing.T) {
 	envVars := map[libpf.String]libpf.String{
 		libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("svc"),
-	}
-	serviceName := func(t *testing.T, info Info) string {
-		t.Helper()
-		v, ok := info.ResourceAttrs.Value("service.name")
-		require.True(t, ok)
-		return v.AsString()
 	}
 	// Callers store the result unconditionally, so an unresolved Info would
 	// publish empty attributes.
