@@ -155,7 +155,6 @@ func (t *Trace) APMHash() TraceHash {
 	}
 	// Avoid a heap allocation by reusing the stack-allocated buffer.
 	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
-	t.cachedHash = traceHash
 	return traceHash
 }
 
