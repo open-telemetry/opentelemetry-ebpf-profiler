@@ -147,6 +147,13 @@ struct apm_int_procs_t {
   __uint(max_entries, 128);
 } apm_int_procs SEC(".maps");
 
+struct thread_context_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, ThreadContextProcInfo);
+  __uint(max_entries, 1024);
+} thread_context_procs SEC(".maps");
+
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
@@ -249,6 +256,18 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     corr_buf.trace_flags);
 }
 
+// Stub: only looks the process up, so thread_context_procs stays loaded
+// regardless of whether the tracer is enabled. Reading and decoding the
+// thread context lands in a later change.
+static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
+{
+  u32 pid                     = trace->pid;
+  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &pid);
+  if (!proc) {
+    return;
+  }
+}
+
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
 static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
@@ -314,8 +333,11 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
-  // Must be last since it may not return (it will call send_trace).
+  // Does not return once it dispatches, so anything below runs only when the
+  // Go path did not fill custom labels.
   maybe_add_go_custom_labels(ctx, record);
+
+  maybe_add_thread_context_info(trace);
 
   send_trace(ctx, trace);
 

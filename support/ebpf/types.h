@@ -364,6 +364,18 @@ enum {
   // number of Go asmcgocall unwind failures
   metricID_UnwindGoAsmcgocallUnwindFailure,
 
+  // number of failures to read the thread context buffer pointer out of TLS
+  metricID_UnwindThreadContextErrReadTlsPtr,
+
+  // number of failures to read the thread context buffer, header or payload
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
+  // number of thread context attribute payloads truncated to fit the buffer
+  metricID_UnwindThreadContextAttrsTruncated,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -1127,5 +1139,11 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+// ThreadContextProcInfo is a container for the data needed to locate the
+// thread context TLS variable of a process.
+typedef struct ThreadContextProcInfo {
+  TLSVarInfo tls;
+} ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H
