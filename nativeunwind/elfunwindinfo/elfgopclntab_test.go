@@ -4,7 +4,10 @@
 package elfunwindinfo
 
 import (
+	"fmt"
+	"math"
 	"testing"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -133,4 +136,96 @@ func TestTextStart(t *testing.T) {
 	defer gStripped.Close()
 
 	require.Equal(t, runtimeTextAddr, gStripped.textStart)
+}
+
+// TestGetPcvalBounds verifies that an out-of-range pcval offset, which is
+// untrusted data from the pclntab function descriptor, does not slice out
+// of bounds. The negative cases must not panic with "slice bounds out of
+// range".
+func TestGetPcvalBounds(t *testing.T) {
+	g := &Gopclntab{
+		pctab:   []byte{0x02, 0x19, 0x00},
+		quantum: 1,
+	}
+	for _, test := range []struct {
+		name string
+		offs int32
+	}{
+		{"negative", -1},
+		{"minInt32", math.MinInt32},
+		{"pastEnd", int32(len(g.pctab) + 1)},
+		{"maxInt32", math.MaxInt32},
+		{"atEnd", int32(len(g.pctab))},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			p := g.getPcval(test.offs, 0x2000)
+			// An empty table steps to a stop immediately.
+			assert.False(t, p.step())
+		})
+	}
+
+	// A valid offset still decodes the table.
+	p := g.getPcval(0, 0x2000)
+	assert.Equal(t, int32(0), p.val)
+	assert.Equal(t, uint(0x2019), p.pcEnd)
+}
+
+// TestGetFuncOverflow verifies that a function offset near the top of the
+// address space does not wrap around the bounds check in getFunc. funcOff is
+// read verbatim from the file as a 64-bit value for pre-Go1.18 pclntab.
+// Check that these cases don't panic with "index out of range", and that the
+// accepted ones return a pclntabFunc that fits in the table.
+func TestGetFuncOverflow(t *testing.T) {
+	// getFunc skips over the function start PC, whose width depends on the
+	// pclntab version, before returning the pclntabFunc that follows it.
+	// funSize has to account for both parts.
+	for _, version := range []uint8{go1_16, go1_18, go1_20} {
+		t.Run(fmt.Sprintf("version%d", version), func(t *testing.T) {
+			g := &Gopclntab{
+				functab: make([]byte, 128),
+				version: version,
+				ptrSize: 8,
+			}
+			if version >= go1_18 {
+				g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
+			} else {
+				g.funSize = g.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{}))
+			}
+			tabStart := uintptr(unsafe.Pointer(&g.functab[0]))
+			tabEnd := tabStart + uintptr(len(g.functab))
+
+			for _, test := range []struct {
+				name    string
+				funcOff uintptr
+			}{
+				{"maxUintptr", ^uintptr(0)},
+				{"wrapsToZero", ^uintptr(0) - uintptr(g.funSize) + 1},
+				{"justPastEnd", uintptr(len(g.functab))},
+				{"lastByte", uintptr(len(g.functab) - 1)},
+				{"oneTooFar", uintptr(len(g.functab)) - uintptr(g.funSize) + 1},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					pc, fun := g.getFunc(test.funcOff)
+					assert.Zero(t, pc)
+					assert.Nil(t, fun)
+				})
+			}
+
+			// The last offset that still fits a full function descriptor is
+			// accepted, and the descriptor ends exactly at the end of the
+			// table: the bound is tight, and never returns a pclntabFunc
+			// reaching past the mapping.
+			lastValid := uintptr(len(g.functab)) - uintptr(g.funSize)
+			_, fun := g.getFunc(lastValid)
+			require.NotNil(t, fun)
+			funEnd := uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
+			assert.Equal(t, tabEnd, funEnd)
+
+			// An in-range offset is still accepted, and stays in bounds.
+			_, fun = g.getFunc(0)
+			require.NotNil(t, fun)
+			funEnd = uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
+			assert.GreaterOrEqual(t, tabEnd, funEnd)
+		})
+	}
 }
