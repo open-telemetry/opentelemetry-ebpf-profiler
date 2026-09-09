@@ -10,7 +10,6 @@
 package processcontext // import "go.opentelemetry.io/ebpf-profiler/process/processcontext"
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net/url"
@@ -210,11 +209,11 @@ func IsContextMapping(isExecutable bool, mappingPath string) bool {
 }
 
 func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint64, error) {
-	var buf [8]byte
-	if err := rm.Read(headerAddr+monotonicPublishedAtNsOffset, buf[:]); err != nil {
+	ts, err := rm.ReadUint64(headerAddr + monotonicPublishedAtNsOffset)
+	if err != nil {
 		return 0, fmt.Errorf("failed to read timestamp: %w", err)
 	}
-	return binary.LittleEndian.Uint64(buf[:]), nil
+	return ts, nil
 }
 
 // readHeader reads and validates the 32-byte ProcessContext header.
