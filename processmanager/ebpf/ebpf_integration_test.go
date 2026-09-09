@@ -7,12 +7,16 @@ package ebpf
 
 import (
 	"testing"
+	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -83,4 +87,46 @@ func TestBatchOperations(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestUpdateStackDeltaPagesPartialFailure verifies that a page batch update
+// that fails midway leaves no orphaned entries behind.
+func TestUpdateStackDeltaPagesPartialFailure(t *testing.T) {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	require.NoError(t, err)
+	defer restoreRlimit()
+
+	// Deliberately too small for the batch below. The kernel inserts the
+	// first 4 pages, then fails the batch with E2BIG.
+	spec := cebpf.MapSpec{
+		Name:       "stack_delta_page_to_info_test",
+		Type:       cebpf.Hash,
+		KeySize:    uint32(unsafe.Sizeof(support.StackDeltaPageKey{})),
+		ValueSize:  uint32(unsafe.Sizeof(support.StackDeltaPageInfo{})),
+		MaxEntries: 4,
+	}
+	stackDeltaPageToInfo, err := cebpf.NewMap(&spec)
+	require.NoError(t, err)
+	defer stackDeltaPageToInfo.Close()
+
+	impl := &ebpfMapsImpl{
+		StackDeltaPageToInfo: stackDeltaPageToInfo,
+		errCounter:           make(map[metrics.MetricID]int64),
+	}
+
+	numDeltasPerPage := make([]uint16, 8)
+	err = impl.UpdateStackDeltaPages(host.FileID(0x1234),
+		numDeltasPerPage, 7, 0)
+	require.ErrorIs(t, err, unix.E2BIG)
+
+	// The cleanup must have removed every inserted key.
+	var remaining int
+	var k support.StackDeltaPageKey
+	var v support.StackDeltaPageInfo
+	iterate := stackDeltaPageToInfo.Iterate()
+	for iterate.Next(&k, &v) {
+		remaining++
+	}
+	require.NoError(t, iterate.Err())
+	require.Zero(t, remaining, "orphaned entries left after failed batch update")
 }
