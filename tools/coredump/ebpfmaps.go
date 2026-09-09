@@ -76,6 +76,9 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.addMap(unsafe.Pointer(&C.go_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_GoRuntimeOffsets))
 	case libpf.LuaJIT:
 		emc.ctx.addMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_LuaJITProcInfo))
+	case libpf.ThreadContext:
+		emc.ctx.addMap(unsafe.Pointer(&C.thread_context_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_ThreadContextProcInfo))
 	}
 	return nil
 }
@@ -102,6 +105,8 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.delMap(unsafe.Pointer(&C.go_procs), C.u32(pid))
 	case libpf.LuaJIT:
 		emc.ctx.delMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid))
+	case libpf.ThreadContext:
+		emc.ctx.delMap(unsafe.Pointer(&C.thread_context_procs), C.u32(pid))
 	}
 
 	return nil
