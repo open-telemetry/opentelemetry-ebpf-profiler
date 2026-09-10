@@ -35,6 +35,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -425,8 +426,13 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	fileID := host.FileIDFromLibpf(info.mappingFile.Value().FileID)
 	ei, err := pm.eim.AddOrIncRef(fileID, elfRef)
 	if err != nil {
-		log.Errorf("Failed to load executable info for PID %d file %v (fileID %s): %v",
-			pr.PID(), m.Path, fileID.StringNoQuotes(), err)
+		if !errors.Is(err, execinfomanager.ErrDeferredFileID) {
+			log.Errorf("Failed to load executable info for PID %d file %v (fileID %s): %v",
+				pr.PID(), m.Path, fileID.StringNoQuotes(), err)
+		}
+		// ErrDeferredFileID is expected while this fileID is in backoff. The
+		// original failure was already logged once when the fileID entered
+		// deferredFileIDs.
 		return libpf.FrameMapping{}, anonymousMappingsWanted, err
 	}
 
