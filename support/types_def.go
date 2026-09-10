@@ -98,10 +98,16 @@ const (
 	HSTSIDSegMapMask      = C.HS_TSID_SEG_MAP_MASK
 )
 
+const (
+	CustomLabelsTypeNone = C.CUSTOM_LABELS_TYPE_NONE
+	CustomLabelsTypeGo   = C.CUSTOM_LABELS_TYPE_GO
+)
+
 type ApmSpanID C.ApmSpanID
 type ApmTraceID C.ApmTraceID
 type CustomLabel C.CustomLabel
 type CustomLabelsArray C.CustomLabelsArray
+type CustomLabelsData C.CustomLabelsData
 type Event C.Event
 type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage

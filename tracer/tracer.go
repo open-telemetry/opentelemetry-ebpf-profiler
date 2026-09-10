@@ -1021,7 +1021,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Custom_labels.Len > 0 {
+	if ptr.Custom_labels_type == support.CustomLabelsTypeGo && ptr.Custom_labels.Len > 0 {
 		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
