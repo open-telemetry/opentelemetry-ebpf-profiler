@@ -2230,5 +2230,19 @@
     "name": "UnwindGoAsmcgocallUnwindFailure",
     "field": "bpf.go.errors.asmcgocall_unwind_failure",
     "id": 305
+  },
+  {
+    "description": "Number of thread-context samples whose labels were dropped because the process published no usable label schema",
+    "type": "counter",
+    "name": "ThreadContextDroppedSamplesNoSchema",
+    "field": "agent.threadctx.dropped_samples.no_schema",
+    "id": 306
+  },
+  {
+    "description": "Number of thread-context label entries dropped as undecodable",
+    "type": "counter",
+    "name": "ThreadContextDroppedEntriesUndecodable",
+    "field": "agent.threadctx.dropped_entries.undecodable",
+    "id": 307
   }
 ]

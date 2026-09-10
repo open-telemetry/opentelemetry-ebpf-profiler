@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
@@ -139,6 +138,9 @@ type Tracer struct {
 	// customLabels validates custom label keys/values pulled from eBPF and
 	// tracks how many were dropped due to invalid UTF-8.
 	customLabels customLabelValidator
+
+	// threadContextLabels counts the thread-context labels dropped undecoded.
+	threadContextLabels threadContextLabelMetrics
 
 	// sysConfigVars holds kernel struct offsets determined at startup, passed
 	// to custom probes via Enable so they can reference the same layout.
@@ -1021,23 +1023,17 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Custom_labels_type == support.CustomLabelsTypeGo && ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
-				continue
-			}
-			key := libpf.Intern(pfunsafe.ToString(keyBytes))
-			valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
-				continue
-			}
-			trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
-		}
+	switch ptr.Custom_labels_type {
+	case support.CustomLabelsTypeGo:
+		trace.CustomLabels = t.goCustomLabels(&ptr.Custom_labels)
+	case support.CustomLabelsTypeThreadContext:
+		// Both union members alias the same bytes. The tag says which is live.
+		payload := (*support.CustomLabelsData)(unsafe.Pointer(&ptr.Custom_labels))
+		trace.CustomLabels = t.threadContextCustomLabels(payload, trace.PID)
+	case support.CustomLabelsTypeNone:
+	default:
+		log.Debugf("unknown custom labels type %d for PID %d, dropping",
+			ptr.Custom_labels_type, trace.PID)
 	}
 
 	numKernelFrames := int(ptr.Num_kernel_frames)
@@ -1112,6 +1108,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 			metrics.AddSlice(t.customLabels.getAndResetMetrics())
+			metrics.AddSlice(t.threadContextLabels.getAndResetMetrics())
 		})
 	}
 
