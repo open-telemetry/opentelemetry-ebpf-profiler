@@ -649,6 +649,7 @@ typedef struct CustomLabelsData {
 enum CustomLabelsType {
   CUSTOM_LABELS_TYPE_NONE,
   CUSTOM_LABELS_TYPE_GO,
+  CUSTOM_LABELS_TYPE_THREAD_CONTEXT,
 };
 
 // Container for a stack trace

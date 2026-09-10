@@ -897,6 +897,18 @@ func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set
 	return process.Meta{}, attribute.Set{}
 }
 
+// LabelDecoderForPID returns a decoder for pid's per-thread labels, or nil if
+// it publishes no schema. The decoder is immutable, so it stays usable after
+// the lock is dropped.
+func (pm *ProcessManager) LabelDecoderForPID(pid libpf.PID) libpf.LabelDecoder {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		return procInfo.processContext.LabelDecoder()
+	}
+	return nil
+}
+
 // findMappingForTrace locates the mapping for a given host trace.
 func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	addr libpf.Address) libpf.FrameMapping {
