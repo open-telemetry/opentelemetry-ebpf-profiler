@@ -685,6 +685,7 @@ typedef struct CustomLabelsData {
 enum CustomLabelsType {
   CUSTOM_LABELS_TYPE_NONE,
   CUSTOM_LABELS_TYPE_GO,
+  CUSTOM_LABELS_TYPE_THREAD_CONTEXT,
 };
 
 // The frame data of a stack trace. Each frame is variable length,
