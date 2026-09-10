@@ -36,10 +36,6 @@ const (
 	// events are produced by the kernel between two polling intervals, the queue from bpf
 	// to userspace will fill up and the kernel will start dropping events.
 	maxEvents = 4096
-
-	// eventReaderDeadline is the timeout for perf event reads. It allows the
-	// reader goroutine to periodically check for context cancellation.
-	eventReaderDeadline = 100 * time.Millisecond
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -87,7 +83,7 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 }
 
 // startPerfEventMonitor spawns a goroutine that receives events from the given
-// perf event map by waiting for events the kernel. Every event in the buffer
+// perf event map by waiting for events from the kernel. Every event in the buffer
 // will wake up userspace.
 //
 // For each received event, triggerFunc is called. triggerFunc may NOT store
@@ -102,12 +98,14 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 		return nil, fmt.Errorf("failed to setup perf reporting via %s: %v", perfEventMap, err)
 	}
 
-	// Set a deadline so ReadInto times out periodically and we can check context
-	eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
-
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		defer eventReader.Close()
+		stopClose := context.AfterFunc(ctx, func() {
+			_ = eventReader.Close()
+		})
+		defer stopClose()
+
 		var data perf.Record
 		for {
 			select {
@@ -115,12 +113,12 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 				return
 			default:
 			}
-			// Set a deadline so ReadInto times out and we can check context
-			eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
+
 			if err := eventReader.ReadInto(&data); err != nil {
-				if !errors.Is(err, os.ErrDeadlineExceeded) {
-					readErrorCount.Add(1)
+				if errors.Is(err, os.ErrClosed) {
+					return
 				}
+				readErrorCount.Add(1)
 				continue
 			}
 			if data.LostSamples != 0 {
