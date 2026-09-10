@@ -704,6 +704,12 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
+	// Number of thread-context samples whose labels were dropped because the process published no usable label schema
+	IDThreadContextDroppedSamplesNoSchema = 306
+
+	// Number of thread-context label entries dropped as undecodable
+	IDThreadContextDroppedEntriesUndecodable = 307
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 306
+	IDMax = 308
 )
