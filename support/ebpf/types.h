@@ -673,6 +673,20 @@ typedef struct CustomLabelsArray {
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
 
+// CustomLabelsData is the opaque variant of the Trace custom labels union: a
+// length-prefixed payload that user space decodes on the producer's terms.
+typedef struct CustomLabelsData {
+  // Must be <= sizeof(data).
+  u16 size;
+  // Sized to fill the union, so the payload can use every byte the union costs.
+  u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
+} CustomLabelsData;
+
+enum CustomLabelsType {
+  CUSTOM_LABELS_TYPE_NONE,
+  CUSTOM_LABELS_TYPE_GO,
+};
+
 // The frame data of a stack trace. Each frame is variable length,
 // and is about 2 or 3 entries long. This array defines the ebpf buffer
 // to record the frames, and thus limits the number of frames we can
@@ -696,8 +710,14 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
+  // Which member of the union below is live.
+  u8 custom_labels_type;
+  union {
+    // Go runtime/pprof labels.
+    CustomLabelsArray custom_labels;
+    // Payload from a producer that encodes its own labels.
+    CustomLabelsData custom_labels_data;
+  };
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
@@ -725,6 +745,13 @@ typedef struct Trace {
   TraceFrameData frame_data;
 #endif
 } Trace;
+
+// cgo -godefs mirrors only the first union member, so every field after the
+// union holds its Go offset only while CustomLabelsArray stays the largest.
+_Static_assert(
+  __builtin_offsetof(Trace, frame_data_len) - __builtin_offsetof(Trace, custom_labels) ==
+    sizeof(CustomLabelsArray),
+  "CustomLabelsArray must be the largest member of Trace's custom labels union");
 
 // Container for unwinding state
 typedef struct UnwindState {
