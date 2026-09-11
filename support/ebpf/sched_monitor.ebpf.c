@@ -61,3 +61,18 @@ int tracepoint__sched_process_free_pre616(struct sched_process_free_ctx_pre616 *
 {
   return do_process_free(ctx, ctx->pid);
 }
+
+// A task that exits after its final switch-out will never switch in again.
+// These probe-specific hooks remove its pending trace before the kernel can
+// reuse the TID, without duplicating the normal process-exit reporting above.
+SEC("tracepoint/sched/sched_process_free/off_cpu/v2")
+int off_cpu_tracepoint__sched_process_free(struct sched_process_free_ctx *ctx)
+{
+  return bpf_map_delete_elem(&off_cpu_traces, &ctx->pid);
+}
+
+SEC("tracepoint/sched/sched_process_free/off_cpu/v1")
+int off_cpu_tracepoint__sched_process_free_pre616(struct sched_process_free_ctx_pre616 *ctx)
+{
+  return bpf_map_delete_elem(&off_cpu_traces, &ctx->pid);
+}

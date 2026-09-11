@@ -437,6 +437,57 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	})
 }
 
+func TestGenerate_OffCPUProfile(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	filePath := libpf.Intern("/bin/sleeper")
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(1, 2),
+			FileName: filePath,
+		}),
+	})
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	durations := []int64{5 * int64(time.Millisecond), 12 * int64(time.Millisecond)}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: filePath, PID: 123}: {
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeOffCPU: {
+					{}: {
+						Frames: singleFrameTrace(libpf.GoFrame, mapping,
+							0x10, "main.block", filePath, 42),
+						Timestamps: timestamps,
+						Values:     durations,
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+
+	profile := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
+	dic := profiles.Dictionary()
+	assert.Equal(t, "off_cpu",
+		dic.StringTable().At(int(profile.SampleType().TypeStrindex())))
+	assert.Equal(t, "nanoseconds",
+		dic.StringTable().At(int(profile.SampleType().UnitStrindex())))
+	assert.Zero(t, profile.Period(), "event-driven off-CPU profiles have no sampling period")
+
+	require.Equal(t, 1, profile.Samples().Len())
+	sample := profile.Samples().At(0)
+	assert.Equal(t, timestamps, sample.TimestampsUnixNano().AsRaw())
+	assert.Equal(t, durations, sample.Values().AsRaw())
+	assert.Positive(t, sample.StackIndex())
+	assert.NotEmpty(t, dic.StackTable().At(int(sample.StackIndex())).LocationIndices().AsRaw())
+}
+
 func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
