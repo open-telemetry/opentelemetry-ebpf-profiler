@@ -120,7 +120,7 @@ func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *
 		grpcConnectionTimeout:     GRPCConnectionTimeout,
 		grpcOperationTimeout:      GRPCOperationTimeout,
 		grpcStartupBackoffTimeout: GRPCStartupBackoffTimeout,
-		pidCleanupInterval:        5 * time.Minute,
+		pidCleanupInterval:        2 * time.Minute,
 		tracePollInterval:         250 * time.Millisecond,
 		reportInterval:            reportInterval,
 		monitorInterval:           monitorInterval,

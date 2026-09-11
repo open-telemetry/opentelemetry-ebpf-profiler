@@ -43,6 +43,11 @@ var (
 		SampleUnit:   "nanoseconds",
 		ReportValues: true,
 	}
+	profileTypeHeapAlloc = &samples.TypeMetadata{
+		SampleType:   "alloc_space",
+		SampleUnit:   "bytes",
+		ReportValues: true,
+	}
 )
 
 // testGenerate is a helper that calls Generate with the standard test collection window
@@ -1018,4 +1023,119 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 		string(semconv.ProcessExecutableNameKey): "svc",
 	}
 	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+func TestHeapAllocProducesSpaceAndObjectsProfiles(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeHeapAlloc: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{128, 256},
+						AllocSizes: []int64{64, 128},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len())
+
+	profilesByType := make(map[string]pprofile.Profile)
+	strings := profiles.Dictionary().StringTable()
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		sampleType := prof.SampleType()
+		profilesByType[strings.At(int(sampleType.TypeStrindex()))] = prof
+	}
+
+	allocSpace, ok := profilesByType["alloc_space"]
+	require.True(t, ok)
+	assert.Equal(t, "bytes", strings.At(int(allocSpace.SampleType().UnitStrindex())))
+	require.Equal(t, 1, allocSpace.Samples().Len())
+	assert.Equal(t, []int64{128, 256}, allocSpace.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, allocSpace.Samples().At(0).TimestampsUnixNano().AsRaw())
+
+	allocObjects, ok := profilesByType["alloc_objects"]
+	require.True(t, ok)
+	assert.Equal(t, "count", strings.At(int(allocObjects.SampleType().UnitStrindex())))
+	require.Equal(t, 1, allocObjects.Samples().Len())
+	assert.Equal(t, []int64{2, 2}, allocObjects.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, allocObjects.Samples().At(0).TimestampsUnixNano().AsRaw())
+}
+
+// TestHeapAllocObjectsUsesAllocSizeWeighting verifies that alloc_objects is
+// derived from Values (byte-weight) divided by the per-event AllocSizes
+// (raw allocation size), not a flat count of 1 per sample, and that a
+// missing/zero size falls back to 1 rather than dividing by zero.
+func TestHeapAllocObjectsUsesAllocSizeWeighting(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+		uint64(time.Unix(1030, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeHeapAlloc: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						// weight=1000 @ size=100 -> 10 objects.
+						// weight=64 @ size=64 -> 1 object.
+						// weight=500 @ size=0 (unknown) -> falls back to 1.
+						Values:     []int64{1000, 64, 500},
+						AllocSizes: []int64{100, 64, 0},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	strings := profiles.Dictionary().StringTable()
+	var allocObjects pprofile.Profile
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		if strings.At(int(prof.SampleType().TypeStrindex())) == "alloc_objects" {
+			allocObjects = prof
+		}
+	}
+	require.Equal(t, 1, allocObjects.Samples().Len())
+	assert.Equal(t, []int64{10, 1, 1}, allocObjects.Samples().At(0).Values().AsRaw())
 }

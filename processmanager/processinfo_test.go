@@ -599,3 +599,51 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	meta, _ = pm.metaForPID(pid)
 	require.Equal("foobarbaz", meta.ExtraMeta[key])
 }
+
+// deadPID is a PID chosen to be well outside the range the kernel would
+// realistically assign, so isPIDLive (kill(pid, 0)) reports it as not running.
+const deadPID = libpf.PID(0x7ffffffe)
+
+func newSyncPIDsTestPM(attachers []ProbeAttacher) *ProcessManager {
+	return &ProcessManager{
+		ebpf:             &testEbpfHandler{},
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: map[libpf.PID]*processInfo{deadPID: {}},
+		exitEvents:       make(map[libpf.PID]times.KTime),
+		attachedProbes:   make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
+		probeAttachers:   attachers,
+	}
+}
+
+// TestSynchronizePIDsSkipsResyncWithoutAttachers verifies that with no probe
+// attacher registered, SynchronizePIDs still reaps dead PIDs (job 1) but does
+// not build or drain the mapping-resync queue (job 2 is skipped), keeping the
+// periodic tick as cheap as the original liveness-only sweep.
+func TestSynchronizePIDsSkipsResyncWithoutAttachers(t *testing.T) {
+	require := require.New(t)
+	pm := newSyncPIDsTestPM(nil)
+
+	pm.SynchronizePIDs()
+
+	// Job 1 ran: the dead PID was reaped (exit recorded).
+	require.Contains(pm.exitEvents, deadPID)
+	// Job 2 was skipped: the resync queue was never built.
+	require.Empty(pm.pidResyncQueue)
+	require.Zero(pm.pidResyncCycleLen)
+}
+
+// TestSynchronizePIDsResyncsWithAttacher verifies that when a probe attacher is
+// registered the mapping-resync queue is built and drained (job 2 runs) in
+// addition to the liveness sweep.
+func TestSynchronizePIDsResyncsWithAttacher(t *testing.T) {
+	require := require.New(t)
+	pm := newSyncPIDsTestPM([]ProbeAttacher{&recordingProbeAttacher{}})
+
+	pm.SynchronizePIDs()
+
+	// Job 1 ran: the dead PID was reaped.
+	require.Contains(pm.exitEvents, deadPID)
+	// Job 2 ran: the resync queue was built for the tracked PID. The dead PID
+	// is skipped inside the batch loop, so SynchronizeProcess is never called.
+	require.Equal(1, pm.pidResyncCycleLen)
+}
