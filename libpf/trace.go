@@ -253,3 +253,11 @@ func (f EbpfFrame) Data() uint64 {
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
 }
+
+// LabelDecoder decodes a per-thread custom-label payload into labels plus a
+// count of entries it could not decode. Implementations must be
+// concurrency-safe, and DecodeLabels must not retain or alias data, which
+// points into a reused ring buffer.
+type LabelDecoder interface {
+	DecodeLabels(data []byte) (labels map[String]String, dropped int)
+}
