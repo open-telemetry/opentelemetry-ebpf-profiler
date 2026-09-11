@@ -126,8 +126,10 @@ func (t *threadContextInfo) DecodeLabels(data []byte) (labels map[libpf.String]l
 		key := t.attributeKeyMap[keyIndex]
 		// A repeated key index means the payload is malformed: still decode it
 		// (last write wins) but count it, rather than silently discard a value.
-		if _, exists := labels[key]; exists {
+		if prev, exists := labels[key]; exists {
 			dropped++
+			log.Debugf("thread context: duplicate entry for %q, replacing %q with %q",
+				key, prev, val)
 		}
 		// Interning copies val, satisfying LabelDecoder's no-alias contract.
 		labels[key] = libpf.Intern(pfunsafe.ToString(val))
