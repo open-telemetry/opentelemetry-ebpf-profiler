@@ -151,6 +151,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		reporter.version,
 		collectionStart,
 		collectionEnd,
+		nil, nil,
 	)
 
 	// Validate the generation succeeded
@@ -323,6 +324,8 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		reporter.version,
 		reporter.collectionStartTime,
 		time.Now(),
+		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, profiles)

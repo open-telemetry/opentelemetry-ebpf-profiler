@@ -40,6 +40,11 @@ import (
 )
 
 const (
+	// pidResyncCycles is the number of SynchronizePIDs calls over which
+	// every tracked PID is resynchronised once. With a 2-minute call
+	// interval this gives a full cycle of ~10 minutes.
+	pidResyncCycles = 5
+
 	// ELFInfoCacheSize is the maximum size of the LRU cache holding the executables'
 	// ELF information. It is exported so other packages (e.g. usdt) can share it.
 	ELFInfoCacheSize = 16384
@@ -386,7 +391,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
+	procMeta, resourceAttrs := pm.MetaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -398,6 +403,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ContainerID:    procMeta.ContainerID,
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
+		AllocSize:      int64(bpfTrace.ValueExtra[1]),
 		EnvVars:        procMeta.EnvVariables,
 		ResourceAttrs:  resourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,

@@ -78,6 +78,16 @@ type ProcessManager struct {
 	// pidToProcessInfo keeps track of the executable memory mappings.
 	pidToProcessInfo map[libpf.PID]*processInfo
 
+	// pidResyncQueue is the remaining PIDs to resynchronise in the
+	// current cycle. Rebuilt from pidToProcessInfo when exhausted.
+	// See SynchronizePIDs.
+	pidResyncQueue []libpf.PID
+	// pidResyncCycleLen is the number of PIDs in the queue when it was
+	// last rebuilt. Batch sizes are derived from this value so that each
+	// tick drains a fixed 1/pidResyncCycles fraction of the original
+	// queue rather than 1/pidResyncCycles of whatever remains.
+	pidResyncCycleLen int
+
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
 	exitEvents map[libpf.PID]times.KTime
 
