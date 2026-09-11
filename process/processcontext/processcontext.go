@@ -251,9 +251,11 @@ func readHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (header,
 	return hdr, nil
 }
 
+// payloadResult exists only to carry a non-fatal failure to read the
+// thread-context schema alongside Info.
 type payloadResult struct {
 	info Info
-	// A non-fatal thread-context schema fault: info is valid without it.
+	// A non-fatal error: info stays usable, only its threadCtx is nil.
 	// Returned rather than logged here because only the caller's timestamp
 	// recheck can tell a genuine fault from a torn read.
 	threadCtxErr error
