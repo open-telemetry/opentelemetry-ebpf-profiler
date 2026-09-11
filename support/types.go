@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x75
+	MetricIDBeginCumulative = 0x79
 )
 
 const (
@@ -146,6 +146,13 @@ type DTVInfo struct {
 	Offset     int16
 	Multiplier uint8
 	Pad_cgo_0  [1]byte
+}
+type TLSVarInfo struct {
+	tls_offset int32
+	module_id  uint16
+	dtv_info   DTVInfo
+	resolved   bool
+	pad_cgo_0  [1]byte
 }
 type Trace struct {
 	Pid                uint32
@@ -303,6 +310,9 @@ type RubyProcInfo struct {
 	Running_ec                   uint16
 	Pad_cgo_0                    [4]byte
 }
+type ThreadContextProcInfo struct {
+	Tls TLSVarInfo
+}
 type V8ProcInfo struct {
 	Version                      uint32
 	Type_JSFunction_first        uint16
@@ -330,10 +340,11 @@ const (
 	Sizeof_StackDelta = 0x4
 	Sizeof_Trace      = 0x62d8
 
-	sizeof_ApmIntProcInfo = 0x8
-	sizeof_DotnetProcInfo = 0x4
-	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x60
+	sizeof_ApmIntProcInfo        = 0x8
+	sizeof_DotnetProcInfo        = 0x4
+	sizeof_PHPProcInfo           = 0x18
+	sizeof_RubyProcInfo          = 0x60
+	sizeof_ThreadContextProcInfo = 0xc
 )
 
 const (
@@ -512,4 +523,8 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
 	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
 	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
+	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x77: metrics.IDUnwindThreadContextReadSuccesses,
+	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
 }

@@ -364,6 +364,18 @@ enum {
   // number of Go asmcgocall unwind failures
   metricID_UnwindGoAsmcgocallUnwindFailure,
 
+  // number of failures to read the thread context buffer pointer out of TLS
+  metricID_UnwindThreadContextErrReadTlsPtr,
+
+  // number of failures to read the thread context buffer, header or payload
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
+  // number of thread context attribute payloads truncated to fit the buffer
+  metricID_UnwindThreadContextAttrsTruncated,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -431,6 +443,22 @@ typedef struct DTVInfo {
   // Multiplier is the size of each DTV entry in bytes.
   u8 multiplier;
 } DTVInfo;
+
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS.
+typedef struct TLSVarInfo {
+  // TP-relative when module_id is 0, else within that module's TLS block.
+  // Signed because variant II puts the static block below the thread pointer.
+  s32 tls_offset;
+  // 0 for static TLS, and the only static/dynamic discriminant.
+  u16 module_id;
+  // Unused when module_id == 0, and empty until libc introspection supplies it.
+  DTVInfo dtv_info;
+  // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
+  // aarch64 musl gives tls_offset 0 to a library whose executable has no
+  // PT_TLS. Dynamic TLS stays false until dtv_info arrives.
+  bool resolved;
+} TLSVarInfo;
 
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
@@ -1111,5 +1139,11 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+// ThreadContextProcInfo is a container for the data needed to locate the
+// thread context TLS variable of a process.
+typedef struct ThreadContextProcInfo {
+  TLSVarInfo tls;
+} ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H
