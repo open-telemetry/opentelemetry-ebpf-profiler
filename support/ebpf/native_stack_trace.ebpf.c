@@ -54,6 +54,10 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 // internal view (e.g., reporting PID 1 instead of the host PID).
 BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
 
+// If enabled, tasks in descendant PID namespaces are translated by walking
+// their PID namespace hierarchy when the kernel helper cannot resolve them.
+BPF_RODATA_VAR(bool, translate_descendant_pids, false)
+
 // The inode number of the target PID namespace.
 // Obtained by calling stat() on /proc/self/ns/pid.
 BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
@@ -62,6 +66,17 @@ BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
 // Required by the bpf_get_ns_current_pid_tgid helper to uniquely
 // identify the namespace filesystem (nsfs) instance.
 BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+
+// Kernel BTF-derived layout used to translate tasks in descendant PID
+// namespaces into target_pid_ns_inode. bpf_get_ns_current_pid_tgid only
+// handles tasks whose active PID namespace exactly matches the target.
+BPF_RODATA_VAR(u32, task_thread_pid_offset, 0)
+BPF_RODATA_VAR(u32, pid_level_offset, 0)
+BPF_RODATA_VAR(u32, pid_numbers_offset, 0)
+BPF_RODATA_VAR(u32, upid_size, 0)
+BPF_RODATA_VAR(u32, upid_nr_offset, 0)
+BPF_RODATA_VAR(u32, upid_ns_offset, 0)
+BPF_RODATA_VAR(u32, pid_namespace_inum_offset, 0)
 // origin_id_sampling is set during load time.
 BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
