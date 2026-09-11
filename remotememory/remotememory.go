@@ -3,15 +3,16 @@
 
 // remotememory provides access to memory space of a process. The ReaderAt
 // interface is used for the basic access, and various convenience functions are
-// provided to help reading specific data types.
+// provided to help reading specific data types. Accessors without a Read prefix
+// fold a failed read into the zero value.
 package remotememory // import "go.opentelemetry.io/ebpf-profiler/remotememory"
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
 
 // RemoteMemory implements a set of convenience functions to access the remote memory
@@ -32,49 +33,74 @@ func (rm RemoteMemory) Read(addr libpf.Address, p []byte) error {
 	return err
 }
 
+// readInt decodes in host byte order.
+func readInt[T ~uint8 | ~uint16 | ~uint32 | ~uint64](
+	rm RemoteMemory, addr libpf.Address,
+) (T, error) {
+	var v T
+	if err := rm.Read(addr, pfunsafe.FromPointer(&v)); err != nil {
+		return 0, err
+	}
+	return v, nil
+}
+
+// ReadPtr reads a native pointer from remote memory
+func (rm RemoteMemory) ReadPtr(addr libpf.Address) (libpf.Address, error) {
+	v, err := readInt[uint64](rm, addr)
+	if err != nil {
+		return 0, err
+	}
+	return libpf.Address(v) - rm.Bias, nil
+}
+
+// ReadUint8 reads an 8-bit unsigned integer from remote memory
+func (rm RemoteMemory) ReadUint8(addr libpf.Address) (uint8, error) {
+	return readInt[uint8](rm, addr)
+}
+
+// ReadUint16 reads a 16-bit unsigned integer from remote memory
+func (rm RemoteMemory) ReadUint16(addr libpf.Address) (uint16, error) {
+	return readInt[uint16](rm, addr)
+}
+
+// ReadUint32 reads a 32-bit unsigned integer from remote memory
+func (rm RemoteMemory) ReadUint32(addr libpf.Address) (uint32, error) {
+	return readInt[uint32](rm, addr)
+}
+
+// ReadUint64 reads a 64-bit unsigned integer from remote memory
+func (rm RemoteMemory) ReadUint64(addr libpf.Address) (uint64, error) {
+	return readInt[uint64](rm, addr)
+}
+
 // Ptr reads a native pointer from remote memory
 func (rm RemoteMemory) Ptr(addr libpf.Address) libpf.Address {
-	var buf [8]byte
-	if rm.Read(addr, buf[:]) != nil {
-		return 0
-	}
-	return libpf.Address(binary.LittleEndian.Uint64(buf[:])) - rm.Bias
+	v, _ := rm.ReadPtr(addr)
+	return v
 }
 
 // Uint8 reads an 8-bit unsigned integer from remote memory
 func (rm RemoteMemory) Uint8(addr libpf.Address) uint8 {
-	var buf [1]byte
-	if rm.Read(addr, buf[:]) != nil {
-		return 0
-	}
-	return buf[0]
+	v, _ := readInt[uint8](rm, addr)
+	return v
 }
 
 // Uint16 reads a 16-bit unsigned integer from remote memory
 func (rm RemoteMemory) Uint16(addr libpf.Address) uint16 {
-	var buf [2]byte
-	if rm.Read(addr, buf[:]) != nil {
-		return 0
-	}
-	return binary.LittleEndian.Uint16(buf[:])
+	v, _ := readInt[uint16](rm, addr)
+	return v
 }
 
 // Uint32 reads a 32-bit unsigned integer from remote memory
 func (rm RemoteMemory) Uint32(addr libpf.Address) uint32 {
-	var buf [4]byte
-	if rm.Read(addr, buf[:]) != nil {
-		return 0
-	}
-	return binary.LittleEndian.Uint32(buf[:])
+	v, _ := readInt[uint32](rm, addr)
+	return v
 }
 
 // Uint64 reads a 64-bit unsigned integer from remote memory
 func (rm RemoteMemory) Uint64(addr libpf.Address) uint64 {
-	var buf [8]byte
-	if rm.Read(addr, buf[:]) != nil {
-		return 0
-	}
-	return binary.LittleEndian.Uint64(buf[:])
+	v, _ := readInt[uint64](rm, addr)
+	return v
 }
 
 // String reads a zero terminated string from remote memory
