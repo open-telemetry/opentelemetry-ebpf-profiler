@@ -7,6 +7,7 @@ package tracer_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"runtime"
 	"slices"
@@ -22,6 +23,7 @@ import (
 
 	"go.opentelemetry.io/otel/metric/noop"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -286,5 +288,38 @@ func TestAllTracers(t *testing.T) {
 			require.NoError(t, err)
 			defer tr.Close()
 		})
+	}
+}
+
+// BenchmarkNewTracer measures the cost of the whole tracer startup path,
+// which is dominated by loading eBPF maps and programs into the kernel.
+//
+// Run with:
+//
+//	sudo go test -tags integration -run='^$' -bench=BenchmarkNewTracer \
+//	    -benchtime=5x -count=10 ./tracer/
+func BenchmarkNewTracer(b *testing.B) {
+	// Keep the benchmark output parseable by benchstat.
+	log.SetLevel(slog.LevelError)
+
+	ctx := b.Context()
+
+	for b.Loop() {
+		tr, err := tracer.NewTracer(ctx, &tracer.Config{
+			Intervals:              &mockIntervals{},
+			InterpretersConfig:     interpreterconfig.AllInterpreters(),
+			FilterErrorFrames:      false,
+			SamplesPerSecond:       20,
+			MapScaleFactor:         0,
+			KernelVersionCheck:     true,
+			BPFVerifierLogLevel:    0,
+			ProbabilisticInterval:  100,
+			ProbabilisticThreshold: 100,
+		})
+		require.NoError(b, err)
+
+		b.StopTimer()
+		tr.Close()
+		b.StartTimer()
 	}
 }
