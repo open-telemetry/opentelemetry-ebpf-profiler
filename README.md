@@ -154,7 +154,6 @@ For more information about the maintainer role, see the
 
 - [Roger Coll](https://github.com/rogercoll), Elastic
 - [Florian Lehner](https://github.com/florianl), Elastic
-- [Damien Mathieu](https://github.com/dmathieu), Elastic
 - [Tim Rühsen](https://github.com/rockdaboot)
 
 For more information about the approver role, see the
@@ -162,6 +161,7 @@ For more information about the approver role, see the
 
 ### Emeritus
 
+- [Damien Mathieu](https://github.com/dmathieu), Approver
 - [Dmitry Filimonov](https://github.com/petethepig), Maintainer
 - [Joel Höner](https://github.com/athre0z), Approver
 
