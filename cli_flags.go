@@ -81,7 +81,13 @@ var (
 		"captured profiling samples."
 	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
 		"Default is %d.", defaultArgFrameCacheSize)
-	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
+	enableSWCPUClockHelp = "Enable software cpu-clock perf events for sampling. " +
+		"At least one of --enable-sw-cpu-clock or --enable-hw-cpu-cycles must be enabled."
+	enableHWCPUCyclesHelp = "Enable hardware cpu-cycles perf events for sampling. " +
+		"Hardware events may not be available in all environments (e.g., VMs without PMU passthrough). " +
+		"At least one of --enable-sw-cpu-clock or --enable-hw-cpu-cycles must be enabled."
+	enableBranchSamplingHelp = "Enable branch sampling for supported CPUs. Requires hardware cpu-cycles sampling."
+	bpffsHelp                = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
 	pinnedCPUIDsHelp  = "Range of CPUs to profile in the format like \"0-15,20,31\". Only for on-CPU sampling. " +
@@ -161,6 +167,10 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
+
+	fs.BoolVar(&args.EnableSWCPUClock, "enable-sw-cpu-clock", true, enableSWCPUClockHelp)
+	fs.BoolVar(&args.EnableHWCPUCycles, "enable-hw-cpu-cycles", false, enableHWCPUCyclesHelp)
+	fs.BoolVar(&args.EnableBranchSampling, "enable-branch-sampling", false, enableBranchSamplingHelp)
 
 	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
 

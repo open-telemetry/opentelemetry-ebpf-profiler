@@ -75,6 +75,17 @@ type Config struct {
 	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
 	Probes                  []component.ID           `mapstructure:"probes"`
 
+	// EnableSWCPUClock enables software cpu-clock perf events for sampling.
+	// This is the default event type used for profiling.
+	EnableSWCPUClock bool `mapstructure:"enable_sw_cpu_clock"`
+	// EnableHWCPUCycles enables hardware cpu-cycles perf events for sampling.
+	// When enabled together with EnableSWCPUClock, both event types are collected concurrently.
+	// Hardware events may not be available in all environments (e.g., VMs without PMU passthrough).
+	EnableHWCPUCycles bool `mapstructure:"enable_hw_cpu_cycles"`
+	// EnableBranchSampling enables LBR for Intel/Zen4+ when using `EnableHWCPUCycles`,
+	// and AMD BRS for older Zen if supported.
+	EnableBranchSampling bool `mapstructure:"enable_branch_sampling"`
+
 	// Configuration options that users can not set directly:
 	//
 	// PinnedCPUIDs is derived from TargetCPUIDs during Validate
@@ -150,6 +161,13 @@ func (cfg *Config) Validate() error {
 				"should be between 1 and %d",
 			tracer.ProbabilisticThresholdMax,
 		)
+	}
+
+	// At least one perf event type must be enabled.
+	if !cfg.EnableSWCPUClock && !cfg.EnableHWCPUCycles {
+		return errors.New(
+			"at least one perf event type must be enabled: " +
+				"use --enable-sw-cpu-clock and/or --enable-hw-cpu-cycles")
 	}
 
 	if cfg.NoKernelVersionCheck {

@@ -19,6 +19,7 @@ require (
 	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/cpuid/v2 v2.2.10
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
 	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260910102957-80072b29d425
@@ -41,6 +42,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.11.0
 	go.opentelemetry.io/proto/otlp/processcontext/v1development v0.4.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.0
+	go.uber.org/goleak v1.3.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.31.0
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba
@@ -77,7 +79,6 @@ require (
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/jsimonetti/rtnetlink/v2 v2.0.3 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/knadh/koanf/maps v0.1.3 // indirect
 	github.com/knadh/koanf/providers/confmap v1.0.1 // indirect
 	github.com/knadh/koanf/v2 v2.3.6 // indirect

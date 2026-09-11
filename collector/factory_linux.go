@@ -51,6 +51,7 @@ func defaultConfig() component.Config {
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
+		EnableSWCPUClock:       true,
 	}
 }
 

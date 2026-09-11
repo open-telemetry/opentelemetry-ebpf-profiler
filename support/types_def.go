@@ -32,6 +32,7 @@ const (
 	FrameMarkerLuaJIT  = C.FRAME_MARKER_LUAJIT
 	FrameMarkerBEAM    = C.FRAME_MARKER_BEAM
 	FrameMarkerGo      = C.FRAME_MARKER_GO
+	FrameMarkerLBR     = C.FRAME_MARKER_LBR
 )
 
 const (
@@ -112,7 +113,11 @@ type StackDeltaPageKey C.StackDeltaPageKey
 type SystemAnalysis C.SystemAnalysis
 type TSDInfo C.TSDInfo
 type DTVInfo C.DTVInfo
+type LBREntry C.LBREntry
 type Trace C.Trace
+
+const MaxBranchRecords = C.MAX_BRANCH_RECORDS
+
 type UnwindInfo C.UnwindInfo
 
 type ApmIntProcInfo C.ApmIntProcInfo
