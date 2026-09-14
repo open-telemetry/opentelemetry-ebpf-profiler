@@ -364,6 +364,11 @@ enum {
   // number of Go asmcgocall unwind failures
   metricID_UnwindGoAsmcgocallUnwindFailure,
 
+  // number of heap allocs dropped due to per-PID live-heap cap
+  metricID_HeapPerPIDLimitHit,
+
+  // number of dropped heap alloc entries due to map full
+  metricID_HeapLiveMapFull,
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -670,6 +675,15 @@ typedef struct Trace {
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
+
+  // value_extra carries origin-specific auxiliary values alongside `value`.
+  // Each origin defines how its eBPF producer and its reporter consumer use
+  // the slots. For example, the heap probe documents its layout where the
+  // fields are written, in heap_usdt.ebpf.c.
+  //
+  // This is intentionally a small, fixed side-channel; we expect it may be
+  // replaced with a more general mechanism later.
+  u64 value_extra[2];
 
   // The CPU that captured this trace.
   u32 cpu_id;
