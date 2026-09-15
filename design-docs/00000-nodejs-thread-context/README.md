@@ -11,26 +11,22 @@ Node.js Thread Context
 # Abstract
 
 This document proposes how the profiler reads OpenTelemetry thread context from
-Node.js processes. The thread-context work in flight (see
-[#1229](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/1229)
-and its follow-up series) implements [OTEP
-4947](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md),
-in which the target process publishes a pointer to a **Thread-Local Context
-Record** in a thread-local variable and the profiler dereferences it. That
-mechanism does not fit Node.js, where a single thread interleaves many logical
-contexts and keeping a thread-local current would mean an FFI crossing on the
-hottest path in the runtime.
+Node.js processes. [OTEP 4947](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md)
+specifies that the target process publishes a pointer to a **Thread-Local
+Context Record** in a thread-local variable and the profiler dereferences it.
+That mechanism does not fit Node.js, where a single thread interleaves many
+logical contexts and keeping a thread-local current would mean an FFI crossing
+on the hottest path in the runtime.
 
 We propose a second discovery mechanism for the same record format. The target
-process publishes a small, write-once-per-isolate discovery struct in a
-thread-local; the profiler uses it to walk from the V8 isolate's
-`ContinuationPreservedEmbedderData` slot, through Node.js's active
-`AsyncContextFrame` (a JavaScript `Map`), to the record. The record format,
-`attribute_key_map` decoding and all record parsing are shared verbatim with
-OTEP 4947, and the new walk is selected by a distinct
+process publishes a small discovery struct in a thread-local; the profiler uses
+it to walk through thread-specific V8 and Node.js data structures until it
+reaches the record attached to the asynchronous local storage of the current
+execution. The record format, attribute key map handling, and all record parsing
+are shared verbatim with OTEP 4947, and the new walk is selected by a distinct
 `threadlocal.schema_version` value. The design has a working writer-side
-reference implementation; no reader implements it yet, and this document is the
-proposal for making the profiler the first.
+[reference implementation](https://github.com/polarsignals/custom-labels/tree/otel-thread-ctx-wip/js);
+and this document is the proposal for making the profiler read it.
 
 # Introduction
 
@@ -44,12 +40,12 @@ Two OTEPs define what the profiler consumes today:
   rather than per sample.
 - [OTEP
   4947](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md)
-  defines the **Thread-Local Context Record** — a packed byte layout carrying
-  trace ID, span ID, trace flags and indexed attributes — and the thread-local
-  variable that points at it. It surveys the major runtimes and lists Node.js
-  among those it does not expect to support, with a section, "Alternative for
-  Node.js support", promising a separate document. This is that document,
-  adapted for this repository.
+  defines the **Thread-Local Context Record**, a packed byte layout carrying
+  trace ID, span ID, trace flags and indexed attributes, as well as the
+  thread-local variable that points at it. It surveys the major runtimes and
+  lists Node.js among those it does not expect to support, with a section,
+  "Alternative for Node.js support", promising a separate document. This is that
+  document, adapted for this repository.
 
 Relevant code already in or arriving in this repository:
 
@@ -66,8 +62,7 @@ Relevant code already in or arriving in this repository:
   profiler already reads tagged V8 words and V8 heap object fields out of
   target memory. The walk proposed here needs the same primitives.
 - `design-docs/00002-custom-labels` is the sibling mechanism for Go pprof
-  labels, and made the same observation this proposal rests on: the unit of
-  context is whatever the runtime says it is, not necessarily the OS thread.
+  labels, which also has a unit of context other than the OS thread.
 
 ### How Node.js tracks the active continuation
 
@@ -88,11 +83,11 @@ levels:
   installs the right `AsyncContextFrame` into the CPED slot on the continuation
   changes it effects itself, such as entering IO and timer callbacks.
 
-So CPED is the V8 mechanism and the async-context frame is Node's application of
-it. An SDK, or any other Node.js tracing code, that puts its record holder into
-an `AsyncLocalStorage` therefore gets context-switch tracking for free, at
-exactly the granularity the runtime uses, with no native call on attach or
-detach and no cost at all when nothing is attached.
+Said otherwise, CPED is the V8 mechanism and the async-context frame is Node's
+application of it. An SDK, or any other Node.js tracing code, that puts its
+record holder into an `AsyncLocalStorage` therefore gets context-switch tracking
+for free, at exactly the granularity the runtime uses, with no native call on
+attach or detach and no cost at all when nothing is attached.
 
 What is left is to tell the profiler how to walk from the isolate to the record.
 That is what this document specifies.
@@ -106,9 +101,7 @@ The writer side exists and has been exercised:
   — reference implementation of this contract, including the reader-facing
   contract documented in its `README.md`.
 - [`DataDog/pprof-nodejs`](https://github.com/DataDog/pprof-nodejs) — the same
-  writer vendored into a shipping profiler, with tests covering the publication
-  protocol, in-place and reallocating appends, invalidation, and isolate
-  teardown.
+  writer vendored into a shipping profiler.
 
 The discovery approach — walking the async-context frame out of the CPED slot —
 was first demonstrated by Polar Signals ([blog
@@ -128,11 +121,10 @@ deoptimizes V8 — and they are deprecated and slated for removal.
 
 As called out in OTEP 4947, this combination of constant switching and the high
 cost of running code at each switch means an implementation of that spec would
-not be efficient for current versions of Node.js. The consequence for this
-repository is concrete: once the thread-context reader lands, Node.js remains a
-gap — one of the few runtimes for which the profiler already ships an unwinder
+not be efficient for current versions of Node.js. As a consequence, Node.js
+remains one of the few runtimes for which the profiler already ships an unwinder
 (`interpreter/nodev8`) but would still have no way to attribute a sample to a
-trace.
+trace even if an OTEP 4947 thread-context reader for its default schema ships.
 
 Thus, similarly to how Go is already supported under its own schema version, we
 propose a Node.js-specific discovery mechanism for the same record format.
@@ -141,7 +133,7 @@ propose a Node.js-specific discovery mechanism for the same record format.
 
 - **The record format is reused unchanged.** The bytes the profiler parses are
   identical to OTEP 4947's, so record parsing and `attribute_key_map` decoding
-  are shared across runtimes. Only the code that arrives at a record differs.
+  are shared across runtimes. Only the code that finds the record differs.
 - **Selection is explicit.** The new walk is chosen by a distinct
   `threadlocal.schema_version` value, so a target the profiler does not
   understand degrades to no context rather than to a wrong walk.
@@ -191,9 +183,7 @@ propose a Node.js-specific discovery mechanism for the same record format.
   never publish a discovery struct. There is currently no mechanism in Node.js
   we could use to support this thread pool; such a mechanism would mean changing
   Node.js itself.
-- **Changing the record format.** Any change there belongs in OTEP 4947. Notably
-  the semantics of mutating `trace-flags` after publication, which matters to
-  SDKs that decide sampling late, is deliberately left to that OTEP.
+- **Changing the record format.** Any change there belongs in OTEP 4947.
 
 # Proposed Solution
 
@@ -229,7 +219,7 @@ reason the mechanism is affordable in Node.js.
 
 The cost is moved to the profiler: to find the record it must know enough about
 V8 and Node.js internals to read their representation of a JavaScript `Map`. See
-"Trade-offs and mitigations" for what that buys and what it risks.
+"Trade-offs and mitigations" below for more details.
 
 ## The contract the target process provides
 
@@ -304,9 +294,6 @@ symbol archaeology. See "Alternatives Considered" for why they are not taken
 from V8's `v8dbg_*` postmortem symbols, which this repository already consumes
 elsewhere.
 
-Note that nothing published here describes the writer's own data structures.
-Internal field 0 points straight at the record.
-
 ### Thread-local variable
 
 A single thread-local, `otel_thread_ctx_nodejs_v1`, is exported as an ELF TLS
@@ -323,17 +310,26 @@ pointer:
 
 All four fields are fixed while the isolate lives, but they are not written only
 once: the SDK populates them when it installs its hook and zeroes them again at
-teardown. The profiler MUST therefore re-read the struct each time it samples
-the thread, and MUST NOT substitute cached field values — one holding a
-pre-teardown copy would go on walking a dead isolate's `cped_slot`. That costs
-one read of four words, which is negligible beside the walk it precedes.
+teardown.
+
+Additionally, a writer MAY temporarily set the `cped_slot` to zero and later
+restore its previous value if it wishes to prevent reads for a period of time
+because some condition makes the walk unsafe — see "Garbage collection" for a
+motivating example.
+
+The profiler MUST therefore re-read at least the `cped_slot` each time it
+samples the thread, and MUST NOT substitute cached values for other fields when
+it changes. That costs one read of four words, which is negligible beside the
+walk it precedes. A reader using a stale value of `cped_slot` after it changed
+could go on walking a dead isolate's `cped_slot`. The profiler also MUST NOT
+infer from a zero reading that a thread is permanently uninstrumented.
 
 Upon initialization implementations MUST write the nonzero `cped_slot` value
 last, and upon isolate teardown they MUST write the zero `cped_slot` value
 first, using compiler fences (`atomic_signal_fence` or equivalent) and volatile
-writes to prevent instruction reordering by the compiler. This way a reader
-gating on `cped_slot` is guaranteed to always see a fully populated struct when
-`cped_slot` is nonzero.
+writes to prevent instruction reordering by the compiler. This way the profiler
+is guaranteed to always see a fully populated struct when `cped_slot` is
+nonzero.
 
 The TLS access-model requirements of OTEP 4947's "Thread-Local Variable
 Resolution" apply unchanged: writers SHOULD use the TLSDESC dialect, and readers
@@ -349,16 +345,11 @@ observable. Threads that never install the hook leave the struct zeroed, which
 is what lets `cped_slot` serve as the gate: no live isolate has its CPED slot at
 address zero.
 
-A closed gate is not necessarily permanent. A writer MAY close it transiently,
-for as long as some condition makes the walk unsafe — see "Garbage collection"
-for the motivating example. The profiler MUST therefore re-test the gate on
-every sample, and MUST NOT infer from a zero reading that a thread is
-permanently uninstrumented.
-
-Because the contract is byte-level, "cleared" means an all-zero representation.
-A C++ writer assigning a null pointer produces that on the ELF platforms in
-scope, the same assumption OTEP 4947 already relies on; a writer on any platform
-where a null pointer is not all-zero bits MUST zero the bytes explicitly.
+Because the contract is byte-level, "zeroed" means an all-zero representation.
+A C++ writer assigning a null pointer to `cped_slot` produces that on the ELF
+platforms in scope, the same assumption OTEP 4947 already relies on; a writer on
+any platform where a null pointer is not all-zero bits MUST zero the bytes
+explicitly.
 
 ### Thread-local context record
 
@@ -458,12 +449,13 @@ cannot be reordered before that store.
 
 Before an isolate is torn down, the SDK MUST clear the thread-local, and MUST
 clear `cped_slot` **first**, as a volatile store followed by a compiler fence.
-It SHOULD additionally clear internal field 0 of all live wrappers known to it.
+It SHOULD additionally clear internal field 0 of all live wrappers known to it
+and release the memory these fields point to, holding the records.
 
-Clearing wrapper internal fields is proportional to the number of live wrappers
-and requires the SDK to track them all; it is defense in depth, and is redundant
-once the thread-local is cleared, since a reader that stops at `cped_slot == 0`
-never reaches a wrapper.
+Clearing wrapper internal fields and releasing the records' memory is
+proportional to the number of live wrappers and requires the SDK to track them
+all; it is defense in depth, and is redundant once the thread-local is cleared,
+since a reader that stops at `cped_slot == 0` never reaches a wrapper.
 
 Neither omission can crash the profiler, as reading freed or unmapped memory in
 another process fails or returns garbage rather than faulting the reader. The
@@ -623,8 +615,8 @@ walks a hash map. That is more code, and it has to be defensive.
 is short in practice; and the two early exits mean the full walk only runs for
 threads that actually have context attached. The complexity is confined to
 reaching the record — everything from the record onward is shared with OTEP
-4947. This repository is also unusually well placed to absorb it, since
-`interpreter/nodev8` already reads V8 heap objects out of target memory.
+4947. This repository already has code to read V8 heap objects out of target 
+memory in `interpreter/nodev8`.
 
 ### Rehashing of the map
 
@@ -713,7 +705,7 @@ sampling decisions, so samples may reference traces the SDK never exported. The
 same mitigation applies — publish the attributes that matter directly in
 `attrs-data` via `attribute_key_map`.
 
-# Alternatives Considered
+# Alternatives Considered and Rejected
 
 **Writing the OTEP 4947 thread-local on every attach/detach.** Rejected: an FFI
 crossing per context transition, on Node.js's hottest path, paid whether or not
