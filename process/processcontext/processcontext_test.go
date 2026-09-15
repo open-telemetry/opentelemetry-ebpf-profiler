@@ -211,6 +211,7 @@ func TestProcessContext_Read(t *testing.T) {
 			expectedResult: Info{
 				ResourceAttrs: expectedResourceAttrs(),
 				publishedAtNs: 123456789,
+				valid:         true,
 			},
 		},
 		{
@@ -311,15 +312,15 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			result, err := read(mappingAddr, rm, tt.lastPublishedAtNs, 0)
+			info, err := read(mappingAddr, 0, rm, tt.lastPublishedAtNs, 0)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedResult, result.info)
+				require.Equal(t, tt.expectedResult, info)
 			} else {
-				assert.Zero(t, result.info.ResourceAttrs.Len())
-				assert.Nil(t, result.info.LabelDecoder())
-				assert.Zero(t, result.info.publishedAtNs)
+				assert.Zero(t, info.ResourceAttrs.Len())
+				assert.Nil(t, info.LabelDecoder())
+				assert.Zero(t, info.publishedAtNs)
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
@@ -419,14 +420,15 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 			require.NotZero(t, contextMappingAddr)
 
-			result, err := read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			info, err := read(libpf.Address(contextMappingAddr), pid, proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.Equal(t,
 				Info{
 					ResourceAttrs: expectedResourceAttrs(),
 					publishedAtNs: 123456789,
+					valid:         true,
 				},
-				result.info)
+				info)
 
 		})
 	}
@@ -454,6 +456,18 @@ func serviceName(t *testing.T, info Info) string {
 	return v.AsString()
 }
 
+func buildPayload(t *testing.T, threadAttrs ...*commonpb.KeyValue) []byte {
+	t.Helper()
+	payload, err := proto.Marshal(&processcontextpb.ProcessContext{
+		Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
+			{Key: "service.name", Value: strVal("test-service")},
+		}},
+		Attributes: threadAttrs,
+	})
+	require.NoError(t, err)
+	return payload
+}
+
 // An AnyValue with no variant set is a valid empty value per OTLP
 // common.proto. The key must survive the read with an EMPTY value rather than
 // be dropped.
@@ -473,7 +487,7 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), payloadAddr, 1))
 	mock.writeAt(payloadAddr, payload)
 
-	result, err := read(libpf.Address(0x1000),
+	info, err := read(libpf.Address(0x1000), 0,
 		remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 	require.NoError(t, err)
 
@@ -481,7 +495,7 @@ func TestProcessContext_Read_KeepsEmptyValues(t *testing.T) {
 		attribute.String("set", "v"),
 		attribute.KeyValue{Key: "unset.oneof"},
 		attribute.KeyValue{Key: "absent.value"},
-	), result.info.ResourceAttrs)
+	), info.ResourceAttrs)
 }
 
 // tornTimestampReader simulates a concurrent publish observed between
@@ -506,19 +520,28 @@ func (r *tornTimestampReader) ReadAt(p []byte, off int64) (int, error) {
 	return r.inner.ReadAt(p, off)
 }
 
-func TestProcessContext_Read_ThreadContext(t *testing.T) {
-	buildPayload := func(t *testing.T, threadAttrs ...*commonpb.KeyValue) []byte {
-		t.Helper()
-		payload, err := proto.Marshal(&processcontextpb.ProcessContext{
-			Resource: &resourcepb.Resource{Attributes: []*commonpb.KeyValue{
-				{Key: "service.name", Value: strVal("test-service")},
-			}},
-			Attributes: threadAttrs,
-		})
-		require.NoError(t, err)
-		return payload
+// A publish landing between the header and the payload read leaves no other
+// trace than the second timestamp.
+func TestProcessContext_Read_TornPayload(t *testing.T) {
+	payload := buildPayload(t)
+	mock := newMockReader()
+	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
+	mock.writeAt(0x2000, payload)
+
+	reader := &tornTimestampReader{
+		inner:  mock,
+		tsAddr: 0x1000 + int64(monotonicPublishedAtNsOffset),
+		first:  1,
+		second: 2,
 	}
 
+	info, err := readOnce(libpf.Address(0x1000), 0,
+		remotememory.RemoteMemory{ReaderAt: reader}, 0)
+	require.ErrorIs(t, err, errConcurrentUpdate)
+	assert.Zero(t, info)
+}
+
+func TestProcessContext_Read_ThreadContext(t *testing.T) {
 	validSchema := []*commonpb.KeyValue{
 		attr(threadCtxSchemaVersionKey, strVal(supportedThreadCtxSchemaVersion)),
 		attr(threadCtxKeyMapKey, arrVal(strVal("route"), strVal("method"))),
@@ -533,10 +556,11 @@ func TestProcessContext_Read_ThreadContext(t *testing.T) {
 		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
 		mock.writeAt(0x2000, payload)
 
-		result, err := read(libpf.Address(0x1000), remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
+		info, err := read(libpf.Address(0x1000), 0,
+			remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 		require.NoError(t, err)
 
-		decoder := result.info.LabelDecoder()
+		decoder := info.LabelDecoder()
 		require.NotNil(t, decoder)
 		labels, dropped := decoder.DecodeLabels(append([]byte{0, 3}, "/rt"...))
 		assert.Zero(t, dropped)
@@ -551,33 +575,11 @@ func TestProcessContext_Read_ThreadContext(t *testing.T) {
 		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
 		mock.writeAt(0x2000, payload)
 
-		result, err := read(libpf.Address(0x1000), remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
+		info, err := read(libpf.Address(0x1000), 0,
+			remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 		require.NoError(t, err)
-		require.Error(t, result.threadCtxErr)
-		assert.Equal(t, "test-service", serviceName(t, result.info))
-		assert.Nil(t, result.info.LabelDecoder())
-	})
-
-	// A schema fault seen during a torn read is not a fault: the bytes it was
-	// decoded from were never coherent. The recheck must win, and threadCtxErr
-	// must not reach the caller for it to log.
-	t.Run("torn read wins over a payload fault", func(t *testing.T) {
-		payload := buildPayload(t, malformedSchema...)
-		mock := newMockReader()
-		mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
-		mock.writeAt(0x2000, payload)
-
-		reader := &tornTimestampReader{
-			inner:  mock,
-			tsAddr: 0x1000 + int64(monotonicPublishedAtNsOffset),
-			first:  1,
-			second: 2,
-		}
-
-		result, err := readOnce(libpf.Address(0x1000),
-			remotememory.RemoteMemory{ReaderAt: reader}, 0)
-		require.ErrorIs(t, err, errConcurrentUpdate)
-		assert.Zero(t, result)
+		assert.Equal(t, "test-service", serviceName(t, info))
+		assert.Nil(t, info.LabelDecoder())
 	})
 }
 
@@ -743,14 +745,14 @@ func TestResolve(t *testing.T) {
 	envVars := map[libpf.String]libpf.String{
 		libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("svc"),
 	}
-	// Callers store the result unconditionally, so an unresolved Info would
+	// Callers store the result unconditionally, so an invalid Info would
 	// publish empty attributes.
 	resolve := func(t *testing.T, mappingAddr uint64, rm remotememory.RemoteMemory,
 		old Info, envVars map[libpf.String]libpf.String,
 	) Info {
 		t.Helper()
 		info := Resolve(mappingAddr, 1, rm, old, envVars)
-		require.True(t, info.resolved)
+		require.True(t, info.valid)
 		return info
 	}
 	// A resolved context carrying nothing: no mapping, no env vars.
@@ -782,7 +784,7 @@ func TestResolve(t *testing.T) {
 		old := Info{
 			ResourceAttrs: attribute.NewSet(attribute.String("from.mapping", "v")),
 			publishedAtNs: 7,
-			resolved:      true,
+			valid:         true,
 		}
 		info := resolve(t, 0, remotememory.RemoteMemory{}, old, envVars)
 		_, found := info.ResourceAttrs.Value("from.mapping")

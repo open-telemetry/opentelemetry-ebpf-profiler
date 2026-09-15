@@ -75,9 +75,9 @@ type Info struct {
 	ResourceAttrs attribute.Set
 	threadCtx     *threadContextInfo
 	publishedAtNs uint64
-	// resolved is false only on a zero Info, meaning never resolved or
-	// invalidated by an exec. Resolve never returns an unresolved Info.
-	resolved bool
+	// valid is false only on a zero Info, meaning never resolved or
+	// invalidated by an exec. Resolve never returns an invalid Info.
+	valid bool
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -93,68 +93,80 @@ type header struct {
 // read reads ProcessContext from remote process memory at addr.
 // Returns errInvalidContext if the process has no ProcessContext memory region.
 // Retries concurrent updates up to maxAttempts times, or defaultMaxAttempts if 0.
-func read(addr libpf.Address, rm remotememory.RemoteMemory,
+func read(addr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
 	lastPublishedAtNs uint64, maxAttempts int,
-) (payloadResult, error) {
+) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
 	var lastErr error
 
 	for range maxAttempts {
-		result, err := readOnce(addr, rm, lastPublishedAtNs)
+		info, err := readOnce(addr, pid, rm, lastPublishedAtNs)
 		if err == nil {
-			return result, nil
+			return info, nil
 		}
 		if !errors.Is(err, errConcurrentUpdate) {
-			return payloadResult{}, err
+			return Info{}, err
 		}
 		lastErr = err
 	}
-	return payloadResult{}, lastErr
+	return Info{}, lastErr
 }
 
-func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory,
+func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
 	lastPublishedAtNs uint64,
-) (payloadResult, error) {
+) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
-		return payloadResult{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			errInvalidContext, err)
 	}
 	if monotonicPublishedAtNs == 0 {
-		return payloadResult{}, errConcurrentUpdate
+		return Info{}, errConcurrentUpdate
 	}
 
 	if monotonicPublishedAtNs <= lastPublishedAtNs {
-		return payloadResult{}, errNoUpdate
+		return Info{}, errNoUpdate
 	}
 
 	hdr, err := readHeader(rm, mappingAddr)
 	if err != nil {
-		return payloadResult{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			errInvalidContext, err)
 	}
 
-	result, ctxErr := readPayload(rm, hdr)
+	ctx, ctxErr := readPayload(rm, hdr)
 	// Deferred: the read may have failed only because of a concurrent update
 	// between the header and the payload, which the timestamp recheck detects.
 
 	monotonicPublishedAtNs2, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
-		return payloadResult{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			errInvalidContext, err)
 	}
 
 	if monotonicPublishedAtNs != monotonicPublishedAtNs2 {
-		return payloadResult{}, errConcurrentUpdate
+		return Info{}, errConcurrentUpdate
 	}
 
 	if ctxErr != nil {
-		return payloadResult{}, fmt.Errorf("%w: %w", errInvalidContext, ctxErr)
+		return Info{}, fmt.Errorf("%w: %w", errInvalidContext, ctxErr)
 	}
 
-	return result, nil
+	// Parsed after the coherence recheck, so a fault here is genuine and not a
+	// torn read. Warn, not debug: the process loses every label until fixed.
+	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
+	if err != nil {
+		log.Warnf("PID %d: failed to read thread context: %v", pid, err)
+	}
+
+	return Info{
+		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
+		threadCtx:     threadCtx,
+		publishedAtNs: hdr.MonotonicPublishedAtNs,
+		valid:         true,
+	}, nil
 }
 
 // Resolve reads the process context from a context mapping (if any). Per
@@ -173,29 +185,22 @@ func Resolve(
 ) Info {
 	if mappingAddr == 0 {
 		// Old came from env vars alone: nothing changed.
-		if old.resolved && old.publishedAtNs == 0 {
+		if old.valid && old.publishedAtNs == 0 {
 			return old
 		}
 	} else {
 		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
 		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
 
-		result, err := read(addr, rm, old.publishedAtNs, 0)
+		info, err := read(addr, pid, rm, old.publishedAtNs, 0)
 		switch {
 		case err == nil:
-			if result.threadCtxErr != nil {
-				// Coherent now, so a real fault, not a torn read: every label
-				// from this process is dropped until it is fixed.
-				log.Warnf("PID %d: failed to read thread context: %v", pid, result.threadCtxErr)
-			}
-			ctx := result.info
-			ctx.resolved = true
-			return ctx
+			return info
 		case errors.Is(err, errNoUpdate):
 			return old
 		case errors.Is(err, errConcurrentUpdate):
 			// Retries are exhausted, so prefer the previous context over dropping it.
-			if old.resolved {
+			if old.valid {
 				return old
 			}
 		default:
@@ -208,7 +213,7 @@ func Resolve(
 	if err != nil {
 		log.Debugf("Partial resource attributes: %v", err)
 	}
-	return Info{ResourceAttrs: env, resolved: true}
+	return Info{ResourceAttrs: env, valid: true}
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
@@ -250,37 +255,20 @@ func readHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (header,
 	return hdr, nil
 }
 
-// payloadResult exists only to carry a non-fatal failure to read the
-// thread-context schema alongside Info.
-type payloadResult struct {
-	info Info
-	// A non-fatal error: info stays usable, only its threadCtx is nil.
-	// Returned rather than logged here because only the caller's timestamp
-	// recheck can tell a genuine fault from a torn read.
-	threadCtxErr error
-}
-
-func readPayload(rm remotememory.RemoteMemory, hdr header) (payloadResult, error) {
+func readPayload(
+	rm remotememory.RemoteMemory, hdr header,
+) (*processcontextpb.ProcessContext, error) {
 	payloadBytes := make([]byte, hdr.PayloadSize)
 	if err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes); err != nil {
-		return payloadResult{}, fmt.Errorf("failed to read payload: %w", err)
+		return nil, fmt.Errorf("failed to read payload: %w", err)
 	}
 
 	ctx := &processcontextpb.ProcessContext{}
 	if err := proto.Unmarshal(payloadBytes, ctx); err != nil {
-		return payloadResult{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	threadCtx, threadCtxErr := readThreadContextInfo(ctx.GetAttributes())
-
-	return payloadResult{
-		info: Info{
-			ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
-			threadCtx:     threadCtx,
-			publishedAtNs: hdr.MonotonicPublishedAtNs,
-		},
-		threadCtxErr: threadCtxErr,
-	}, nil
+	return ctx, nil
 }
 
 // newAttributeSet builds a Set from attrs, dropping entries with an empty key
