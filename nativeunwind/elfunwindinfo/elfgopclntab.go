@@ -524,8 +524,10 @@ func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 
 // getFunc returns the gopclntab function data and its start address.
 func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
-	// Get the function data
-	if uintptr(len(g.functab)) < funcOff+uintptr(g.funSize) {
+	// Get the function data. Compare without overflowing, making sure
+	// funcOff+funSize does not wrap around.
+	if funcOff > uintptr(len(g.functab)) ||
+		uintptr(len(g.functab))-funcOff < uintptr(g.funSize) {
 		return 0, nil
 	}
 	var pc uintptr
@@ -541,6 +543,11 @@ func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
 
 // getPcval returns the pcval table at given offset with 'startPc' as the pc start value.
 func (g *Gopclntab) getPcval(offs int32, startPc uint) pcval {
+	// offs comes from the function descriptor. Check for invalid out of
+	// bound values.
+	if offs < 0 || int(offs) > len(g.pctab) {
+		return newPcval(nil, startPc, g.quantum)
+	}
 	return newPcval(g.pctab[int(offs):], startPc, g.quantum)
 }
 
