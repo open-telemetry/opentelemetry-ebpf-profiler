@@ -73,18 +73,25 @@ func TestSchedOffsets(t *testing.T) {
 	require.NoError(t, err)
 
 	gobuf := structOffsets(t, d, "runtime.gobuf")
-	lr, ok := gobuf["lr"]
-	require.True(t, ok, "gobuf has no lr member")
-	bp, ok := gobuf["bp"]
-	require.True(t, ok, "gobuf has no bp member")
-	require.Equal(t, bp, lr+8,
-		"gobuf lr and bp are no longer adjacent, so go_unwind_morestack can no "+
-			"longer derive lr from sched_bp_off")
-
 	g := structOffsets(t, d, "runtime.g")
 	sched, ok := g["sched"]
 	require.True(t, ok, "g has no sched member")
-	require.Equal(t, int64(getOffsets(info.GoVersion).Sched_bp_off), sched+bp,
-		"Sched_bp_off for %s does not match the binary; re-run tools/gooffsets",
-		info.GoVersion)
+
+	offsets := getOffsets(info.GoVersion)
+	for _, tc := range []struct {
+		member string
+		got    uint32
+		name   string
+	}{
+		{"sp", offsets.Sched_sp_off, "Sched_sp_off"},
+		{"pc", offsets.Sched_pc_off, "Sched_pc_off"},
+		{"lr", offsets.Sched_lr_off, "Sched_lr_off"},
+		{"bp", offsets.Sched_bp_off, "Sched_bp_off"},
+	} {
+		off, ok := gobuf[tc.member]
+		require.Truef(t, ok, "gobuf has no %s member", tc.member)
+		require.Equalf(t, int64(tc.got), sched+off,
+			"%s for %s does not match the binary; re-run tools/gooffsets",
+			tc.name, info.GoVersion)
+	}
 }

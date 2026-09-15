@@ -196,6 +196,9 @@ type GoRuntimeOffsets struct {
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_sp_off           uint32
+	Sched_pc_off           uint32
+	Sched_lr_off           uint32
 	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
