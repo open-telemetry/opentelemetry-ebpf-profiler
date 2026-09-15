@@ -449,13 +449,20 @@ cannot be reordered before that store.
 
 Before an isolate is torn down, the SDK MUST clear the thread-local, and MUST
 clear `cped_slot` **first**, as a volatile store followed by a compiler fence.
-It SHOULD additionally clear internal field 0 of all live wrappers known to it
-and release the memory these fields point to, holding the records.
+It SHOULD additionally clear internal field 0 of all live wrappers known to it.
 
-Clearing wrapper internal fields and releasing the records' memory is
-proportional to the number of live wrappers and requires the SDK to track them
-all; it is defense in depth, and is redundant once the thread-local is cleared,
-since a reader that stops at `cped_slot == 0` never reaches a wrapper.
+An SDK that releases the records' memory at teardown — which it will typically
+want to do, since a leak checker running before the runtime's own late-shutdown
+finalizers will otherwise report them — MUST clear internal field 0 before the
+release, and the release MUST NOT be reordered before that store. Releasing a
+record while a wrapper still points at it is worse than leaking it: the
+allocator may hand the memory out again, and the profiler can then reach bytes
+that pass validation.
+
+Clearing wrapper internal fields is proportional to the number of live wrappers
+and requires the SDK to track them all; it is defense in depth, and is redundant
+once the thread-local is cleared, since a reader that stops at `cped_slot == 0`
+never reaches a wrapper.
 
 Neither omission can crash the profiler, as reading freed or unmapped memory in
 another process fails or returns garbage rather than faulting the reader. The
