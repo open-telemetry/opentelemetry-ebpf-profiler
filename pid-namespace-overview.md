@@ -108,9 +108,9 @@ PRs / branches
 
 | Priority | Branch to Merge First | Rationale |
 |----------|----------------------|-----------|
-| **1** | `rogercoll/parametrize_proc_fs_rebase` | Foundational refactor — enables all containerized deployments; fixes analysis probes; prerequisite for others |
-| **2** | `shivanshuraj1333/feat/nested-pid-namespace-translation` | Solves most common production issue (kind/minikube DaemonSet); smaller eBPF change |
-| **3** | `simonepri/fix/descendant-pid-namespace-translation` | More general but narrower use case (sidecar); larger eBPF change; needs integration with unified discovery |
+| **Independent / Ready** | `simonepri/fix/descendant-pid-namespace-translation` (#1801) | Pure in-kernel eBPF translation + BTF fallback; solves Kind/Minikube DaemonSets safely (validates `target_pid_ns_inode` to avoid sibling collisions); 0 conflicts with `main` or #1651; all 37 CI checks pass |
+| **In Review / Complementary** | `rogercoll/parametrize_proc_fs_rebase` (#1651) | Foundational refactor for userspace `/proc` parameterization (`RootFs`); orthogonal to #1801 (userspace pathing vs eBPF translation); can merge independently before or after #1801 |
+| **Needs Safety Rework** | `shivanshuraj1333/feat/nested-pid-namespace-translation` (#1657) | Superseded by #1801's safer inode-checked walk; currently indexes `numbers[level]` without checking `ns.inum == target_pid_ns_inode`, causing PID collisions across sibling containers |
 
 The **ideal end state** merges all three with a unified translation layer that handles:
 - Profiler at **any** pidns level (discovered at startup)
