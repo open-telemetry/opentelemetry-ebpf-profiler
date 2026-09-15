@@ -165,18 +165,15 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   }
 
   // The read is anchored at curg, so one read of the g prefix covers the curg.m
-  // check, g.sched.sp, g.sched.pc, g.sched.lr and g.sched.bp. g.sched sits right
-  // after g.m, and sched_bp_off is bp's offset within g. bp is the last of them,
-  // so the read is sized from it.
-  //
-  // max_off is the highest offset a u64 can be read from, so a bound of
-  // "off > max_off" already accounts for the 8 bytes read there. m_off needs two
-  // slots on top of that, because g.sched.sp and g.sched.pc are read at m_off+8
-  // and m_off+16. lr is read just below bp, so bp_off's bound covers it.
+  // check and the g.sched fields. bp is the last of them, so the read is sized
+  // from it. max_off is the highest offset a u64 can be read from, so a bound of
+  // "off > max_off" already accounts for the 8 bytes read there.
   const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
   u64 m_off         = offs->m_offset;
+  u64 sp_off        = offs->sched_sp_off;
+  u64 pc_off        = offs->sched_pc_off;
   u64 bp_off        = offs->sched_bp_off;
-  if (m_off + 2 * sizeof(u64) > max_off || bp_off > max_off) {
+  if (m_off > max_off || sp_off > max_off || pc_off > max_off || bp_off > max_off) {
     DEBUG_PRINT("morestack: unusable g offsets");
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
@@ -194,12 +191,10 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
 
-  u8 *gobuf    = scratch + m_off + sizeof(u64);
-  u64 saved_sp = *((u64 *)gobuf);
-  u64 saved_pc = *((u64 *)(gobuf + sizeof(u64)));
+  u64 saved_sp = *((u64 *)(scratch + sp_off));
 
   state->sp = saved_sp;
-  state->pc = saved_pc;
+  state->pc = *((u64 *)(scratch + pc_off));
   state->fp = *((u64 *)(scratch + bp_off));
   // gobuf.pc is the address morestack will return to, that is the return address
   // of the call into it, so the frame is a non-leaf one.
@@ -223,6 +218,12 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   if (err != ERR_OK) {
     return err;
   }
+  if (unwinder != PROG_UNWIND_NATIVE) {
+    // Go can reach other runtimes through cgo, so the caller is not guaranteed to
+    // be native code. Pushing a native frame for it would mislabel the frame.
+    DEBUG_PRINT("morestack: caller is not native code (unwinder %d)", unwinder);
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
   err = push_native(
     state,
     &record->trace,
@@ -234,9 +235,13 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   }
 
 #if defined(__aarch64__)
-  // The return address never reached the stack; morestack saved it into gobuf.lr,
-  // the slot ahead of bp (tools/gooffsets and TestSchedOffsets guard the adjacency).
-  state->pc = *((u64 *)(scratch + bp_off - sizeof(u64)));
+  // The return address never reached the stack; morestack saved it into gobuf.lr.
+  u64 lr_off = offs->sched_lr_off;
+  if (lr_off > max_off) {
+    DEBUG_PRINT("morestack: unusable g offsets");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  state->pc = *((u64 *)(scratch + lr_off));
   // aarch64 calls do not push, so the recovered sp is already the caller's.
   state->sp = saved_sp;
 #else

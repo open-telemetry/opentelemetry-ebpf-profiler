@@ -880,6 +880,9 @@ typedef struct GoRuntimeOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  u32 sched_sp_off;
+  u32 sched_pc_off;
+  u32 sched_lr_off;
   u32 sched_bp_off;
 } GoRuntimeOffsets;
 
