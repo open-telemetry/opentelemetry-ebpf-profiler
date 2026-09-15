@@ -88,6 +88,12 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
+const (
+	CustomLabelsTypeNone          = 0x0
+	CustomLabelsTypeGo            = 0x1
+	CustomLabelsTypeThreadContext = 0x2
+)
+
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
@@ -97,6 +103,10 @@ type CustomLabel struct {
 type CustomLabelsArray struct {
 	Len    uint32
 	Labels [10]CustomLabel
+}
+type CustomLabelsData struct {
+	Size uint16
+	Data [642]uint8
 }
 type Event struct {
 	Type uint32
@@ -154,6 +164,7 @@ type Trace struct {
 	Comm               [16]uint8
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
+	Custom_labels_type uint8
 	Custom_labels      CustomLabelsArray
 	Frame_data_len     uint16
 	Num_frames         uint16
