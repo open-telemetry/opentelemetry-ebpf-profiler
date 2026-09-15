@@ -16,10 +16,7 @@ import (
 // ensureMmapEventMonitor starts system-wide perf readers once. Executable mapping
 // events enter the existing PID path so probes see mappings added after initial sync.
 func (t *Tracer) ensureMmapEventMonitor() error {
-	t.mmapEventOnce.Do(func() {
-		t.mmapEventErr = t.startMmapEventMonitor()
-	})
-	return t.mmapEventErr
+	return t.mmapEventOnce()
 }
 
 func (t *Tracer) startMmapEventMonitor() error {

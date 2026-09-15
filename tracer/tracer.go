@@ -102,8 +102,7 @@ type Tracer struct {
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
 
-	mmapEventOnce   sync.Once
-	mmapEventErr    error
+	mmapEventOnce   func() error
 	mmapEventCancel context.CancelFunc
 	mmapEventWG     sync.WaitGroup
 
@@ -337,6 +336,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
 		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
+	tracer.mmapEventOnce = sync.OnceValue(tracer.startMmapEventMonitor)
 
 	return tracer, nil
 }
