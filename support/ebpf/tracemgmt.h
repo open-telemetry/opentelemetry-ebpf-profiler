@@ -559,6 +559,20 @@ static inline EBPF_INLINE u64 *push_frame(
   return &pos[1];
 }
 
+// Record a native frame
+static inline EBPF_INLINE ErrorCode
+push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
+{
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = file;
+  return ERR_OK;
+}
+
 // Push an interpreter specific error frame.
 static inline EBPF_INLINE ErrorCode
 push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)

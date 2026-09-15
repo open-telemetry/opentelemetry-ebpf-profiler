@@ -13,20 +13,6 @@
 // The number of native frames to unwind per frame-unwinding eBPF program.
 #define NATIVE_FRAMES_PER_PROGRAM 5
 
-// Record a native frame
-static EBPF_INLINE ErrorCode
-push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
-{
-  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
-
-  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
-  if (!data) {
-    return ERR_STACK_LENGTH_EXCEEDED;
-  }
-  data[0] = file;
-  return ERR_OK;
-}
-
 // A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
 // step, built in a way to update the value of *lo and *hi. This function will be called repeatedly
 // (since we cannot do loops). The return value signals whether the bsearch came to an end / found
@@ -231,12 +217,12 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 //
-// delegate_go selects the flavor: NULL unwinds Go frames, non-NULL reports them
-// through the flag instead, leaving state and trace untouched so the caller can
-// hand the frame to the Go capable flavor.
+// delegate_command selects the flavor: NULL unwinds every command, non-NULL reports
+// STACK_DELTA_NATIVE_COMMAND_BIT commands through the flag instead, leaving state and
+// trace untouched so the caller can hand the frame to the fully capable flavor.
 #if defined(__x86_64__)
 static EBPF_INLINE ErrorCode
-unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
+unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
 {
   *stop = false;
 
@@ -253,7 +239,27 @@ unwind_one_frame(PerCPURecord *record, bool *stop, UNUSED bool *delegate_go)
   }
 
   if (unwindInfo & STACK_DELTA_COMMAND_FLAG) {
-    switch (unwindInfo & ~STACK_DELTA_COMMAND_FLAG) {
+    u32 command = unwindInfo & ~STACK_DELTA_COMMAND_FLAG;
+    if (command & STACK_DELTA_NATIVE_COMMAND_BIT) {
+      // Implemented by the native unwinder only. Callers that cannot afford the
+      // implementation inlined into them report the frame instead, which also keeps
+      // the bodies below out of their program.
+      if (delegate_command) {
+        *delegate_command = true;
+        return ERR_OK;
+      }
+      switch (command) {
+      case UNWIND_COMMAND_GO_MORESTACK: {
+        if (go_unwind_morestack(record, state) != ERR_OK) {
+          goto err_native_pc_read;
+        }
+        goto frame_ok;
+      }
+      default: return ERR_UNREACHABLE;
+      }
+    }
+
+    switch (command) {
     case UNWIND_COMMAND_PLT:
       // The toolchains routinely emit a fixed DWARF expression to unwind the full
       // PLT table with one expression to reduce .eh_frame size.
@@ -347,7 +353,8 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_go)
+static EBPF_INLINE ErrorCode
+unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
 {
   *stop = false;
 
@@ -363,7 +370,36 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop, 
   }
 
   if (unwindInfo & STACK_DELTA_COMMAND_FLAG) {
-    switch (unwindInfo & ~STACK_DELTA_COMMAND_FLAG) {
+    u32 command = unwindInfo & ~STACK_DELTA_COMMAND_FLAG;
+    if (command & STACK_DELTA_NATIVE_COMMAND_BIT) {
+      // Implemented by the native unwinder only. Callers that cannot afford the
+      // implementation inlined into them report the frame instead, which also keeps
+      // the bodies below out of their program.
+      if (delegate_command) {
+        *delegate_command = true;
+        return ERR_OK;
+      }
+      switch (command) {
+      case UNWIND_COMMAND_GO_ASMCGOCALL: {
+        error = go_unwind_asmcgocall(record, state);
+        if (error == ERR_OK) {
+          goto frame_ok;
+        }
+        DEBUG_PRINT("go asmcgocall unwind failed: %d", error);
+        *stop = true;
+        return ERR_OK;
+      }
+      case UNWIND_COMMAND_GO_MORESTACK: {
+        if (go_unwind_morestack(record, state) != ERR_OK) {
+          goto err_native_pc_read;
+        }
+        goto frame_ok;
+      }
+      default: return ERR_UNREACHABLE;
+      }
+    }
+
+    switch (command) {
     case UNWIND_COMMAND_SIGNAL: {
       // Use the PerCPURecord scratch union instead of a stack-local buffer to avoid
       // exceeding the 512-byte BPF stack limit when inlined into interpreters.
@@ -397,19 +433,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop, 
         goto err_native_pc_read;
       }
       goto frame_ok;
-    case UNWIND_COMMAND_GO_ASMCGOCALL: {
-      if (delegate_go) {
-        *delegate_go = true;
-        return ERR_OK;
-      }
-      error = go_unwind_asmcgocall(record, state);
-      if (error == ERR_OK) {
-        goto frame_ok;
-      }
-      DEBUG_PRINT("go asmcgocall unwind failed: %d", error);
-      *stop = true;
-      return ERR_OK;
-    }
     default: return ERR_UNREACHABLE;
     }
   }
