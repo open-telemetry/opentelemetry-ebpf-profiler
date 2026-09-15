@@ -303,7 +303,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		KernelSymbolizer:      kernelSymbolizer,
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
-		IncludeEnvVars:        cfg.IncludeEnvVars,
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
 	})
 	if err != nil {
