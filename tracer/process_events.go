@@ -16,13 +16,19 @@ import (
 // ensureMmapEventMonitor starts system-wide perf readers once. Executable mapping
 // events enter the existing PID path so probes see mappings added after initial sync.
 func (t *Tracer) ensureMmapEventMonitor() error {
-	t.mmapEventOnce.Do(func() {
-		t.mmapEventErr = t.startMmapEventMonitor()
-	})
-	return t.mmapEventErr
+	return t.mmapEventOnce()
 }
 
-func (t *Tracer) startMmapEventMonitor() error {
+func (t *Tracer) startMmapEventMonitor(ctx context.Context) error {
+	t.mmapEventMu.Lock()
+	defer t.mmapEventMu.Unlock()
+
+	// Close cancels the lifecycle context before acquiring mmapEventMu. If it
+	// won the race with startup, do not create resources after shutdown.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	cpus, err := onlineCPUsOnce()
 	if err != nil {
 		return fmt.Errorf("getting online CPUs: %w", err)
@@ -31,7 +37,7 @@ func (t *Tracer) startMmapEventMonitor() error {
 	attr := &perf.Attr{
 		Options: perf.Options{
 			Disabled:  true, // Enable only after every per-CPU ring has been mapped.
-			Mmap:      true, // Emit records for executable mappings.
+			Mmap2:     true, // Emit extended records for executable mappings.
 			Watermark: true, // Wake readers based on unread bytes, not sample count.
 		},
 	}
@@ -70,8 +76,6 @@ func (t *Tracer) startMmapEventMonitor() error {
 			return fmt.Errorf("enabling mmap events: %w", err)
 		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	t.mmapEventCancel = cancel
 	for _, event := range events {
 		t.mmapEventWG.Go(func() {
 			t.readMmapEvents(ctx, event)
@@ -110,7 +114,13 @@ func (t *Tracer) readMmapEvents(ctx context.Context, event *perf.Event) {
 func mmapRecordPIDTID(record perf.Record) (libpf.PIDTID, bool) {
 	var pid, tid uint32
 	switch record := record.(type) {
-	case *perf.MmapRecord:
+	case *perf.Mmap2Record:
+		// Mappings without a backing inode, such as anonymous JIT code, cannot
+		// provide a file-backed ELF probe target and would only trigger an
+		// unnecessary full process resync.
+		if record.Inode == 0 {
+			return 0, false
+		}
 		pid, tid = record.Pid, record.Tid
 	default:
 		return 0, false
