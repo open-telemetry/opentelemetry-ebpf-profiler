@@ -202,6 +202,11 @@ code. Such a component publishes context by:
    detaching it by storing `undefined`). Both are pure-JavaScript operations; no
    native code runs for them.
 
+Only step 3 is on the hot path, and only when the wrapper from steps 1 and 2 is
+reused — which is the intended pattern, an SDK caching both on the span so that
+re-entering a context allocates nothing and calls no native code. An SDK may
+also start with a small record and grow it as attributes accumulate.
+
 The profiler walks:
 
 ```text
@@ -361,6 +366,11 @@ schemas.
 
 ### Publication protocol
 
+Every requirement below exists because the profiler's correctness depends on it:
+it is the set of assumptions the reader makes, restated as obligations on the
+target. Where an SDK is free to choose, this section says `MAY` or says nothing.
+Writer behavior the profiler cannot observe is not in scope for this document.
+
 #### 1. Isolate initialization
 
 On first use, per isolate, the SDK:
@@ -392,16 +402,11 @@ When context becomes active, the SDK:
    partially built record.
 3. Stores the wrapper in the `AsyncLocalStorage`, for a scope or until replaced.
 
-Step 3 is the only step on the hot path when a wrapper is reused, which is the
-intended pattern: an SDK SHOULD cache the record and its wrapper created in
-steps 1 and 2 on the span or equivalent object so that re-entering a context
-allocates nothing and calls no native code.
-
-The record's lifetime SHOULD be tied to the wrapper's, so that a record stays
-alive exactly as long as the wrapper is reachable in the JavaScript heap and can
-thus still be presented to a reader. The record should be released when the
-wrapper is known to be unreachable. (This is typically achieved using V8 Globals
-as weak references to wrappers with garbage collection callbacks.)
+A record MUST stay alive for as long as its wrapper is reachable in the
+JavaScript heap, since any such wrapper can still be presented to the profiler;
+it may be released once the wrapper is known to be unreachable. How an SDK
+arranges that — weak references with collection callbacks, in the reference
+implementation — is its own business.
 
 #### 3. Context detachment
 
@@ -428,10 +433,6 @@ frame when the span ends in addition to invalidating the record.
 
 #### 4. Growing the attribute payload
 
-A memory-optimizing implementation can initially allocate a small record with
-space for only a few small attributes, and have a mechanism to grow it if
-needed.
-
 OTEP 4947 permits appending to `attrs-data` in place, publishing the new extent
 by writing `attrs-data-size` last. That applies here unchanged when the existing
 allocation has room.
@@ -454,14 +455,13 @@ and will typically want to release the records' memory as well, since a leak
 checker running before the runtime's own late-shutdown finalizers will otherwise
 report them.
 
-Releasing the records is what obliges an SDK to track every live wrapper: the
-runtime will not have collected them all by teardown. Neither the field clearing
-nor the release needs an ordering rule of its own, though. Both are proportional
-to the number of live wrappers, and both are redundant once `cped_slot` is zero,
-since the profiler stops at the root and never reaches a wrapper, let alone a
-record. They are defense in depth against an SDK that gets the gate wrong. The
-one release that does need ordering is the in-place-growth release in step 4,
-which happens while the gate is open.
+Releasing the records is what obliges an SDK to track every live wrapper, since
+the runtime will not have collected them all by teardown. Neither that nor the
+field clearing needs an ordering rule of its own, though: both are redundant
+once `cped_slot` is zero, since the profiler stops at the root and never reaches
+a wrapper, let alone a record. They are defense in depth against an SDK that
+gets the gate wrong. The one release that does need ordering is the
+in-place-growth release in step 4, which happens while the gate is open.
 
 Neither omission can crash the profiler, as reading freed or unmapped memory in
 another process fails or returns garbage rather than faulting the reader. The
