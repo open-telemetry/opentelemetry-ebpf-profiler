@@ -102,6 +102,10 @@ type Tracer struct {
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
 
+	mmapEventOnce   func() error
+	mmapEventCancel context.CancelFunc
+	mmapEventWG     sync.WaitGroup
+
 	// hooks holds references to loaded eBPF hooks.
 	hooks xsync.RWMutex[hooksState]
 
@@ -332,6 +336,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
 		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
+	tracer.mmapEventOnce = sync.OnceValue(tracer.startMmapEventMonitor)
 
 	return tracer, nil
 }
@@ -339,6 +344,11 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // Close provides functionality for Tracer to perform cleanup tasks.
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
+	if t.mmapEventCancel != nil {
+		t.mmapEventCancel()
+		t.mmapEventWG.Wait()
+	}
+
 	events := t.perfEntrypoints.WLock()
 	terminatePerfEvents(*events)
 	*events = nil
