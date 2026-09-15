@@ -589,9 +589,13 @@ built differently than advertised costs a dropped context rather than a bad one.
 - **`interpreter/nodev8`.** Independent. The V8 unwinder and this walk both read
   V8 objects from the same targets but share no state; a process can have
   either, both or neither. They are not gated on each other.
-- **Trace types and enablement.** As with custom labels, this rides the
-  thread-context trace type rather than introducing its own; a target that
-  publishes nothing costs nothing.
+- **Trace types and enablement.** No new `InterpreterType` and no new
+  `interpreterconfig` field. The `thread_context` switch that gates the existing
+  walk gates this one too, as it gates a pseudo-interpreter that already
+  contributes per-sample data rather than frames. With the switch on, a Node.js
+  process that never installs the hook exports no `otel_thread_ctx_nodejs_v1`,
+  so process initialization finds nothing and no walk is ever attempted:
+  publishing nothing costs nothing.
 - **OpenTelemetry SDKs.** Additive and optional. Nothing about existing Node.js
   SDK behaviour changes; a process that does not install the hook is
   indistinguishable from today.
