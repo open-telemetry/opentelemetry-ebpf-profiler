@@ -345,3 +345,81 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	}
 	assert.True(t, found, "expected process.name=myapp in the attribute table")
 }
+
+func TestCustomLabelsArePartOfSampleIdentity(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	frames := make(libpf.Frames, 0, 1)
+	frames.Append(&libpf.Frame{
+		Type:            libpf.GoFrame,
+		AddressOrLineno: 42,
+		FunctionName:    libpf.Intern("work"),
+	})
+
+	meta := &samples.TraceEventMeta{
+		Timestamp:      libpf.UnixTime64(time.Now().UnixNano()),
+		Comm:           libpf.NewCommFromString("app"),
+		ExecutablePath: libpf.Intern("/usr/bin/app"),
+		PID:            1000,
+		TID:            1001,
+		CPU:            0,
+		ProfileType:    profileTypeSampling,
+	}
+
+	for _, value := range []string{"tenant-a", "tenant-b", "tenant-a"} {
+		trace := &libpf.Trace{
+			Frames: frames,
+			CustomLabels: map[libpf.String]libpf.String{
+				libpf.Intern("tenant"): libpf.Intern(value),
+			},
+		}
+		require.NoError(t, reporter.ReportTraceEvent(trace, meta))
+		meta.Timestamp++
+	}
+
+	eventsTreePtr := reporter.traceEvents.RLock()
+	eventsTree := *eventsTreePtr
+	reporter.traceEvents.RUnlock(&eventsTreePtr)
+	profiles, err := reporter.pdata.Generate(eventsTree, reporter.name, reporter.version,
+		reporter.collectionStartTime, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 2, profiles.SampleCount())
+
+	dictionary := profiles.Dictionary()
+	profileSamples := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0).Samples()
+	labelValues := make(map[string]struct{}, profileSamples.Len())
+	timestampsByLabel := make(map[string]int, profileSamples.Len())
+	for i := 0; i < profileSamples.Len(); i++ {
+		profileSample := profileSamples.At(i)
+		attributeIndices := profileSample.AttributeIndices()
+		for j := 0; j < attributeIndices.Len(); j++ {
+			attr := dictionary.AttributeTable().At(int(attributeIndices.At(j)))
+			if dictionary.StringTable().At(int(attr.KeyStrindex())) == "process.context.label.tenant" {
+				value := attr.Value().Str()
+				labelValues[value] = struct{}{}
+				timestampsByLabel[value] = profileSample.TimestampsUnixNano().Len()
+			}
+		}
+	}
+	require.Equal(t, map[string]struct{}{
+		"tenant-a": {},
+		"tenant-b": {},
+	}, labelValues)
+	require.Equal(t, map[string]int{
+		"tenant-a": 2,
+		"tenant-b": 1,
+	}, timestampsByLabel)
+}
+
+func TestCustomLabelHashIsOrderIndependent(t *testing.T) {
+	labelsA := map[libpf.String]libpf.String{}
+	labelsA[libpf.Intern("first")] = libpf.Intern("one")
+	labelsA[libpf.Intern("second")] = libpf.Intern("two")
+
+	labelsB := map[libpf.String]libpf.String{}
+	labelsB[libpf.Intern("second")] = libpf.Intern("two")
+	labelsB[libpf.Intern("first")] = libpf.Intern("one")
+
+	require.Equal(t, hashCustomLabels(labelsA), hashCustomLabels(labelsB))
+	labelsB[libpf.Intern("first")] = libpf.Intern("different")
+	require.NotEqual(t, hashCustomLabels(labelsA), hashCustomLabels(labelsB))
+}
