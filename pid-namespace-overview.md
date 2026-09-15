@@ -46,8 +46,8 @@ PRs / branches
 
 | Dimension | `simonepri` (Descendant) | `shivanshuraj1333` (Nested) | `rogercoll` (Parametrize ProcFS) |
 |-----------|---------------------------|----------------------------|----------------------------------|
-| **Primary Problem** | Profiler in parent ns, targets in child ns | Profiler in nested ns, eBPF reports kernel-root PIDs | Profiler in container, host `/proc` at custom path |
-| **Translation Direction** | Child ns → Parent ns | Kernel-root ns → Profiler ns | N/A (userspace path resolution) |
+| **Primary Problem** | Profiler in parent/ancestor ns, targets in descendant child ns (Kind/Minikube DaemonSet, nested containers) | Profiler in nested ns, eBPF reports kernel-root PIDs | Profiler in container, host `/proc` at custom path |
+| **Translation Direction** | Descendant ns → Target/Profiler ns (validated via ns inode) | Kernel-root ns → Profiler ns level (without validating ns inode) | N/A (userspace path resolution) |
 | **eBPF Mechanism** | `bpf_get_ns_current_pid_tgid()` + manual `struct pid` walk | Manual walk from `task_struct.thread_pid` using discovered `profiler_pidns_level` | `BPF_PROG_TEST_RUN` on `raw_tracepoint` to get host TGID |
 | **Namespace Discovery** | Target ns inode known at config time (`/proc/self/ns/pid`) | Profiler's own ns level discovered at runtime via BPF probe | `RootFs != "/"` implies containerized; host PID via test-run |
 | **Config API** | Typed enum: `PIDNamespaceTranslationMode {Auto, Exact, Descendants}` | String: `PIDNamespaceTranslation {"off","on","auto"}` | String: `RootFs` path (default "/") |
