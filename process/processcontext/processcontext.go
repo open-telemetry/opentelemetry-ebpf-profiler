@@ -68,16 +68,16 @@ var (
 	errNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
-// Info is a snapshot of process context. attribute.Set is immutable, so the
-// sets are safe to copy and share across goroutines without locking.
+// Info is a snapshot of process context. Copies are safe to share across
+// goroutines: attribute.Set is immutable and threadCtx is never mutated after
+// construction.
 type Info struct {
 	ResourceAttrs attribute.Set
-	// Populated but unused until thread context lands.
-	attributes    attribute.Set
+	threadCtx     *threadContextInfo
 	publishedAtNs uint64
-	// resolved is false only on a zero Info, meaning never resolved or
-	// invalidated by an exec. Resolve never returns an unresolved Info.
-	resolved bool
+	// valid is false only on a zero Info, meaning never resolved or
+	// invalidated by an exec. Resolve never returns an invalid Info.
+	valid bool
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -93,16 +93,18 @@ type header struct {
 // read reads ProcessContext from remote process memory at addr.
 // Returns errInvalidContext if the process has no ProcessContext memory region.
 // Retries concurrent updates up to maxAttempts times, or defaultMaxAttempts if 0.
-func read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+func read(addr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64, maxAttempts int,
+) (Info, error) {
 	if maxAttempts == 0 {
 		maxAttempts = defaultMaxAttempts
 	}
 	var lastErr error
 
 	for range maxAttempts {
-		processCtx, err := readOnce(addr, rm, lastPublishedAtNs)
+		info, err := readOnce(addr, pid, rm, lastPublishedAtNs)
 		if err == nil {
-			return processCtx, nil
+			return info, nil
 		}
 		if !errors.Is(err, errConcurrentUpdate) {
 			return Info{}, err
@@ -112,7 +114,9 @@ func read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 	return Info{}, lastErr
 }
 
-func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
+func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
+	lastPublishedAtNs uint64,
+) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return Info{}, fmt.Errorf("%w: %w",
@@ -150,7 +154,19 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 		return Info{}, fmt.Errorf("%w: %w", errInvalidContext, ctxErr)
 	}
 
-	return ctx, nil
+	// Parsed after the coherence recheck, so a fault here is genuine and not a
+	// torn read. Warn, not debug: the process loses every label until fixed.
+	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
+	if err != nil {
+		log.Warnf("PID %d: failed to read thread context: %v", pid, err)
+	}
+
+	return Info{
+		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
+		threadCtx:     threadCtx,
+		publishedAtNs: hdr.MonotonicPublishedAtNs,
+		valid:         true,
+	}, nil
 }
 
 // Resolve reads the process context from a context mapping (if any). Per
@@ -169,23 +185,22 @@ func Resolve(
 ) Info {
 	if mappingAddr == 0 {
 		// Old came from env vars alone: nothing changed.
-		if old.resolved && old.publishedAtNs == 0 {
+		if old.valid && old.publishedAtNs == 0 {
 			return old
 		}
 	} else {
 		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
 		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
 
-		ctx, err := read(addr, rm, old.publishedAtNs, 0)
+		info, err := read(addr, pid, rm, old.publishedAtNs, 0)
 		switch {
 		case err == nil:
-			ctx.resolved = true
-			return ctx
+			return info
 		case errors.Is(err, errNoUpdate):
 			return old
 		case errors.Is(err, errConcurrentUpdate):
 			// Retries are exhausted, so prefer the previous context over dropping it.
-			if old.resolved {
+			if old.valid {
 				return old
 			}
 		default:
@@ -198,7 +213,7 @@ func Resolve(
 	if err != nil {
 		log.Debugf("Partial resource attributes: %v", err)
 	}
-	return Info{ResourceAttrs: env, resolved: true}
+	return Info{ResourceAttrs: env, valid: true}
 }
 
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
@@ -240,23 +255,20 @@ func readHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (header,
 	return hdr, nil
 }
 
-func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
+func readPayload(
+	rm remotememory.RemoteMemory, hdr header,
+) (*processcontextpb.ProcessContext, error) {
 	payloadBytes := make([]byte, hdr.PayloadSize)
-	err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes)
-	if err != nil {
-		return Info{}, fmt.Errorf("failed to read payload: %w", err)
+	if err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes); err != nil {
+		return nil, fmt.Errorf("failed to read payload: %w", err)
 	}
 
 	ctx := &processcontextpb.ProcessContext{}
 	if err := proto.Unmarshal(payloadBytes, ctx); err != nil {
-		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return Info{
-		ResourceAttrs: newAttributeSet(convertKeyValues(ctx.GetResource().GetAttributes())),
-		attributes:    newAttributeSet(convertKeyValues(ctx.GetAttributes())),
-		publishedAtNs: hdr.MonotonicPublishedAtNs,
-	}, nil
+	return ctx, nil
 }
 
 // newAttributeSet builds a Set from attrs, dropping entries with an empty key
