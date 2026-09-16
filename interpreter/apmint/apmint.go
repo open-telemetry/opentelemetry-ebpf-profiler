@@ -118,17 +118,19 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
 	}
 
-	loc, err := d.tlsVar.Locate(rm, bias)
-	if err != nil {
+	var procInfo support.ApmIntProcInfo
+	var pendingTLS *tls.VarLocation
+	if loc, err := d.tlsVar.Locate(rm, bias); err != nil {
 		return nil, fmt.Errorf("failed to locate APM correlation TLS variable: %w", err)
-	}
-	// An agent library in dynamic TLS yields ErrNeedDTV: apmint has no
-	// UpdateLibcInfo hook to complete such a descriptor later.
-	tlsInfo, err := loc.VarInfo(libc.DTVInfo{})
-	if err != nil {
+	} else if tlsInfo, err := loc.VarInfo(libc.DTVInfo{}); err == nil {
+		procInfo.Tls = tlsInfo
+	} else if errors.Is(err, tls.ErrNeedDTV) {
+		// Dynamic TLS, so UpdateLibcInfo completes it once the DTV arrives and
+		// eBPF skips the correlation read until then.
+		pendingTLS = &loc
+	} else {
 		return nil, fmt.Errorf("unusable APM correlation TLS variable %v: %w", loc, err)
 	}
-	procInfo := support.ApmIntProcInfo{Tls: tlsInfo}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
@@ -148,6 +150,8 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	return &Instance{
 		serviceName: procStorage.ServiceName,
 		socket:      socket,
+		procInfo:    &procInfo,
+		pendingTLS:  pendingTLS,
 	}, nil
 }
 
@@ -157,10 +161,43 @@ func (d data) Unload(_ interpreter.EbpfHandler) {
 type Instance struct {
 	serviceName string
 	socket      *apmAgentSocket
+
+	// procInfo is kept for re-insertion once pendingTLS resolves.
+	procInfo *support.ApmIntProcInfo
+
+	// pendingTLS is where the correlation variable lives while it waits for the
+	// DTV layout, nil once described or when there is nothing to wait for.
+	pendingTLS *tls.VarLocation
+
 	interpreter.InstanceStubs
 }
 
 var _ interpreter.Instance = &Instance{}
+
+// UpdateLibcInfo completes a correlation variable in dynamic TLS, which needs
+// the DTV layout the process C library defines.
+func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	libcInfo libc.LibcInfo) error {
+	if i.pendingTLS == nil {
+		return nil
+	}
+	if !libcInfo.HasDTVInfo() {
+		// May still arrive from a different DSO.
+		return nil
+	}
+
+	tlsInfo, err := i.pendingTLS.VarInfo(libcInfo.DTVInfo)
+	if err != nil {
+		return err
+	}
+	i.procInfo.Tls = tlsInfo
+	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(i.procInfo)); err != nil {
+		return err
+	}
+	i.pendingTLS = nil
+	log.Debugf("PID %d: located the APM correlation variable via the DTV", pid)
+	return nil
+}
 
 // Detach implements the interpreter.Instance interface.
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {

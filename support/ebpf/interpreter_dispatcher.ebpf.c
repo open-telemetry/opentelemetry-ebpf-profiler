@@ -217,6 +217,12 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 
   DEBUG_PRINT("Trace is within a process with APM integration enabled");
 
+  // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
+  if (!proc->tls.valid) {
+    DEBUG_PRINT("APM correlation TLS variable not located yet");
+    return;
+  }
+
   u64 tsd_base;
   if (tsd_get_base((void **)&tsd_base) != 0) {
     increment_metric(metricID_UnwindApmIntErrReadTsdBase);
@@ -225,9 +231,12 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
   }
 
   void *apm_corr_buf_ptr;
-  if (tls_read_var(&proc->tls, (void *)tsd_base, &apm_corr_buf_ptr) != TLS_READ_OK) {
+  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &apm_corr_buf_ptr);
+  if (rc == TLS_READ_ERR) {
     increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
     DEBUG_PRINT("Failed to read APM correlation buffer pointer");
+  }
+  if (rc != TLS_READ_OK) {
     return;
   }
 
