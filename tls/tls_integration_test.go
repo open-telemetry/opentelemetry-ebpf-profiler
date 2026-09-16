@@ -464,10 +464,10 @@ func findTLSSymbol(ef *pfelf.File, name string) *libpf.Symbol {
 
 // libcDTVInfo returns the DTV layout of the process's libc, empty when the
 // process has none mapped (a statically linked fixture).
-func libcDTVInfo(t *testing.T, pr process.Process) support.DTVInfo {
+func libcDTVInfo(t *testing.T, pr process.Process) libc.DTVInfo {
 	t.Helper()
 
-	var dtv support.DTVInfo
+	var dtv libc.DTVInfo
 	_, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if !m.IsExecutable() || !libc.IsPotentialLibcDSO(m.Path) {
 			return true
