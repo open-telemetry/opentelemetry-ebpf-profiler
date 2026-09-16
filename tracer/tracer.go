@@ -486,6 +486,27 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	return ebpfMaps, ebpfProgs, innerMapTemplate, nil
 }
 
+// closeEBPFResources closes the given eBPF maps and programs and empties both
+// collections, so that a partially completed setup does not leave anything loaded
+// in the kernel. A map that was pinned is not removed from the kernel by this, as
+// its pin keeps holding a reference to it.
+func closeEBPFResources(ebpfMaps map[string]*cebpf.Map,
+	ebpfProgs map[string]*cebpf.Program,
+) {
+	for name, m := range ebpfMaps {
+		if err := m.Close(); err != nil {
+			log.Errorf("Failed to close eBPF map %s: %v", name, err)
+		}
+		delete(ebpfMaps, name)
+	}
+	for name, p := range ebpfProgs {
+		if err := p.Close(); err != nil {
+			log.Errorf("Failed to close eBPF program %s: %v", name, err)
+		}
+		delete(ebpfProgs, name)
+	}
+}
+
 // removeTemporaryMaps unloads and deletes eBPF maps that are only required for the
 // initialization.
 func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
