@@ -217,11 +217,8 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     return;
   }
 
-  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
-
   void *apm_corr_buf_ptr;
-  if (bpf_probe_read_user(
-        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
+  if (tls_read_var(&proc->tls, (void *)tsd_base, &apm_corr_buf_ptr) != TLS_READ_OK) {
     increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
     DEBUG_PRINT("Failed to read APM correlation buffer pointer");
     return;

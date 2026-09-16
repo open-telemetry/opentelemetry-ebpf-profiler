@@ -13,7 +13,15 @@ import (
 )
 
 type TSDInfo = support.TSDInfo
-type DTVInfo = support.DTVInfo
+
+// DTVInfo is the C library's Dynamic Thread Vector layout, which locating a
+// variable in dynamic TLS needs.
+type DTVInfo struct {
+	// Offset of the DTV pointer from the thread pointer.
+	Offset int16
+	// Size of a DTV entry in bytes: 8 on musl, 16 on glibc.
+	Multiplier uint8
+}
 
 // LibcInfo contains introspection information extracted from the C-library
 type LibcInfo struct {
