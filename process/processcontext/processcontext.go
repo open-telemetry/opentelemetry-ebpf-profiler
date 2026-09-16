@@ -156,10 +156,10 @@ func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMe
 	}
 
 	// Parsed after the coherence recheck, so a fault here is genuine and not a
-	// torn read. Warn, not debug: the process loses every label until fixed.
+	// torn read.
 	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
 	if err != nil {
-		log.Warnf("PID %d: failed to read thread context: %v", pid, err)
+		log.Debugf("PID %d: failed to read thread context: %v", pid, err)
 	}
 
 	return Info{
