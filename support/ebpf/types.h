@@ -1108,8 +1108,8 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_EL0t  0x00000000
 
 typedef struct ApmIntProcInfo {
-  // Always static TLS: an agent library in dynamic TLS is rejected at attach,
-  // since apmint has no libc introspection hook to complete the descriptor.
+  // Invalid until located: an agent library in dynamic TLS stays so until
+  // UpdateLibcInfo supplies the DTV layout.
   TLSVarInfo tls;
 } ApmIntProcInfo;
 
