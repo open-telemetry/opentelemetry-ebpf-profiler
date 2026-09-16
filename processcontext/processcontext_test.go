@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -364,6 +365,9 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			require.NotZero(t, contextMappingAddr)
 
 			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
+			if errors.Is(err, syscall.ENOSYS) {
+				t.Skipf("skipping due to process_vm_readv not available: %v", err)
+			}
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
