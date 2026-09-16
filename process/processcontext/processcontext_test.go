@@ -520,13 +520,15 @@ func (r *tornTimestampReader) ReadAt(p []byte, off int64) (int, error) {
 	return r.inner.ReadAt(p, off)
 }
 
-// A publish landing between the header and the payload read leaves no other
-// trace than the second timestamp.
+// A publish landing between the header and the payload read can leave garbage
+// mid-unmarshal at the payload address. The recheck must report this as a
+// concurrent update, not surface the garbage as errInvalidContext: readPayload's
+// error is only genuine when the timestamp is stable across both reads.
 func TestProcessContext_Read_TornPayload(t *testing.T) {
-	payload := buildPayload(t)
+	garbage := []byte{0xff, 0xff, 0xff, 0xff}
 	mock := newMockReader()
-	mock.writeAt(0x1000, createValidHeader(uint32(len(payload)), 0x2000, 1))
-	mock.writeAt(0x2000, payload)
+	mock.writeAt(0x1000, createValidHeader(uint32(len(garbage)), 0x2000, 1))
+	mock.writeAt(0x2000, garbage)
 
 	reader := &tornTimestampReader{
 		inner:  mock,
@@ -538,6 +540,7 @@ func TestProcessContext_Read_TornPayload(t *testing.T) {
 	info, err := readOnce(libpf.Address(0x1000), 0,
 		remotememory.RemoteMemory{ReaderAt: reader}, 0)
 	require.ErrorIs(t, err, errConcurrentUpdate)
+	require.NotErrorIs(t, err, errInvalidContext)
 	assert.Zero(t, info)
 }
 
