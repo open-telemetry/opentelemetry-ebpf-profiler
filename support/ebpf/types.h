@@ -432,6 +432,23 @@ typedef struct DTVInfo {
   u8 multiplier;
 } DTVInfo;
 
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS.
+typedef struct TLSVarInfo {
+  // TP-relative when dtv_pos is 0, else within the module's TLS block.
+  // Signed because variant II puts the static block below the thread pointer.
+  s32 tls_offset;
+  // Byte offset of the module's entry in the DTV array, that is its TLS module
+  // ID times the entry size. 0 for static TLS, and the only static/dynamic
+  // discriminant.
+  u32 dtv_pos;
+  // Offset of the DTV pointer from the thread pointer. Unused for static TLS.
+  s16 dtv_offset;
+  // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
+  // aarch64 musl gives tls_offset 0 to a library whose executable has no PT_TLS.
+  bool valid;
+} TLSVarInfo;
+
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
   u32 version;
