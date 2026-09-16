@@ -17,11 +17,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 )
 
 const (
@@ -81,31 +82,25 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
 	}
 
-	var tlsDescElfAddr libpf.Address
-	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
-		if symName == tlsExport {
-			tlsDescElfAddr = libpf.Address(r.Off)
-			return false
-		}
-		return true
-	}); err != nil {
-		return nil, fmt.Errorf("failed to visit TLS descriptor: %v", err)
+	tlsSym, err := ef.LookupSymbol(tlsExport)
+	if err != nil {
+		return nil, fmt.Errorf("failed to locate %s: %w", tlsExport, err)
+	}
+	tlsVar, err := tls.Resolve(ef, tlsSym)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve %s: %w", tlsExport, err)
 	}
 
-	if tlsDescElfAddr == 0 {
-		return nil, errors.New("failed to locate TLS descriptor")
-	}
-
-	log.Debugf("APM integration TLS descriptor offset: 0x%08X", tlsDescElfAddr)
+	log.Debugf("APM integration TLS variable: %v", tlsVar)
 
 	return &data{
-		tlsDescElfAddr:   tlsDescElfAddr,
+		tlsVar:           tlsVar,
 		procStorageElfVA: libpf.Address(procStorageSym.Address),
 	}, nil
 }
 
 type data struct {
-	tlsDescElfAddr   libpf.Address
+	tlsVar           tls.Var
 	procStorageElfVA libpf.Address
 }
 
@@ -123,9 +118,17 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
 	}
 
-	// Read TLS offset from the TLS descriptor.
-	tlsOffset := rm.Uint64(bias + d.tlsDescElfAddr + 8)
-	procInfo := support.ApmIntProcInfo{Offset: tlsOffset}
+	loc, err := d.tlsVar.Locate(rm, bias)
+	if err != nil {
+		return nil, fmt.Errorf("failed to locate APM correlation TLS variable: %w", err)
+	}
+	// An agent library in dynamic TLS yields ErrNeedDTV: apmint has no
+	// UpdateLibcInfo hook to complete such a descriptor later.
+	tlsInfo, err := loc.VarInfo(libc.DTVInfo{})
+	if err != nil {
+		return nil, fmt.Errorf("unusable APM correlation TLS variable %v: %w", loc, err)
+	}
+	procInfo := support.ApmIntProcInfo{Tls: tlsInfo}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}

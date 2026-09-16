@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -69,16 +70,16 @@ func TestDynamicLoc(t *testing.T) {
 }
 
 func TestVarInfo(t *testing.T) {
-	dtv := support.DTVInfo{Offset: -8, Multiplier: 16}
+	dtv := libc.DTVInfo{Offset: -8, Multiplier: 16}
 
 	// Static TLS needs no layout, and an offset of 0 still yields a valid
 	// descriptor.
-	info, err := VarLocation{}.VarInfo(support.DTVInfo{})
+	info, err := VarLocation{}.VarInfo(libc.DTVInfo{})
 	require.NoError(t, err)
 	require.Equal(t, support.TLSVarInfo{Valid: true}, info)
 
 	// A nonzero DTV offset does not make the layout usable.
-	_, err = VarLocation{ModuleID: 3, Offset: 16}.VarInfo(support.DTVInfo{Offset: -8})
+	_, err = VarLocation{ModuleID: 3, Offset: 16}.VarInfo(libc.DTVInfo{Offset: -8})
 	require.ErrorIs(t, err, ErrNeedDTV)
 
 	info, err = VarLocation{ModuleID: 3, Offset: 16}.VarInfo(dtv)
