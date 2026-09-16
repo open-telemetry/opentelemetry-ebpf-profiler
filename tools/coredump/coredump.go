@@ -187,7 +187,6 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 		TraceReporter:         &traceReporter,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		FrameCacheSize:        pm.DefaultFrameCacheSize,
-		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)

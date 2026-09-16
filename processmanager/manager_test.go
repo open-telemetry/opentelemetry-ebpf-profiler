@@ -58,7 +58,6 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 		ExecutableUnloadDelay: time.Hour,
 		EbpfHandler:           &testEbpfHandler{},
 		FrameCacheSize:        1,
-		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	require.NoError(t, err)
 
