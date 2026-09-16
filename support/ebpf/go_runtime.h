@@ -164,6 +164,12 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
     return ERR_OK;
   }
 
+  // Ensure gobuf fields are in a valid state.
+  if (ctx.g == ctx.m_curg) {
+    DEBUG_PRINT("morestack: pre-gosave g==curg");
+    return ERR_OK;
+  }
+
   // The read is anchored at curg, so one read of the g prefix covers the curg.m
   // check and the g.sched fields. bp is the last of them, so the read is sized
   // from it. max_off is the highest offset a u64 can be read from, so a bound of
