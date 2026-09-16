@@ -400,6 +400,16 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	ebpfMaps = make(map[string]*cebpf.Map)
 	ebpfProgs = make(map[string]*cebpf.Program)
 
+	// Everything loaded from here on is owned by this function until it returns
+	// successfully. The named return maps and progs are nil in case of error, so
+	// keep separate references to close them.
+	loadedMaps, loadedProgs := ebpfMaps, ebpfProgs
+	defer func() {
+		if err != nil {
+			closeEBPFResources(loadedMaps, loadedProgs)
+		}
+	}()
+
 	// Use the specification of the first exe_id_to_Y_stack_deltas inner map
 	// as template for further updates.
 	innerMapTemplate := coll.Maps["exe_id_to_8_stack_deltas"].InnerMap.Copy()
