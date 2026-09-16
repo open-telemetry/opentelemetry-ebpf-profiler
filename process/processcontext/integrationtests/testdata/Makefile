@@ -1,7 +1,7 @@
 # Copyright The OpenTelemetry Authors
 # SPDX-License-Identifier: Apache-2.0
 
-# Test binaries for the processcontext integration tests.
+# Test binaries for the processcontext and threadcontext integration tests.
 
 .PHONY: all clean
 
@@ -19,20 +19,22 @@ GCC       ?= $(ARCH)-linux-gnu-gcc
 MUSL_GCC  ?= $(ARCH)-linux-musl-gcc
 
 
-# Only the static executable variant is built. The rest exercise other TLS
-# models and are kept for the upcoming thread-context support.
-BINARIES := processctx_exe_glibc # processctx_exe_musl processctx_lib_glibc processctx_lib_musl processctx_dlopen_glibc processctx_dlopen_musl
+BINARIES := \
+	processctx_exe_glibc \
+	libprocessctx_glibc.so libprocessctx_musl.so \
+	processctx_dlopen_glibc processctx_dlopen_musl
 
 all: $(BINARIES)
 
 clean:
 	rm -f $(BINARIES)
 
+# -rdynamic puts the executable's own otel_thread_ctx_v1 in .dynsym, where the
+# profiler looks for it: nothing references it from outside, so the linker would
+# otherwise leave it in .symtab alone. A publisher has to export the variable
+# for the same reason, which rules out a static binary, having no .dynsym.
 processctx_exe_glibc: processctx.c processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
-	$(GCC) -mtls-dialect=$(TLS_DIALECT) -o $@ $< processctx_lib.c otel_process_ctx.c 
-
-processctx_exe_musl: processctx.c processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
-	$(MUSL_GCC) -mtls-dialect=$(TLS_DIALECT) -o $@ $< processctx_lib.c otel_process_ctx.c -static
+	$(GCC) -mtls-dialect=$(TLS_DIALECT) -rdynamic -o $@ $< processctx_lib.c otel_process_ctx.c
 
 libprocessctx_glibc.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(GCC) -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -o $@ $< otel_process_ctx.c
@@ -40,14 +42,8 @@ libprocessctx_glibc.so: processctx_lib.c processctx_lib.h otel_process_ctx.c ote
 libprocessctx_musl.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(MUSL_GCC) -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -o $@ $< otel_process_ctx.c
 
-processctx_lib_glibc: processctx.c processctx_lib.h libprocessctx_glibc.so
-	$(GCC) -o $@ $< -L. -lprocessctx_glibc -Wl,-rpath='$$ORIGIN'
-
-processctx_lib_musl: processctx.c processctx_lib.h libprocessctx_musl.so
-	$(MUSL_GCC) -o $@ $< -L. -lprocessctx_musl -Wl,-rpath=/lib/x86_64-linux-musl/ -Wl,-rpath='$$ORIGIN'
-
 processctx_dlopen_glibc: processctx.c
 	$(GCC) -o $@ $< -DUSE_DLOPEN
 
 processctx_dlopen_musl: processctx.c
-	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN -Wl,-rpath=/lib/x86_64-linux-musl/ 
+	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN
