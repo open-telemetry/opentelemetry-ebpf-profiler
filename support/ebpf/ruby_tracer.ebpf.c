@@ -544,7 +544,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   // Pointer for an address to a rb_execution_context_struct struct.
   void *current_ctx_addr = NULL;
 
-  if (rubyinfo->current_ec_tpbase_tls_offset != 0) {
+  if (rubyinfo->tls_ec.valid) {
     // With Ruby 3.x and its internal change of the execution model, we can no longer
     // access rb_execution_context_struct directly. We will look up the
     // ruby_current_ec from thread local storage, analogous to how it is done
@@ -552,41 +552,16 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     // https://github.com/ruby/ruby/blob/6c0315d99a93bdea947f821bd337000420ab41d1/vm_core.h#L2024
     u64 tsd_base;
     if (tsd_get_base((void **)&tsd_base) != 0) {
-      DEBUG_PRINT("ruby: failed to get TSD base for TLS symbol lookup");
+      DEBUG_PRINT("ruby: failed to get TSD base for TLS lookup");
       error = ERR_RUBY_READ_TSD_BASE;
       goto exit;
     }
 
-    u64 tls_current_ec_addr = tsd_base + rubyinfo->current_ec_tpbase_tls_offset;
-
-    if (bpf_probe_read_user(
-          &current_ctx_addr, sizeof(current_ctx_addr), (void *)(tls_current_ec_addr))) {
+    if (tls_read_var(&rubyinfo->tls_ec, (void *)tsd_base, &current_ctx_addr) != TLS_READ_OK) {
+      DEBUG_PRINT("ruby: failed to read EC from TLS");
       goto exit;
     }
     DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
-  } else if (rubyinfo->tls_module_id != 0 && rubyinfo->dtv_info.multiplier != 0) {
-    // DTV-based TLS access: traverse the Dynamic Thread Vector to find ruby_current_ec.
-    // Used when TLSDESC relocations are unavailable (e.g. some musl setups,
-    // or when TLS is allocated dynamically).
-    u64 tsd_base;
-    if (tsd_get_base((void **)&tsd_base) != 0) {
-      DEBUG_PRINT("ruby: failed to get TSD base for DTV lookup");
-      error = ERR_RUBY_READ_TSD_BASE;
-      goto exit;
-    }
-
-    void *ec_ptr;
-    if (dtv_read(
-          &rubyinfo->dtv_info,
-          (void *)tsd_base,
-          rubyinfo->tls_module_id,
-          rubyinfo->current_ec_tls_offset,
-          &ec_ptr)) {
-      DEBUG_PRINT("ruby: failed to read EC from DTV");
-      goto exit;
-    }
-    current_ctx_addr = ec_ptr;
-    DEBUG_PRINT("ruby: EC from DTV: 0x%llx", (u64)current_ctx_addr);
   } else if (rubyinfo->version >= 0x30000) {
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(

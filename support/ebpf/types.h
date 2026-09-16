@@ -419,18 +419,24 @@ typedef struct TSDInfo {
   u8 indirect;
 } TSDInfo;
 
-// DTVInfo contains data needed to read Thread Local Storage (TLS) values, which
-// are located using the Dynamic Thread Vector (DTV).
-// DTV access is always indirect: TP+offset yields a pointer to the DTV array,
-// which must be dereferenced before indexing by module ID. This is true for
-// both glibc and musl (the DTV is a separately-allocated array, not inline
-// in the thread control block).
-typedef struct DTVInfo {
-  // Offset is the offset of the DTV pointer from the thread pointer base.
-  s16 offset;
-  // Multiplier is the size of each DTV entry in bytes.
-  u8 multiplier;
-} DTVInfo;
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS.
+typedef struct TLSVarInfo {
+  // TP-relative when dtv_pos is 0, else within the module's TLS block.
+  // Signed because variant II puts the static block below the thread pointer.
+  s32 tls_offset;
+  // Byte offset of the module's entry in the DTV array, that is its TLS module
+  // ID times the entry size. 0 for static TLS, and the only static/dynamic
+  // discriminant.
+  u32 dtv_pos;
+  // Offset of the DTV pointer from the thread pointer. Indirect on both glibc
+  // and musl: TP+dtv_offset holds a pointer to the DTV, which is allocated
+  // apart from the thread control block. Unused for static TLS.
+  s16 dtv_offset;
+  // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
+  // aarch64 musl gives tls_offset 0 to a library whose executable has no PT_TLS.
+  bool valid;
+} TLSVarInfo;
 
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
@@ -500,16 +506,9 @@ typedef struct RubyProcInfo {
   // version of the Ruby interpreter.
   u32 version;
 
-  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase.
-  // Signed because static TLS offsets (local exec model) are negative on x86_64.
-  s64 current_ec_tpbase_tls_offset;
-
-  // DTV-based TLS access for ruby_current_ec (fallback when TLSDESC unavailable)
-  DTVInfo dtv_info;
-  // Offset of ruby_current_ec within its module's TLS block
-  u64 current_ec_tls_offset;
-  // Runtime TLS module ID for libruby.so (from DTPMOD64 relocation, written by linker)
-  u32 tls_module_id;
+  // Locates ruby_current_ec. Invalid for Ruby that resolves it through neither
+  // TLS path, which falls through to the ractor and global branches below.
+  TLSVarInfo tls_ec;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
@@ -1109,7 +1108,9 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_EL0t  0x00000000
 
 typedef struct ApmIntProcInfo {
-  u64 tls_offset;
+  // Invalid until located: an agent library in dynamic TLS stays so until
+  // UpdateLibcInfo supplies the DTV layout.
+  TLSVarInfo tls;
 } ApmIntProcInfo;
 
 #endif // OPTI_TYPES_H

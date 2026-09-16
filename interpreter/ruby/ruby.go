@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -128,19 +129,8 @@ type rubyData struct {
 	// eBPF program to build ruby backtraces.
 	currentCtxPtr libpf.Address
 
-	// Address to the ruby_current_ec variable in TLS, as an offset from tpbase
-	currentEcTpBaseTlsOffset libpf.Address
-
-	// For statically-linked ruby, the direct TP-relative offset to ruby_current_ec
-	// extracted from disassembly of rb_current_ec_noinline
-	staticTLSOffset int64
-
-	// For DTV-based TLS access: offset of ruby_current_ec within its TLS block
-	currentEcTlsOffset libpf.Address
-
-	// For DTV-based TLS access: ELF offset where the TLS module ID is stored
-	// (from DTPMOD64 relocation, the actual module ID is written by the linker at load time)
-	tlsModuleIdOffset libpf.Address
+	// How ruby_current_ec is accessed in TLS, nil when it was not resolved.
+	tlsEC *tls.Var
 
 	// Address to global symbols, for id to string mappings
 	globalSymbolsAddr libpf.Address
@@ -314,31 +304,28 @@ func (r *rubyData) String() string {
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	var tlsOffset int64
-	if r.staticTLSOffset != 0 {
-		// For statically-linked ruby, use the direct TP-relative offset
-		// extracted from disassembly of rb_current_ec_noinline.
-		tlsOffset = r.staticTLSOffset
-	} else if r.currentEcTpBaseTlsOffset != 0 {
-		// Read TLS offset from the TLS descriptor.
-		tlsOffset = int64(rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8))
-	}
-
-	// For DTV-based access: read the actual module ID from process memory.
-	// The linker writes the module ID at the relocation offset at load time.
-	var modID uint32
-	if r.tlsModuleIdOffset != 0 {
-		modID = uint32(rm.Uint64(bias + r.tlsModuleIdOffset))
-		log.Debugf("Ruby TLS module ID: %d", modID)
+	var tlsEC support.TLSVarInfo
+	var pendingEC *tls.VarLocation
+	// Leaving these unset falls back to the ractor and global branches, which
+	// still yield frames, unlike a failed attach.
+	if r.tlsEC != nil {
+		if loc, err := r.tlsEC.Locate(rm, bias); err != nil {
+			log.Debugf("Ruby PID %d: ruby_current_ec not located: %v", pid, err)
+		} else if info, err := loc.VarInfo(libc.DTVInfo{}); err == nil {
+			tlsEC = info
+		} else if errors.Is(err, tls.ErrNeedDTV) {
+			// Dynamic TLS, so UpdateLibcInfo completes it once the DTV arrives.
+			pendingEC = &loc
+		} else {
+			log.Debugf("Ruby PID %d: unusable ruby_current_ec location %v: %v", pid, loc, err)
+		}
 	}
 
 	cdata := support.RubyProcInfo{
 		Version: r.version,
 
-		Current_ctx_ptr:              uint64(r.currentCtxPtr + bias),
-		Current_ec_tpbase_tls_offset: tlsOffset,
-		Current_ec_tls_offset:        uint64(r.currentEcTlsOffset),
-		Tls_module_id:                modID,
+		Current_ctx_ptr: uint64(r.currentCtxPtr + bias),
+		Tls_ec:          tlsEC,
 
 		Vm_stack:      r.vmStructs.execution_context_struct.vm_stack,
 		Vm_stack_size: r.vmStructs.execution_context_struct.vm_stack_size,
@@ -379,6 +366,7 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		r:                 r,
 		rm:                rm,
 		procInfo:          &cdata,
+		pendingEC:         pendingEC,
 		globalSymbolsAddr: r.globalSymbolsAddr + bias,
 		addrToString:      addrToString,
 		prefixes:          make(map[lpm.Prefix]uint32),
@@ -416,11 +404,12 @@ type rubyIseq struct {
 type rubyInstance struct {
 	interpreter.InstanceStubs
 
-	// procInfo stores the eBPF proc data for re-insertion when UpdateLibcInfo provides DTVInfo
+	// procInfo stores the eBPF proc data for re-insertion when UpdateLibcInfo provides the DTV
 	procInfo *support.RubyProcInfo
 
-	// dtvInfoInserted tracks whether we have already updated procInfo with DTVInfo
-	dtvInfoInserted bool
+	// pendingEC is the location of ruby_current_ec while it is waiting for the
+	// DTV layout, nil once described or when there is nothing to wait for.
+	pendingEC *tls.VarLocation
 
 	// Ruby symbolization metrics
 	successCount atomic.Uint64
@@ -472,29 +461,29 @@ func (r *rubyInstance) UsesAnonymousMappings() bool {
 	return true
 }
 
-// UpdateLibcInfo is called when libc introspection data becomes available.
-// Ruby uses this to receive DTVInfo for DTV-based TLS access to ruby_current_ec
-// when TLSDESC relocations are unavailable.
+// UpdateLibcInfo is called when libc introspection data becomes available. Ruby
+// uses it to complete a ruby_current_ec in dynamic TLS, which needs the DTV
+// layout the C library defines.
 func (r *rubyInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
-	// Only need DTVInfo if we're using DTV-based access (have a module ID but no TLSDESC offset)
-	if r.procInfo.Tls_module_id == 0 {
+	if r.pendingEC == nil {
 		return nil
 	}
 	if !libcInfo.HasDTVInfo() {
-		// DTV info not available yet (may arrive from a different DSO)
-		return nil
-	}
-	if r.dtvInfoInserted {
+		// May still arrive from a different DSO.
 		return nil
 	}
 
-	r.procInfo.Dtv_info = libcInfo.DTVInfo
+	info, err := r.pendingEC.VarInfo(libcInfo.DTVInfo)
+	if err != nil {
+		return err
+	}
+	r.procInfo.Tls_ec = info
 	if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(r.procInfo)); err != nil {
 		return err
 	}
-	r.dtvInfoInserted = true
-	log.Debugf("Ruby: updated proc data with DTVInfo (offset=%d, multiplier=%d)",
+	r.pendingEC = nil
+	log.Debugf("Ruby: located ruby_current_ec via the DTV (offset=%d, multiplier=%d)",
 		libcInfo.DTVInfo.Offset, libcInfo.DTVInfo.Multiplier)
 	return nil
 }
@@ -1506,7 +1495,6 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var globalSymbols libpf.SymbolValue
-	var currentEcTpBaseTlsOffset libpf.Address
 	var interpRanges []util.Range
 
 	globalSymbolsName := libpf.SymbolName("ruby_global_symbols")
@@ -1522,10 +1510,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		interpSymbolName = libpf.SymbolName("ruby_exec_node")
 	}
 
-	rubyCurrentEcTlsSymbol := "ruby_current_ec"
-	var currentEcSymbolAddress libpf.SymbolValue
-
-	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
+	currentEcSymbolName := libpf.SymbolName("ruby_current_ec")
+	var currentEcSym *libpf.Symbol
 
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
 		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
@@ -1550,12 +1536,21 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
 	}
 
+	// A stripped libruby keeps an exported ruby_current_ec in .dynsym, which
+	// this reaches and the .symtab-only VisitSymbols below does not.
+	currentEcSym, err = ef.LookupSymbol(currentEcSymbolName)
+	if err != nil {
+		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentEcSymbolName, err)
+		currentEcSym = nil
+	}
+
 	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
-		if len(interpRanges) > 0 && currentEcSymbolAddress != 0 && currentCtxPtr != 0 && globalSymbols != libpf.SymbolValueInvalid {
+		if len(interpRanges) > 0 && currentEcSym != nil && currentCtxPtr != 0 && globalSymbols != libpf.SymbolValueInvalid {
 			return false
 		}
-		if s.Name == currentEcSymbolName {
-			currentEcSymbolAddress = s.Address
+		if currentEcSym == nil && s.Name == currentEcSymbolName {
+			sym := s
+			currentEcSym = &sym
 		}
 		if s.Name == currentCtxSymbol {
 			currentCtxPtr = s.Address
@@ -1574,57 +1569,28 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("failed to visit symbols: %v", err)
 	}
 
-	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
-	// ruby_current_ec TLS symbol.
-	// We could potentially add a fallback for this in the future, but for now
-	// only unstripped ruby is supported. Many distro supplied rubies are stripped.
-	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
-		if symName == rubyCurrentEcTlsSymbol ||
-			libpf.SymbolValue(r.Addend) == currentEcSymbolAddress {
-			currentEcTpBaseTlsOffset = libpf.Address(r.Off)
-			return false
-		}
-		return true
-	}); err != nil {
-		log.Debugf("failed to locate TLS descriptor: %v", err)
-	}
-
-	// For statically-linked ruby, extract the direct TP-relative offset from
-	// rb_current_ec_noinline disassembly. This is the same pattern Python 3.13+
-	// uses for _PyThreadState_GetCurrent.
-	var staticTLSOffset int64
-	if isBinRuby {
-		offset, ecErr := extractEcTLSOffset(ef)
-		if ecErr != nil {
-			log.Debugf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+	// A stripped build still works when ruby_current_ec is exported. One that
+	// keeps it local does not: its offset within the TLS block then lives
+	// nowhere but .symtab, and the relocations reaching it carry no symbol.
+	var tlsEC *tls.Var
+	if currentEcSym != nil {
+		v, resolveErr := tls.Resolve(ef, currentEcSym)
+		if resolveErr != nil {
+			log.Debugf("failed to resolve %v: %v", currentEcSymbolName, resolveErr)
 		} else {
-			staticTLSOffset = offset
+			tlsEC = &v
 		}
 	}
 
-	// Look for DTPMOD64 relocation to find the TLS module ID offset.
-	// This is used for DTV-based TLS access when TLSDESC is unavailable.
-	var tlsModuleIdOffset libpf.Address
-	if err = ef.VisitRelocations(func(r pfelf.ElfReloc, _ string, _ pfelf.RelocType) bool {
-		log.Debugf("Found DTPMOD64 relocation at offset %x", r.Off)
-		tlsModuleIdOffset = libpf.Address(r.Off)
-		return false
-	}, pfelf.RelDTPMOD64); err != nil {
-		log.Debugf("failed to find DTPMOD64 relocation: %v", err)
-	}
-
-	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, dtpmod offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x",
-		currentEcTpBaseTlsOffset, staticTLSOffset, tlsModuleIdOffset, currentCtxPtr, interpRanges, globalSymbols)
+	log.Debugf("Discovered EC %v, fallback ctx %x, interp ranges: %v, global symbols: %x",
+		tlsEC, currentCtxPtr, interpRanges, globalSymbols)
 
 	rid := &rubyData{
-		version:                  version,
-		currentEcTpBaseTlsOffset: libpf.Address(currentEcTpBaseTlsOffset),
-		staticTLSOffset:          staticTLSOffset,
-		currentEcTlsOffset:       libpf.Address(currentEcSymbolAddress),
-		tlsModuleIdOffset:        tlsModuleIdOffset,
-		currentCtxPtr:            libpf.Address(currentCtxPtr),
-		hasGlobalSymbols:         globalSymbols != 0,
-		globalSymbolsAddr:        libpf.Address(globalSymbols),
+		version:           version,
+		tlsEC:             tlsEC,
+		currentCtxPtr:     libpf.Address(currentCtxPtr),
+		hasGlobalSymbols:  globalSymbols != 0,
+		globalSymbolsAddr: libpf.Address(globalSymbols),
 	}
 
 	vms := &rid.vmStructs
