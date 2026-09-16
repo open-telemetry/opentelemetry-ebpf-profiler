@@ -385,7 +385,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	needTPBase := !interpretersConfig.Perl.IsDisabled() ||
 		!interpretersConfig.Python.IsDisabled() ||
 		!interpretersConfig.Ruby.IsDisabled() ||
-		!interpretersConfig.Go.IsLabelsDisabled()
+		!interpretersConfig.Go.IsLabelsDisabled() ||
+		!interpretersConfig.ThreadContext.IsDisabled()
 	if err := parseBTF(vars, needTPBase, needProcessStartTime); err != nil {
 		if needProcessStartTime {
 			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
