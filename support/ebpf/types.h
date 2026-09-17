@@ -671,6 +671,15 @@ typedef struct Trace {
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
 
+  // value_extra carries origin-specific auxiliary values alongside `value`.
+  // Each origin defines how its eBPF producer and its reporter consumer use
+  // the slots. For example, the heap probe documents its layout where the
+  // fields are written, in heap_usdt.ebpf.c.
+  //
+  // This is intentionally a small, fixed side-channel; we expect it may be
+  // replaced with a more general mechanism later.
+  u64 value_extra[2];
+
   // The CPU that captured this trace.
   u32 cpu_id;
 
