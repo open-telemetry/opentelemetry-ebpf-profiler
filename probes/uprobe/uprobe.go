@@ -129,7 +129,11 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	p.prog = prog
 
 	// Register for per-process callbacks instead of a global link.
-	probeCtx.AddAttacher(p)
+	if err := probeCtx.AddAttacher(p); err != nil {
+		_ = p.prog.Close()
+		p.prog = nil
+		return fmt.Errorf("registering process attacher: %w", err)
+	}
 	return nil
 }
 
