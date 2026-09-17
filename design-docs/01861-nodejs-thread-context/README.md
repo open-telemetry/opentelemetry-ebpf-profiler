@@ -28,6 +28,12 @@ are shared verbatim with OTEP 4947, and the new walk is selected by a distinct
 [reference implementation](https://github.com/polarsignals/custom-labels/tree/otel-thread-ctx-wip/js);
 and this document is the proposal for making the profiler read it.
 
+This is a design document rather than a new OTEP because its scope is too narrow
+for one: it concerns a single runtime, and what it specifies is how this
+profiler reads it. It changes nothing that OTEP 4719 or 4947 specify, and it
+needs no new specification, only the extension points those OTEPs already
+provide: a new schema version value, and few more process-context keys.
+
 # Introduction
 
 ## Context
@@ -49,15 +55,12 @@ Two OTEPs define what the profiler consumes today:
 
 Relevant code already in or arriving in this repository:
 
-- `process/processcontext` reads OTEP 4719 process context and gates
-  thread-context support on `threadlocal.schema_version` matching
-  `tlsdesc_v1_dev`.
-- `interpreter/threadcontext` locates the `otel_thread_ctx_v1` thread-local
-  across the TLS access models a target may have been built with (TLSDESC,
-  legacy GNU global-dynamic, linker-relaxed initial-exec and local-exec) and
-  decodes the record. **Nearly all of this is reusable as-is**: what this
-  proposal changes is the size and interpretation of what the thread-local
-  holds, not how it is found.
+- the `processcontext` reader reads OTEP 4719 process context, and gates
+  thread-context support on the `threadlocal.schema_version` it finds there.
+- `threadcontext` code locates OTEP 4947's thread-local, across whichever TLS
+  access model the target was built with, and decodes the record it points at.
+  **Nearly all of this is reusable as-is**: what this proposal changes is the
+  size and interpretation of what the thread-local holds, not how it is found.
 - `interpreter/nodev8` already unwinds V8 JavaScript stacks, which means the
   profiler already reads tagged V8 words and V8 heap object fields out of
   target memory. The walk proposed here needs the same primitives.
@@ -66,7 +69,13 @@ Relevant code already in or arriving in this repository:
 
 ### How Node.js tracks the active continuation
 
-What has to be tracked in Node.js is the active *continuation* on a thread.
+Node.js interleaves many logical threads of execution on one OS thread, which is
+what makes OTEP 4947 unaffordable there; "Problem" below states that case. The
+consequence for this section is that the unit which has to be tracked is not the
+OS thread but the active *continuation* — the remainder of a computation, which
+in Node.js terms is the logical thread of execution that resumes when a promise
+settles, a callback fires or a timer expires.
+
 Node.js already has a way to attach data to one, and the mechanism acts on two
 levels:
 
@@ -121,8 +130,13 @@ deoptimizes V8 — and they are deprecated and slated for removal.
 
 As called out in OTEP 4947, this combination of constant switching and the high
 cost of running code at each switch means an implementation of that spec would
-not be efficient for current versions of Node.js. As a consequence, Node.js
-remains one of the few runtimes for which the profiler already ships an unwinder
+not be efficient for current versions of Node.js. The code that would have to
+run is also worse than ordinary JavaScript: OTEP 4947 keeps its record pointer
+in a native thread-local, so keeping that pointer current from JavaScript means
+an FFI crossing at every switch. Running code at each switch is expensive;
+crossing into native code at each switch is worse. Avoiding both is what the
+success criteria below are built around. As a consequence, Node.js remains one
+of the few runtimes for which the profiler already ships an unwinder
 (`interpreter/nodev8`) but would still have no way to attribute a sample to a
 trace even if an OTEP 4947 thread-context reader for its default schema ships.
 
@@ -183,11 +197,10 @@ propose a Node.js-specific discovery mechanism for the same record format.
   never publish a discovery struct. There is currently no mechanism in Node.js
   we could use to support this thread pool; such a mechanism would mean changing
   Node.js itself.
-- **Changing the record format.** Any change there belongs in OTEP 4947.
 
 # Proposed Solution
 
-## The walk, in outline
+## Resolving the context
 
 "The SDK" below is shorthand for whichever component in the target publishes the
 context — an OpenTelemetry SDK, a vendor tracer, or any other Node.js tracing
@@ -195,9 +208,9 @@ code. Such a component publishes context by:
 
 1. Creating one `AsyncLocalStorage` instance per isolate, and telling its native
    addon about it.
-2. Allocating a **Thread-Local Context Record** (OTEP 4947's format, unchanged)
-   behind a JavaScript wrapper object for every tracing span, and storing a raw
-   pointer to the record in the wrapper's internal field.
+2. Allocating a **Thread-Local Context Record** behind a JavaScript wrapper
+   object for every tracing span, and storing a raw pointer to the record in the
+   wrapper's internal field.
 3. Attaching context by storing that wrapper in the `AsyncLocalStorage` (and
    detaching it by storing `undefined`). Both are pure-JavaScript operations; no
    native code runs for them.
@@ -238,15 +251,16 @@ than per sample. This proposal uses the existing values with an alternate
 Reused from OTEP 4947:
 
 - `threadlocal.schema_version` — `nodejs_v1_dev` for experimentation, to become
-  `nodejs_v1` once stabilized. Recognizing this value is what tells the profiler
-  to use the walk described here instead of OTEP 4947's TLS-pointer walk.
+  `nodejs_v1` once this doc gets merged. Recognizing this value is what tells
+  the profiler to use the walk described here instead of OTEP 4947's TLS-pointer
+  walk.
 - `threadlocal.attribute_key_map` — unchanged, including its append-only
   semantics.
 
-The four added attributes are all V8 layout constants captured from the V8
-headers the target's addon was compiled against, so that the profiler does not
-have to derive them from the target's pointer-compression and sandbox build
-flags, nor look up V8 internal symbols:
+The four added attributes are all V8 layout constants, fixed for the V8 build
+the target is running, published so that the profiler does not have to derive
+them from the target's pointer-compression and sandbox build flags, nor look up
+V8 internal symbols:
 
 | Key | Meaning |
 | :-- | :------ |
@@ -511,12 +525,6 @@ The proposal is additive at three points, in increasing order of new code:
    bounded remote reads of V8 objects) but this walk is independent of stack
    unwinding and should not be entangled with the unwinder's state.
 
-An open implementation question is whether the walk lives in
-`interpreter/threadcontext` behind a per-schema strategy, or in its own package
-that `threadcontext` delegates to. The former keeps one entry point for "read
-this thread's context"; the latter keeps V8 knowledge out of a package that is
-otherwise runtime-agnostic. This document does not decide it.
-
 ### 1. Process initialization
 
 Unchanged from OTEP 4947's process-initialization steps, except that the
@@ -607,14 +615,19 @@ built differently than advertised costs a dropped context rather than a bad one.
 The walk crosses `JSMap` and `OrderedHashMap`, neither of whose layouts is part
 of V8's public API, and any of the offsets could change in a future V8.
 
-**Mitigation:** the offsets are not hardcoded in the profiler. They are captured
-at addon-compile time from the very V8 headers the addon is built against and
-published through the process context, so the profiler is told the layout of the
-V8 it is actually looking at. This does not protect against V8 restructuring
-these objects more deeply than an offset change, which is what the versioned
-`schema_version` is for. It does mean that the usual failure mode — a Node.js
-release built with different pointer-compression or sandbox settings — is
-handled without profiler changes.
+**Mitigation:** the offsets are not hardcoded in the profiler. The target
+publishes them, so the profiler is told the layout of the V8 it is actually
+looking at.
+
+Two of the four the addon reads straight out of the V8 headers it is compiled
+against, so they are correct for that build by construction. The other two are
+not exposed by those headers at all, so an addon has to carry them as constants
+kept in sync with V8's sources.
+
+None of this protects against V8 restructuring these objects more deeply than an
+offset change, which is what the versioned `schema_version` is for. It does mean
+that the usual failure mode — a Node.js release built with different
+pointer-compression or sandbox settings — is handled without profiler changes.
 
 ### Reader complexity relative to OTEP 4947
 
@@ -625,7 +638,7 @@ walks a hash map. That is more code, and it has to be defensive.
 is short in practice; and the two early exits mean the full walk only runs for
 threads that actually have context attached. The complexity is confined to
 reaching the record — everything from the record onward is shared with OTEP
-4947. This repository already has code to read V8 heap objects out of target 
+4947. This repository already has code to read V8 heap objects out of target
 memory in `interpreter/nodev8`.
 
 ### Rehashing of the map
@@ -634,6 +647,15 @@ Since `AsyncContextFrame` is a JavaScript `Map`, one can rightly ask what would
 happen if it were mutated in place and triggered a rehash while it is being
 read. Fortunately, the way it is currently implemented in Node.js is that
 existing maps are never mutated; they are copied on writes.
+
+Should that change, the reader could be stopped mid-insert and observe a table
+that is half-rehashed. Every read on the walk is bounded and the record is
+validated, so the outcomes are a lookup that misses its key — the sample loses
+its context, which is the benign case — or a bucket that still resolves to a
+wrapper from the pre-rehash generation, yielding a well-formed record for the
+wrong context. The profiler cannot detect the second one, which is why a Node.js
+change here has to come with a new `threadlocal.schema_version`: that value is
+precisely what tells the profiler which invariants it may rely on.
 
 ### Garbage collection
 
@@ -653,12 +675,15 @@ Note that the record itself is not a V8 heap object; it is malloc'd memory owned
 by the wrapper, so it never moves as a result of GC. Only the path to it
 involves heap objects.
 
-Should that walk prove unsafe, a writer MAY close the gate for the duration of a
-collection: register GC prologue and epilogue callbacks on the isolate, zero
-`cped_slot` in the prologue and restore it in the epilogue, with the same
-compiler fence and volatile store the other gate writes use. The profiler needs
-no change at all, as it already stops at a zero gate and is forbidden from
-treating it as permanent.
+Should the reasoning above turn out to be wrong, a writer MAY close the gate for
+the duration of a collection: register GC prologue and epilogue callbacks on the
+isolate, zero `cped_slot` in the prologue and restore it in the epilogue, with
+the same compiler fence and volatile store the other gate writes use. The
+profiler needs no change at all, as it already stops at a zero gate and is
+forbidden from treating it as permanent. This is a contingency rather than a
+part of the proposal: nothing has to implement it unless the argument above
+proves wrong, and because the profiler is unaffected, it can then be adopted one
+SDK at a time with no schema change.
 
 Losing the trace context for GC samples is a design decision. A collection is
 triggered by whole-heap pressure that the active request may have contributed
@@ -697,6 +722,25 @@ can already walk the target's stack and so can tell a thread parked in the poll
 from one that is running, which is all such a flag would say; and maintaining it
 would mean marking entry to and exit from JavaScript in the target, which is
 per-call work on the hottest path this design exists to keep native code off.
+
+### Reporting a sample with nothing attached
+
+A sample can come from a thread that publishes a perfectly good discovery struct
+and still has nothing attached: an idle loop, a request that has already
+finished, or application code running outside any span. This proposal has the
+profiler emit such a sample the same way it emits one from a process with no
+thread-context support at all — with no trace context — and adds no per-sample
+marker separating the two.
+
+The distinction remains available to a consumer one level up. A process that
+supports this mechanism says so in its process context, which the profiler
+already reports, so "supports it, nothing was attached here" and "does not
+support it" are separable per process without spending a bit per sample. A
+per-sample marker would only be needed to separate "nothing was attached" from
+"something was attached but the walk failed". Those two *are* distinguishable
+inside the reader — an empty slot compares equal to `undefined_addr`, a failed
+walk does not — but the place to surface that difference is the profiler's own
+error metrics, not a field on every sample.
 
 ### Memory overhead
 
