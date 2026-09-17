@@ -53,6 +53,13 @@ const (
 	GoFrame FrameType = support.FrameMarkerGo
 	// BEAMFrame identifies the BEAM interpreter frames.
 	BEAMFrame FrameType = support.FrameMarkerBEAM
+	// LBRFrame identifies a Last Branch Record entry. LBR frames are
+	// synthetic: each one carries a single (from, to) address pair captured
+	// by the CPU's branch sampling hardware, not a real call-stack frame.
+	// They are emitted alongside the regular call stack on entry points
+	// configured with PERF_SAMPLE_BRANCH_STACK (Intel LBR, AMD BRS,
+	// AMD LbrExtV2).
+	LBRFrame FrameType = support.FrameMarkerLBR
 	// LuaJITFrame identifies the LuaJIT interpreter frames.
 	LuaJITFrame FrameType = support.FrameMarkerLuaJIT
 )

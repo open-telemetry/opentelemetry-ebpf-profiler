@@ -428,4 +428,48 @@ enum {
 // defined in include/uapi/linux/perf_event.h
 #define PERF_MAX_STACK_DEPTH 127
 
+// Defined in include/uapi/linux/perf_event.h.
+// Mirrored byte-for-byte from the kernel uapi header. The layout does not
+// vary by endianness for this struct (unlike perf_mem_data_src /
+// perf_sample_weight which do).
+//
+// Single taken branch record layout:
+//
+//      from: source instruction (may not always be a branch insn)
+//        to: branch target
+//   mispred: branch target was mispredicted
+// predicted: branch target was predicted
+//
+// support for mispred, predicted is optional. In case it
+// is not supported mispred = predicted = 0.
+//
+//     in_tx: running in a hardware transaction
+//     abort: aborting a hardware transaction
+//    cycles: cycles from last branch (or 0 if not supported)
+//      type: branch type
+//      spec: branch speculation info (or 0 if not supported)
+//  new_type: additional branch type
+//      priv: privilege level
+struct perf_branch_entry {
+  u64 from;
+  u64 to;
+  u64 mispred : 1, // target mispredicted
+    predicted : 1, // target predicted
+    in_tx : 1,     // in transaction
+    abort : 1,     // transaction abort
+    cycles : 16,   // cycle count to last branch
+    type : 4,      // branch type
+    spec : 2,      // branch speculation info
+    new_type : 4,  // additional branch type
+    priv : 3,      // privilege level
+    reserved : 31;
+};
+
+_Static_assert(
+  sizeof(struct perf_branch_entry) == 24,
+  "perf_branch_entry must be 24 bytes to match the kernel ABI");
+
+// MAX_BRANCH_RECORDS is typically 32 for Skylake+ https://lwn.net/Articles/680985/
+#define MAX_BRANCH_RECORDS 32
+
 #endif // OPTI_KERNEL_H
