@@ -166,23 +166,30 @@ func pclntabHeaderSignature(arch elf.Machine) []byte {
 	return []byte{0xff, 0xff, 0xff, 0x00, 0x00, quantum, 0x08}
 }
 
-func newPcval(data []byte, pc uint, quantum uint8) pcval {
+// newPcval returns the pcval table in data, positioned on its first entry.
+// It reports false if that first entry could not be loaded, in which case val
+// is still the -1 sentinel and the table must not be used: callers of the
+// parse loops below read val before their first step, so a sentinel value
+// would be emitted as unwind information.
+func newPcval(data []byte, pc uint, quantum uint8) (pcval, bool) {
 	p := pcval{
 		ptr:     data,
 		pcEnd:   pc,
 		val:     -1,
 		quantum: quantum,
 	}
-	p.step()
-	return p
+	return p, p.step()
 }
 
-// getInt reads one zig-zag encoded integer
-func (p *pcval) getInt() uint32 {
+// getInt reads one zig-zag encoded integer. It reports false if the data ends
+// in the middle of the encoding: a truncated value is otherwise
+// indistinguishable from a real zero, which would let a malformed table
+// decode as a valid entry.
+func (p *pcval) getInt() (uint32, bool) {
 	var v, shift uint32
 	for {
 		if len(p.ptr) == 0 {
-			return 0
+			return 0, false
 		}
 		b := p.ptr[0]
 		p.ptr = p.ptr[1:]
@@ -192,7 +199,7 @@ func (p *pcval) getInt() uint32 {
 		}
 		shift += 7
 	}
-	return v
+	return v, true
 }
 
 // step executes one line of the pcval table. Returns true on success.
@@ -201,14 +208,23 @@ func (p *pcval) step() bool {
 		return false
 	}
 	p.pcStart = p.pcEnd
-	d := p.getInt()
+	d, ok := p.getInt()
+	if !ok {
+		return false
+	}
 	if d&1 != 0 {
 		d = ^(d >> 1)
 	} else {
 		d >>= 1
 	}
+	// Both values are decoded before either is applied, so that a truncated
+	// entry leaves val and pcEnd untouched rather than half updated.
+	pcDelta, ok := p.getInt()
+	if !ok {
+		return false
+	}
 	p.val += int32(d)
-	p.pcEnd += uint(p.getInt()) * uint(p.quantum)
+	p.pcEnd += uint(pcDelta) * uint(p.quantum)
 	return true
 }
 
@@ -524,8 +540,10 @@ func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 
 // getFunc returns the gopclntab function data and its start address.
 func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
-	// Get the function data
-	if uintptr(len(g.functab)) < funcOff+uintptr(g.funSize) {
+	// Get the function data. Compare without overflowing, making sure
+	// funcOff+funSize does not wrap around.
+	if funcOff > uintptr(len(g.functab)) ||
+		uintptr(len(g.functab))-funcOff < uintptr(g.funSize) {
 		return 0, nil
 	}
 	var pc uintptr
@@ -539,14 +557,45 @@ func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
 	return pc, (*pclntabFunc)(unsafe.Pointer(&g.functab[funcOff]))
 }
 
-// getPcval returns the pcval table at given offset with 'startPc' as the pc start value.
-func (g *Gopclntab) getPcval(offs int32, startPc uint) pcval {
-	return newPcval(g.pctab[int(offs):], startPc, g.quantum)
+// getPcval returns the pcval table at given offset with 'startPc' as the pc
+// start value. The offset comes from the function descriptor, which is
+// untrusted data from the profiled executable, so it is bounds checked here.
+//
+// An error is returned if the table cannot be used, either because the offset
+// is out of bounds or because it does not start with a usable entry. The Go
+// linker reserves a zero byte at pctab[0] so that a function without pcval
+// data refers to it by offset zero, and all four call sites check for that
+// before calling. A non-zero offset that yields no entry means the pclntab is
+// malformed.
+//
+// The value of the first entry is also rejected if it is negative. This is
+// what the -1 sentinel of an unpopulated pcval decodes to, and reaching it
+// does not require a truncated table: a non-canonical encoding of zero, such
+// as 0x80 0x00, steps successfully while leaving the sentinel in place. The
+// only tables read here hold a stack pointer delta, a file index or a line
+// number, none of which starts out negative, so the check costs nothing.
+func (g *Gopclntab) getPcval(offs int32, startPc uint) (pcval, error) {
+	if offs < 0 || int(offs) >= len(g.pctab) {
+		return pcval{}, fmt.Errorf("pcval offset %d out of bounds (pctab size %d)",
+			offs, len(g.pctab))
+	}
+	p, ok := newPcval(g.pctab[int(offs):], startPc, g.quantum)
+	if !ok {
+		return pcval{}, fmt.Errorf("pcval table at offset %d has no valid first entry", offs)
+	}
+	if p.val < 0 {
+		return pcval{}, fmt.Errorf("pcval table at offset %d starts with negative value %d",
+			offs, p.val)
+	}
+	return p, nil
 }
 
 // mapPcval steps the given pcval table until matching PC is found and returns the value.
 func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
-	p := g.getPcval(offs, startPc)
+	p, err := g.getPcval(offs, startPc)
+	if err != nil {
+		return 0, false
+	}
 	for pc >= p.pcEnd {
 		if ok := p.step(); !ok {
 			return 0, false
@@ -868,7 +917,10 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// to using frame pointers in the unlikely case of no file info
 		fileStrategy := defaultStrategy
 		if fun.pcfileOff != 0 {
-			p := g.getPcval(fun.pcfileOff, uint(funcPc))
+			p, err := g.getPcval(fun.pcfileOff, uint(funcPc))
+			if err != nil {
+				return fmt.Errorf("func %d pcfileOff: %w", i, err)
+			}
 			cuIndex := int(p.val) + int(fun.npcData)
 			if s, ok := cuStrategy[cuIndex]; ok {
 				fileStrategy = s
@@ -888,11 +940,10 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		}
 
 		// Generate stack deltas as the information is available
-		if len(g.pctab) < int(fun.pcspOff) {
-			return fmt.Errorf("func %v pcscOff (%d) is invalid",
-				i, fun.pcspOff)
+		p, err := g.getPcval(fun.pcspOff, 0)
+		if err != nil {
+			return fmt.Errorf("func %d pcspOff: %w", i, err)
 		}
-		p := g.getPcval(fun.pcspOff, 0)
 		if err := parsePclntab(&bb, p, fileStrategy); err != nil {
 			return err
 		}
