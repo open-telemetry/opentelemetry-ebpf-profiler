@@ -92,7 +92,8 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
-		collectionStartTime, collectionEndTime)
+		collectionStartTime, collectionEndTime,
+		r.collectSourceProfiles(), r.cfg.ProcessMetaForPID)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil
