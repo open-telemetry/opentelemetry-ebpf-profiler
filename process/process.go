@@ -138,7 +138,7 @@ func (sp *systemProcess) GetProcessMeta(enrichers []MetaEnricher) Meta {
 }
 
 // parseContainerID parses cgroup v1 and v2 container IDs
-func parseContainerID(cgroupFile io.Reader) libpf.String {
+func parseContainerID(cgroupFile io.Reader) (libpf.String, error) {
 	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
 	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
@@ -156,14 +156,14 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 		if len(m) == 4 {
 			sub := line[m[2]:m[3]]
 			if parts := expContainerID.FindStringSubmatchIndex(sub); len(parts) == 4 {
-				return libpf.Intern(sub[parts[2]:parts[3]])
+				return libpf.Intern(sub[parts[2]:parts[3]]), scanner.Err()
 			}
 		}
 		log.Debugf("Could not extract container ID from line: %s", line)
 	}
 
 	// No containerID could be extracted
-	return libpf.NullString
+	return libpf.NullString, scanner.Err()
 }
 
 // extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
@@ -174,7 +174,7 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	}
 	defer cgroupFile.Close()
 
-	return parseContainerID(cgroupFile), nil
+	return parseContainerID(cgroupFile)
 }
 
 // cgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
