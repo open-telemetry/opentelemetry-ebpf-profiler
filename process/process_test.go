@@ -238,7 +238,8 @@ func TestExtractContainerID(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.expectedContainerID, func(t *testing.T) {
 			reader := strings.NewReader(tc.line)
-			gotContainerID := parseContainerID(reader)
+			gotContainerID, err := parseContainerID(reader)
+			require.NoError(t, err)
 			assert.Equal(t, tc.expectedContainerID, gotContainerID.String())
 		})
 	}
