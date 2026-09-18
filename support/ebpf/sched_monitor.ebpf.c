@@ -26,7 +26,7 @@ struct sched_process_free_ctx {
 
 static EBPF_INLINE int do_process_free(void *ctx, u32 pid)
 {
-  if (pid_ns_translation_enabled) {
+  if (pid_ns_translation_mode != PID_NS_TRANSLATION_MODE_NONE) {
     // pid is always the PID within the root/init PID namespace, since it comes straight
     // from the task_struct field the tracepoint copies, and get_pid_tgid() cannot
     // translate it. Therefore skip the fast exit-notification and ratelimit-reset below.
