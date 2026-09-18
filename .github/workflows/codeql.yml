@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up environment
-        uses: ./.github/workflows/env
+        uses: $/.github/workflows/env
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
