@@ -68,11 +68,18 @@ extern u16 origin_id_sampling;
 // pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
 extern bool pid_ns_translation_enabled;
 
+extern bool translate_descendant_pids;
+
 // target_pid_ns_inode is declared in native_stack_trace.ebpf.c
 extern u64 target_pid_ns_inode;
 
 // target_pid_ns_dev is declared in native_stack_trace.ebpf.c
 extern u64 target_pid_ns_dev;
+
+// target_pid_ns_level is declared in native_stack_trace.ebpf.c
+extern u32 target_pid_ns_level;
+
+extern PIDNamespaceLayout pid_namespace_layout;
 
 // Mirrors the kernel's struct bpf_pidns_info for use with bpf_get_ns_current_pid_tgid().
 // pid:  thread PID as seen within the target PID namespace.
@@ -81,6 +88,70 @@ struct bpf_pidns_info {
   u32 pid;
   u32 tgid;
 };
+
+// Resolve the PID of task as visible in the configured target namespace.
+// Using the target PID namespace level (L) determined at startup:
+// Tasks visible in the target namespace have their PID at numbers[L] (see kernel pid_nr_ns).
+static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result)
+{
+  u64 pid_address = 0;
+  if (
+    bpf_probe_read_kernel(
+      &pid_address,
+      sizeof(pid_address),
+      (void *)(task + pid_namespace_layout.task_thread_pid_offset)) ||
+    pid_address == 0) {
+    return false;
+  }
+
+  u32 active_level = 0;
+  if (bpf_probe_read_kernel(
+        &active_level,
+        sizeof(active_level),
+        (void *)(pid_address + pid_namespace_layout.pid_level_offset))) {
+    return false;
+  }
+
+  if (active_level < target_pid_ns_level || target_pid_ns_level > 32) {
+    return false;
+  }
+
+  u64 upid_address = pid_address + pid_namespace_layout.pid_numbers_offset +
+                     ((u64)target_pid_ns_level * pid_namespace_layout.upid_size);
+
+  u64 namespace_address = 0;
+  if (
+    bpf_probe_read_kernel(
+      &namespace_address,
+      sizeof(namespace_address),
+      (void *)(upid_address + pid_namespace_layout.upid_ns_offset)) ||
+    namespace_address == 0) {
+    return false;
+  }
+
+  u32 namespace_inode = 0;
+  if (
+    bpf_probe_read_kernel(
+      &namespace_inode,
+      sizeof(namespace_inode),
+      (void *)(namespace_address + pid_namespace_layout.pid_namespace_inum_offset)) ||
+    namespace_inode != (u32)target_pid_ns_inode) {
+    return false;
+  }
+
+  u32 translated_pid = 0;
+  if (
+    bpf_probe_read_kernel(
+      &translated_pid,
+      sizeof(translated_pid),
+      (void *)(upid_address + pid_namespace_layout.upid_nr_offset)) ||
+    translated_pid == 0) {
+    return false;
+  }
+
+  *result = translated_pid;
+  return true;
+}
 
 // get_pid_tgid resolves the current task's PID and TGID, translating them into the
 // configured target PID namespace if pid_ns_translation_enabled is set. Returns false if
@@ -92,16 +163,33 @@ static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
     struct bpf_pidns_info ns_info = {0};
     long ret                      = bpf_get_ns_current_pid_tgid(
       target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
-    if (ret < 0) {
-      // Task is not in the target namespace, signal caller to skip it.
+    if (ret == 0) {
+      // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
+      // ns_info.pid is the thread PID in the namespace.
+      // Match the convention of the non-namespace path where pid holds the TGID.
+      *pid = ns_info.tgid;
+      *tid = ns_info.pid;
+      return true;
+    }
+
+    if (!translate_descendant_pids) {
       return false;
     }
-    // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
-    // ns_info.pid is the thread PID in the namespace.
-    // Match the convention of the non-namespace path where pid holds the TGID.
-    *pid = ns_info.tgid;
-    *tid = ns_info.pid;
-    return true;
+
+    u64 task         = bpf_get_current_task();
+    u64 group_leader = 0;
+    if (
+      task == 0 ||
+      bpf_probe_read_kernel(
+        &group_leader, sizeof(group_leader), (void *)(task + task_group_leader_offset)) ||
+      group_leader == 0) {
+      return false;
+    }
+
+    // A helper miss can mean either a descendant namespace or an unrelated
+    // namespace. Both translations validate the target namespace inode, so
+    // untranslated host PIDs are never returned from this path.
+    return get_pid_in_target_namespace(group_leader, pid) && get_pid_in_target_namespace(task, tid);
   }
 
   // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
