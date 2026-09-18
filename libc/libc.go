@@ -5,8 +5,10 @@ package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -66,21 +68,13 @@ func IsPotentialLibcDSO(filename string) bool {
 }
 
 func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
-	info := &LibcInfo{}
+	info := &LibcInfo{DTVInfo: extractDTVInfo(ef)}
 
-	tsdinfo, tsdErr := extractTSDInfo(ef)
+	tsdInfo, tsdErr := extractTSDInfo(ef)
 	if tsdErr == nil {
-		info.TSDInfo = tsdinfo
-	}
-
-	dtvinfo, dtvErr := extractDTVInfo(ef)
-	if dtvErr == nil {
-		info.DTVInfo = dtvinfo
-	}
-
-	// Return an error only if both extractions failed.
-	if tsdErr != nil && dtvErr != nil {
-		return nil, fmt.Errorf("TSD: %s; DTV: %s", tsdErr, dtvErr)
+		info.TSDInfo = tsdInfo
+	} else if !info.HasDTVInfo() {
+		return nil, fmt.Errorf("TSD: %w; no DTV info", tsdErr)
 	}
 
 	return info, nil
@@ -133,6 +127,11 @@ func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 
 // extractTSDInfo extracts the introspection data for pthread thread specific data.
 func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
+	// glibc 2.34 and later state the layout outright, no disassembly needed.
+	if info, err := glibcTSDInfo(ef); err == nil {
+		return info, nil
+	}
+
 	_, code, err := ef.SymbolData("__pthread_getspecific", 2048)
 	if err != nil {
 		_, code, err = ef.SymbolData("pthread_getspecific", 2048)
@@ -159,30 +158,73 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	return info, nil
 }
 
-// extractDTVInfo extracts the introspection data for the DTV to access TLS vars
-func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
-	var info DTVInfo
-	_, code, err := ef.SymbolData("__tls_get_addr", 2048)
-	if err != nil {
-		// If the symbol is not exported, this is not a critical error.
-		// Callers can check HasDTVInfo() to determine if DTV data is available.
-		return info, nil
-	}
+type libcFlavor int
 
-	if len(code) < 8 {
-		return info, fmt.Errorf("__tls_get_addr function size is %d", len(code))
-	}
+const (
+	libcUnknown libcFlavor = iota
+	libcGlibc
+	libcMusl
+)
 
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		info, err = extractDTVInfoARM(code)
-	case elf.EM_X86_64:
-		info, err = extractDTVInfoX86(code)
-	default:
-		return info, fmt.Errorf("unsupported arch %s", ef.Machine.String())
-	}
+// libcFlavorOf identifies objects eligible for the constant DTV layouts.
+// Only glibc's libc.so.6 is eligible: its loader and libpthread can lack
+// nptl_db descriptors even in modern glibc and must not supply constants.
+// Upstream musl has no SONAME, so also recognize its dynamic linker entry point.
+func libcFlavorOf(ef *pfelf.File) libcFlavor {
+	sonames, err := ef.DynString(elf.DT_SONAME)
 	if err != nil {
-		return info, fmt.Errorf("failed to extract DTV data: %s", err)
+		return libcUnknown
 	}
-	return info, nil
+	for _, soname := range sonames {
+		switch {
+		case strings.HasPrefix(soname, "libc.musl-"):
+			return libcMusl
+		case soname == "libc.so.6":
+			return libcGlibc
+		}
+	}
+	// musl looks up __dls3 by name during startup, so the definition remains
+	// in the dynamic symbol table even when the library is stripped.
+	// Treat a symbol with both zero address and zero size as undefined.
+	if sym, err := ef.LookupSymbol("__dls3"); err == nil &&
+		(sym.Address != 0 || sym.Size != 0) {
+		return libcMusl
+	}
+	return libcUnknown
+}
+
+// musl marks the regions of 'struct pthread' holding the DTV pointer as ABI
+// in src/internal/pthread_impl.h: right after .self when TLS lives below the
+// thread pointer (x86_64), and last when above (arm64). Verified unchanged on
+// musl 1.1.5 to 1.2.5. The .tsd offset sits outside that ABI region and does
+// move between releases, hence no equivalent table for TSD.
+//
+// glibc makes no such promise: 'union dtv' grew a second pointer in 2.26 and
+// only kept its size because the field it replaced was padded. These values
+// therefore only serve glibc older than 2.34, which can no longer change.
+// Newer glibc states its layout through glibcDTVInfo.
+var dtvInfos = map[libcFlavor]map[elf.Machine]DTVInfo{
+	libcGlibc: {
+		elf.EM_X86_64:  {Offset: 8, Multiplier: 16},
+		elf.EM_AARCH64: {Offset: 0, Multiplier: 16},
+	},
+	libcMusl: {
+		elf.EM_X86_64:  {Offset: 8, Multiplier: 8},
+		elf.EM_AARCH64: {Offset: -8, Multiplier: 8},
+	},
+}
+
+// extractDTVInfo extracts the introspection data for the DTV to access TLS
+// vars. An unrecognized C-library or architecture yields a zero DTVInfo.
+func extractDTVInfo(ef *pfelf.File) DTVInfo {
+	info, err := glibcDTVInfo(ef)
+	if err == nil {
+		return info
+	}
+	if !errors.Is(err, errNptlDBUnavailable) {
+		// Symbols present but rejected: the static table below is known-stale
+		// for glibc >= 2.34, so it must not paper over this.
+		return DTVInfo{}
+	}
+	return dtvInfos[libcFlavorOf(ef)][ef.Machine]
 }
