@@ -23,9 +23,11 @@ const SymbolValueInvalid = SymbolValue(0)
 // SymbolNameUnknown is the value returned by SymbolMap functions when address has no symbol info.
 const SymbolNameUnknown = ""
 
-// Symbol represents the name of a symbol
+// Symbol represents a symbol and its metadata.
 type Symbol struct {
 	Name    SymbolName
 	Address SymbolValue
 	Size    uint64
+	Info    uint8  // ELF symbol type and binding attributes.
+	Shndx   uint16 // ELF section index.
 }
