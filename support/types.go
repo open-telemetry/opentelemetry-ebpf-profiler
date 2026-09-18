@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x75
+	MetricIDBeginCumulative = 0x79
 )
 
 const (
@@ -88,6 +88,12 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
+const (
+	CustomLabelsTypeNone          = 0x0
+	CustomLabelsTypeGo            = 0x1
+	CustomLabelsTypeThreadContext = 0x2
+)
+
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
@@ -97,6 +103,10 @@ type CustomLabel struct {
 type CustomLabelsArray struct {
 	Len    uint32
 	Labels [10]CustomLabel
+}
+type CustomLabelsData struct {
+	Size uint16
+	Data [642]uint8
 }
 type Event struct {
 	Type uint32
@@ -147,6 +157,13 @@ type DTVInfo struct {
 	Multiplier uint8
 	Pad_cgo_0  [1]byte
 }
+type TLSVarInfo struct {
+	Tls_offset int32
+	Dtv_pos    uint32
+	Dtv_offset int16
+	Valid      bool
+	Pad_cgo_0  [1]byte
+}
 type Trace struct {
 	Pid                uint32
 	Tid                uint32
@@ -154,6 +171,7 @@ type Trace struct {
 	Comm               [16]uint8
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
+	Custom_labels_type uint8
 	Custom_labels      CustomLabelsArray
 	Frame_data_len     uint16
 	Num_frames         uint16
@@ -303,6 +321,9 @@ type RubyProcInfo struct {
 	Running_ec                   uint16
 	Pad_cgo_0                    [4]byte
 }
+type ThreadContextProcInfo struct {
+	Tls TLSVarInfo
+}
 type V8ProcInfo struct {
 	Version                      uint32
 	Type_JSFunction_first        uint16
@@ -330,10 +351,11 @@ const (
 	Sizeof_StackDelta = 0x4
 	Sizeof_Trace      = 0x62d8
 
-	sizeof_ApmIntProcInfo = 0x8
-	sizeof_DotnetProcInfo = 0x4
-	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x60
+	sizeof_ApmIntProcInfo        = 0x8
+	sizeof_DotnetProcInfo        = 0x4
+	sizeof_PHPProcInfo           = 0x18
+	sizeof_RubyProcInfo          = 0x60
+	sizeof_ThreadContextProcInfo = 0xc
 )
 
 const (
@@ -512,4 +534,8 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
 	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
 	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
+	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x77: metrics.IDUnwindThreadContextReadSuccesses,
+	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
 }

@@ -247,7 +247,7 @@ jobs:
 
   # Not in the qemu matrix: that initramfs cannot load shared libraries.
   host-integration-tests:
-    name: Integration tests (processcontext ${{ matrix.target_arch }})
+    name: Integration tests (host ${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     strategy:

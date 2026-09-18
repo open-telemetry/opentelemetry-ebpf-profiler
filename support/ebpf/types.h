@@ -364,6 +364,18 @@ enum {
   // number of Go asmcgocall unwind failures
   metricID_UnwindGoAsmcgocallUnwindFailure,
 
+  // number of failures to read the thread context buffer pointer out of TLS
+  metricID_UnwindThreadContextErrReadTlsPtr,
+
+  // number of failures to read the thread context buffer, header or payload
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
+  // number of thread context attribute payloads truncated to fit the buffer
+  metricID_UnwindThreadContextAttrsTruncated,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -431,6 +443,23 @@ typedef struct DTVInfo {
   // Multiplier is the size of each DTV entry in bytes.
   u8 multiplier;
 } DTVInfo;
+
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS.
+typedef struct TLSVarInfo {
+  // TP-relative when dtv_pos is 0, else within the module's TLS block.
+  // Signed because variant II puts the static block below the thread pointer.
+  s32 tls_offset;
+  // Byte offset of the module's entry in the DTV array, that is its TLS module
+  // ID times the entry size. 0 for static TLS, and the only static/dynamic
+  // discriminant.
+  u32 dtv_pos;
+  // Offset of the DTV pointer from the thread pointer. Unused for static TLS.
+  s16 dtv_offset;
+  // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
+  // aarch64 musl gives tls_offset 0 to a library whose executable has no PT_TLS.
+  bool valid;
+} TLSVarInfo;
 
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
@@ -621,6 +650,20 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+// Defines the format of the thread context buffer an instrumented process
+// publishes through the otel_thread_ctx_v1 thread-local, per OTEP #4947. The
+// attribute payload follows immediately after this header.
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+  // 0 while the writer is mid-update.
+  u8 valid;
+  // _padding on the writer side.
+  u8 _reserved;
+  // Payload length in bytes.
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 #define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
 // Big enough to hold UUIDs, etc.
 #define CUSTOM_LABEL_MAX_VAL_LEN 48
@@ -636,6 +679,21 @@ typedef struct CustomLabelsArray {
   unsigned len;
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
+
+// CustomLabelsData is the opaque variant of the Trace custom labels union: a
+// length-prefixed payload that user space decodes on the producer's terms.
+typedef struct CustomLabelsData {
+  // Must be <= sizeof(data).
+  u16 size;
+  // Sized to fill the union, so the payload can use every byte the union costs.
+  u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
+} CustomLabelsData;
+
+enum CustomLabelsType {
+  CUSTOM_LABELS_TYPE_NONE,
+  CUSTOM_LABELS_TYPE_GO,
+  CUSTOM_LABELS_TYPE_THREAD_CONTEXT,
+};
 
 // Container for a stack trace
 typedef struct Trace {
@@ -653,8 +711,14 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
+  // Which member of the union below is live.
+  u8 custom_labels_type;
+  union {
+    // Go runtime/pprof labels.
+    CustomLabelsArray custom_labels;
+    // Payload from a producer that encodes its own labels.
+    CustomLabelsData custom_labels_data;
+  };
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
@@ -685,6 +749,13 @@ typedef struct Trace {
   // to be the last item in the struct. When sending via the ringbuffer, only the
   // 'frame_data_len' elements of 'frame_data' are sent.
 } Trace;
+
+// cgo -godefs mirrors only the first union member, so every field after the
+// union holds its Go offset only while CustomLabelsArray stays the largest.
+_Static_assert(
+  __builtin_offsetof(Trace, frame_data_len) - __builtin_offsetof(Trace, custom_labels) ==
+    sizeof(CustomLabelsArray),
+  "CustomLabelsArray must be the largest member of Trace's custom labels union");
 
 // Container for unwinding state
 typedef struct UnwindState {
@@ -1111,5 +1182,11 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+// ThreadContextProcInfo is a container for the data needed to locate the
+// thread context TLS variable of a process.
+typedef struct ThreadContextProcInfo {
+  TLSVarInfo tls;
+} ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H

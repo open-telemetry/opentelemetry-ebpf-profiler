@@ -704,6 +704,24 @@ const (
 	// Number of Go asmcgocall unwind failures
 	IDUnwindGoAsmcgocallUnwindFailure = 305
 
+	// Number of failures to read the thread context buffer pointer out of TLS
+	IDUnwindThreadContextErrReadTlsPtr = 306
+
+	// Number of failures to read the thread context buffer, header or payload
+	IDUnwindThreadContextErrReadThreadCtxBuf = 307
+
+	// Number of successful reads of thread context info
+	IDUnwindThreadContextReadSuccesses = 308
+
+	// Number of thread context attribute payloads truncated to fit the buffer
+	IDUnwindThreadContextAttrsTruncated = 309
+
+	// Number of thread-context samples whose labels were dropped because the process published no usable label schema
+	IDThreadContextDroppedSamplesNoSchema = 310
+
+	// Number of thread-context label entries dropped as undecodable
+	IDThreadContextDroppedEntriesUndecodable = 311
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 306
+	IDMax = 312
 )

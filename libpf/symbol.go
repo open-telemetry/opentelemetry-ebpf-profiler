@@ -28,4 +28,7 @@ type Symbol struct {
 	Name    SymbolName
 	Address SymbolValue
 	Size    uint64
+	// Info is the ELF st_info byte: symbol type in its low nibble, binding in
+	// the high one (elf.ST_TYPE, elf.ST_BIND).
+	Info uint8
 }
