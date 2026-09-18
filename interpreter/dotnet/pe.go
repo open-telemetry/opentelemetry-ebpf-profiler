@@ -326,6 +326,11 @@ type peInfo struct {
 	methodSpecs []peMethodSpec
 	sizeOfImage uint32
 
+	// hash is this PE's peInfoCache key. A peInfo is re-parsed whenever its cache
+	// entry expires or is evicted, which yields a new pointer for the same file,
+	// so anything outliving one parse must key on this and not on the pointer.
+	hash peHash
+
 	// stringsHeapFileOffset is the offset of the ECMA-335 II.24.2.3 #Strings heap
 	// in the on-disk PE file. The absolute process address is computed at attach
 	// time from the process.RawMapping that covers this file offset (see
@@ -1401,7 +1406,7 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 	}
 	pc.peInfoCacheMiss.Add(1)
 
-	info := &peInfo{}
+	info := &peInfo{hash: key}
 	info.err = info.parse(file)
 	if info.err != nil {
 		pc.peInfoErrCache.Add(odk, peErrEntry{info.err, lastModified})
