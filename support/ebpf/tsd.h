@@ -40,7 +40,7 @@ err:
 // This path is also needed on other platforms when TLSDESC is unavailable.
 //
 // Parameters:
-//   dtvi:       DTVInfo extracted from __tls_get_addr disassembly (offset, multiplier)
+//   dtvi:       DTVInfo extracted from the C-library (offset, multiplier)
 //   tsd_base:   thread pointer base (from tsd_get_base)
 //   module_id:  TLS module ID for the target DSO (from DTPMOD64 relocation)
 //   tls_offset: offset of the variable within its module's TLS block
