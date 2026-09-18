@@ -36,6 +36,63 @@ func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
 	require.NotZero(t, ino, "pid namespace inode should be non-zero")
 }
 
+func TestPIDNamespaceTranslationMode(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		enabled bool
+		mode    PIDNamespaceTranslationMode
+		want    PIDNamespaceTranslationMode
+	}{
+		{name: "disabled returns none", enabled: false, mode: PIDNamespaceTranslationModeExact, want: PIDNamespaceTranslationModeNone},
+		{name: "enabled with none defaults to auto", enabled: true, mode: PIDNamespaceTranslationModeNone, want: PIDNamespaceTranslationModeAuto},
+		{name: "exact", enabled: true, mode: PIDNamespaceTranslationModeExact, want: PIDNamespaceTranslationModeExact},
+		{name: "descendants", enabled: true, mode: PIDNamespaceTranslationModeDescendants, want: PIDNamespaceTranslationModeDescendants},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := pidNamespaceTranslationMode(&Config{
+				PIDNamespaceTranslation: tt.enabled, PIDNamespaceTranslationMode: tt.mode,
+			})
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestParsePIDNamespaceLayoutMissingType(t *testing.T) {
+	builder := &btf.Builder{}
+	_, err := builder.Add(&btf.Struct{Name: "task_struct"})
+	require.NoError(t, err)
+	spec, err := builder.Spec()
+	require.NoError(t, err)
+	var layout support.PIDNamespaceLayout
+	err = parsePIDNamespaceLayout(spec, &layout)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "resolve kernel BTF type")
+}
+
+func TestPIDNamespaceVars(t *testing.T) {
+	v := SysConfigVars{
+		pid_ns_translation_enabled: true,
+		translate_descendant_pids:  true,
+		target_pid_ns_level:        2,
+		target_pid_ns_dev:          123,
+		target_pid_ns_inode:        456,
+	}
+	vars := v.pidNamespaceVars()
+	expected := map[string]any{
+		"pid_ns_translation_enabled": true,
+		"translate_descendant_pids":  true,
+		"target_pid_ns_level":        uint32(2),
+		"target_pid_ns_dev":          uint64(123),
+		"target_pid_ns_inode":        uint64(456),
+		"pid_namespace_layout":       support.PIDNamespaceLayout{},
+	}
+	require.Len(t, vars, len(expected))
+	for _, sv := range vars {
+		require.Contains(t, expected, sv.name)
+		require.Equal(t, expected[sv.name], sv.val)
+	}
+}
+
 func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
 
