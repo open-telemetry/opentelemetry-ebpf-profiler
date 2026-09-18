@@ -128,6 +128,12 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 
 	// Is RA popped out from stack?
 	if regs.ra.reg == regCFA && regs.cfa.reg == x86RegRSP && regs.cfa.off+regs.ra.off < 0 {
+		if regs.cfa.off < 0 {
+			// A CFA below the stack pointer describes no frame, so the CFI did not
+			// decode rather than the stack having ended. STOP would report the
+			// truncated trace as complete.
+			return sdtypes.UnwindInfoInvalid
+		}
 		// It depends on context if this is INVALID or STOP. As this catch the musl
 		// thread start __clone function, treat this as STOP. Seeing the INVALID
 		// condition in samples is statistically unlikely.
