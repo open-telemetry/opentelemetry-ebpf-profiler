@@ -5,8 +5,10 @@ package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -66,21 +68,13 @@ func IsPotentialLibcDSO(filename string) bool {
 }
 
 func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
-	info := &LibcInfo{}
+	info := &LibcInfo{DTVInfo: extractDTVInfo(ef)}
 
-	tsdinfo, tsdErr := extractTSDInfo(ef)
+	tsdInfo, tsdErr := extractTSDInfo(ef)
 	if tsdErr == nil {
-		info.TSDInfo = tsdinfo
-	}
-
-	dtvinfo, dtvErr := extractDTVInfo(ef)
-	if dtvErr == nil {
-		info.DTVInfo = dtvinfo
-	}
-
-	// Return an error only if both extractions failed.
-	if tsdErr != nil && dtvErr != nil {
-		return nil, fmt.Errorf("TSD: %s; DTV: %s", tsdErr, dtvErr)
+		info.TSDInfo = tsdInfo
+	} else if !info.HasDTVInfo() {
+		return nil, fmt.Errorf("TSD: %w; no DTV info", tsdErr)
 	}
 
 	return info, nil
@@ -124,15 +118,21 @@ func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 //   ...
 // }
 //
-// The 1st block is special cased for keys smaller than PTHREAD_KEY_2NDLEVEL_SIZE.
-// We also assume we don't see large keys, and support only the small key case.
-// Further both x86_64 and arm64 disassembler assume that small key code is the
-// main code flow (as in, any conditional jumps are not followed).
+// The disassembly fallback only supports keys smaller than PTHREAD_KEY_2NDLEVEL_SIZE.
+// Both x86_64 and arm64 disassemblers assume that small key code is the main
+// code flow (as in, any conditional jumps are not followed).
 //
-// Reading the value is basically "return self->specific_1stblock[key].data;"
+// The fallback reads self->specific_1stblock[key].data. With nptl_db metadata,
+// we instead follow self->specific[key / block_entries][key % block_entries].data
+// for all keys, including the first block.
 
 // extractTSDInfo extracts the introspection data for pthread thread specific data.
 func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
+	// glibc 2.34+ exports layout metadata, avoiding compiler-dependent disassembly.
+	if info, err := glibcTSDInfo(ef); err == nil {
+		return info, nil
+	}
+
 	_, code, err := ef.SymbolData("__pthread_getspecific", 2048)
 	if err != nil {
 		_, code, err = ef.SymbolData("pthread_getspecific", 2048)
@@ -156,33 +156,80 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	if err != nil {
 		return TSDInfo{}, fmt.Errorf("failed to extract getspecific data: %s", err)
 	}
+	switch libcFlavorOf(ef) {
+	case libcGlibc, libcGlibcPthread:
+		// The disassembler only recovers access to specific_1stblock.
+		info.KeyLimit = 32
+	case libcMusl:
+		// musl's flat TSD array has PTHREAD_KEYS_MAX entries.
+		info.KeyLimit = 128
+	}
 	return info, nil
 }
 
-// extractDTVInfo extracts the introspection data for the DTV to access TLS vars
-func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
-	var info DTVInfo
-	_, code, err := ef.SymbolData("__tls_get_addr", 2048)
-	if err != nil {
-		// If the symbol is not exported, this is not a critical error.
-		// Callers can check HasDTVInfo() to determine if DTV data is available.
-		return info, nil
-	}
+type libcFlavor int
 
-	if len(code) < 8 {
-		return info, fmt.Errorf("__tls_get_addr function size is %d", len(code))
-	}
+const (
+	libcUnknown libcFlavor = iota
+	libcGlibc
+	libcGlibcPthread
+	libcMusl
+)
 
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		info, err = extractDTVInfoARM(code)
-	case elf.EM_X86_64:
-		info, err = extractDTVInfoX86(code)
-	default:
-		return info, fmt.Errorf("unsupported arch %s", ef.Machine.String())
-	}
+// Keep libpthread distinct because it can lack nptl_db descriptors even on
+// modern glibc. It must not seed DTV constants before libc supplies metadata.
+func libcFlavorOf(ef *pfelf.File) libcFlavor {
+	sonames, err := ef.DynString(elf.DT_SONAME)
 	if err != nil {
-		return info, fmt.Errorf("failed to extract DTV data: %s", err)
+		return libcUnknown
 	}
-	return info, nil
+	for _, soname := range sonames {
+		switch {
+		case strings.HasPrefix(soname, "libc.musl-"):
+			return libcMusl
+		case soname == "libc.so.6":
+			return libcGlibc
+		case soname == "libpthread.so.0":
+			return libcGlibcPthread
+		}
+	}
+	// Upstream musl has no SONAME. Startup looks up __dls3 by name,
+	// so stripping preserves it.
+	if sym, err := ef.LookupSymbol("__dls3"); err == nil &&
+		sym.Shndx != uint16(elf.SHN_UNDEF) {
+		return libcMusl
+	}
+	return libcUnknown
+}
+
+// musl marks the DTV pointer's position as ABI in src/internal/pthread_impl.h:
+// after .self on x86_64, and at the end of struct pthread on arm64.
+// Verified on musl 1.1.5 through 1.2.5. The .tsd field is outside these ABI
+// regions and moves between releases, so TSD still requires disassembly.
+//
+// glibc's constants cover pre-2.34 releases without exported nptl_db metadata.
+// Newer glibc supplies its layout through glibcDTVInfo. Rejected metadata
+// must not fall back to constants that may describe a different layout.
+var dtvInfos = map[libcFlavor]map[elf.Machine]DTVInfo{
+	libcGlibc: {
+		elf.EM_X86_64:  {Offset: 8, Multiplier: 16},
+		elf.EM_AARCH64: {Offset: 0, Multiplier: 16},
+	},
+	libcMusl: {
+		elf.EM_X86_64:  {Offset: 8, Multiplier: 8},
+		elf.EM_AARCH64: {Offset: -8, Multiplier: 8},
+	},
+}
+
+// Unknown libraries or architectures yield no DTV info.
+func extractDTVInfo(ef *pfelf.File) DTVInfo {
+	info, err := glibcDTVInfo(ef)
+	if err == nil {
+		return info
+	}
+	if !errors.Is(err, errNptlDBUnavailable) {
+		// Existing metadata could describe a layout the constants cannot represent.
+		return DTVInfo{}
+	}
+	return dtvInfos[libcFlavorOf(ef)][ef.Machine]
 }

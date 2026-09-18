@@ -11,14 +11,34 @@ static inline EBPF_INLINE int
 tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
 {
   const void *tsd_addr = tsd_base + tsi->offset;
-  if (tsi->indirect) {
+  if (key < 0) {
+    goto err;
+  }
+  u32 index = (u32)key;
+  if (tsi->keyLimit && index >= tsi->keyLimit) {
+    goto err;
+  }
+  if (tsi->blockEntries) {
+    u32 block = index / tsi->blockEntries;
+    // specific[0] points to the inline block. Later blocks are allocated on demand.
+    tsd_addr += block * sizeof(void *);
+    if (bpf_probe_read_user(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
+      goto err;
+    }
+    if (!tsd_addr) {
+      *out = NULL;
+      return 0;
+    }
+    tsd_addr += tsi->dataOffset;
+    index %= tsi->blockEntries;
+  } else if (tsi->indirect) {
     // Read the memory pointer that contains the per-TSD key data
     if (bpf_probe_read_user(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
       goto err;
     }
   }
 
-  tsd_addr += key * tsi->multiplier;
+  tsd_addr += index * tsi->multiplier;
 
   DEBUG_PRINT("readTSD key %d from address 0x%lx", key, (unsigned long)tsd_addr);
   if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
@@ -40,7 +60,7 @@ err:
 // This path is also needed on other platforms when TLSDESC is unavailable.
 //
 // Parameters:
-//   dtvi:       DTVInfo extracted from __tls_get_addr disassembly (offset, multiplier)
+//   dtvi:       DTVInfo extracted from the C-library (offset, multiplier)
 //   tsd_base:   thread pointer base (from tsd_get_base)
 //   module_id:  TLS module ID for the target DSO (from DTPMOD64 relocation)
 //   tls_offset: offset of the variable within its module's TLS block

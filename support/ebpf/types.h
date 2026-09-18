@@ -407,7 +407,8 @@ typedef enum TracePrograms {
 typedef struct TSDInfo {
   // Offset is the pointer difference from "tpbase" pointer to the C-library
   // specific struct pthread's member containing the thread specific data:
-  // .tsd (musl) or .specific (glibc).
+  // .tsd (musl), .specific (glibc metadata), or the first block's data
+  // field (glibc disassembly).
   // Note: on x86_64 it's positive value, and arm64 it is negative value as
   // "tpbase" register has different purpose and pointer value per platform ABI.
   s16 offset;
@@ -415,8 +416,14 @@ typedef struct TSDInfo {
   // Typically 8 bytes on 64bit musl and 16 bytes on 64bit glibc
   u8 multiplier;
   // Indirect is a flag indicating if the "tpbase + Offset" points to a member
-  // which is a pointer the array (musl) and not the array itself (glibc).
+  // which is a pointer to a flat array (musl) rather than inline data.
   u8 indirect;
+  // Exclusive upper bound for keys. Zero means the limit is unknown.
+  u16 keyLimit;
+  // Entries per block for two-level glibc lookup. Zero selects a flat array.
+  u8 blockEntries;
+  // Offset of the first entry's data field from the block pointer.
+  u8 dataOffset;
 } TSDInfo;
 
 // DTVInfo contains data needed to read Thread Local Storage (TLS) values, which

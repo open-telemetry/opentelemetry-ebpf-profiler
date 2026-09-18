@@ -138,9 +138,12 @@ type SystemAnalysis struct {
 	Code    [128]uint8
 }
 type TSDInfo struct {
-	Offset     int16
-	Multiplier uint8
-	Indirect   uint8
+	Offset       int16
+	Multiplier   uint8
+	Indirect     uint8
+	KeyLimit     uint16
+	BlockEntries uint8
+	DataOffset   uint8
 }
 type DTVInfo struct {
 	Offset     int16
@@ -251,7 +254,6 @@ type PerlProcInfo struct {
 	Xcv_flags                uint8
 	Xcv_gv                   uint8
 	Gp_egv                   uint8
-	Pad_cgo_0                [4]byte
 }
 type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
@@ -273,7 +275,7 @@ type PyProcInfo struct {
 	PyCodeObject_sizeof            uint8
 	Lasti_is_codeunit              uint8
 	Frame_is_cframe                uint8
-	Pad_cgo_0                      [2]byte
+	Pad_cgo_0                      [6]byte
 }
 type RubyProcInfo struct {
 	Version                      uint32
