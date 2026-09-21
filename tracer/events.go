@@ -101,10 +101,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		defer eventReader.Close()
-		stopClose := context.AfterFunc(ctx, func() {
-			_ = eventReader.Close()
-		})
-		defer stopClose()
+		context.AfterFunc(ctx, func() { _ = eventReader.Close() })
 
 		var data perf.Record
 		for {
