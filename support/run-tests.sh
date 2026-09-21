@@ -48,7 +48,7 @@ fi
 
 case "$qemu_arch" in
     x86_64)
-        additionalQemuArgs+=" -cpu x86-64-v3 -append console=ttyS0"
+        additionalQemuArgs+=" -cpu Haswell -append console=ttyS0"
         bb_args+=(-a amd64)
         ;;
     aarch64)
