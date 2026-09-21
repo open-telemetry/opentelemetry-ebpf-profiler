@@ -149,6 +149,11 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+      - name: Install binutils-gold
+        # Work around for https://github.com/golang/go/issues/22040
+        # until the project moved on to Go 1.27.
+        run:
+          sudo apt install -y --no-install-recommends --no-install-suggests binutils-gold
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
