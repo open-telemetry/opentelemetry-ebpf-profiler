@@ -542,8 +542,12 @@ or interrupted.
 
 The pseudo-code below assumes a 64-bit build with pointer compression and the V8
 sandbox both off, which is true of Node's bundled V8 in the versions this
-mechanism supports. Tagged pointers have their low bit set; clear it to get the
-object address.
+mechanism supports. **Tagged values** can either be small integers ("Smi" in V8
+parlance) or pointers stored in a single machine word. Pointers have their low
+bit set, that's the tag; clear it to get the object address. Smis use either the
+upper 32 bits of a  64-bit word or the upper 31 bits of a 32-bit word to
+represent signed integer values and thus need to be right-shifted by 32 or 1
+bits to get the actual value.
 
 ```cpp
 auto* ctx = read_tls<otel_thread_ctx_nodejs_v1_t>();
@@ -585,6 +589,11 @@ minimum; sanity-checking `attrs-data-size` as well as the `OrderedHashMap`
 bucket count being a power of two are cheap additional guards. Every remote read
 on the walk is bounded and failure-tolerant, so a target that is mid-teardown or
 built differently than advertised costs a dropped context rather than a bad one.
+
+Tagged words should also be checked for their tag before use, rather than
+assumed to be of the kind the layout calls for. In particular, `OrderedHashMap`
+header's element count can hold either an Smi or a heap-object pointer;
+"Mutation of the frame map while it is read" below explains when and why.
 
 ### Interaction with existing functionality
 
@@ -641,21 +650,52 @@ reaching the record — everything from the record onward is shared with OTEP
 4947. This repository already has code to read V8 heap objects out of target
 memory in `interpreter/nodev8`.
 
-### Rehashing of the map
+### Mutation of the frame map while it is read
 
-Since `AsyncContextFrame` is a JavaScript `Map`, one can rightly ask what would
-happen if it were mutated in place and triggered a rehash while it is being
-read. Fortunately, the way it is currently implemented in Node.js is that
-existing maps are never mutated; they are copied on writes.
+Since `AsyncContextFrame` is a JavaScript `Map`, one can rightly ask what
+happens if it is mutated while it is being read.
 
-Should that change, the reader could be stopped mid-insert and observe a table
-that is half-rehashed. Every read on the walk is bounded and the record is
-validated, so the outcomes are a lookup that misses its key — the sample loses
-its context, which is the benign case — or a bucket that still resolves to a
-wrapper from the pre-rehash generation, yielding a well-formed record for the
-wrong context. The profiler cannot detect the second one, which is why a Node.js
-change here has to come with a new `threadlocal.schema_version`: that value is
-precisely what tells the profiler which invariants it may rely on.
+Let's first see the scenarios where this can happen. Node.js treats frames as
+immutable on most code paths. `enterWith` and `run`, don't mutate the
+`AsyncContextFrame`, but rather construct a new one that fist copies the current
+one and then set a new key-value pair in it. There is one mutating exception
+through the public API: `AsyncLocalStorage.prototype.disable()` deletes its own
+entry from the frame currently in the CPED slot, in place.
+`Map.prototype.delete` writes hole sentinels over that entry's key and value,
+adjusts the element and deleted-element counts
+
+It is also possible for third-party native addons to access the map through the
+isolate's CPED getter method and then mutate it in place.
+
+Both insertions and deletions from a map can trigger a rehash to either grow or
+shrink the map. During a rehash, it is not possible to observe a partially
+constructed new table, as `OrderedHashTable::Rehash` allocates a table of the
+new capacity, fills it completely, and only then does it point its table pointer
+at it. The table a reader is walking is therefore never itself rehashed: the
+reader sees either the old table or the finished new one.
+
+To complicate matters, the old table will be destructively modified while the
+copy is happening. Specifically, the bucket indexes will be clobbered by writing
+indexes of deleted elements over them, and at the end the field for the number
+of elements will be rewritten to hold a forwarding tagged pointer to the new
+table. These serve to preserve consistency of existing iterators that still hold
+a pointer to the old map as they can then use the forwarding pointer to switch
+to the new map, and rewind their current index in the new map by the number of
+deleted elements before it.
+
+In practical matter, a reader can thus observe clobbered bucket indices that now
+instead point to deleted elements. The reader doing a walk treating it as a
+valid bucket index will thus walk a tail part of some bucket, and most likely
+not succeed in finding the entry that has the published `AsyncLocalStorage`
+instance as the key. So the only negative consequence is a lookup miss.
+
+(The element count being rewritten as a forwarding tagged pointer can only be
+observed by a reader for a very brief window of a few machine instructions, as
+the map will update its own table pointer immediately after it wrote it to the
+element count field. The reader SHOULD check whether the number of elements is a
+Smi and bail out when it isn't. It MAY follow the forwarding pointer and repeat
+the read in the new table, but in the opinion of the author it is such a narrow
+corner case that it's not worth complicating the reader code for.)
 
 ### Garbage collection
 
