@@ -246,7 +246,7 @@ V8 and Node.js internals to read their representation of a JavaScript `Map`. See
 As in OTEP 4947, process-scoped data is published as entries in
 `ProcessContext.attributes` per OTEP 4719, so the profiler reads it once rather
 than per sample. This proposal uses the existing values with an alternate
-`threadlocal.schema_version`, and otherwise adds four more process attributes.
+`threadlocal.schema_version`; it adds no new process attributes.
 
 Reused from OTEP 4947:
 
@@ -256,18 +256,6 @@ Reused from OTEP 4947:
   walk.
 - `threadlocal.attribute_key_map` — unchanged, including its append-only
   semantics.
-
-The four added attributes are all V8 layout constants, fixed for the V8 build
-the target is running, published so that the profiler does not have to derive
-them from the target's pointer-compression and sandbox build flags, nor look up
-V8 internal symbols:
-
-| Key | Meaning |
-| :-- | :------ |
-| `threadlocal.js_object_record_offset` | Byte offset, within the wrapper JSObject, of the slot holding the pointer to its record. That slot is internal field 0: JavaScript objects can be allocated with space for internal fields, which are typically used to hold pointers to native data structures. |
-| `threadlocal.tagged_size` | V8's tagged-pointer width in bytes: 4 with pointer compression, 8 without. |
-| `threadlocal.js_map_table_offset` | Byte offset, within a V8 `JSMap`, of the tagged pointer to its backing `OrderedHashMap` table. |
-| `threadlocal.ordered_hash_map_header_size` | Size of the `OrderedHashMap` header preceding its element-count fields. |
 
 Example:
 
@@ -282,36 +270,11 @@ value:
     values:
       - string_value: "http.request.method"  # index 0
       - string_value: "http.route"           # index 1
-
-key: "threadlocal.js_object_record_offset"
-value:
-  int_value: 24
-
-key: "threadlocal.tagged_size"
-value:
-  int_value: 8
-
-key: "threadlocal.js_map_table_offset"
-value:
-  int_value: 24
-
-key: "threadlocal.ordered_hash_map_header_size"
-value:
-  int_value: 16
 ```
 
 > **Note:** As in OTEP 4947, the `threadlocal.*` keys are inter-process
 > coordination metadata rather than telemetry attributes, and are not expected
 > to appear in OTLP exports.
-
-The last three values are properties of the V8 build and not of the SDK; they
-are published rather than hardcoded in the profiler because they vary with build
-configuration, and because two of them (`js_map_table_offset`,
-`ordered_hash_map_header_size`) are not exposed by V8's public headers and so
-cannot be discovered by a reader at all without either this contract or its own
-symbol archaeology. See "Alternatives Considered" for why they are not taken
-from V8's `v8dbg_*` postmortem symbols, which this repository already consumes
-elsewhere.
 
 ### Thread-local variable
 
@@ -500,7 +463,14 @@ point of view while the CPED slot is never written, so the profiler sees a
 record that nothing updates. A direct probe (asking native code what is in the
 CPED slot during a `run()`) tests the exact slot readers depend on.
 
-An SDK that cannot satisfy the requirement MUST NOT publish
+The schema also presumes the V8 Node.js builds by default: 64-bit, pointer
+compression off, the V8 sandbox off. This fixes V8's object layout; "The V8
+layout constants the walk uses" section further below says what that covers. An
+SDK running on a V8 built with pointer compression or the sandbox enabled MUST
+NOT declare the schema version from this document, since its object layout does
+not match it.
+
+An SDK that cannot satisfy these requirements MUST NOT publish
 `threadlocal.schema_version`.
 
 ## Changes in the profiler
@@ -510,10 +480,10 @@ An SDK that cannot satisfy the requirement MUST NOT publish
 The proposal is additive at three points, in increasing order of new code:
 
 1. **`process/processcontext`** — accept `nodejs_v1_dev` (and later `nodejs_v1`)
-   alongside `tlsdesc_v1_dev` as a supported `threadlocal.schema_version`, and
-   parse the four integer V8 layout attributes. The `attribute_key_map` handling
-   is untouched. The schema version must be carried forward so the sampling path
-   can select a walk; today a single supported value means it need not be.
+   alongside `tlsdesc_v1_dev` as a supported `threadlocal.schema_version`. No
+   new attributes are parsed and the `attribute_key_map` handling is untouched.
+   The schema version must be carried forward so the sampling path can select a
+   walk.
 2. **`interpreter/threadcontext`** — a second TLS export name,
    `otel_thread_ctx_nodejs_v1`, and a 4-word struct where the existing schema
    has a single 8-byte pointer. The TLS access-model resolution, the symbol and
@@ -530,26 +500,28 @@ The proposal is additive at three points, in increasing order of new code:
 Unchanged from OTEP 4947's process-initialization steps, except that the
 profiler looks for `otel_thread_ctx_nodejs_v1` in the dynamic symbol tables, and
 treats a `threadlocal.schema_version` of `nodejs_v1` or `nodejs_v1_dev` as
-selecting this walk. The profiler MUST also read the four V8 layout constants
-before sampling; they are not optional for this schema, and a target that
-declares either schema version without them SHOULD be treated as having
-incomplete process context, to be re-read on the next update.
+selecting this walk.
 
 ### 2. Thread sampling
 
 As in OTEP 4947, the profiler MUST only read while the target thread is stopped
 or interrupted.
 
-The pseudo-code below assumes a 64-bit build with pointer compression and the V8
-sandbox both off, which is true of Node's bundled V8 in the versions this
-mechanism supports. **Tagged values** can either be small integers ("Smi" in V8
+The pseudo-code below assumes the build this schema presumes: 64-bit, with
+pointer compression and the V8 sandbox both off, which is how Node.js is built
+by default. The layout constants it opens with are fixed by the schema version
+rather than read from the target; "The V8 layout constants the walk uses" below
+covers all four. **Tagged values** can either be small integers ("Smi" in V8
 parlance) or pointers stored in a single machine word. Pointers have their low
-bit set, that's the tag; clear it to get the object address. Smis use either the
-upper 32 bits of a  64-bit word or the upper 31 bits of a 32-bit word to
-represent signed integer values and thus need to be right-shifted by 32 or 1
-bits to get the actual value.
+bit set, that's the tag; clear it to get the object address. Smis use the upper
+32 bits of the word to represent signed integer values and thus need to be
+right-shifted by 32 bits to get the actual value.
 
 ```cpp
+// Fixed by the schema version, not read from the target; see below.
+constexpr size_t kTaggedSize = 8, kJSMapTableOffset = 24,
+                 kOrderedHashMapHeaderSize = 16, kRecordSlotOffset = 24;
+
 auto* ctx = read_tls<otel_thread_ctx_nodejs_v1_t>();
 if (ctx->cped_slot == 0) return NO_CONTEXT;  // nothing published here
 // No async-context frame is active.
@@ -557,12 +529,12 @@ if (*ctx->cped_slot == ctx->undefined_addr) return NO_CONTEXT;
 
 // CPED -> active AsyncContextFrame (a JS Map) -> its backing OrderedHashMap.
 auto* acf = untag<JSMap>(*ctx->cped_slot);
-auto* table = untag<OrderedHashMap>(
-    *(tagged_ptr*)((char*)acf + js_map_table_offset));
+auto* table =
+    untag<OrderedHashMap>(*(uintptr_t*)((char*)acf + kJSMapTableOffset));
 
 // Find the entry keyed by our AsyncLocalStorage instance. A reader uses the
 // published identity hash to walk a single bucket. Bucket and entry layout
-// follow from ordered_hash_map_header_size and tagged_size.
+// follow from kOrderedHashMapHeaderSize and kTaggedSize.
 uintptr_t als = *ctx->als_handle;
 Entry* e = find_entry(table, als, ctx->als_identity_hash);
 if (!e) return NO_CONTEXT;  // not in this frame
@@ -571,7 +543,7 @@ if (e->value == ctx->undefined_addr) return NO_CONTEXT;  // explicitly detached
 // The value is the wrapper JSObject; internal field 0 holds the record pointer.
 auto* wrapper = untag<JSObject>(e->value);
 auto* record =
-    *(OtelThreadCtxRecord**)((char*)wrapper + js_object_record_offset);
+    *(OtelThreadCtxRecord**)((char*)wrapper + kRecordSlotOffset);
 if (record == nullptr) return NO_CONTEXT;  // teardown in progress
 if (record->valid != 1) return NO_CONTEXT;  // invalidated or mid-update
 // Parse exactly as in OTEP 4947 from here on.
@@ -595,14 +567,45 @@ assumed to be of the kind the layout calls for. In particular, `OrderedHashMap`
 header's element count can hold either an Smi or a heap-object pointer;
 "Mutation of the frame map while it is read" below explains when and why.
 
+### The V8 layout constants the walk uses
+
+The four constants the pseudo-code declares are not read from the target. This
+schema fixes them, so a reader holds them as it would any protocol constant,
+pinned by `schema_version`:
+
+| Constant | Value | What it is |
+| :------- | ----: | :--------- |
+| `kTaggedSize` | 8 | V8's tagged-pointer width in bytes. |
+| `kJSMapTableOffset` | 24 | Byte offset, within a V8 `JSMap`, of the tagged pointer to its backing `OrderedHashMap` table. |
+| `kOrderedHashMapHeaderSize` | 16 | Size of the header preceding the table's element-count fields. |
+| `kRecordSlotOffset` | 24 | Byte offset, within the wrapper `JSObject`, of the slot holding the pointer to its record. That slot is internal field 0: JavaScript objects can be allocated with space for internal fields, which are typically used to hold pointers to native data structures. |
+
+All four are functions of two V8 build switches, pointer compression and the V8
+sandbox. This schema version disallows both of them. An SDK compiled with either
+MUST NOT declare the schema, per "Runtime requirements" above. If they ever need
+supporting, a later schema version can be introduced.
+
+On the writer's side the values can be checked because all four values follow
+from constants in V8's `v8-internal.h` public header:
+
+| Constant | Derived from |
+| :------- | :----------- |
+| `kTaggedSize` | `kApiTaggedSize` |
+| `kJSMapTableOffset` | `kJSObjectHeaderSize` |
+| `kOrderedHashMapHeaderSize` | `kFixedArrayHeaderSize` |
+| `kRecordSlotOffset` | `kJSObjectHeaderSize` + `kEmbedderDataSlotExternalPointerOffset` |
+
+With static assertions against the V8 in SDK's native addon code it should fail
+to compile a build that deviates from this schema.
+
 ### Interaction with existing functionality
 
 - **OTEP 4947 support.** Additive. This proposal defines a second value of
   `threadlocal.schema_version` and a second discovery walk; the record format
   and its parsing are shared. A profiler supporting both selects on
   `schema_version`.
-- **OTEP 4719 support.** Additive, in the manner OTEP 4947 already established:
-  four more `threadlocal.*` keys in `ProcessContext.attributes`.
+- **OTEP 4719 support.** Unchanged: the same `threadlocal.*` keys OTEP 4947
+  already established, carrying a new `threadlocal.schema_version` value.
 - **`interpreter/nodev8`.** Independent. The V8 unwinder and this walk both read
   V8 objects from the same targets but share no state; a process can have
   either, both or neither. They are not gated on each other.
@@ -624,19 +627,13 @@ header's element count can hold either an Smi or a heap-object pointer;
 The walk crosses `JSMap` and `OrderedHashMap`, neither of whose layouts is part
 of V8's public API, and any of the offsets could change in a future V8.
 
-**Mitigation:** the offsets are not hardcoded in the profiler. The target
-publishes them, so the profiler is told the layout of the V8 it is actually
-looking at.
-
-Two of the four the addon reads straight out of the V8 headers it is compiled
-against, so they are correct for that build by construction. The other two are
-not exposed by those headers at all, so an addon has to carry them as constants
-kept in sync with V8's sources.
-
-None of this protects against V8 restructuring these objects more deeply than an
-offset change, which is what the versioned `schema_version` is for. It does mean
-that the usual failure mode — a Node.js release built with different
-pointer-compression or sandbox settings — is handled without profiler changes.
+**Mitigation:** the layout the reader assumes is pinned by `schema_version`, and
+the writer's side of it is checked at build time rather than trusted: the SDK's
+addon derives the same four constants from the V8 headers it is compiled against
+and static-asserts them, so a V8 this schema does not describe fails to compile
+instead of yielding a process that publishes a contract a reader would
+mis-walk. A V8 that moves these fields, or restructures them more deeply needs a
+new schema version.
 
 ### Reader complexity relative to OTEP 4947
 
@@ -823,8 +820,8 @@ plus one small JavaScript wrapper object and possibly some internal bookkeeping
 of approximately 40 bytes. An SDK caching wrappers per span holds them for the
 span's lifetime. The thread-local struct is four words per thread.
 
-In the profiler: four integers per process beyond what OTEP 4947 already
-retains, and no per-sample allocation the existing path does not already make.
+In the profiler: nothing per process beyond what OTEP 4947 already retains, and
+no per-sample allocation the existing path does not already make.
 
 ### Trace sampling
 
@@ -851,26 +848,36 @@ so its location is neither stable nor cheaply computable by a reader. An
 internal field is at a fixed offset and holds a raw aligned pointer.
 
 **Resolving the V8 layout constants from `v8dbg_*` postmortem symbols instead of
-publishing them.** This repository already does exactly that in
+fixing them in the schema.** This repository already does exactly that in
 `interpreter/nodev8`, which reads V8 class and field offsets from the
 `v8dbg_class_*` symbols Node.js builds export, so reusing that machinery is the
-obvious thing to try. Rejected for three reasons. First, that metadata is
+obvious thing to try. Rejected for two reasons. First, that metadata is
 generated by V8's heuristic `gen-postmortem-metadata.py` and is known to be
 incomplete and to lose symbols between releases — the existing `nodev8` code
 documents this and carries fallbacks for it, which is tolerable for a
-best-effort unwinder and not for a mechanism that must either be right or
-publish nothing. Second, `js_object_record_offset` is not a property of the V8
-build at all: it depends on how the wrapper object was allocated by the addon,
-so no V8 symbol can supply it. Third, the publishing target has the offsets
-exactly, at compile time, from the headers it was built against; asking the
-profiler to rediscover what the writer already knows adds a failure mode for no
-gain. Nothing prevents a future implementation from using `v8dbg_*` as a
-*cross-check*.
+best-effort unwinder and not for a mechanism that must either be right or read
+nothing. Second, there is nothing to discover: this schema version admits only a
+default Node.js build, for which all four values are constants, and the SDK
+static-asserts that at compile time. Resolving them at runtime would add a
+failure mode without buying coverage the contract offers. Nothing prevents a
+future implementation from using `v8dbg_*` as a *cross-check*, or as the
+mechanism by which a later, parametrized schema version reaches non-default
+builds.
+
+**Publishing the V8 layout constants as process context attributes.** An
+earlier revision of this proposal did that: four `threadlocal.*` integers
+carrying the tagged size and the three offsets, computed by the SDK's addon from
+V8's public headers. Rejected: every Node.js release anyone deploys reports the
+same four numbers, so the attributes bought no coverage while obliging both ends
+of the contract to carry a layout-negotiation path that would essentially never
+be exercised, and the profiler to treat every walk offset as a runtime value.
+Fixing the values in the schema and bumping the version if a build ever needs
+different ones keeps the common case simple and the uncommon one explicit.
 
 **Requiring the profiler to derive the layout from build flags.** Rejected: it
 makes the profiler track V8's pointer-compression and sandbox configuration
-matrix per Node.js release, and two of the four offsets are not derivable from
-public headers at any rate.
+matrix per Node.js release, for builds this schema version does not admit in the
+first place.
 
 # Author's Preferred Solution
 
@@ -883,7 +890,7 @@ profiler to walk it.
 
 The genuinely open choices are smaller and called out where they arise: whether
 the walk lives inside `interpreter/threadcontext` or in a package of its own,
-and whether to add a `v8dbg_*` cross-check of the published offsets. Both can be
+and whether to add a `v8dbg_*` cross-check of the layout constants. Both can be
 settled during implementation without revisiting this document.
 
 # Testing Strategy
@@ -911,18 +918,19 @@ for a mechanism of this kind.
   running one of the reference writers. This is the only part of the strategy
   that needs a Node.js toolchain in CI, and it is the part that would catch a
   writer/reader disagreement that synthesized memory cannot.
-- **Cross-version coverage.** Because the layout constants come from the target,
-  the risk is a Node.js release whose `JSMap` structure changed rather than
-  moved. Coredump cases from each supported major (22 with the flag, 24, and
-  newer) are how that gets detected.
+- **Cross-version coverage.** Because the layout constants are fixed by the
+  schema rather than read from the target, a release that moves these fields is
+  as much a risk as one whose `JSMap` structure changed — though the SDK's
+  static assertions catch the former where it is built. Coredump cases from each
+  supported major (22 with the flag, 24, and newer) are how that gets detected.
 
 ## Impact on Testing of Other Systems/Components
 
 Minimal. The change to `process/processcontext` is an additional accepted schema
-version and four more parsed attributes, both covered by its existing
-table-driven tests. `interpreter/threadcontext` gains a second export name and
-struct shape; its TLS-resolution tests are unaffected because that layer does
-not interpret the bytes it locates. Nothing in `interpreter/nodev8` changes, so
+version, covered by its existing table-driven tests.
+`interpreter/threadcontext` gains a second export name and struct shape; its
+TLS-resolution tests are unaffected because that layer does not interpret the
+bytes it locates. Nothing in `interpreter/nodev8` changes, so
 the existing V8 unwinder tests and coredump cases are untouched.
 
 The one thing that becomes harder is testing the two mechanisms in combination:
@@ -936,9 +944,11 @@ schema-version selection deserves a test at that level.
   struct once, let the runtime do the context switching, teach the reader to
   walk runtime internals — should transfer to other managed runtimes whose
   context model is not the OS thread.
-- **Sharing the V8 layout constants.** If the constants outgrow this mechanism,
-  they could be promoted out of `threadlocal.*` and reused by any reader that
-  needs to walk a V8 heap, including `interpreter/nodev8`.
+- **A parametrized layout.** If builds this schema version does not admit —
+  pointer-compressed, sandboxed, or a V8 that has moved these fields — ever
+  need supporting, a later schema version can carry the layout as process
+  context rather than fix it, and such a descriptor could be shared with any
+  reader that walks a V8 heap, including `interpreter/nodev8`.
 - **libuv thread pool attribution.** Out of scope here because Node.js offers no
   mechanism to carry a record onto a pool thread. Those threads would in fact
   suit OTEP 4947's original design well, since each runs one work item at a
