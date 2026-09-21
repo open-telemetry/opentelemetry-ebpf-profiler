@@ -45,6 +45,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install clang-format-17
+        run: |
+          apt-get update
+          apt-get install -y clang-format-17
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: linter
@@ -55,7 +59,6 @@ jobs:
   format:
     name: Format Go and C code
     runs-on: ubuntu-26.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:585409de39191c201f91a8e6ec5294556c8f21c7d2ce0b0f96e838f27e399f82
     defaults:
       run:
         shell: bash --login {0}
@@ -268,8 +271,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { target_arch: amd64, runner: ubuntu-24.04 }
-          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+          - { target_arch: amd64, runner: ubuntu-26.04 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm }
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

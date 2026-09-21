@@ -76,10 +76,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { runner: ubuntu-24.04, use-upstream: true }
-          - { runner: ubuntu-24.04, use-upstream: false }
-          - { runner: ubuntu-24.04-arm, use-upstream: true }
-          - { runner: ubuntu-24.04-arm, use-upstream: false }
+          - { runner: ubuntu-26.04, use-upstream: true }
+          - { runner: ubuntu-26.04, use-upstream: false }
+          - { runner: ubuntu-26.04-arm, use-upstream: true }
+          - { runner: ubuntu-26.04-arm, use-upstream: false }
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout Repo
