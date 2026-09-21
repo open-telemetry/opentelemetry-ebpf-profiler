@@ -214,13 +214,13 @@ type dotnetInstance struct {
 	// limited number of PE files mapped in, this is a map instead of a LRU.
 	moduleToPEInfo map[libpf.Address]*peInfo
 
-	// stringsHeapAddrByPE maps a peInfo (shared via globalPeCache) to the absolute
+	// stringsHeapAddrByPE maps a PE's content hash (its peInfoCache key) to the absolute
 	// process address of its #Strings heap in this process. The map is allocated
 	// once and reused across SynchronizeMappings calls: each entry is stamped
 	// with syncGen on touch, and entries not stamped this run are pruned. This
 	// avoids allocating a fresh map per sync, which fires often even when the
 	// set of loaded DLLs is stable.
-	stringsHeapAddrByPE map[*peInfo]stringsHeapEntry
+	stringsHeapAddrByPE map[peHash]stringsHeapEntry
 
 	// syncGen is incremented on every SynchronizeMappings call. Entries in
 	// stringsHeapAddrByPE carry the generation at which they were last written;
@@ -753,7 +753,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 				stringsHeapAddr := resolveStringsHeapAddr(last.info, m)
 				if stringsHeapAddr != 0 {
 					stringsResolved = true
-					i.stringsHeapAddrByPE[last.info] = stringsHeapEntry{
+					i.stringsHeapAddrByPE[last.info.hash] = stringsHeapEntry{
 						addr: stringsHeapAddr,
 						gen:  i.syncGen,
 					}
@@ -787,7 +787,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		stringsHeapAddr := resolveStringsHeapAddr(info, m)
 		if stringsHeapAddr != 0 {
 			stringsResolved = true
-			i.stringsHeapAddrByPE[info] = stringsHeapEntry{
+			i.stringsHeapAddrByPE[info.hash] = stringsHeapEntry{
 				addr: stringsHeapAddr,
 				gen:  i.syncGen,
 			}
@@ -932,7 +932,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
 			FunctionName: module.resolveR2RMethodName(pcOffset, i.rm,
-				i.stringsHeapAddrByPE[module].addr),
+				i.stringsHeapAddrByPE[module.hash].addr),
 			SourceFile: module.simpleName,
 			Mapping:    module.mapping,
 		})
@@ -969,7 +969,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		lineID := libpf.AddressOrLineno(0xf0000000+method.index)<<32 +
 			libpf.AddressOrLineno(ilOffset)
 		methodName := method.module.resolveMethodName(method.index, i.rm,
-			i.stringsHeapAddrByPE[method.module].addr)
+			i.stringsHeapAddrByPE[method.module.hash].addr)
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: lineID,
