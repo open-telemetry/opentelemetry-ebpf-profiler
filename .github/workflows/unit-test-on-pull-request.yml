@@ -72,7 +72,6 @@ jobs:
   otel-col-goos:
     name: Crosscompile OTel Collector component on (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-26.04
-    if: false # REMOVE AFTER DEBUGGING
     strategy:
       matrix:
         goos: ['linux', 'windows']
