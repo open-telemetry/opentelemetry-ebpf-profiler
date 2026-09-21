@@ -123,27 +123,15 @@ func (hp *Probe) Match(_ process.Process, _ *process.RawMapping) bool {
 }
 
 // Attach implements processmanager.ProbeAttacher.
-func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping) error {
+func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
+	fileID libpf.FileID, elfRef *pfelf.Reference,
+) error {
 	pid := pr.PID()
-	fileID, err := pr.CalculateMappingFileID(mapping)
-	if err != nil {
-		return fmt.Errorf("calculate file ID for %s: %w", mapping.Path, err)
-	}
 
 	// Discover USDT attachment points in this mapping. The discoverer
 	// caches results by backing-file identity so repeated calls for the
 	// same binary are cheap.
-	ref := pfelf.NewReferenceWithOpenFunc(mapping.Path, pr, func() (*pfelf.File, error) {
-		f, err := pr.OpenMappingFile(mapping)
-		if err != nil {
-			return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w",
-				mapping.Path, mapping.Vaddr, err)
-		}
-		return pfelf.NewFileFromFS(f)
-	})
-	defer ref.Close()
-
-	points, err := hp.discoverer.Discover(ref, fileID)
+	points, err := hp.discoverer.Discover(elfRef, fileID)
 	if err != nil {
 		if len(points) == 0 {
 			return fmt.Errorf("discovering USDT probes: %w", err)
