@@ -45,10 +45,6 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install clang-format-17
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-17
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: linter
@@ -67,14 +63,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install clang-format-17
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-17
-      - name: Debug steps
-        run: |
-          pwd
-          ls -liahp
+      - name: Set up environment
+        uses: ./.github/workflows/env
       - name: formatter
         env:
           CGO_ENABLED: 1
