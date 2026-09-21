@@ -54,13 +54,15 @@ jobs:
   format:
     name: Format Go and C code
     runs-on: ubuntu-26.04
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:585409de39191c201f91a8e6ec5294556c8f21c7d2ce0b0f96e838f27e399f82
+    defaults:
+      run:
+        shell: bash --login {0}
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up environment
-        uses: ./.github/workflows/env
       - name: formatter
         env:
           CGO_ENABLED: 1
