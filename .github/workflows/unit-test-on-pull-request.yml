@@ -58,23 +58,27 @@ jobs:
     defaults:
       run:
         shell: bash --login {0}
-        working-directory: ${{ github.workspace }}
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install clang-format-17
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format-17
       - name: Debug steps
         run: |
           pwd
-          ls -liah *
+          ls -liahp
           which git
+          which clang-format-17
       - name: formatter
         env:
           CGO_ENABLED: 1
         run: |
           make format
-          git -C "${{ github.workspace }}" diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
+          git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   otel-col-goos:
     name: Crosscompile OTel Collector component on (${{ matrix.goos }}/${{ matrix.goarch }})
