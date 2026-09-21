@@ -12,7 +12,7 @@ permissions:
 jobs:
   legal:
     name: Check licenses of dependencies
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,7 +53,7 @@ jobs:
 
   format:
     name: Format Go and C code
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +70,7 @@ jobs:
 
   otel-col-goos:
     name: Crosscompile OTel Collector component on (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         goos: ['linux', 'windows']
@@ -116,7 +116,7 @@ jobs:
 
   luajit-offsets-test:
     name: LuaJIT offsets test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Clone code
@@ -176,7 +176,7 @@ jobs:
 
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
