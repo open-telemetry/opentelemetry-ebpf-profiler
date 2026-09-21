@@ -108,11 +108,6 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 
 		var data perf.Record
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
 
 			if err := eventReader.ReadInto(&data); err != nil {
 				if errors.Is(err, os.ErrClosed) {
