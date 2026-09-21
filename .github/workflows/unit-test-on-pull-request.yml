@@ -65,8 +65,8 @@ jobs:
           persist-credentials: false
       - name: Install clang-format-17
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang-format-17
+          apt-get update
+          apt-get install -y clang-format-17
       - name: Debug steps
         run: |
           pwd
