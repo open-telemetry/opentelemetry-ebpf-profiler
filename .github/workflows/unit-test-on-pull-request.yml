@@ -60,6 +60,9 @@ jobs:
         shell: bash --login {0}
         working-directory: ${{ github.workspace }}
     steps:
+      - name: Install git
+        run: 
+          apt update && apt install -y git
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,7 +70,8 @@ jobs:
       - name: Debug steps
         run:
           pwd
-          ls -liah
+          ls -liah *
+          which git
       - name: formatter
         env:
           CGO_ENABLED: 1
