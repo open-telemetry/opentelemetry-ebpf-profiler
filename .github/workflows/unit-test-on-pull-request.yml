@@ -55,9 +55,6 @@ jobs:
   format:
     name: Format Go and C code
     runs-on: ubuntu-26.04
-    defaults:
-      run:
-        shell: bash --login {0}
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,7 +67,6 @@ jobs:
           CGO_ENABLED: 1
         run: |
           make format
-          pwd
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   otel-col-goos:
