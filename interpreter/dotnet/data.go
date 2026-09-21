@@ -234,7 +234,7 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 		ranges:              make(map[libpf.Address]dotnetRangeSection),
 		moduleToPEInfo:      make(map[libpf.Address]*peInfo),
 		addrToMethod:        addrToMethod,
-		stringsHeapAddrByPE: make(map[*peInfo]stringsHeapEntry),
+		stringsHeapAddrByPE: make(map[peHash]stringsHeapEntry),
 	}, nil
 }
 
