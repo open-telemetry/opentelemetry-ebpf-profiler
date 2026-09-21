@@ -706,10 +706,49 @@ writer from racing the reader — but it does not by itself establish that no
 *other* thread can relocate the objects being walked while the sampled thread is
 stopped.
 
-In practice, V8 performs object motion during the atomic pause on the isolate's
-own thread, which is the stopped thread; concurrent GC threads mark rather than
-move. We believe this makes the walk safe under the same assumptions OTEP 4947
-already makes.
+V8 moves objects only during an atomic pause, and that pause is driven by the
+isolate's own thread — the stopped one. Parallel evacuation tasks do much of the
+copying, but they are joined before the pause ends, and concurrent marking and
+concurrent sweeping never relocate a live object. At the end of a pause the
+evacuated memory is handed back: the semispaces are swapped and the old
+from-space is refilled by ordinary allocation, and old-space evacuation
+candidates are released outright. 
+
+The reader only holds raw addresses, which keep meaning what they meant only for
+as long as the pause lasts. Since a stopped thread cannot reach the end of its
+own pause, the entire read is contained within it, and it is thus protected
+against observing above effects.
+
+The argument rests on the collection being driven by the stopped thread itself,
+which holds because isolates share no garbage-collected memory: each has its own
+heap, collected by its own thread. V8 can be built and flagged to give a group
+of isolates a shared heap, collected by one of them at a global safepoint while
+the others are parked — a collection that could therefore finish while this
+thread stays stopped. That configuration is experimental and Node.js does not
+enable it, and even under it the shared heap holds only shared strings and
+shared structs, never a `JSMap`, so it cannot reach anything on this walk.
+
+When we say an object is moved during the collection, it is in fact copied. The
+collectors write a forwarding pointer to the new copy of the object into the map
+word of the source copy of the object, and otherwise don't write the source's
+body. The walk never reads objects' map words so to it an evacuated object reads
+the same during a GC pause.
+
+This is a further reason for the reader not to validate what it finds by
+checking maps or instance types. During a pause a map word can hold a forwarding
+address rather than a map identifier so such a check would fail on precisely the
+objects that are still perfectly readable.
+
+Reading the old copy is as good as reading the new one. No JavaScript runs
+during the pause, so neither copy is semantically mutated while the reader is
+looking at it, and a walk that follows a mixture of pre- and post-move addresses
+— which it can, since referring slots are updated one at a time — sees the same
+values either way. The new copy is not necessarily complete at the moment it
+becomes reachable as various writes use relaxed ordering. On weakly ordered
+hardware a reader can in principle follow a pointer to a new address where the
+body was not written yet. The consequence is the one the walk tolerates
+everywhere else: it reads something that is not the key it is looking for, and
+the lookup misses.
 
 Note that the record itself is not a V8 heap object; it is malloc'd memory owned
 by the wrapper, so it never moves as a result of GC. Only the path to it
@@ -724,11 +763,6 @@ forbidden from treating it as permanent. This is a contingency rather than a
 part of the proposal: nothing has to implement it unless the argument above
 proves wrong, and because the profiler is unaffected, it can then be adopted one
 SDK at a time with no schema change.
-
-Losing the trace context for GC samples is a design decision. A collection is
-triggered by whole-heap pressure that the active request may have contributed
-little to, so attributing that time to whichever context happened to be current
-would manufacture a plausible-looking but ultimately wrong attribution.
 
 ### Sampling a thread that is not executing JavaScript
 
