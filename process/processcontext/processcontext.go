@@ -115,6 +115,12 @@ func read(addr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
 	return Info{}, lastErr
 }
 
+// readOnce reads a coherent snapshot using the [OTEP 4719] timestamp protocol.
+// The publisher clears the timestamp before an update and sets a new nonzero
+// value when done. The reader reads the timestamp, header and payload, then
+// rechecks the timestamp. A zero or changed timestamp signals a concurrent
+// update, which read retries. Payload errors are deferred until this check
+// passes so torn reads are retried rather than reported as invalid context.
 func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMemory,
 	lastPublishedAtNs uint64,
 ) (Info, error) {

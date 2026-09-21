@@ -65,6 +65,8 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, erro
 		return nil, fmt.Errorf("unsupported thread context schema version: %s", v)
 	}
 	if keyMap == nil {
+		// Producer speaks the protocol but has no keys yet. Non-nil so
+		// LabelDecoder() reports it capable, but decodes nothing until a key map arrives.
 		return &threadContextInfo{}, nil
 	}
 
@@ -124,8 +126,8 @@ func (t *threadContextInfo) DecodeLabels(data []byte) (labels map[libpf.String]l
 			labels = make(map[libpf.String]libpf.String)
 		}
 		key := t.attributeKeyMap[keyIndex]
-		// A repeated key index means the payload is malformed: still decode it
-		// (last write wins) but count it, rather than silently discard a value.
+		// The last instance of a repeated key wins, so the earlier value is counted
+		// as dropped (last write wins).
 		if prev, exists := labels[key]; exists {
 			dropped++
 			log.Debugf("thread context: duplicate entry for %q, replacing %q with %q",
