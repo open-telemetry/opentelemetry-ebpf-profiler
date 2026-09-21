@@ -13,7 +13,6 @@ jobs:
   legal:
     name: Check licenses of dependencies
     runs-on: ubuntu-26.04
-    if: false # REMOVE AFTER DEBUGGING
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -154,7 +153,6 @@ jobs:
   coredump-test-macos:
     name: Coredump tests (macOS)
     runs-on: macos-latest
-    if: false # REMOVE AFTER DEBUGGING
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -181,7 +179,6 @@ jobs:
     runs-on: ubuntu-26.04
     needs: build-integration-test-binaries
     timeout-minutes: 10
-    if: false # REMOVE AFTER DEBUGGING
     strategy:
       fail-fast: false
       matrix:
