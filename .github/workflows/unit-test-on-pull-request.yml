@@ -47,8 +47,8 @@ jobs:
           persist-credentials: false
       - name: Install clang-format-17
         run: |
-          apt-get update
-          apt-get install -y clang-format-17
+          sudo apt-get update
+          sudo apt-get install -y clang-format-17
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: linter
@@ -69,8 +69,8 @@ jobs:
           persist-credentials: false
       - name: Install clang-format-17
         run: |
-          apt-get update
-          apt-get install -y clang-format-17
+          sudo apt-get update
+          sudo apt-get install -y clang-format-17
       - name: Debug steps
         run: |
           pwd
