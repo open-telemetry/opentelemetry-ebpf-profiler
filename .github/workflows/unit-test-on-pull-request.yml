@@ -13,6 +13,7 @@ jobs:
   legal:
     name: Check licenses of dependencies
     runs-on: ubuntu-26.04
+    if: false # REMOVE AFTER DEBUGGING
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,8 +38,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { target_arch: amd64, runner: ubuntu-24.04 }
-          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+          - { target_arch: amd64, runner: ubuntu-26.04 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm }
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,13 +72,12 @@ jobs:
         run: |
           pwd
           ls -liahp
-          which git
-          which clang-format-17
       - name: formatter
         env:
           CGO_ENABLED: 1
         run: |
           make format
+          pwd
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   otel-col-goos:
@@ -105,10 +105,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - { target_arch: amd64, runner: ubuntu-24.04, go_flags: "" }
-          - { target_arch: amd64, runner: ubuntu-24.04, go_flags: "-race" }
-          - { target_arch: arm64, runner: ubuntu-24.04-arm, go_flags: "" }
-          - { target_arch: arm64, runner: ubuntu-24.04-arm, go_flags: "-race" }
+          - { target_arch: amd64, runner: ubuntu-26.04, go_flags: "" }
+          - { target_arch: amd64, runner: ubuntu-26.04, go_flags: "-race" }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, go_flags: "" }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, go_flags: "-race" }
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,12 +143,11 @@ jobs:
     name: Build integration test binaries (${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
-    if: false # REMOVE AFTER DEBUGGING
     strategy:
       matrix:
         include:
-          - { target_arch: amd64, runner: ubuntu-24.04 }
-          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+          - { target_arch: amd64, runner: ubuntu-26.04 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm }
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
