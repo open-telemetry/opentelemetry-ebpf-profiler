@@ -300,42 +300,27 @@ func TestExtractTSDInfo(t *testing.T) {
 	}
 }
 
-func TestExtractDTVInfo(t *testing.T) {
-	testCases := map[string]struct {
-		soname  string
-		machine elf.Machine
-		info    DTVInfo
+func TestHardcodedDTVEligibility(t *testing.T) {
+	for name, test := range map[string]struct {
+		soname   string
+		dls3     bool
+		eligible bool
 	}{
-		"glibc / x86_64": {
-			soname:  "libc.so.6",
-			machine: elf.EM_X86_64,
-			info:    DTVInfo{Offset: 8, Multiplier: 16},
-		},
-		"glibc / aarch64": {
-			soname:  "libc.so.6",
-			machine: elf.EM_AARCH64,
-			info:    DTVInfo{Offset: 0, Multiplier: 16},
-		},
-		"musl / x86_64": {
-			soname:  "libc.musl-x86_64.so.1",
-			machine: elf.EM_X86_64,
-			info:    DTVInfo{Offset: 8, Multiplier: 8},
-		},
-		"musl / aarch64": {
-			soname:  "libc.musl-aarch64.so.1",
-			machine: elf.EM_AARCH64,
-			info:    DTVInfo{Offset: -8, Multiplier: 8},
-		},
-		"unknown libc": {
-			soname:  "libfoo.so.1",
-			machine: elf.EM_X86_64,
-		},
-	}
-
-	for name, test := range testCases {
+		"glibc":               {"libc.so.6", false, true},
+		"libpthread":          {"libpthread.so.0", false, false},
+		"loader":              {"ld-linux-x86-64.so.2", false, false},
+		"musl":                {"libc.musl-x86_64.so.1", false, true},
+		"musl without SONAME": {"", true, true},
+		"unknown libc":        {"libunknown.so", false, false},
+	} {
 		t.Run(name, func(t *testing.T) {
-			ef := buildTestELF(t, test.machine, test.soname, nil)
-			assert.Equal(t, test.info, extractDTVInfo(ef))
+			syms := map[string][]byte{}
+			if test.dls3 {
+				syms["__dls3"] = []byte{0, 0, 0, 0}
+			}
+			ef := buildTestELF(t, elf.EM_X86_64, test.soname, syms)
+			info := extractDTVInfo(ef)
+			assert.Equal(t, test.eligible, info.Multiplier != 0)
 		})
 	}
 }
