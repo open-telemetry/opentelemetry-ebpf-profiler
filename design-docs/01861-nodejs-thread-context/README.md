@@ -327,12 +327,6 @@ observable. Threads that never install the hook leave the struct zeroed, which
 is what lets `cped_slot` serve as the gate: no live isolate has its CPED slot at
 address zero.
 
-Because the contract is byte-level, "zeroed" means an all-zero representation.
-A C++ writer assigning a null pointer to `cped_slot` produces that on the ELF
-platforms in scope, the same assumption OTEP 4947 already relies on; a writer on
-any platform where a null pointer is not all-zero bits MUST zero the bytes
-explicitly.
-
 ### Thread-local context record
 
 Unchanged from OTEP 4947, including field offsets, `attrs-data` encoding, the
@@ -381,9 +375,9 @@ When context becomes active, the SDK:
 
 A record MUST stay alive for as long as its wrapper is reachable in the
 JavaScript heap, since any such wrapper can still be presented to the profiler;
-it may be released once the wrapper is known to be unreachable. How an SDK
-arranges that — weak references with collection callbacks, in the reference
-implementation — is its own business.
+it may be released once the wrapper is known to be unreachable.
+The reference implementation uses weak references with collection callbacks
+for this, but writers are free to pick any suitable implementation for this.
 
 #### 3. Context detachment
 
@@ -428,9 +422,7 @@ cannot be reordered before that store.
 Before an isolate is torn down, the SDK MUST clear the thread-local, and MUST
 clear `cped_slot` **first**, as a volatile store followed by a compiler fence.
 It SHOULD additionally clear internal field 0 of all live wrappers known to it,
-and will typically want to release the records' memory as well, since a leak
-checker running before the runtime's own late-shutdown finalizers will otherwise
-report them.
+and will typically want to release the records' memory as well.
 
 Releasing the records is what obliges an SDK to track every live wrapper, since
 the runtime will not have collected them all by teardown. Neither that nor the
@@ -457,11 +449,7 @@ default from Node 24, where it can still be turned off with
 An SDK MUST feature-detect this rather than infer it from the version and
 command line, which disagree in both directions: `NODE_OPTIONS` can enable or
 disable it without appearing in `process.execArgv`, and worker threads may be
-created with a different `execArgv` than the main thread. Inferring "on" when it
-is off is the dangerous direction — the SDK keeps working from JavaScript's
-point of view while the CPED slot is never written, so the profiler sees a
-record that nothing updates. A direct probe (asking native code what is in the
-CPED slot during a `run()`) tests the exact slot readers depend on.
+created with a different `execArgv` than the main thread.
 
 The schema also presumes the V8 Node.js builds by default: 64-bit, pointer
 compression off, the V8 sandbox off. This fixes V8's object layout; "The V8
@@ -558,9 +546,7 @@ needs no assumption about any other field.
 As in OTEP 4947, the profiler SHOULD validate before trusting: a mis-stepped
 pointer walk yields garbage at the same offsets. Checking `valid == 1` is the
 minimum; sanity-checking `attrs-data-size` as well as the `OrderedHashMap`
-bucket count being a power of two are cheap additional guards. Every remote read
-on the walk is bounded and failure-tolerant, so a target that is mid-teardown or
-built differently than advertised costs a dropped context rather than a bad one.
+bucket count being a power of two are cheap additional guards.
 
 Tagged words should also be checked for their tag before use, rather than
 assumed to be of the kind the layout calls for. In particular, `OrderedHashMap`
@@ -768,10 +754,7 @@ loop with nothing to do is parked in the libuv poll. `cped_slot` addresses a
 field of the isolate rather than anything on the JS stack, so the read itself is
 unaffected. Node keeps an isolate entered for the whole lifetime of the event
 loop it serves, both on the main thread and in worker threads, so the
-not-entered state barely arises while an application is running. The only loop
-that does spin with no isolate entered is the one a worker runs while it waits
-for the platform to release its isolate during teardown, by which point the gate
-is already closed.
+not-entered state does not arise during normal app execution.
 
 When the loop is idle, the CPED slot holds whatever frame was current at the
 outermost level. Node unwinds the slot as the stack unwinds; every entry into
@@ -788,11 +771,6 @@ program.
 This is also mostly a wall-clock concern. A thread parked in the poll consumes
 no CPU and so is never sampled by a CPU-time profiler.
 
-We do not ask targets to publish an "executing JavaScript" flag. The profiler
-can already walk the target's stack and so can tell a thread parked in the poll
-from one that is running, which is all such a flag would say; and maintaining it
-would mean marking entry to and exit from JavaScript in the target, which is
-per-call work on the hottest path this design exists to keep native code off.
 
 ### Reporting a sample with nothing attached
 
@@ -823,12 +801,6 @@ span's lifetime. The thread-local struct is four words per thread.
 In the profiler: nothing per process beyond what OTEP 4947 already retains, and
 no per-sample allocation the existing path does not already make.
 
-### Trace sampling
-
-Unchanged from OTEP 4947: an out-of-process reader cannot influence in-process
-sampling decisions, so samples may reference traces the SDK never exported. The
-same mitigation applies — publish the attributes that matter directly in
-`attrs-data` via `attribute_key_map`.
 
 # Alternatives Considered and Rejected
 
@@ -888,10 +860,6 @@ run on the context-switch path, then the runtime's own context-switching
 mechanism has to be what carries the record, and something has to teach the
 profiler to walk it.
 
-The genuinely open choices are smaller and called out where they arise: whether
-the walk lives inside `interpreter/threadcontext` or in a package of its own,
-and whether to add a `v8dbg_*` cross-check of the layout constants. Both can be
-settled during implementation without revisiting this document.
 
 # Testing Strategy
 
@@ -924,40 +892,11 @@ for a mechanism of this kind.
   static assertions catch the former where it is built. Coredump cases from each
   supported major (22 with the flag, 24, and newer) are how that gets detected.
 
-## Impact on Testing of Other Systems/Components
-
-Minimal. The change to `process/processcontext` is an additional accepted schema
-version, covered by its existing table-driven tests.
-`interpreter/threadcontext` gains a second export name and struct shape; its
-TLS-resolution tests are unaffected because that layer does not interpret the
-bytes it locates. Nothing in `interpreter/nodev8` changes, so
-the existing V8 unwinder tests and coredump cases are untouched.
-
-The one thing that becomes harder is testing the two mechanisms in combination:
-a target publishing both schema versions is not meaningful, but a host running
-Node.js and non-Node.js instrumented processes side by side is, and the
-schema-version selection deserves a test at that level.
 
 # Future Possibilities
 
-- **Other runtimes with the same shape.** The pattern — publish a discovery
-  struct once, let the runtime do the context switching, teach the reader to
-  walk runtime internals — should transfer to other managed runtimes whose
-  context model is not the OS thread.
-- **A parametrized layout.** If builds this schema version does not admit —
-  pointer-compressed, sandboxed, or a V8 that has moved these fields — ever
-  need supporting, a later schema version can carry the layout as process
-  context rather than fix it, and such a descriptor could be shared with any
-  reader that walks a V8 heap, including `interpreter/nodev8`.
 - **libuv thread pool attribution.** Out of scope here because Node.js offers no
   mechanism to carry a record onto a pool thread. Those threads would in fact
   suit OTEP 4947's original design well, since each runs one work item at a
-  time; if Node.js ever grows a way to associate context with submitted work,
-  this becomes worth revisiting.
-- **Non-Linux platforms.** As with OTEPs 4719 and 4947, the discovery contract
-  here is ELF/TLSDESC-based. The record format and the CPED walk are not
-  Linux-specific; only the mechanism for finding the discovery struct is.
+  time.
 
-# Decision
-
-TBD.
