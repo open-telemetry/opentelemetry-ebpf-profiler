@@ -126,13 +126,7 @@ func (t *threadContextInfo) DecodeLabels(data []byte) (labels map[libpf.String]l
 			labels = make(map[libpf.String]libpf.String)
 		}
 		key := t.attributeKeyMap[keyIndex]
-		// The last instance of a repeated key wins, so the earlier value is counted
-		// as dropped (last write wins).
-		if prev, exists := labels[key]; exists {
-			dropped++
-			log.Debugf("thread context: duplicate entry for %q, replacing %q with %q",
-				key, prev, val)
-		}
+		// The last instance of a repeated key wins.
 		// Interning copies val, satisfying LabelDecoder's no-alias contract.
 		labels[key] = libpf.Intern(pfunsafe.ToString(val))
 	}

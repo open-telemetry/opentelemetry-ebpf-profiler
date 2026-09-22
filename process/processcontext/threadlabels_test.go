@@ -209,12 +209,9 @@ func TestDecodeLabels(t *testing.T) {
 			want:        map[string]string{"http_method": "GET"},
 			wantDropped: 1,
 		},
-		// A repeated key index is malformed, so the earlier value is counted as
-		// dropped even though the entry itself decodes (last write wins).
-		"duplicate key index counts the overwritten value as dropped": {
-			data:        append(entry(0, "/x"), entry(0, "/y")...),
-			want:        map[string]string{"http_route": "/y"},
-			wantDropped: 1,
+		"duplicate key index keeps the last value without counting a drop": {
+			data: append(entry(0, "/x"), entry(0, "/y")...),
+			want: map[string]string{"http_route": "/y"},
 		},
 	}
 
