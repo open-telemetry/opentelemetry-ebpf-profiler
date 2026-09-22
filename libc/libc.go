@@ -163,6 +163,9 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	case libcMusl:
 		// musl's flat TSD array has PTHREAD_KEYS_MAX entries.
 		info.KeyLimit = 128
+	default:
+		// Cap unknown libc support at glibc's PTHREAD_KEYS_MAX.
+		info.KeyLimit = 1024
 	}
 	return info, nil
 }

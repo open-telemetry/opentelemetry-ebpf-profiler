@@ -418,7 +418,7 @@ typedef struct TSDInfo {
   // Indirect is a flag indicating if the "tpbase + Offset" points to a member
   // which is a pointer to a flat array (musl) rather than inline data.
   u8 indirect;
-  // Exclusive upper bound for keys. Zero means the limit is unknown.
+  // Exclusive upper bound for keys. Must be initialized.
   u16 keyLimit;
   // Entries per block for two-level glibc lookup. Zero selects a flat array.
   u8 blockEntries;

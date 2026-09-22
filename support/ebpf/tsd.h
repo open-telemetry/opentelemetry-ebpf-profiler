@@ -8,16 +8,13 @@ extern u64 tpbase_offset;
 
 // tsd_read reads from the Thread Specific Data location associated with the provided key.
 static inline EBPF_INLINE int
-tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
+tsd_read(const TSDInfo *tsi, const void *tsd_base, u32 key, void **out)
 {
   const void *tsd_addr = tsd_base + tsi->offset;
-  if (key < 0) {
+  if (key >= tsi->keyLimit) {
     goto err;
   }
-  u32 index = (u32)key;
-  if (tsi->keyLimit && index >= tsi->keyLimit) {
-    goto err;
-  }
+  u32 index = key;
   if (tsi->blockEntries) {
     u32 block = index / tsi->blockEntries;
     // specific[0] points to the inline block. Later blocks are allocated on demand.
@@ -40,7 +37,7 @@ tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
 
   tsd_addr += index * tsi->multiplier;
 
-  DEBUG_PRINT("readTSD key %d from address 0x%lx", key, (unsigned long)tsd_addr);
+  DEBUG_PRINT("readTSD key %u from address 0x%lx", key, (unsigned long)tsd_addr);
   if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
     goto err;
   }

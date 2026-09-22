@@ -278,7 +278,7 @@ func TestExtractTSDInfo(t *testing.T) {
 		{"glibc", "glibc 2.35  / Fedora 36 / x86_64", "libc.so.6", 32, false},
 		{"glibc libpthread", "glibc 2.33 / Fedora 34 / arm64", "libpthread.so.0", 32, false},
 		{"musl without SONAME", "musl 1.2.3 / Alpine 3.16 / arm64", "", 128, true},
-		{"unknown libc", "glibc 2.35  / Fedora 36 / x86_64", "libunknown.so", 0, false},
+		{"unknown libc", "glibc 2.35  / Fedora 36 / x86_64", "libunknown.so", 1024, false},
 	} {
 		t.Run("fallback/"+fallback.name, func(t *testing.T) {
 			fixture := testCases[fallback.fixture]
