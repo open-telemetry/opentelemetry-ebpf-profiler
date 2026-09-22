@@ -179,6 +179,7 @@ const (
 // Keep libpthread distinct because it can lack nptl_db descriptors even on
 // modern glibc. It must not seed DTV constants before libc supplies metadata.
 func libcFlavorOf(ef *pfelf.File) libcFlavor {
+	// DynString(DT_SONAME) always returns one element, "" when SONAME is absent.
 	sonames, err := ef.DynString(elf.DT_SONAME)
 	if err != nil {
 		return libcUnknown
@@ -191,6 +192,8 @@ func libcFlavorOf(ef *pfelf.File) libcFlavor {
 			return libcGlibc
 		case soname == "libpthread.so.0":
 			return libcGlibcPthread
+		case soname != "":
+			return libcUnknown
 		}
 	}
 	// Upstream musl has no SONAME. Startup looks up __dls3 by name,
