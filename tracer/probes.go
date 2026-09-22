@@ -21,7 +21,7 @@ import (
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
-	registerAttacher func(pm.ProbeAttacher)
+	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
 }
@@ -348,8 +348,8 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 
 // AddAttacher registers a per-process attacher with the process manager.
 // ProcessManager calls Match/Attach as new mappings appear and Detach on process exit.
-func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
-	c.registerAttacher(a)
+func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
+	return c.registerAttacher(a)
 }
 
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
@@ -433,8 +433,13 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
 		reg:     t.origins,
-		registerAttacher: func(a pm.ProbeAttacher) {
+		registerAttacher: func(a pm.ProbeAttacher) error {
+			// Per-process probes need resynchronization when executable mappings are added.
+			if err := t.ensureMmapEventMonitor(); err != nil {
+				return err
+			}
 			t.processManager.RegisterProbeAttacher(a)
+			return nil
 		},
 		KernelSymbolizer: t.kernelSymbolizer,
 	}

@@ -102,6 +102,13 @@ type Tracer struct {
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
 
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	mmapEventOnce   func() error
+	// mmapEventMu serializes lazy monitor startup with Close.
+	mmapEventMu sync.Mutex
+	mmapEventWG sync.WaitGroup
+
 	// hooks holds references to loaded eBPF hooks.
 	hooks xsync.RWMutex[hooksState]
 
@@ -292,7 +299,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, pm.Config{
+	lifecycleCtx, lifecycleCancel := context.WithCancel(ctx)
+	processManager, err := pm.New(lifecycleCtx, pm.Config{
 		InterpretersConfig:    cfg.InterpretersConfig,
 		MonitorInterval:       cfg.Intervals.MonitorInterval(),
 		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),
@@ -307,12 +315,15 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
 	})
 	if err != nil {
+		lifecycleCancel()
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
 	perfEventList := []*perf.Event{}
 
 	tracer := &Tracer{
+		lifecycleCtx:           lifecycleCtx,
+		lifecycleCancel:        lifecycleCancel,
 		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
@@ -332,6 +343,9 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
 		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
+	tracer.mmapEventOnce = sync.OnceValue(func() error {
+		return tracer.startMmapEventMonitor(tracer.lifecycleCtx)
+	})
 
 	return tracer, nil
 }
@@ -339,6 +353,14 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // Close provides functionality for Tracer to perform cleanup tasks.
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
+	if t.lifecycleCancel != nil {
+		t.lifecycleCancel()
+	}
+	// Ensure startup has registered every reader before waiting for them.
+	t.mmapEventMu.Lock()
+	t.mmapEventWG.Wait()
+	t.mmapEventMu.Unlock()
+
 	events := t.perfEntrypoints.WLock()
 	terminatePerfEvents(*events)
 	*events = nil
