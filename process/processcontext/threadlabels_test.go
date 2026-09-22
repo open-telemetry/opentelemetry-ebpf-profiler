@@ -142,8 +142,8 @@ func TestReadThreadContextInfo(t *testing.T) {
 
 // Callers test the result against nil, so a nil schema must not surface as a
 // non-nil interface holding a typed nil.
-func TestInfoLabelDecoder_NilSchema(t *testing.T) {
-	assert.Nil(t, Info{}.LabelDecoder())
+func TestInfoThreadLabelDecoder_NilSchema(t *testing.T) {
+	assert.Nil(t, Info{}.ThreadLabelDecoder())
 }
 
 func TestDecodeLabels(t *testing.T) {
@@ -222,9 +222,9 @@ func TestDecodeLabels(t *testing.T) {
 			got, dropped := tc.DecodeLabels(tt.data)
 
 			// A nil map isn't allocated until the first label is kept.
-			var want map[libpf.String]libpf.String
+			var want libpf.ThreadLabels
 			if len(tt.want) > 0 {
-				want = make(map[libpf.String]libpf.String, len(tt.want))
+				want = make(libpf.ThreadLabels, len(tt.want))
 				for k, v := range tt.want {
 					want[libpf.Intern(k)] = libpf.Intern(v)
 				}

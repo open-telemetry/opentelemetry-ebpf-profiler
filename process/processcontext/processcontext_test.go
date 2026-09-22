@@ -319,7 +319,7 @@ func TestProcessContext_Read(t *testing.T) {
 				require.Equal(t, tt.expectedResult, info)
 			} else {
 				assert.Zero(t, info.ResourceAttrs.Len())
-				assert.Nil(t, info.LabelDecoder())
+				assert.Nil(t, info.ThreadLabelDecoder())
 				assert.Zero(t, info.publishedAtNs)
 				require.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -563,12 +563,12 @@ func TestProcessContext_Read_ThreadContext(t *testing.T) {
 			remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 		require.NoError(t, err)
 
-		decoder := info.LabelDecoder()
+		decoder := info.ThreadLabelDecoder()
 		require.NotNil(t, decoder)
 		labels, dropped := decoder.DecodeLabels(append([]byte{0, 3}, "/rt"...))
 		assert.Zero(t, dropped)
 		assert.Equal(t,
-			map[libpf.String]libpf.String{libpf.Intern("route"): libpf.Intern("/rt")},
+			libpf.ThreadLabels{libpf.Intern("route"): libpf.Intern("/rt")},
 			labels)
 	})
 
@@ -582,7 +582,7 @@ func TestProcessContext_Read_ThreadContext(t *testing.T) {
 			remotememory.RemoteMemory{ReaderAt: mock}, 0, 0)
 		require.NoError(t, err)
 		assert.Equal(t, "test-service", serviceName(t, info))
-		assert.Nil(t, info.LabelDecoder())
+		assert.Nil(t, info.ThreadLabelDecoder())
 	})
 }
 

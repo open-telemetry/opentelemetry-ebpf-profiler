@@ -66,7 +66,7 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, erro
 	}
 	if keyMap == nil {
 		// Producer speaks the protocol but has no keys yet. Non-nil so
-		// LabelDecoder() reports it capable, but decodes nothing until a key map arrives.
+		// ThreadLabelDecoder() reports it capable, but decodes nothing until a key map arrives.
 		return &threadContextInfo{}, nil
 	}
 
@@ -95,7 +95,7 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, erro
 
 // DecodeLabels resolves each entry's key index against the published schema.
 // Payload is repeated (key index byte, value length byte, value bytes).
-func (t *threadContextInfo) DecodeLabels(data []byte) (labels map[libpf.String]libpf.String, dropped int) {
+func (t *threadContextInfo) DecodeLabels(data []byte) (labels libpf.ThreadLabels, dropped int) {
 	for len(data) > 0 {
 		if len(data) < 2 {
 			dropped++
@@ -123,19 +123,19 @@ func (t *threadContextInfo) DecodeLabels(data []byte) (labels map[libpf.String]l
 			continue
 		}
 		if labels == nil {
-			labels = make(map[libpf.String]libpf.String)
+			labels = make(libpf.ThreadLabels)
 		}
 		key := t.attributeKeyMap[keyIndex]
 		// The last instance of a repeated key wins.
-		// Interning copies val, satisfying LabelDecoder's no-alias contract.
+		// Interning copies val, satisfying ThreadLabelDecoder's no-alias contract.
 		labels[key] = libpf.Intern(pfunsafe.ToString(val))
 	}
 	return labels, dropped
 }
 
-// LabelDecoder returns a decoder for the process's per-thread labels, or nil if
+// ThreadLabelDecoder returns a decoder for the process's per-thread labels, or nil if
 // it publishes no schema.
-func (i Info) LabelDecoder() libpf.LabelDecoder {
+func (i Info) ThreadLabelDecoder() libpf.ThreadLabelDecoder {
 	if i.threadCtx == nil {
 		// Returning i.threadCtx directly would hand back a non-nil interface
 		// holding a typed nil, which a caller's nil test would not catch.
