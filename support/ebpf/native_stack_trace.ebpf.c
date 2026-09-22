@@ -204,6 +204,6 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
+  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0, false);
 }
 MULTI_USE_FUNC(unwind_native)
