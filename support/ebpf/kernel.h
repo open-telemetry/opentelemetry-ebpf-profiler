@@ -100,6 +100,7 @@ struct pt_regs {
   unsigned long sp;
   unsigned long ss;
 };
+typedef struct pt_regs bpf_user_pt_regs_t;
 #elif defined(__aarch64__)
 struct pt_regs {
   u64 regs[31];
@@ -110,12 +111,19 @@ struct pt_regs {
   s32 syscallno;
   u32 unused2;
 };
+struct user_pt_regs {
+  u64 regs[31];
+  u64 sp;
+  u64 pc;
+  u64 pstate;
+};
+typedef struct user_pt_regs bpf_user_pt_regs_t;
 #else
   #error "Unsupported architecture"
 #endif
 
 struct bpf_perf_event_data {
-  struct pt_regs regs;
+  bpf_user_pt_regs_t regs;
 };
 
 // The following works with clang and gcc.
