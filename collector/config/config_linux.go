@@ -84,13 +84,8 @@ type Config struct {
 // Validate validates the config.
 // This is automatically called by the config parser as it implements the confmap.Validator interface.
 func (cfg *Config) Validate() error {
-	switch cfg.PIDNamespaceTranslationMode {
-	case tracer.PIDNamespaceTranslationModeNone,
-		tracer.PIDNamespaceTranslationModeAuto,
-		tracer.PIDNamespaceTranslationModeExact,
-		tracer.PIDNamespaceTranslationModeDescendants:
-	default:
-		return fmt.Errorf("invalid argument for pid-namespace-translation-mode: unknown mode %d", cfg.PIDNamespaceTranslationMode)
+	if err := cfg.PIDNamespaceTranslationMode.Validate(); err != nil {
+		return fmt.Errorf("invalid argument for pid-namespace-translation-mode: %w", err)
 	}
 
 	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {

@@ -201,18 +201,18 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  u32 pid = 0;
-  u32 tid = 0;
-  if (!get_pid_tgid(&pid, &tid)) {
+  TIDContext tctx;
+  if (!get_tid_context(&tctx)) {
     return 0;
   }
 
-  if (pid == 0 && filter_idle_frames) {
+  if (tctx.pid == 0 && filter_idle_frames) {
     return 0;
   }
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
+  return collect_trace(
+    (struct pt_regs *)&ctx->regs, origin_id_sampling, tctx.pid, tctx.tid, tctx.group_leader, ts, 0);
 }
 MULTI_USE_FUNC(unwind_native)

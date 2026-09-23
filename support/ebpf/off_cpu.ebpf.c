@@ -28,13 +28,12 @@ BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
 SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(UNUSED void *ctx)
 {
-  u32 pid = 0;
-  u32 tid = 0;
-  if (!get_pid_tgid(&pid, &tid)) {
+  TIDContext tctx;
+  if (!get_tid_context(&tctx)) {
     return 0;
   }
 
-  if (pid == 0 || tid == 0) {
+  if (tctx.pid == 0 || tctx.tid == 0) {
     return 0;
   }
 
@@ -43,11 +42,11 @@ int tracepoint__sched_switch(UNUSED void *ctx)
   }
 
   u64 ts = bpf_ktime_get_ns();
-  if (process_is_too_new(ts)) {
+  if (process_is_too_new(ts, tctx.group_leader)) {
     return 0;
   }
 
-  u64 pid_tgid = ((u64)pid << 32) | tid;
+  u64 pid_tgid = ((u64)tctx.pid << 32) | tctx.tid;
 
   if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
     DEBUG_PRINT("Failed to record sched_switch event entry");
@@ -74,18 +73,17 @@ int kprobe__dummy(struct pt_regs *ctx)
 SEC("kprobe/finish_task_switch")
 int finish_task_switch(struct pt_regs *ctx)
 {
-  u32 pid = 0;
-  u32 tid = 0;
-  if (!get_pid_tgid(&pid, &tid)) {
+  TIDContext tctx;
+  if (!get_tid_context(&tctx)) {
     return 0;
   }
 
-  if (pid == 0 || tid == 0) {
+  if (tctx.pid == 0 || tctx.tid == 0) {
     return 0;
   }
 
   u64 ts       = bpf_ktime_get_ns();
-  u64 pid_tgid = ((u64)pid << 32) | tid;
+  u64 pid_tgid = ((u64)tctx.pid << 32) | tctx.tid;
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
   if (!start_ts || *start_ts == 0) {
@@ -101,5 +99,5 @@ int finish_task_switch(struct pt_regs *ctx)
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
-  return collect_trace(ctx, origin_id_off_cpu, pid, tid, ts, diff);
+  return collect_trace(ctx, origin_id_off_cpu, tctx.pid, tctx.tid, tctx.group_leader, ts, diff);
 }

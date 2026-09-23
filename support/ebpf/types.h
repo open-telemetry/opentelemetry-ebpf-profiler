@@ -1086,10 +1086,17 @@ typedef struct Event {
 
 // PID namespace translation modes.
 enum PIDNamespaceTranslationMode {
-  PID_NS_TRANSLATION_MODE_NONE = 0,
-  PID_NS_TRANSLATION_MODE_EXACT = 1,
+  PID_NS_TRANSLATION_MODE_NONE        = 0,
+  PID_NS_TRANSLATION_MODE_EXACT       = 1,
   PID_NS_TRANSLATION_MODE_DESCENDANTS = 2,
 };
+
+// TIDContext carries the PID, TID, and optional thread-group leader task pointer.
+typedef struct TIDContext {
+  u32 pid;
+  u32 tid;
+  u64 group_leader;
+} TIDContext;
 
 // PIDNamespaceLayout contains kernel structure offsets used to translate PIDs from descendant
 // namespaces.

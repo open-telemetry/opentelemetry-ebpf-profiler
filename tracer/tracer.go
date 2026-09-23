@@ -104,6 +104,14 @@ func (m PIDNamespaceTranslationMode) String() string {
 	}
 }
 
+// Validate checks whether the PIDNamespaceTranslationMode is valid.
+func (m PIDNamespaceTranslationMode) Validate() error {
+	if m > PIDNamespaceTranslationModeDescendants {
+		return fmt.Errorf("unknown mode %d", m)
+	}
+	return nil
+}
+
 // Constants that define the status of probabilistic profiling.
 const (
 	probProfilingEnable  = 1

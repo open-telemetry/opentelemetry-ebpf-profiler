@@ -199,8 +199,9 @@ func parsePIDNamespaceLayout(spec *btf.Spec, layout *support.PIDNamespaceLayout)
 	if err != nil {
 		return fmt.Errorf("resolve kernel BTF upid size: %w", err)
 	}
-	if upidSize <= 0 {
-		return fmt.Errorf("invalid kernel BTF upid size %d", upidSize)
+	if upidSize <= 0 || upidSize > 16 || layout.Upid_nr_offset+4 > 16 || layout.Upid_ns_offset+8 > 16 {
+		return fmt.Errorf("invalid kernel BTF upid size or layout: size=%d, nr_offset=%d, ns_offset=%d",
+			upidSize, layout.Upid_nr_offset, layout.Upid_ns_offset)
 	}
 	layout.Upid_size = uint32(upidSize)
 	return nil
@@ -713,6 +714,18 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		targetPIDNamespaceInode = ino
 		ebpfMode = ebpfPIDNSTranslationModeExact
 		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only process traces visible in the profiler namespace will be collected", dev, ino)
+
+		// Set initial PID namespace variables before prepareAnalysis so that system analysis
+		// probes (which run in the profiler's PID namespace) can resolve the profiler process's PID.
+		if err := coll.Variables["pid_ns_translation_mode"].Set(ebpfMode); err != nil {
+			return fmt.Errorf("failed to set pid_ns_translation_mode: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_dev"].Set(targetPIDNamespaceDev); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_dev: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_inode"].Set(targetPIDNamespaceInode); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
+		}
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
@@ -780,6 +793,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if pidNamespaceTranslation {
+		// Apply final PID namespace variables (including discovered layout and level) to coll.
 		for _, variable := range rodataVars.pidNamespaceVars() {
 			if err := coll.Variables[variable.name].Set(variable.val); err != nil {
 				return fmt.Errorf("failed to set %s: %v", variable.name, err)

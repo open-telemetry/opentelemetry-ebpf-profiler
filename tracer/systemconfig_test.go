@@ -59,8 +59,10 @@ func TestPIDNamespaceTranslationMode(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tt.mode, m)
 			require.Equal(t, tt.text, m.String())
+			require.NoError(t, m.Validate())
 		})
 	}
+	require.Error(t, PIDNamespaceTranslationMode(99).Validate())
 }
 
 func TestParsePIDNamespaceLayoutMissingType(t *testing.T) {

@@ -77,6 +77,7 @@ extern u64 target_pid_ns_dev;
 // target_pid_ns_level is declared in native_stack_trace.ebpf.c
 extern u32 target_pid_ns_level;
 
+// pid_namespace_layout is declared in native_stack_trace.ebpf.c
 extern PIDNamespaceLayout pid_namespace_layout;
 
 // Mirrors the kernel's struct bpf_pidns_info for use with bpf_get_ns_current_pid_tgid().
@@ -117,13 +118,21 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
   u64 upid_address = pid_address + pid_namespace_layout.pid_numbers_offset +
                      ((u64)target_pid_ns_level * pid_namespace_layout.upid_size);
 
-  u64 namespace_address = 0;
+  u8 upid_buf[16] = {0};
+  if (bpf_probe_read_kernel(upid_buf, sizeof(upid_buf), (void *)upid_address)) {
+    return false;
+  }
+
   if (
-    bpf_probe_read_kernel(
-      &namespace_address,
-      sizeof(namespace_address),
-      (void *)(upid_address + pid_namespace_layout.upid_ns_offset)) ||
-    namespace_address == 0) {
+    pid_namespace_layout.upid_ns_offset + sizeof(u64) > sizeof(upid_buf) ||
+    pid_namespace_layout.upid_nr_offset + sizeof(u32) > sizeof(upid_buf)) {
+    return false;
+  }
+
+  u64 namespace_address = 0;
+  __builtin_memcpy(
+    &namespace_address, upid_buf + pid_namespace_layout.upid_ns_offset, sizeof(namespace_address));
+  if (namespace_address == 0) {
     return false;
   }
 
@@ -138,12 +147,9 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
   }
 
   u32 translated_pid = 0;
-  if (
-    bpf_probe_read_kernel(
-      &translated_pid,
-      sizeof(translated_pid),
-      (void *)(upid_address + pid_namespace_layout.upid_nr_offset)) ||
-    translated_pid == 0) {
+  __builtin_memcpy(
+    &translated_pid, upid_buf + pid_namespace_layout.upid_nr_offset, sizeof(translated_pid));
+  if (translated_pid == 0) {
     return false;
   }
 
@@ -151,12 +157,17 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
   return true;
 }
 
-// get_pid_tgid resolves the current task's PID and TGID, translating them into the
-// configured target PID namespace if pid_ns_translation_mode is set. Returns false if
-// the task could not be resolved (e.g. it is not part of the target namespace), in which
+// get_tid_context resolves the current task's PID and TGID, translating them into the
+// configured target PID namespace if pid_ns_translation_mode is set. It also captures
+// the task's thread-group leader if resolved during descendant translation. Returns false
+// if the task could not be resolved (e.g. it is not part of the target namespace), in which
 // case the caller should skip the current event.
-static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
+static inline EBPF_INLINE bool get_tid_context(TIDContext *ctx)
 {
+  ctx->pid          = 0;
+  ctx->tid          = 0;
+  ctx->group_leader = 0;
+
   if (pid_ns_translation_mode != PID_NS_TRANSLATION_MODE_NONE) {
     struct bpf_pidns_info ns_info = {0};
     long ret                      = bpf_get_ns_current_pid_tgid(
@@ -165,8 +176,8 @@ static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
       // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
       // ns_info.pid is the thread PID in the namespace.
       // Match the convention of the non-namespace path where pid holds the TGID.
-      *pid = ns_info.tgid;
-      *tid = ns_info.pid;
+      ctx->pid = ns_info.tgid;
+      ctx->tid = ns_info.pid;
       return true;
     }
 
@@ -187,13 +198,32 @@ static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
     // A helper miss can mean either a descendant namespace or an unrelated
     // namespace. Both translations validate the target namespace inode, so
     // untranslated host PIDs are never returned from this path.
-    return get_pid_in_target_namespace(group_leader, pid) && get_pid_in_target_namespace(task, tid);
+    if (
+      !get_pid_in_target_namespace(group_leader, &ctx->pid) ||
+      !get_pid_in_target_namespace(task, &ctx->tid)) {
+      return false;
+    }
+
+    ctx->group_leader = group_leader;
+    return true;
   }
 
   // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
-  u64 id = bpf_get_current_pid_tgid();
-  *pid   = id >> 32;
-  *tid   = id & 0xFFFFFFFF;
+  u64 id   = bpf_get_current_pid_tgid();
+  ctx->pid = id >> 32;
+  ctx->tid = id & 0xFFFFFFFF;
+  return true;
+}
+
+// get_pid_tgid resolves the current task's PID and TGID.
+static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
+{
+  TIDContext ctx;
+  if (!get_tid_context(&ctx)) {
+    return false;
+  }
+  *pid = ctx.pid;
+  *tid = ctx.tid;
   return true;
 }
 
@@ -227,24 +257,26 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
 }
 
 // process_is_too_new returns true when a trace should be skipped because a process is too new.
-static inline EBPF_INLINE bool process_is_too_new(u64 ts)
+// If group_leader is non-zero, it reuses the pointer instead of reading it from current task.
+static inline EBPF_INLINE bool process_is_too_new(u64 ts, u64 group_leader)
 {
   if (!filter_min_process_age_ns) {
     return false;
   }
 
-  struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-  struct task_struct *group_leader;
-  u64 group_leader_ptr = (u64)task + task_group_leader_offset;
-  // task_struct::group_leader is a pointer to the thread-group leader task, whose PID
-  // is the PID from userspace's perspective. Follow it so process age filtering uses
-  // the initial thread's start_time instead of the current thread's start_time.
-  if (bpf_probe_read_kernel(&group_leader, sizeof(group_leader), (void *)group_leader_ptr)) {
-    DEBUG_PRINT("Failed to read group_leader");
-    return false;
+  if (group_leader == 0) {
+    u64 task             = bpf_get_current_task();
+    u64 group_leader_ptr = task + task_group_leader_offset;
+    // task_struct::group_leader is a pointer to the thread-group leader task, whose PID
+    // is the PID from userspace's perspective. Follow it so process age filtering uses
+    // the initial thread's start_time instead of the current thread's start_time.
+    if (bpf_probe_read_kernel(&group_leader, sizeof(group_leader), (void *)group_leader_ptr)) {
+      DEBUG_PRINT("Failed to read group_leader");
+      return false;
+    }
   }
 
-  u64 start_time_ptr = (u64)group_leader + task_start_time_offset;
+  u64 start_time_ptr = group_leader + task_start_time_offset;
   u64 start_time;
   if (bpf_probe_read_kernel(&start_time, sizeof(start_time), (void *)start_time_ptr)) {
     DEBUG_PRINT("Failed to read start_time");
@@ -1129,15 +1161,21 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #endif // TESTING_COREDUMP
 
-static inline EBPF_INLINE int
-collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
+static inline EBPF_INLINE int collect_trace(
+  struct pt_regs *ctx,
+  u16 origin,
+  u32 pid,
+  u32 tid,
+  u64 group_leader,
+  u64 trace_timestamp,
+  u64 value)
 {
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
     return -1;
   }
 
-  if (process_is_too_new(trace_timestamp)) {
+  if (process_is_too_new(trace_timestamp, group_leader)) {
     return 0;
   }
 
