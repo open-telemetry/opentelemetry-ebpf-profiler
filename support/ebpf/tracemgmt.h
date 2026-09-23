@@ -118,7 +118,7 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
   u64 upid_address = pid_address + pid_namespace_layout.pid_numbers_offset +
                      ((u64)target_pid_ns_level * pid_namespace_layout.upid_size);
 
-  u8 upid_buf[16] = {0};
+  __attribute__((aligned(8))) u8 upid_buf[16];
   if (bpf_probe_read_kernel(upid_buf, sizeof(upid_buf), (void *)upid_address)) {
     return false;
   }
@@ -129,9 +129,7 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
     return false;
   }
 
-  u64 namespace_address = 0;
-  __builtin_memcpy(
-    &namespace_address, upid_buf + pid_namespace_layout.upid_ns_offset, sizeof(namespace_address));
+  u64 namespace_address = *(u64 *)(upid_buf + pid_namespace_layout.upid_ns_offset);
   if (namespace_address == 0) {
     return false;
   }
@@ -146,9 +144,7 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
     return false;
   }
 
-  u32 translated_pid = 0;
-  __builtin_memcpy(
-    &translated_pid, upid_buf + pid_namespace_layout.upid_nr_offset, sizeof(translated_pid));
+  u32 translated_pid = *(u32 *)(upid_buf + pid_namespace_layout.upid_nr_offset);
   if (translated_pid == 0) {
     return false;
   }
@@ -157,16 +153,16 @@ static inline EBPF_INLINE bool get_pid_in_target_namespace(u64 task, u32 *result
   return true;
 }
 
-// get_tid_context resolves the current task's PID and TGID, translating them into the
-// configured target PID namespace if pid_ns_translation_mode is set. It also captures
-// the task's thread-group leader if resolved during descendant translation. Returns false
-// if the task could not be resolved (e.g. it is not part of the target namespace), in which
-// case the caller should skip the current event.
-static inline EBPF_INLINE bool get_tid_context(TIDContext *ctx)
+// get_pid_tgid_leader resolves the current task's PID and TGID, translating them into the
+// configured target PID namespace if pid_ns_translation_mode is set. If thread_group is
+// non-NULL, it receives the thread-group leader task pointer if resolved during descendant
+// translation (otherwise 0). Returns false if the task could not be resolved (e.g. it is not
+// part of the target namespace), in which case the caller should skip the current event.
+static inline EBPF_INLINE bool get_pid_tgid_leader(u32 *pid, u32 *tid, u64 *thread_group)
 {
-  ctx->pid          = 0;
-  ctx->tid          = 0;
-  ctx->group_leader = 0;
+  if (thread_group) {
+    *thread_group = 0;
+  }
 
   if (pid_ns_translation_mode != PID_NS_TRANSLATION_MODE_NONE) {
     struct bpf_pidns_info ns_info = {0};
@@ -176,8 +172,8 @@ static inline EBPF_INLINE bool get_tid_context(TIDContext *ctx)
       // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
       // ns_info.pid is the thread PID in the namespace.
       // Match the convention of the non-namespace path where pid holds the TGID.
-      ctx->pid = ns_info.tgid;
-      ctx->tid = ns_info.pid;
+      *pid = ns_info.tgid;
+      *tid = ns_info.pid;
       return true;
     }
 
@@ -199,32 +195,28 @@ static inline EBPF_INLINE bool get_tid_context(TIDContext *ctx)
     // namespace. Both translations validate the target namespace inode, so
     // untranslated host PIDs are never returned from this path.
     if (
-      !get_pid_in_target_namespace(group_leader, &ctx->pid) ||
-      !get_pid_in_target_namespace(task, &ctx->tid)) {
+      !get_pid_in_target_namespace(group_leader, pid) ||
+      !get_pid_in_target_namespace(task, tid)) {
       return false;
     }
 
-    ctx->group_leader = group_leader;
+    if (thread_group) {
+      *thread_group = group_leader;
+    }
     return true;
   }
 
   // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
-  u64 id   = bpf_get_current_pid_tgid();
-  ctx->pid = id >> 32;
-  ctx->tid = id & 0xFFFFFFFF;
+  u64 id = bpf_get_current_pid_tgid();
+  *pid   = id >> 32;
+  *tid   = id & 0xFFFFFFFF;
   return true;
 }
 
 // get_pid_tgid resolves the current task's PID and TGID.
 static inline EBPF_INLINE bool get_pid_tgid(u32 *pid, u32 *tid)
 {
-  TIDContext ctx;
-  if (!get_tid_context(&ctx)) {
-    return false;
-  }
-  *pid = ctx.pid;
-  *tid = ctx.tid;
-  return true;
+  return get_pid_tgid_leader(pid, tid, NULL);
 }
 
 // Strips the PAC tag from a pointer.

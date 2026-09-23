@@ -7,18 +7,20 @@ BPF_RODATA_VAR(u16, origin_id_probe, 0)
 
 static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
 {
-  TIDContext tctx;
-  if (!get_tid_context(&tctx)) {
+  u32 pid          = 0;
+  u32 tid          = 0;
+  u64 group_leader = 0;
+  if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
     return 0;
   }
 
-  if (tctx.pid == 0 || tctx.tid == 0) {
+  if (pid == 0 || tid == 0) {
     return 0;
   }
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace(ctx, origin_id_probe, tctx.pid, tctx.tid, tctx.group_leader, ts, value);
+  return collect_trace(ctx, origin_id_probe, pid, tid, group_leader, ts, value);
 }
 
 // kprobe__generic serves as entry point for kprobe based profiling.
