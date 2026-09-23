@@ -253,3 +253,14 @@ func (f EbpfFrame) Data() uint64 {
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
 }
+
+// ThreadLabels contains per-thread custom labels with interned keys and values.
+type ThreadLabels map[String]String
+
+// ThreadLabelDecoder decodes a per-thread custom-label payload into labels plus a
+// count of entries it could not decode. Implementations must be
+// concurrency-safe, and DecodeLabels must not retain or alias data, which
+// points into a reused ring buffer.
+type ThreadLabelDecoder interface {
+	DecodeLabels(data []byte) (labels ThreadLabels, dropped int)
+}
