@@ -147,6 +147,13 @@ type DTVInfo struct {
 	Multiplier uint8
 	Pad_cgo_0  [1]byte
 }
+type TLSVarInfo struct {
+	Tls_offset int32
+	Dtv_pos    uint32
+	Dtv_offset int16
+	Valid      bool
+	Pad_cgo_0  [1]byte
+}
 type Trace struct {
 	Pid                uint32
 	Tid                uint32
