@@ -167,6 +167,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   // Ensure gobuf fields are in a valid state.
   if (ctx.g == ctx.m_curg) {
     DEBUG_PRINT("morestack: pre-gosave g==curg");
+    state->pc = 0;
     return ERR_OK;
   }
 
