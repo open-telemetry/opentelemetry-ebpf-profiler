@@ -251,7 +251,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMap
 	elfRef *pfelf.Reference,
 ) elfInfo {
 	key := mapping.GetOnDiskFileIdentifier()
-	lastModified := pr.GetMappingFileLastModified(mapping)
+	lastModified := process.MappingLastModified(pr, mapping)
 	if info, ok := pm.elfInfoCache.Get(key); ok && info.lastModified == lastModified {
 		// Cached data ok
 		pm.elfInfoCacheHit.Add(1)
@@ -268,7 +268,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMap
 	var fileID libpf.FileID
 	ef, err := elfRef.GetELF()
 	if err == nil {
-		fileID, err = pr.CalculateMappingFileID(mapping)
+		fileID, err = process.MappingFileID(pr, mapping)
 	}
 	if err != nil {
 		info.err = err

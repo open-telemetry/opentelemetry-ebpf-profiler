@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -237,6 +238,35 @@ type ReadAtCloser interface {
 // on error.
 func NewFileOwned(rc ReadAtCloser) (*File, error) {
 	return newFile(rc, rc, 0, false)
+}
+
+// LoadHinter is an optional capability of an fs.File returned by an fs.FS:
+// implementations whose content is only meaningful at a specific load
+// address (e.g. ELF segments extracted from a coredump, which may also need
+// musl-specific dynamic table handling) report it here so OpenFS parses the
+// file correctly.
+type LoadHinter interface {
+	ELFLoadHints() (loadAddress uint64, hasMusl bool)
+}
+
+// OpenFS opens name via fsys and parses it as an ELF file. The file returned
+// by fsys must additionally implement ReadAtCloser.
+func OpenFS(fsys fs.FS, name string) (*File, error) {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	rac, ok := f.(ReadAtCloser)
+	if !ok {
+		_ = f.Close()
+		return nil, fmt.Errorf("pfelf: %s: opened file does not support io.ReaderAt", name)
+	}
+	var loadAddress uint64
+	var hasMusl bool
+	if lh, ok := f.(LoadHinter); ok {
+		loadAddress, hasMusl = lh.ELFLoadHints()
+	}
+	return newFile(rac, rac, loadAddress, hasMusl)
 }
 
 // newFile builds a File from r. A non-nil closer is owned and closed by the
@@ -709,11 +739,11 @@ func (f *File) GetBuildID() (string, error) {
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
-func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
+func (f *File) DebuglinkFileName(elfFilePath string, fsys fs.FS) string {
 	if f.debuglinkPath != notYetProcessed {
 		return f.debuglinkPath
 	}
-	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
+	file, path := f.OpenDebugLink(elfFilePath, fsys)
 	if file != nil {
 		_ = file.Close()
 	}
@@ -895,7 +925,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 }
 
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
-func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
+func (f *File) OpenDebugLink(elfFilePath string, fsys fs.FS) (
 	debugELF *File, debugFile string,
 ) {
 	f.debuglinkPath = ""
@@ -910,7 +940,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	executablePath := filepath.Dir(elfFilePath)
 	for _, debugPath := range []string{"/usr/lib/debug/"} {
 		debugFile = filepath.Join(debugPath, executablePath, linkName)
-		debugELF, err = elfOpener.OpenELF(debugFile)
+		debugELF, err = OpenFS(fsys, debugFile)
 		if err != nil {
 			continue
 		}

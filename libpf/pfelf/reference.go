@@ -6,17 +6,19 @@
 
 package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
+import "io/fs"
+
 // Reference is a reference to an ELF file which is loaded and cached on demand.
 type Reference struct {
-	// ELFOpener opens auxiliary files by name (e.g. debuglink targets). When
-	// open is nil it also opens the reference's own file via OpenELF(fileName).
-	ELFOpener
+	// FS opens auxiliary files by name (e.g. debuglink targets). When open is
+	// nil it also opens the reference's own file via FS.Open(fileName).
+	fs.FS
 
 	// fileName is the full path of the ELF to open.
 	fileName string
 
 	// open, when non-nil, opens the reference's own file instead of
-	// ELFOpener.OpenELF(fileName). It lets callers inject context that a bare
+	// OpenFS(FS, fileName). It lets callers inject context that a bare
 	// filename cannot carry, e.g. a memory mapping.
 	open func() (*File, error)
 
@@ -25,18 +27,18 @@ type Reference struct {
 }
 
 // NewReference returns a Reference that opens both its own file and any
-// auxiliary files (e.g. debuglink targets) through elfOpener, by name.
-func NewReference(fileName string, elfOpener ELFOpener) *Reference {
-	return &Reference{fileName: fileName, ELFOpener: elfOpener}
+// auxiliary files (e.g. debuglink targets) through fsys, by name.
+func NewReference(fileName string, fsys fs.FS) *Reference {
+	return &Reference{fileName: fileName, FS: fsys}
 }
 
 // NewReferenceWithOpenFunc returns a Reference that opens its own file via
 // open, while auxiliary files (e.g. debuglink targets) are still opened by
-// name through elfOpener.
-func NewReferenceWithOpenFunc(fileName string, elfOpener ELFOpener,
+// name through fsys.
+func NewReferenceWithOpenFunc(fileName string, fsys fs.FS,
 	open func() (*File, error),
 ) *Reference {
-	return &Reference{fileName: fileName, ELFOpener: elfOpener, open: open}
+	return &Reference{fileName: fileName, FS: fsys, open: open}
 }
 
 // FileName returns the file name associated with this Reference
@@ -52,7 +54,7 @@ func (ref *Reference) GetELF() (*File, error) {
 		if ref.open != nil {
 			ref.elfFile, err = ref.open()
 		} else {
-			ref.elfFile, err = ref.OpenELF(ref.fileName)
+			ref.elfFile, err = OpenFS(ref.FS, ref.fileName)
 		}
 	}
 	return ref.elfFile, err

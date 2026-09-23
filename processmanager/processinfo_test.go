@@ -4,6 +4,7 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"io/fs"
 	"testing"
 	"unsafe"
 
@@ -14,7 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -188,23 +188,11 @@ func (tp *testProcess) GetRemoteMemory() remotememory.RemoteMemory {
 	return remotememory.RemoteMemory{}
 }
 
-func (tp *testProcess) OpenMappingFile(*process.RawMapping) (process.ReadAtCloser, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (tp *testProcess) GetMappingFileLastModified(*process.RawMapping) int64 {
-	return 0
-}
-
-func (tp *testProcess) CalculateMappingFileID(*process.RawMapping) (libpf.FileID, error) {
-	return libpf.FileID{}, errors.New("not implemented")
-}
-
 func (tp *testProcess) Close() error {
 	return nil
 }
 
-func (tp *testProcess) OpenELF(string) (*pfelf.File, error) {
+func (tp *testProcess) Open(string) (fs.File, error) {
 	return nil, errors.New("not implemented")
 }
 

@@ -4,8 +4,9 @@
 package main
 
 import (
-	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -22,42 +23,25 @@ type StoreCoredump struct {
 	tempFiles map[string]string
 }
 
-var _ pfelf.ELFOpener = &StoreCoredump{}
+var _ fs.FS = &StoreCoredump{}
 
-func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
-	info, ok := scd.modules[path]
+// Open implements the fs.FS interface. It prefers content from the module
+// store (which holds the original, unmodified on-disk files bundled with the
+// test case), falling back to the coredump's own partial data for name.
+func (scd *StoreCoredump) Open(name string) (fs.File, error) {
+	info, ok := scd.modules[name]
 	if !ok {
-		return nil, fmt.Errorf("failed to open file `%s`: %w", path, os.ErrNotExist)
+		// Bundle miss: fall back to whatever partial data the coredump
+		// itself carries for legacy test cases without bundled modules.
+		return scd.CoredumpProcess.Open(name)
 	}
 
 	// The module is available from store.
 	file, err := scd.store.OpenBufferedReadAt(info.Ref, 4*1024*1024)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file `%s`: %w", path, err)
+		return nil, fmt.Errorf("failed to open file `%s`: %w", name, err)
 	}
-	return file, nil
-}
-
-func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
-	rac, err := scd.openFile(m.Path)
-	if errors.Is(err, os.ErrNotExist) {
-		// Bundle miss: let OpenELFMapping fall back to OpenELF, which
-		// can serve content from PT_LOAD segments for legacy test cases.
-		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
-	}
-	return rac, err
-}
-
-func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
-	file, err := scd.openFile(path)
-	if err == nil {
-		return pfelf.NewFileOwned(file)
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	// Fallback to the native CoredumpProcess
-	return scd.CoredumpProcess.OpenELF(path)
+	return process.NewFile(file), nil
 }
 
 // remoteReaderWithModuleFallback satisfies io.ReaderAt by first trying the
@@ -90,11 +74,15 @@ func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, erro
 	if !found {
 		return n, err
 	}
-	file, openErr := r.scd.OpenMappingFile(&covering)
+	f, openErr := process.OpenMapping(r.scd, &covering)
 	if openErr != nil {
 		return n, err
 	}
-	defer file.Close()
+	defer f.Close()
+	file, ok := f.(io.ReaderAt)
+	if !ok {
+		return n, err
+	}
 	fileOff := covering.FileOffset + (uint64(addr) - covering.Vaddr)
 	return file.ReadAt(p, int64(fileOff))
 }

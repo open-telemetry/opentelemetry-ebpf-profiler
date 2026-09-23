@@ -559,27 +559,16 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 	return os.Open(filename)
 }
 
-func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+// OpenMapping implements the MappingFileOpener interface.
+func (sp *systemProcess) OpenMapping(m *RawMapping) (fs.File, error) {
 	return sp.getMappingFile(m)
-}
-
-func (sp *systemProcess) GetMappingFileLastModified(m *RawMapping) int64 {
-	f, err := sp.getMappingFile(m)
-	if err != nil {
-		return 0
-	}
-	defer f.Close()
-	var st unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &st); err == nil {
-		return st.Mtim.Nano()
-	}
-	return 0
 }
 
 // vdsoFileID caches the VDSO FileID. This assumes there is single instance of
 // VDSO for the system.
 var vdsoFileID libpf.FileID
 
+// CalculateMappingFileID implements the MappingFileIDCalculator interface.
 func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, error) {
 	if m.IsVDSO() {
 		if vdsoFileID != (libpf.FileID{}) {
@@ -600,23 +589,18 @@ func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, er
 	return libpf.FileIDFromExecutableReader(f)
 }
 
-func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
-	// Open the file using the process-specific root. Callers that have a
-	// RawMapping should use OpenELFMapping instead, which can open deleted
-	// or replaced files via /proc/<pid>/map_files.
+// Open implements the fs.FS interface. Callers that have a RawMapping should
+// use OpenELFMapping instead, which can open deleted or replaced files via
+// /proc/<pid>/map_files.
+func (sp *systemProcess) Open(file string) (fs.File, error) {
+	// Open the file using the process-specific root.
 	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
-	f, err := openInProcRoot(sp.pid, file)
-	if err != nil {
-		return nil, err
-	}
-	return pfelf.NewFileOwned(f)
+	return openInProcRoot(sp.pid, file)
 }
 
 // OpenELFMapping opens a memory mapping as an ELF file. VDSO is read
-// from process memory; other mappings go through OpenMappingFile so
-// systemProcess can use /proc/<pid>/map_files for deleted-file safety.
-// Only ErrMappingFileUnavailable triggers a fallback to OpenELF; other
-// OpenMappingFile errors are wrapped and returned.
+// from process memory; other mappings go through OpenMapping, which lets
+// systemProcess use /proc/<pid>/map_files for deleted-file safety.
 func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
 	if m.IsVDSO() {
 		vdso, err := extractMapping(pr, m)
@@ -625,12 +609,14 @@ func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
 		}
 		return pfelf.NewFile(vdso, 0, false)
 	}
-	rac, err := pr.OpenMappingFile(m)
+	f, err := OpenMapping(pr, m)
 	if err != nil {
-		if errors.Is(err, ErrMappingFileUnavailable) {
-			return pr.OpenELF(m.Path)
-		}
-		return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w", m.Path, m.Vaddr, err)
+		return nil, fmt.Errorf("OpenMapping path=%q vaddr=%#x: %w", m.Path, m.Vaddr, err)
+	}
+	rac, ok := f.(pfelf.ReadAtCloser)
+	if !ok {
+		_ = f.Close()
+		return nil, fmt.Errorf("mapping file %q does not support io.ReaderAt", m.Path)
 	}
 	return pfelf.NewFileOwned(rac)
 }

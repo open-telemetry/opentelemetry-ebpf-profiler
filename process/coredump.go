@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io/fs"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -235,18 +236,13 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
 }
 
-// OpenMappingFile implements the Process interface.
-func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
+// OpenMapping implements the MappingFileOpener interface.
+func (cd *CoredumpProcess) OpenMapping(_ *RawMapping) (fs.File, error) {
 	// Coredumps do not contain the original backing files.
 	return nil, ErrMappingFileUnavailable
 }
 
-// GetMappingFileLastModified implements the Process interface.
-func (cd *CoredumpProcess) GetMappingFileLastModified(_ *RawMapping) int64 {
-	return 0
-}
-
-// CalculateMappingFileID implements the Process interface.
+// CalculateMappingFileID implements the MappingFileIDCalculator interface.
 func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, error) {
 	// It is not possible to calculate the real FileID as the section headers
 	// are likely missing. So just return a synthesized FileID.
@@ -259,25 +255,25 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, 
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
-// OpenELF implements the ELFOpener and Process interfaces.
-func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
-	// Fallback to directly returning the data from coredump. This comes with caveats:
-	//
-	// - The process of loading an ELF binary into memory discards any program regions not marked
-	//   as `PT_LOAD`. This means that we won't be able to read sections like `.debug_lines`.
-	// - The section table present in memory is typically broken.
-	// - Writable data sections won't be in their original state.
-	//
-	// This essentially means that, during the test run, the HA code is presented with an
-	// environment that diverges from the environment it operates in when running on a real system
-	// where the original ELF file is available on disk. However, in order to allow keeping around
-	// our old test cases from times when we didn't yet bundle the original executables with our
-	// tests, we allow this fallback.
-
-	if file, ok := cd.files[path]; ok {
-		return file.OpenELF()
+// Open implements the fs.FS interface.
+//
+// Fallback to directly returning the data from coredump. This comes with caveats:
+//
+//   - The process of loading an ELF binary into memory discards any program regions not marked
+//     as `PT_LOAD`. This means that we won't be able to read sections like `.debug_lines`.
+//   - The section table present in memory is typically broken.
+//   - Writable data sections won't be in their original state.
+//
+// This essentially means that, during the test run, the HA code is presented with an
+// environment that diverges from the environment it operates in when running on a real system
+// where the original ELF file is available on disk. However, in order to allow keeping around
+// our old test cases from times when we didn't yet bundle the original executables with our
+// tests, we allow this fallback.
+func (cd *CoredumpProcess) Open(name string) (fs.File, error) {
+	if file, ok := cd.files[name]; ok {
+		return &coredumpFileHandle{CoredumpFile: file}, nil
 	}
-	return nil, fmt.Errorf("ELF file `%s` not found", path)
+	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 }
 
 // Global inode counter to generate unique inode for each coredump file
@@ -533,10 +529,30 @@ func (cf *CoredumpFile) ReadAt(p []byte, addr int64) (int, error) {
 		cf.Name, addr)
 }
 
-// OpenELF opens the CoredumpFile as an ELF.
-//
-// The returned `pfelf.File` is borrowing the coredump file. Closing it will not close the
+// coredumpFileHandle adapts a CoredumpFile to fs.File (and pfelf.ReadAtCloser) for use as a
+// Process's fs.FS Open result. It also reports the file's ELF load hints (see
+// pfelf.LoadHinter) since the coredump content is only meaningful at the file's original
+// load address, and may need musl-specific dynamic table handling.
+type coredumpFileHandle struct {
+	*CoredumpFile
+	off int64
+}
+
+func (h *coredumpFileHandle) Read(p []byte) (int, error) {
+	n, err := h.ReadAt(p, h.off)
+	h.off += int64(n)
+	return n, err
+}
+
+// Close is a no-op: the handle borrows the coredump file, so closing it does not close the
 // underlying CoredumpFile.
-func (cf *CoredumpFile) OpenELF() (*pfelf.File, error) {
-	return pfelf.NewFile(cf, cf.Base, cf.parent.hasMusl)
+func (*coredumpFileHandle) Close() error { return nil }
+
+func (*coredumpFileHandle) Stat() (fs.FileInfo, error) {
+	return nil, errors.New("stat not supported for coredump files")
+}
+
+// ELFLoadHints implements pfelf.LoadHinter.
+func (h *coredumpFileHandle) ELFLoadHints() (loadAddress uint64, hasMusl bool) {
+	return h.Base, h.parent.hasMusl
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -18,7 +19,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
@@ -61,10 +61,6 @@ func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
 	}, nil
 }
 
-func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.RawMapping) int64 {
-	return 0
-}
-
 func (tc *trackedCoredump) warnMissing(fileName string) {
 	if _, seen := tc.warn[fileName]; !seen {
 		log.Infof("Module `%s` was not found for bundling", fileName)
@@ -85,31 +81,20 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.RawMapping) (libpf.
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
-func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
-	if !m.IsVDSO() && !m.IsAnonymous() {
-		file := m.Path
-		rac, err := os.Open(path.Join(tc.prefix, file))
+// Open implements the fs.FS interface. It prefers a real on-disk file located
+// under prefix (the original process's sysroot), falling back to whatever
+// partial data the coredump itself carries for name.
+func (tc *trackedCoredump) Open(name string) (fs.File, error) {
+	m := &process.RawMapping{Path: name}
+	if m.IsFileBacked() {
+		f, err := os.Open(path.Join(tc.prefix, name))
 		if err == nil {
-			tc.seen[file] = libpf.Void{}
-			return rac, nil
+			tc.seen[name] = libpf.Void{}
+			return f, nil
 		}
-		tc.warnMissing(file)
+		tc.warnMissing(name)
 	}
-	return tc.CoredumpProcess.OpenMappingFile(m)
-}
-
-func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	if fileName != process.VdsoPathName {
-		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
-		if err == nil {
-			tc.seen[fileName] = libpf.Void{}
-			return f, err
-		}
-		if !errors.Is(err, pfelf.ErrNotELF) {
-			tc.warnMissing(fileName)
-		}
-	}
-	return tc.CoredumpProcess.OpenELF(fileName)
+	return tc.CoredumpProcess.Open(name)
 }
 
 func newNewCmd(store *modulestore.Store) *ffcli.Command {

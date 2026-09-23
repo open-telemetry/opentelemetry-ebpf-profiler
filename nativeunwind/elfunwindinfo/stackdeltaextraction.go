@@ -112,7 +112,7 @@ func isLibGenericRegsAllowed(elfFile *pfelf.File) bool {
 // Extract takes a filename for a modern ELF file that is accessible
 // and provides the stack delta intervals in the interval parameter
 func Extract(filename string) (*sdtypes.IntervalData, error) {
-	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
+	elfRef := pfelf.NewReference(filename, pfelf.SystemFS)
 	defer elfRef.Close()
 	return ExtractELF(elfRef)
 }

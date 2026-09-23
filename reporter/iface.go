@@ -40,7 +40,7 @@ type ExecutableMetadata struct {
 	// Process is the interface to the process holding the file.
 	Process process.Process
 
-	// Mapping is the process.RawMapping file. Process.OpenMappingFile can be used
+	// Mapping is the process.RawMapping file. process.OpenMapping can be used
 	// to open the file if needed.
 	Mapping *process.RawMapping
 
