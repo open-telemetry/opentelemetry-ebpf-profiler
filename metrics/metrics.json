@@ -2230,5 +2230,33 @@
     "name": "UnwindGoAsmcgocallUnwindFailure",
     "field": "bpf.go.errors.asmcgocall_unwind_failure",
     "id": 305
+  },
+  {
+    "description": "Number of failures to read the thread context buffer pointer out of TLS",
+    "type": "counter",
+    "name": "UnwindThreadContextErrReadTlsPtr",
+    "field": "bpf.threadctx.errors.read_tls_ptr",
+    "id": 306
+  },
+  {
+    "description": "Number of failures to read the thread context buffer, header or payload",
+    "type": "counter",
+    "name": "UnwindThreadContextErrReadThreadCtxBuf",
+    "field": "bpf.threadctx.errors.read_thread_ctx_buf",
+    "id": 307
+  },
+  {
+    "description": "Number of successful reads of thread context info",
+    "type": "counter",
+    "name": "UnwindThreadContextReadSuccesses",
+    "field": "bpf.threadctx.read_successes",
+    "id": 308
+  },
+  {
+    "description": "Number of thread context attribute payloads truncated to fit the buffer",
+    "type": "counter",
+    "name": "UnwindThreadContextAttrsTruncated",
+    "field": "bpf.threadctx.attrs_truncated",
+    "id": 309
   }
 ]
