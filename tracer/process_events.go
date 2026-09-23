@@ -13,6 +13,11 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
+// mmapEventRingPages sizes the per-CPU perf ring buffer used for mmap events.
+// mmap2 records are small, so the default (128 pages) is far larger than needed;
+// a smaller ring keeps the system-wide, per-CPU memory footprint modest.
+const mmapEventRingPages = 8
+
 // ensureMmapEventMonitor starts system-wide perf readers once. Executable mapping
 // events enter the existing PID path so probes see mappings added after initial sync.
 func (t *Tracer) ensureMmapEventMonitor() error {
@@ -36,14 +41,16 @@ func (t *Tracer) startMmapEventMonitor(ctx context.Context) error {
 
 	attr := &perf.Attr{
 		Options: perf.Options{
-			Disabled:  true, // Enable only after every per-CPU ring has been mapped.
-			Mmap2:     true, // Emit extended records for executable mappings.
-			Watermark: true, // Wake readers based on unread bytes, not sample count.
+			Disabled: true, // Enable only after every per-CPU ring has been mapped.
+			// Mmap2 emits extended mapping records, but the kernel only delivers
+			// them when Mmap is also set (see perf_event_open(2)).
+			Mmap:  true,
+			Mmap2: true,
 		},
 	}
-	// The dummy event only carries executable mapping sideband records.
-	attr.SetSamplePeriod(1)
-	// Wake readers when any data reaches the ring; sample-count wakeups ignore sideband records.
+	// Wake readers when any data reaches the ring; SetWakeupWatermark also sets
+	// Options.Watermark, so sample-count wakeups (which ignore sideband records)
+	// are not used.
 	attr.SetWakeupWatermark(1)
 	if err := perf.Dummy.Configure(attr); err != nil {
 		return fmt.Errorf("configuring mmap events: %w", err)
@@ -64,7 +71,7 @@ func (t *Tracer) startMmapEventMonitor(ctx context.Context) error {
 			return fmt.Errorf("opening mmap events on CPU %d: %w", cpu, err)
 		}
 		events = append(events, event)
-		if err := event.MapRing(); err != nil {
+		if err := event.MapRingNumPages(mmapEventRingPages); err != nil {
 			closeEvents()
 			return fmt.Errorf("mapping mmap event ring on CPU %d: %w", cpu, err)
 		}
