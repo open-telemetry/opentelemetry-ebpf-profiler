@@ -51,7 +51,7 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 // Mode of PID namespace translation:
 // - PID_NS_TRANSLATION_MODE_NONE (0): disabled, reporting host PIDs
 // - PID_NS_TRANSLATION_MODE_EXACT (1): translate tasks in active namespace
-// - PID_NS_TRANSLATION_MODE_DESCENDANTS (2): translate active + descendant namespaces
+// - PID_NS_TRANSLATION_MODE_RECURSIVE (2): translate active + descendant namespaces recursively
 BPF_RODATA_VAR(u8, pid_ns_translation_mode, PID_NS_TRANSLATION_MODE_NONE)
 
 // The inode number of the target PID namespace.

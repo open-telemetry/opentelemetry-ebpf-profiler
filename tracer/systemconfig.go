@@ -33,7 +33,7 @@ import (
 const (
 	ebpfPIDNSTranslationModeNone uint8 = iota
 	ebpfPIDNSTranslationModeExact
-	ebpfPIDNSTranslationModeDescendants
+	ebpfPIDNSTranslationModeRecursive
 )
 
 // SysConfigVars supports collecting system configuration information.
@@ -242,7 +242,7 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 	}
 
 	needPIDNamespaceLayout := pidNamespaceMode == PIDNamespaceTranslationModeAuto ||
-		pidNamespaceMode == PIDNamespaceTranslationModeDescendants
+		pidNamespaceMode == PIDNamespaceTranslationModeRecursive
 
 	if needProcessStartTime || needPIDNamespaceLayout {
 		groupLeaderOffset, err := calculateFieldOffset(taskStruct, "group_leader")
@@ -262,12 +262,12 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 
 	if needPIDNamespaceLayout {
 		if err := parsePIDNamespaceLayout(spec, &vars.pid_namespace_layout); err != nil {
-			if pidNamespaceMode == PIDNamespaceTranslationModeDescendants {
+			if pidNamespaceMode == PIDNamespaceTranslationModeRecursive {
 				return err
 			}
-			log.Infof("PID translation from descendant namespaces unavailable, using exact namespace translation: %s", err)
+			log.Infof("Recursive PID namespace translation unavailable, using exact namespace translation: %s", err)
 		} else {
-			vars.pid_ns_translation_mode = ebpfPIDNSTranslationModeDescendants
+			vars.pid_ns_translation_mode = ebpfPIDNSTranslationModeRecursive
 		}
 	}
 	parseVMAOffsets(spec, vars)
@@ -507,8 +507,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		!interpretersConfig.Go.IsLabelsDisabled()
 	err := parseBTF(vars, needTPBase, needProcessStartTime, pidNamespaceMode)
 	if err != nil {
-		if pidNamespaceMode == PIDNamespaceTranslationModeDescendants {
-			return fmt.Errorf("PID translation from descendant namespaces requires readable kernel BTF with task and PID namespace layout: %w", err)
+		if pidNamespaceMode == PIDNamespaceTranslationModeRecursive {
+			return fmt.Errorf("recursive PID namespace translation requires readable kernel BTF with task and PID namespace layout: %w", err)
 		}
 		if needProcessStartTime {
 			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
@@ -546,13 +546,13 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 	}
 
-	if vars.pid_ns_translation_mode == ebpfPIDNSTranslationModeDescendants {
+	if vars.pid_ns_translation_mode == ebpfPIDNSTranslationModeRecursive {
 		if err := determineTargetPIDNamespaceLevel(coll, maps, vars); err != nil {
-			if pidNamespaceMode == PIDNamespaceTranslationModeDescendants {
-				return fmt.Errorf("PID translation from descendant namespaces requires reading PID namespace level: %w", err)
+			if pidNamespaceMode == PIDNamespaceTranslationModeRecursive {
+				return fmt.Errorf("recursive PID namespace translation requires reading PID namespace level: %w", err)
 			}
 			vars.pid_ns_translation_mode = ebpfPIDNSTranslationModeExact
-			log.Infof("PID translation from descendant namespaces unavailable: %s, using exact namespace translation", err)
+			log.Infof("Recursive PID namespace translation unavailable: %s, using exact namespace translation", err)
 		}
 	}
 

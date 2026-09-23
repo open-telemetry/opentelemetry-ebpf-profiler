@@ -64,12 +64,12 @@ type PIDNamespaceTranslationMode uint8
 const (
 	// PIDNamespaceTranslationModeNone disables PID namespace translation.
 	PIDNamespaceTranslationModeNone PIDNamespaceTranslationMode = iota
-	// PIDNamespaceTranslationModeAuto translates descendants when the required kernel BTF is available.
+	// PIDNamespaceTranslationModeAuto translates nested namespaces recursively when the required kernel BTF is available.
 	PIDNamespaceTranslationModeAuto
 	// PIDNamespaceTranslationModeExact translates tasks in the profiler's PID namespace.
 	PIDNamespaceTranslationModeExact
-	// PIDNamespaceTranslationModeDescendants also translates tasks in descendant PID namespaces.
-	PIDNamespaceTranslationModeDescendants
+	// PIDNamespaceTranslationModeRecursive also translates tasks in descendant PID namespaces.
+	PIDNamespaceTranslationModeRecursive
 )
 
 func (m *PIDNamespaceTranslationMode) UnmarshalText(text []byte) error {
@@ -81,8 +81,8 @@ func (m *PIDNamespaceTranslationMode) UnmarshalText(text []byte) error {
 		*m = PIDNamespaceTranslationModeAuto
 	case "exact":
 		*m = PIDNamespaceTranslationModeExact
-	case "descendants":
-		*m = PIDNamespaceTranslationModeDescendants
+	case "recursive":
+		*m = PIDNamespaceTranslationModeRecursive
 	default:
 		return fmt.Errorf("unknown PID namespace translation mode %q", mode)
 	}
@@ -97,8 +97,8 @@ func (m PIDNamespaceTranslationMode) String() string {
 		return "auto"
 	case PIDNamespaceTranslationModeExact:
 		return "exact"
-	case PIDNamespaceTranslationModeDescendants:
-		return "descendants"
+	case PIDNamespaceTranslationModeRecursive:
+		return "recursive"
 	default:
 		return fmt.Sprintf("unknown(%d)", m)
 	}
@@ -106,7 +106,7 @@ func (m PIDNamespaceTranslationMode) String() string {
 
 // Validate checks whether the PIDNamespaceTranslationMode is valid.
 func (m PIDNamespaceTranslationMode) Validate() error {
-	if m > PIDNamespaceTranslationModeDescendants {
+	if m > PIDNamespaceTranslationModeRecursive {
 		return fmt.Errorf("unknown mode %d", m)
 	}
 	return nil
@@ -280,8 +280,8 @@ type Config struct {
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
 	// PIDNamespaceTranslationMode controls the scope of PID namespace translation.
-	// It supports None (disabled, default), Auto (translates descendants when kernel BTF
-	// layout is available, otherwise Exact), Exact, and Descendants (requires BTF).
+	// It supports None (disabled, default), Auto (translates recursively when kernel BTF
+	// layout is available, otherwise Exact), Exact, and Recursive (requires BTF).
 	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
 }
 

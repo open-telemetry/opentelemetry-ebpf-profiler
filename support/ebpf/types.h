@@ -1086,9 +1086,9 @@ typedef struct Event {
 
 // PID namespace translation modes.
 enum PIDNamespaceTranslationMode {
-  PID_NS_TRANSLATION_MODE_NONE        = 0,
-  PID_NS_TRANSLATION_MODE_EXACT       = 1,
-  PID_NS_TRANSLATION_MODE_DESCENDANTS = 2,
+  PID_NS_TRANSLATION_MODE_NONE      = 0,
+  PID_NS_TRANSLATION_MODE_EXACT     = 1,
+  PID_NS_TRANSLATION_MODE_RECURSIVE = 2,
 };
 
 // PIDNamespaceLayout contains kernel structure offsets used to translate PIDs from descendant

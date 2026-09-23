@@ -322,7 +322,7 @@ func TestAllTracers(t *testing.T) {
 	}
 }
 
-func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
+func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	if *pidNamespaceRole != pidNamespaceProfiler {
 		sibling := newPIDNamespaceCommand("-pid-namespace-translation-role=" + pidNamespaceSibling)
 		require.NoError(t, sibling.Start())
@@ -332,7 +332,7 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 		})
 
 		profiler := newPIDNamespaceCommand(
-			"-test.run=^TestPIDNamespaceTranslationFromDescendant$",
+			"-test.run=^TestPIDNamespaceTranslationRecursive$",
 			"-pid-namespace-translation-role="+pidNamespaceProfiler,
 		)
 		profiler.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNS
@@ -354,10 +354,10 @@ func TestPIDNamespaceTranslationFromDescendant(t *testing.T) {
 		SamplesPerSecond:            20,
 		ProbabilisticInterval:       100,
 		ProbabilisticThreshold:      100,
-		PIDNamespaceTranslationMode: tracer.PIDNamespaceTranslationModeDescendants,
+		PIDNamespaceTranslationMode: tracer.PIDNamespaceTranslationModeRecursive,
 	})
 	if os.IsNotExist(btfErr) {
-		require.ErrorContains(t, err, "PID translation from descendant namespaces requires readable kernel BTF")
+		require.ErrorContains(t, err, "recursive PID namespace translation requires readable kernel BTF")
 		return
 	}
 	require.NoError(t, btfErr)

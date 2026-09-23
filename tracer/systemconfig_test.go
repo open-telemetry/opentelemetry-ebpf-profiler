@@ -46,7 +46,7 @@ func TestPIDNamespaceTranslationMode(t *testing.T) {
 		{name: "none", mode: PIDNamespaceTranslationModeNone, text: "none"},
 		{name: "auto", mode: PIDNamespaceTranslationModeAuto, text: "auto"},
 		{name: "exact", mode: PIDNamespaceTranslationModeExact, text: "exact"},
-		{name: "descendants", mode: PIDNamespaceTranslationModeDescendants, text: "descendants"},
+		{name: "recursive", mode: PIDNamespaceTranslationModeRecursive, text: "recursive"},
 		{name: "invalid", invalid: true, text: "invalid"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,14 +79,14 @@ func TestParsePIDNamespaceLayoutMissingType(t *testing.T) {
 
 func TestPIDNamespaceVars(t *testing.T) {
 	v := SysConfigVars{
-		pid_ns_translation_mode: ebpfPIDNSTranslationModeDescendants,
+		pid_ns_translation_mode: ebpfPIDNSTranslationModeRecursive,
 		target_pid_ns_level:     2,
 		target_pid_ns_dev:       123,
 		target_pid_ns_inode:     456,
 	}
 	vars := v.pidNamespaceVars()
 	expected := map[string]any{
-		"pid_ns_translation_mode": ebpfPIDNSTranslationModeDescendants,
+		"pid_ns_translation_mode": ebpfPIDNSTranslationModeRecursive,
 		"target_pid_ns_level":     uint32(2),
 		"target_pid_ns_dev":       uint64(123),
 		"target_pid_ns_inode":     uint64(456),

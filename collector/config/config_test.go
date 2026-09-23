@@ -175,7 +175,7 @@ func TestPIDNamespaceTranslationModeUnmarshal(t *testing.T) {
 		{value: "", want: tracer.PIDNamespaceTranslationModeNone},
 		{value: "auto", want: tracer.PIDNamespaceTranslationModeAuto},
 		{value: "exact", want: tracer.PIDNamespaceTranslationModeExact},
-		{value: "descendants", want: tracer.PIDNamespaceTranslationModeDescendants},
+		{value: "recursive", want: tracer.PIDNamespaceTranslationModeRecursive},
 		{value: "invalid", wantErr: true},
 	} {
 		t.Run(tt.value, func(t *testing.T) {

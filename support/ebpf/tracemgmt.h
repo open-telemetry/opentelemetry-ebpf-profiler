@@ -177,7 +177,7 @@ static inline EBPF_INLINE bool get_pid_tgid_leader(u32 *pid, u32 *tid, u64 *thre
       return true;
     }
 
-    if (pid_ns_translation_mode != PID_NS_TRANSLATION_MODE_DESCENDANTS) {
+    if (pid_ns_translation_mode != PID_NS_TRANSLATION_MODE_RECURSIVE) {
       return false;
     }
 
