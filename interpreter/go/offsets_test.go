@@ -55,9 +55,8 @@ func structOffsets(t *testing.T, d *dwarf.Data, name string) map[string]int64 {
 // TestSchedOffsets checks the curated Sched_bp_off against a real binary's DWARF,
 // covering both a mistyped offset and a version branch that routes to the wrong one.
 //
-// It also asserts that gobuf.lr is the slot ahead of gobuf.bp, which is what lets
-// go_unwind_morestack derive lr from sched_bp_off. tools/gooffsets makes that same
-// assertion against newly supported releases; this covers the fixture's version.
+// tools/gooffsets makes that same assertion against newly supported releases;
+// this covers the fixture's version.
 func TestSchedOffsets(t *testing.T) {
 	const fixture = "integrationtests/pprof_stable"
 	testsupport.RequireGeneratedTestFile(t, fixture)
