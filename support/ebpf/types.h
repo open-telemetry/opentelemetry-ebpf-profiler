@@ -1091,7 +1091,6 @@ enum PIDNamespaceTranslationMode {
   PID_NS_TRANSLATION_MODE_DESCENDANTS = 2,
 };
 
-
 // PIDNamespaceLayout contains kernel structure offsets used to translate PIDs from descendant
 // namespaces.
 typedef struct PIDNamespaceLayout {

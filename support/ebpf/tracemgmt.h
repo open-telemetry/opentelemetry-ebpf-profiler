@@ -195,8 +195,7 @@ static inline EBPF_INLINE bool get_pid_tgid_leader(u32 *pid, u32 *tid, u64 *thre
     // namespace. Both translations validate the target namespace inode, so
     // untranslated host PIDs are never returned from this path.
     if (
-      !get_pid_in_target_namespace(group_leader, pid) ||
-      !get_pid_in_target_namespace(task, tid)) {
+      !get_pid_in_target_namespace(group_leader, pid) || !get_pid_in_target_namespace(task, tid)) {
       return false;
     }
 
