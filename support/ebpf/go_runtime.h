@@ -198,9 +198,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
 
-  u64 saved_sp = *((u64 *)(scratch + sp_off));
-
-  state->sp = saved_sp;
+  state->sp = *((u64 *)(scratch + sp_off));
   state->pc = *((u64 *)(scratch + pc_off));
   state->fp = *((u64 *)(scratch + bp_off));
   // gobuf.pc is the address morestack will return to, that is the return address
@@ -243,21 +241,20 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
 
 #if defined(__aarch64__)
   // The return address never reached the stack; morestack saved it into gobuf.lr.
+  // Calls do not push, so state->sp is already the caller's.
   u64 lr_off = offs->sched_lr_off;
   if (lr_off > max_off) {
     DEBUG_PRINT("morestack: unusable g offsets");
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
   state->pc = *((u64 *)(scratch + lr_off));
-  // aarch64 calls do not push, so the recovered sp is already the caller's.
-  state->sp = saved_sp;
 #else
   // The call pushed the return address, and gobuf.sp points at it.
-  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)saved_sp)) {
+  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp)) {
     DEBUG_PRINT("morestack: failed to read caller return address");
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
-  state->sp = saved_sp + sizeof(u64);
+  state->sp += sizeof(u64);
 #endif
   // state->fp is gobuf.bp, which already is this frame's frame pointer.
   unwinder_mark_nonleaf_frame(state);
