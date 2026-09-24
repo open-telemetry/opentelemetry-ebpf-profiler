@@ -508,17 +508,16 @@ auto* acf = untag<JSMap>(*ctx->cped_slot);
 auto* table =
     untag<OrderedHashMap>(*(uintptr_t*)((char*)acf + kJSMapTableOffset));
 
-// Find the entry keyed by our AsyncLocalStorage instance. A reader uses the
-// published identity hash to walk a single bucket. Bucket and entry layout
-// follow from kOrderedHashMapHeaderSize and kTaggedSize. find_entry is not
-// sketched here.
+// Find the value keyed by our AsyncLocalStorage instance. A reader uses the
+// published identity hash to walk a single bucket; find_value is sketched
+// separately below.
 uintptr_t als = *ctx->als_handle;
-Entry* e = find_entry(table, als, ctx->als_identity_hash);
-if (!e) return NO_CONTEXT;  // not in this frame
-if (e->value == ctx->undefined_addr) return NO_CONTEXT;  // explicitly detached
+uintptr_t value = find_value(table, als, ctx->als_identity_hash);
+if (value == 0) return NO_CONTEXT;  // not in this frame
+if (value == ctx->undefined_addr) return NO_CONTEXT;  // explicitly detached
 
 // The value is the wrapper JSObject; internal field 0 holds the record pointer.
-auto* wrapper = untag<JSObject>(e->value);
+auto* wrapper = untag<JSObject>(value);
 auto* record =
     *(OtelThreadCtxRecord**)((char*)wrapper + kRecordSlotOffset);
 if (record == nullptr) return NO_CONTEXT;  // teardown in progress
@@ -533,27 +532,72 @@ structurally. The first tests the very pointer the next line dereferences, so it
 needs no assumption about any other field.
 
 As in OTEP 4947, the profiler SHOULD validate before trusting: a mis-stepped
-pointer walk yields garbage at the same offsets. It is cheap to check during the
-walk various invariants of the `OrderedHashMap`:
-* The length of the fixed array that holds the hash table must be at least 3, to
-  accommodate at least the words for number-of-buckets, number-of-elements, and
-  number-of-deleted-elements.
-* Number-of-buckets must be a power of two.
-* The sum of number-of-elements and number-of-deleted-elements must not exceed
-  capacity, which is the number-of-buckets multiplied by the hash table load
-  factor (hardcoded to 2 in V8).
-* The length of the fixed array must be at least 3 + number-of-buckets + 3 *
-  capacity (as every entry is 3 words.)
-* During the walk, indices of entries in the bucket heads and index of every
-  next entry must not exceed the sum of number-of-elements and 
-  number-of-deleted-elements.
+pointer walk yields garbage at the same offsets. The `OrderedHashMap` carries
+enough redundancy that checking it is cheap, and the checks fall out of the
+lookup itself, so `find_value` is sketched below with them folded in. Tagged
+words are checked for their tag before use rather than assumed to be of the
+kind the layout calls for; the element count in particular can hold a pointer
+instead of a Smi, for reasons "Mutation of the frame map while it is read"
+below explains.
+
+```cpp
+// A V8 OrderedHashMap is a V8 FixedArray: header, then `length` tagged words.
+// The first three are counts; then one bucket head per bucket; then the
+// entries, three words each (key, value, chain).
+constexpr int kEntrySize = 3, kLoadFactor = 2, kNotFound = -1;
+
+// Returns the value tagged word, or 0 — not a valid tagged value — when the
+// key is absent or the table does not check out.
+uintptr_t find_value(void* table, uintptr_t key, int hash) {
+  auto* t = (char*)table;
+  auto at = [&](size_t off) { return *(uintptr_t*)(t + off); };
+  // i-th word of the array proper, past the FixedArray header.
+  auto word = [&](int i) {
+    return at(kOrderedHashMapHeaderSize + i * kTaggedSize);
+  };
+
+  // The array length is the second word of the header.
+  auto len = at(kTaggedSize);
+  if (!is_smi(len) || smi(len) < 3) return 0;  // no room for the counts
+
+  auto n = word(0), d = word(1), b = word(2);
+  if (!is_smi(n) || !is_smi(d) || !is_smi(b)) return 0;
+  int elements = smi(n), deleted = smi(d), buckets = smi(b);
+
+  // Number of buckets must be a power of two.
+  if (buckets <= 0 || (buckets & (buckets - 1)) != 0) return 0;
+  int capacity = buckets * kLoadFactor;
+  if (elements < 0 || deleted < 0 || elements + deleted > capacity) return 0;
+  // Everything the map claims to hold has to fit in the array.
+  if (smi(len) < 3 + buckets + kEntrySize * capacity) return 0;
+
+  // Entries are appended in insertion order, so only the first `used` of the
+  // `capacity` slots are populated and every index must be below it.
+  int used = elements + deleted;
+
+  // Get the head entry of the target hash bucket
+  auto head = word(3 + (hash & (buckets - 1)));
+  int entry = is_smi(head) ? smi(head) : kNotFound;
+
+  // Bounding the walk by `used` keeps a corrupt or cyclic chain from looping
+  // forever; a well-formed chain ends at kNotFound well before that.
+  for (int steps = used; steps > 0 && entry >= 0 && entry < used; steps--) {
+    int i = 3 + buckets + entry * kEntrySize;
+    if (word(i) == key) return word(i + 1);
+    auto next = word(i + 2);
+    entry = is_smi(next) ? smi(next) : kNotFound;
+  }
+  return 0;
+}
+```
+
+The load factor of two is hardcoded in V8, as is the three-word entry; "The V8
+layout constants the walk uses" below covers the rest of what this sketch
+assumes.
 
 This document does not prescribe validation of the record itself, as such
 validations are presumed to already exist in the common record parsing code to
 ensure it is not reading garbage.
-
-Tagged words should also be checked for their tag before use, rather than
-assumed to be of the kind the layout calls for.
 
 ### The V8 layout constants the walk uses
 
@@ -873,4 +917,3 @@ for a mechanism of this kind.
   mechanism to carry a record onto a pool thread. Those threads would in fact
   suit OTEP 4947's original design well, since each runs one work item at a
   time.
-
