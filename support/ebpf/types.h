@@ -364,6 +364,18 @@ enum {
   // number of Go asmcgocall unwind failures
   metricID_UnwindGoAsmcgocallUnwindFailure,
 
+  // number of failures to read the thread context buffer pointer out of TLS
+  metricID_UnwindThreadContextErrReadTlsPtr,
+
+  // number of failures to read the thread context buffer, header or payload
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
+  // number of thread context attribute payloads truncated to fit the buffer
+  metricID_UnwindThreadContextAttrsTruncated,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -438,6 +450,23 @@ typedef struct DTVInfo {
   // Multiplier is the size of each DTV entry in bytes.
   u8 multiplier;
 } DTVInfo;
+
+// TLSVarInfo locates a thread-local variable at unwind time, covering both
+// static and dynamic TLS.
+typedef struct TLSVarInfo {
+  // TP-relative when dtv_pos is 0, else within the module's TLS block.
+  // Signed because variant II puts the static block below the thread pointer.
+  s32 tls_offset;
+  // Byte offset of the module's entry in the DTV array, that is its TLS module
+  // ID times the entry size. 0 for static TLS, and the only static/dynamic
+  // discriminant.
+  u32 dtv_pos;
+  // Offset of the DTV pointer from the thread pointer. Unused for static TLS.
+  s16 dtv_offset;
+  // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
+  // aarch64 musl gives tls_offset 0 to a library whose executable has no PT_TLS.
+  bool valid;
+} TLSVarInfo;
 
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
@@ -1062,6 +1091,25 @@ typedef struct Event {
 // Event types that notifications are sent for through event_send_trigger.
 #define EVENT_TYPE_GENERIC_PID 1
 
+// PID namespace translation modes.
+enum PIDNamespaceTranslationMode {
+  PID_NS_TRANSLATION_MODE_NONE      = 0,
+  PID_NS_TRANSLATION_MODE_EXACT     = 1,
+  PID_NS_TRANSLATION_MODE_RECURSIVE = 2,
+};
+
+// PIDNamespaceLayout contains kernel structure offsets used to translate PIDs from descendant
+// namespaces.
+typedef struct PIDNamespaceLayout {
+  u32 task_thread_pid_offset;
+  u32 pid_level_offset;
+  u32 pid_numbers_offset;
+  u32 upid_size;
+  u32 upid_nr_offset;
+  u32 upid_ns_offset;
+  u32 pid_namespace_inum_offset;
+} PIDNamespaceLayout;
+
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
   u32 prefixLen; // Number of bits for pid and page that defines the
@@ -1118,5 +1166,11 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+// ThreadContextProcInfo is a container for the data needed to locate the
+// thread context TLS variable of a process.
+typedef struct ThreadContextProcInfo {
+  TLSVarInfo tls;
+} ThreadContextProcInfo;
 
 #endif // OPTI_TYPES_H

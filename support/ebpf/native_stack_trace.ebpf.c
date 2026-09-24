@@ -48,11 +48,11 @@ BPF_RODATA_VAR(u32, task_start_time_offset, 0)
 // The offset of struct pt_regs within the kernel entry stack.
 BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 
-// If enabled, the profiler translates host-level PIDs/TGIDs into the
-// corresponding IDs within a specific PID namespace. This is essential
-// for sidecar deployments to report PIDs consistent with the container's
-// internal view (e.g., reporting PID 1 instead of the host PID).
-BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
+// Mode of PID namespace translation:
+// - PID_NS_TRANSLATION_MODE_NONE (0): disabled, reporting host PIDs
+// - PID_NS_TRANSLATION_MODE_EXACT (1): translate tasks in active namespace
+// - PID_NS_TRANSLATION_MODE_RECURSIVE (2): translate active + descendant namespaces recursively
+BPF_RODATA_VAR(u8, pid_ns_translation_mode, PID_NS_TRANSLATION_MODE_NONE)
 
 // The inode number of the target PID namespace.
 // Obtained by calling stat() on /proc/self/ns/pid.
@@ -62,6 +62,15 @@ BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
 // Required by the bpf_get_ns_current_pid_tgid helper to uniquely
 // identify the namespace filesystem (nsfs) instance.
 BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+
+// The nesting level of the target PID namespace in the namespace hierarchy
+// (0 for root, 1 for immediate child, etc.).
+BPF_RODATA_VAR(u32, target_pid_ns_level, 0)
+
+// Kernel BTF-derived layout used to translate tasks in descendant PID
+// namespaces into target_pid_ns_inode. bpf_get_ns_current_pid_tgid only
+// handles tasks whose active PID namespace exactly matches the target.
+BPF_RODATA_VAR(PIDNamespaceLayout, pid_namespace_layout, {})
 // origin_id_sampling is set during load time.
 BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
@@ -192,9 +201,10 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  u32 pid = 0;
-  u32 tid = 0;
-  if (!get_pid_tgid(&pid, &tid)) {
+  u32 pid          = 0;
+  u32 tid          = 0;
+  u64 group_leader = 0;
+  if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
     return 0;
   }
 
@@ -204,6 +214,7 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace((struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, ts, 0);
+  return collect_trace(
+    (struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, group_leader, ts, 0);
 }
 MULTI_USE_FUNC(unwind_native)

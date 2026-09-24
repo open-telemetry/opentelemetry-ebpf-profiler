@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x75
+	MetricIDBeginCumulative = 0x79
 )
 
 const (
@@ -118,6 +118,15 @@ type PIDPageMappingInfo struct {
 	File_id                 uint64
 	Bias_and_unwind_program uint64
 }
+type PIDNamespaceLayout struct {
+	Task_thread_pid_offset    uint32
+	Pid_level_offset          uint32
+	Pid_numbers_offset        uint32
+	Upid_size                 uint32
+	Upid_nr_offset            uint32
+	Upid_ns_offset            uint32
+	Pid_namespace_inum_offset uint32
+}
 type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16
@@ -148,6 +157,13 @@ type TSDInfo struct {
 type DTVInfo struct {
 	Offset     int16
 	Multiplier uint8
+	Pad_cgo_0  [1]byte
+}
+type TLSVarInfo struct {
+	Tls_offset int32
+	Dtv_pos    uint32
+	Dtv_offset int16
+	Valid      bool
 	Pad_cgo_0  [1]byte
 }
 type Trace struct {
@@ -305,6 +321,9 @@ type RubyProcInfo struct {
 	Running_ec                   uint16
 	Pad_cgo_0                    [4]byte
 }
+type ThreadContextProcInfo struct {
+	Tls TLSVarInfo
+}
 type V8ProcInfo struct {
 	Version                      uint32
 	Type_JSFunction_first        uint16
@@ -332,10 +351,11 @@ const (
 	Sizeof_StackDelta = 0x4
 	Sizeof_Trace      = 0x62d8
 
-	sizeof_ApmIntProcInfo = 0x8
-	sizeof_DotnetProcInfo = 0x4
-	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x60
+	sizeof_ApmIntProcInfo        = 0x8
+	sizeof_DotnetProcInfo        = 0x4
+	sizeof_PHPProcInfo           = 0x18
+	sizeof_RubyProcInfo          = 0x60
+	sizeof_ThreadContextProcInfo = 0xc
 )
 
 const (
@@ -514,4 +534,8 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
 	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
 	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
+	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x77: metrics.IDUnwindThreadContextReadSuccesses,
+	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
 }
