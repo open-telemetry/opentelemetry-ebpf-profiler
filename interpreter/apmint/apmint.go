@@ -17,11 +17,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 )
 
 const (
@@ -81,31 +82,25 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
 	}
 
-	var tlsDescElfAddr libpf.Address
-	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
-		if symName == tlsExport {
-			tlsDescElfAddr = libpf.Address(r.Off)
-			return false
-		}
-		return true
-	}); err != nil {
-		return nil, fmt.Errorf("failed to visit TLS descriptor: %v", err)
+	tlsSym, err := ef.LookupSymbol(tlsExport)
+	if err != nil {
+		return nil, fmt.Errorf("failed to locate %s: %w", tlsExport, err)
+	}
+	tlsVar, err := tls.Resolve(ef, tlsSym)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve %s: %w", tlsExport, err)
 	}
 
-	if tlsDescElfAddr == 0 {
-		return nil, errors.New("failed to locate TLS descriptor")
-	}
-
-	log.Debugf("APM integration TLS descriptor offset: 0x%08X", tlsDescElfAddr)
+	log.Debugf("APM integration TLS variable: %v", tlsVar)
 
 	return &data{
-		tlsDescElfAddr:   tlsDescElfAddr,
+		tlsVar:           tlsVar,
 		procStorageElfVA: libpf.Address(procStorageSym.Address),
 	}, nil
 }
 
 type data struct {
-	tlsDescElfAddr   libpf.Address
+	tlsVar           tls.Var
 	procStorageElfVA libpf.Address
 }
 
@@ -123,9 +118,19 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
 	}
 
-	// Read TLS offset from the TLS descriptor.
-	tlsOffset := rm.Uint64(bias + d.tlsDescElfAddr + 8)
-	procInfo := support.ApmIntProcInfo{Offset: tlsOffset}
+	var procInfo support.ApmIntProcInfo
+	var pendingTLS *tls.VarLocation
+	if loc, err := d.tlsVar.Locate(rm, bias); err != nil {
+		return nil, fmt.Errorf("failed to locate APM correlation TLS variable: %w", err)
+	} else if tlsInfo, err := loc.VarInfo(libc.DTVInfo{}); err == nil {
+		procInfo.Tls = tlsInfo
+	} else if errors.Is(err, tls.ErrNeedDTV) {
+		// Dynamic TLS, so UpdateLibcInfo completes it once the DTV arrives and
+		// eBPF skips the correlation read until then.
+		pendingTLS = &loc
+	} else {
+		return nil, fmt.Errorf("unusable APM correlation TLS variable %v: %w", loc, err)
+	}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
@@ -145,6 +150,8 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	return &Instance{
 		serviceName: procStorage.ServiceName,
 		socket:      socket,
+		procInfo:    &procInfo,
+		pendingTLS:  pendingTLS,
 	}, nil
 }
 
@@ -154,10 +161,43 @@ func (d data) Unload(_ interpreter.EbpfHandler) {
 type Instance struct {
 	serviceName string
 	socket      *apmAgentSocket
+
+	// procInfo is kept for re-insertion once pendingTLS resolves.
+	procInfo *support.ApmIntProcInfo
+
+	// pendingTLS is where the correlation variable lives while it waits for the
+	// DTV layout, nil once described or when there is nothing to wait for.
+	pendingTLS *tls.VarLocation
+
 	interpreter.InstanceStubs
 }
 
 var _ interpreter.Instance = &Instance{}
+
+// UpdateLibcInfo completes a correlation variable in dynamic TLS, which needs
+// the DTV layout the process C library defines.
+func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	libcInfo libc.LibcInfo) error {
+	if i.pendingTLS == nil {
+		return nil
+	}
+	if !libcInfo.HasDTVInfo() {
+		// May still arrive from a different DSO.
+		return nil
+	}
+
+	tlsInfo, err := i.pendingTLS.VarInfo(libcInfo.DTVInfo)
+	if err != nil {
+		return err
+	}
+	i.procInfo.Tls = tlsInfo
+	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(i.procInfo)); err != nil {
+		return err
+	}
+	i.pendingTLS = nil
+	log.Debugf("PID %d: located the APM correlation variable via the DTV", pid)
+	return nil
+}
 
 // Detach implements the interpreter.Instance interface.
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
