@@ -35,7 +35,8 @@ const (
 	sizeofSize = 4
 )
 
-// SymbolData may truncate to the symbol's size without returning an error.
+// readSymbolData retrieves exactly size bytes of data for the named symbol.
+// It returns errNptlDBUnavailable if the symbol is not found.
 func readSymbolData(ef *pfelf.File, name libpf.SymbolName, size int) ([]byte, error) {
 	_, data, err := ef.SymbolData(name, size)
 	if err != nil {
@@ -44,7 +45,8 @@ func readSymbolData(ef *pfelf.File, name libpf.SymbolName, size int) ([]byte, er
 		}
 		return nil, err
 	}
-	if len(data) < size {
+	// SymbolData may truncate to the symbol's size without returning an error.
+	if len(data) != size {
 		return nil, fmt.Errorf("%s is %d bytes", name, len(data))
 	}
 	return data, nil

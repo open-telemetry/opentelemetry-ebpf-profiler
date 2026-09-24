@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -131,6 +132,8 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	// glibc 2.34+ exports layout metadata, avoiding compiler-dependent disassembly.
 	if info, err := glibcTSDInfo(ef); err == nil {
 		return info, nil
+	} else if !errors.Is(err, errNptlDBUnavailable) {
+		log.Debugf("Failed to extract glibc TSD metadata, falling back to disassembly: %v", err)
 	}
 
 	_, code, err := ef.SymbolData("__pthread_getspecific", 2048)
@@ -234,6 +237,7 @@ func extractDTVInfo(ef *pfelf.File) DTVInfo {
 		return info
 	}
 	if !errors.Is(err, errNptlDBUnavailable) {
+		log.Debugf("Failed to extract glibc DTV metadata: %v", err)
 		// Existing metadata could describe a layout the constants cannot represent.
 		return DTVInfo{}
 	}
