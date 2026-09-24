@@ -650,6 +650,20 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+// Defines the format of the thread context buffer an instrumented process
+// publishes through the otel_thread_ctx_v1 thread-local, per OTEP #4947. The
+// attribute payload follows immediately after this header.
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+  // 0 while the writer is mid-update.
+  u8 valid;
+  // _padding on the writer side.
+  u8 _reserved;
+  // Payload length in bytes.
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 #define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
 // Big enough to hold UUIDs, etc.
 #define CUSTOM_LABEL_MAX_VAL_LEN 48
@@ -665,6 +679,21 @@ typedef struct CustomLabelsArray {
   unsigned len;
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
+
+// CustomLabelsData is the opaque variant of the Trace custom labels union: a
+// length-prefixed payload that user space decodes on the producer's terms.
+typedef struct CustomLabelsData {
+  // Must be <= sizeof(data).
+  u16 size;
+  // Sized to fill the union, so the payload can use every byte the union costs.
+  u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
+} CustomLabelsData;
+
+enum CustomLabelsType {
+  CUSTOM_LABELS_TYPE_NONE,
+  CUSTOM_LABELS_TYPE_GO,
+  CUSTOM_LABELS_TYPE_THREAD_CONTEXT,
+};
 
 // Container for a stack trace
 typedef struct Trace {
@@ -682,8 +711,14 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
+  // Which member of the union below is live.
+  u8 custom_labels_type;
+  union {
+    // Go runtime/pprof labels.
+    CustomLabelsArray custom_labels;
+    // Payload from a producer that encodes its own labels.
+    CustomLabelsData custom_labels_data;
+  };
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
@@ -714,6 +749,13 @@ typedef struct Trace {
   // to be the last item in the struct. When sending via the ringbuffer, only the
   // 'frame_data_len' elements of 'frame_data' are sent.
 } Trace;
+
+// cgo -godefs mirrors only the first union member, so every field after the
+// union holds its Go offset only while CustomLabelsArray stays the largest.
+_Static_assert(
+  __builtin_offsetof(Trace, frame_data_len) - __builtin_offsetof(Trace, custom_labels) ==
+    sizeof(CustomLabelsArray),
+  "CustomLabelsArray must be the largest member of Trace's custom labels union");
 
 // Container for unwinding state
 typedef struct UnwindState {

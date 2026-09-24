@@ -83,6 +83,68 @@ err:
   return -1;
 }
 
+// TLSReadResult is the outcome of tls_read_var. TLS_READ_ABSENT is not a
+// failure: the thread has no block for the module yet.
+typedef enum TLSReadResult {
+  TLS_READ_OK     = 0,
+  TLS_READ_ERR    = -1,
+  TLS_READ_ABSENT = -2,
+} TLSReadResult;
+
+// tls_read_var reads the pointer-sized value of the thread-local variable var
+// locates, in static or dynamic TLS. tsd_base comes from tsd_get_base, whose
+// failure each caller reports its own way.
+static inline EBPF_INLINE TLSReadResult
+tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
+{
+  if (var->dtv_pos == 0) {
+    // Sign-extended before the add: variant II puts the static block below the
+    // thread pointer, making the offset negative.
+    s64 offset = var->tls_offset;
+    DEBUG_PRINT("readTLS static at 0x%lx", (unsigned long)(tsd_base + offset));
+    if (bpf_probe_read_user(out, sizeof(*out), tsd_base + offset)) {
+      return TLS_READ_ERR;
+    }
+    return TLS_READ_OK;
+  }
+
+  // Indirect on both glibc and musl: TP+dtv_offset holds a pointer to the DTV,
+  // which is allocated apart from the thread control block.
+  const void *dtv;
+  if (bpf_probe_read_user(&dtv, sizeof(dtv), tsd_base + var->dtv_offset)) {
+    goto err;
+  }
+
+  // DTV layout: [generation, module1_block, module2_block, ...], entries 8
+  // bytes on musl and 16 on glibc, which dtv_pos already accounts for.
+  void *tls_block;
+  if (bpf_probe_read_user(&tls_block, sizeof(tls_block), dtv + var->dtv_pos)) {
+    goto err;
+  }
+
+  // glibc allocates a module's block lazily, leaving TLS_DTV_UNALLOCATED until
+  // the thread first accesses it. A thread that never entered the module is not
+  // a failed read, so it takes neither the error path nor its metric. musl needs
+  // no counterpart because it populates every thread's DTV eagerly.
+  if (tls_block == (void *)-1) {
+    DEBUG_PRINT("TLS block unallocated for this thread");
+    return TLS_READ_ABSENT;
+  }
+
+  if (bpf_probe_read_user(out, sizeof(*out), tls_block + var->tls_offset)) {
+    goto err;
+  }
+
+  DEBUG_PRINT(
+    "readTLS via DTV, dtv_pos 0x%x, offset 0x%x", var->dtv_pos, (unsigned)var->tls_offset);
+  return TLS_READ_OK;
+
+err:
+  DEBUG_PRINT("Failed to read TLS via DTV at dtv_pos 0x%x", var->dtv_pos);
+  increment_metric(metricID_UnwindErrBadDTVRead);
+  return TLS_READ_ERR;
+}
+
 // tsd_get_base looks up the base address for TSD variables (TPBASE).
 static inline EBPF_INLINE int tsd_get_base(void **tsd_base)
 {
