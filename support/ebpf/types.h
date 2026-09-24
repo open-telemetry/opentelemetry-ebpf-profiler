@@ -1084,6 +1084,25 @@ typedef struct Event {
 // Event types that notifications are sent for through event_send_trigger.
 #define EVENT_TYPE_GENERIC_PID 1
 
+// PID namespace translation modes.
+enum PIDNamespaceTranslationMode {
+  PID_NS_TRANSLATION_MODE_NONE      = 0,
+  PID_NS_TRANSLATION_MODE_EXACT     = 1,
+  PID_NS_TRANSLATION_MODE_RECURSIVE = 2,
+};
+
+// PIDNamespaceLayout contains kernel structure offsets used to translate PIDs from descendant
+// namespaces.
+typedef struct PIDNamespaceLayout {
+  u32 task_thread_pid_offset;
+  u32 pid_level_offset;
+  u32 pid_numbers_offset;
+  u32 upid_size;
+  u32 upid_nr_offset;
+  u32 upid_ns_offset;
+  u32 pid_namespace_inum_offset;
+} PIDNamespaceLayout;
+
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
   u32 prefixLen; // Number of bits for pid and page that defines the

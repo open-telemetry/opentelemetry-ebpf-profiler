@@ -118,6 +118,15 @@ type PIDPageMappingInfo struct {
 	File_id                 uint64
 	Bias_and_unwind_program uint64
 }
+type PIDNamespaceLayout struct {
+	Task_thread_pid_offset    uint32
+	Pid_level_offset          uint32
+	Pid_numbers_offset        uint32
+	Upid_size                 uint32
+	Upid_nr_offset            uint32
+	Upid_ns_offset            uint32
+	Pid_namespace_inum_offset uint32
+}
 type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16

@@ -58,6 +58,60 @@ const (
 	ProbabilisticThresholdMax = 100
 )
 
+// PIDNamespaceTranslationMode controls which PID namespaces are translated.
+type PIDNamespaceTranslationMode uint8
+
+const (
+	// PIDNamespaceTranslationModeNone disables PID namespace translation.
+	PIDNamespaceTranslationModeNone PIDNamespaceTranslationMode = iota
+	// PIDNamespaceTranslationModeAuto translates nested namespaces recursively when the required kernel BTF is available.
+	PIDNamespaceTranslationModeAuto
+	// PIDNamespaceTranslationModeExact translates tasks in the profiler's PID namespace.
+	PIDNamespaceTranslationModeExact
+	// PIDNamespaceTranslationModeRecursive also translates tasks in descendant PID namespaces.
+	PIDNamespaceTranslationModeRecursive
+)
+
+func (m *PIDNamespaceTranslationMode) UnmarshalText(text []byte) error {
+	mode := strings.ToLower(string(text))
+	switch mode {
+	case "none", "":
+		*m = PIDNamespaceTranslationModeNone
+	case "auto":
+		*m = PIDNamespaceTranslationModeAuto
+	case "exact":
+		*m = PIDNamespaceTranslationModeExact
+	case "recursive":
+		*m = PIDNamespaceTranslationModeRecursive
+	default:
+		return fmt.Errorf("unknown PID namespace translation mode %q", mode)
+	}
+	return nil
+}
+
+func (m PIDNamespaceTranslationMode) String() string {
+	switch m {
+	case PIDNamespaceTranslationModeNone:
+		return "none"
+	case PIDNamespaceTranslationModeAuto:
+		return "auto"
+	case PIDNamespaceTranslationModeExact:
+		return "exact"
+	case PIDNamespaceTranslationModeRecursive:
+		return "recursive"
+	default:
+		return fmt.Sprintf("unknown(%d)", m)
+	}
+}
+
+// Validate checks whether the PIDNamespaceTranslationMode is valid.
+func (m PIDNamespaceTranslationMode) Validate() error {
+	if m > PIDNamespaceTranslationModeRecursive {
+		return fmt.Errorf("unknown mode %d", m)
+	}
+	return nil
+}
+
 // Constants that define the status of probabilistic profiling.
 const (
 	probProfilingEnable  = 1
@@ -225,10 +279,10 @@ type Config struct {
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
-	// PIDNamespaceTranslation toggles translation of host-level PIDs/TGIDs into
-	// their container-namespace equivalents. Useful for sidecar deployments where
-	// the profiler and the target application share a PID namespace but not host PIDs.
-	PIDNamespaceTranslation bool
+	// PIDNamespaceTranslationMode controls the scope of PID namespace translation.
+	// It supports None (disabled, default), Auto (translates recursively when kernel BTF
+	// layout is available, otherwise Exact), Exact, and Recursive (requires BTF).
+	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
