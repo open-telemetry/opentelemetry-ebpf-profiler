@@ -421,22 +421,10 @@ cannot be reordered before that store.
 
 Before an isolate is torn down, the SDK MUST clear the thread-local, and MUST
 clear `cped_slot` **first**, as a volatile store followed by a compiler fence.
-It SHOULD additionally clear internal field 0 of all live wrappers known to it,
-and will typically want to release the records' memory as well.
 
-Releasing the records is what obliges an SDK to track every live wrapper, since
-the runtime will not have collected them all by teardown. Neither that nor the
-field clearing needs an ordering rule of its own, though: both are redundant
-once `cped_slot` is zero, since the profiler stops at the root and never reaches
-a wrapper, let alone a record. They are defense in depth against an SDK that
-gets the gate wrong. The one release that does need ordering is the
-in-place-growth release in step 4, which happens while the gate is open.
-
-Neither omission can crash the profiler, as reading freed or unmapped memory in
-another process fails or returns garbage rather than faulting the reader. The
-risk is misattribution instead: a stale walk through a dangling `cped_slot` can
-still *succeed* and attach a fabricated trace ID to a genuine sample, which is
-why the record validation in "Thread sampling" is not optional.
+After `cped_slot` was zeroed, the profiler stops reading and will thus never
+reach any data (potentially in already freed memory) that belonged to the
+isolate.
 
 ### Runtime requirements
 
@@ -481,7 +469,9 @@ The proposal is additive at three points, in increasing order of new code:
 3. **The walk itself** — new code, reading V8 heap objects out of target memory.
    `interpreter/nodev8` establishes the primitives (tagged word handling,
    bounded remote reads of V8 objects) but this walk is independent of stack
-   unwinding and should not be entangled with the unwinder's state.
+   unwinding and should not be entangled with the unwinder's state. Prior art
+   for a similar walk is found in
+   [Polar Signals' eBPF profiler](https://github.com/parca-dev/opentelemetry-ebpf-profiler/blob/main/support/ebpf/native_custom_labels.h).
 
 ### 1. Process initialization
 
@@ -639,46 +629,45 @@ Since `AsyncContextFrame` is a JavaScript `Map`, one can rightly ask what
 happens if it is mutated while it is being read.
 
 Let's first see the scenarios where this can happen. Node.js treats frames as
-immutable on most code paths. `enterWith` and `run`, don't mutate the
-`AsyncContextFrame`, but rather construct a new one that fist copies the current
-one and then set a new key-value pair in it. There is one mutating exception
-through the public API: `AsyncLocalStorage.prototype.disable()` deletes its own
-entry from the frame currently in the CPED slot, in place.
-`Map.prototype.delete` writes hole sentinels over that entry's key and value,
-adjusts the element and deleted-element counts
+immutable on most code paths. `enterWith` and `run` don't mutate the
+`AsyncContextFrame`; they construct a new one that copies the current one and
+then sets a new key-value pair in it. There is one mutating exception through
+the public API: `AsyncLocalStorage.prototype.disable()` deletes its own entry
+from the frame currently in the CPED slot, in place.
+`Map.prototype.delete` writes hole sentinels over that entry's key and value and
+adjusts the element and deleted-element counts.
 
 It is also possible for third-party native addons to access the map through the
 isolate's CPED getter method and then mutate it in place.
 
-Both insertions and deletions from a map can trigger a rehash to either grow or
-shrink the map. During a rehash, it is not possible to observe a partially
-constructed new table, as `OrderedHashTable::Rehash` allocates a table of the
-new capacity, fills it completely, and only then does it point its table pointer
-at it. The table a reader is walking is therefore never itself rehashed: the
-reader sees either the old table or the finished new one.
+Both inserting and deleting can trigger a rehash, when the map grows or shrinks.
+A rehash never exposes a half-built table: `OrderedHashTable::Rehash` allocates
+a table with the new capacity, fills it completely, and only then points the
+`JSMap` at it. A reader is therefore always walking a table that is either the
+old one or the finished new one.
 
-To complicate matters, the old table will be destructively modified while the
-copy is happening. Specifically, the bucket indexes will be clobbered by writing
-indexes of deleted elements over them, and at the end the field for the number
-of elements will be rewritten to hold a forwarding tagged pointer to the new
-table. These serve to preserve consistency of existing iterators that still hold
-a pointer to the old map as they can then use the forwarding pointer to switch
-to the new map, and rewind their current index in the new map by the number of
-deleted elements before it.
+What a rehash does do is destroy the old table as it copies out of it. Two
+fields change:
 
-In practical matter, a reader can thus observe clobbered bucket indices that now
-instead point to deleted elements. The reader doing a walk treating it as a
-valid bucket index will thus walk a tail part of some bucket, and most likely
-not succeed in finding the entry that has the published `AsyncLocalStorage`
-instance as the key. So the only negative consequence is a lookup miss.
+- The bucket heads are overwritten, as the copy proceeds, with the indices of
+  the entries that were deleted.
+- The element count is overwritten, at the very end, with a tagged pointer to
+  the new table.
 
-(The element count being rewritten as a forwarding tagged pointer can only be
-observed by a reader for a very brief window of a few machine instructions, as
-the map will update its own table pointer immediately after it wrote it to the
-element count field. The reader SHOULD check whether the number of elements is a
-Smi and bail out when it isn't. It MAY follow the forwarding pointer and repeat
-the read in the new table, but in the opinion of the author it is such a narrow
-corner case that it's not worth complicating the reader code for.)
+(These serve to let an iterator that is live across the rehash and holds a
+pointer to the old table to catch up: it follows the pointer to the new table,
+and rewinds its cursor past the deleted entries that preceded its position.)
+
+Both have consequences for a reader. A clobbered bucket head is simply a wrong
+entry index: the walk follows it into the middle of some bucket's chain and
+almost certainly does not find the entry keyed by the published
+`AsyncLocalStorage` instance, so the sample misses. An element count holding a
+pointer is observable only for the few instructions between that write and the
+`JSMap` being pointed at the new table; a reader SHOULD check that the element
+count is a Smi and bail out when it is not, which is what keeps it from reading
+a pointer as a length. It could instead follow that pointer and redo the lookup
+in the new table, but for a window this narrow that is not worth the extra
+reader code.
 
 ### Garbage collection
 
@@ -737,59 +726,30 @@ Note that the record itself is not a V8 heap object; it is malloc'd memory owned
 by the wrapper, so it never moves as a result of GC. Only the path to it
 involves heap objects.
 
-Should the reasoning above turn out to be wrong, a writer MAY close the gate for
-the duration of a collection: register GC prologue and epilogue callbacks on the
-isolate, zero `cped_slot` in the prologue and restore it in the epilogue, with
-the same compiler fence and volatile store the other gate writes use. The
-profiler needs no change at all, as it already stops at a zero gate and is
-forbidden from treating it as permanent. This is a contingency rather than a
-part of the proposal: nothing has to implement it unless the argument above
-proves wrong, and because the profiler is unaffected, it can then be adopted one
-SDK at a time with no schema change.
+A writer MAY choose to zero the `cped_slot` before a collection and then re-set
+it after it, to stop the reader from reading during a collection. The profiler
+already stops at a zero `cped_slot` and is forbidden from treating it as
+permanent.
 
 ### Sampling a thread that is not executing JavaScript
 
 A thread can be sampled while no JavaScript is on its stack at all: an event
-loop with nothing to do is parked in the libuv poll. `cped_slot` addresses a
-field of the isolate rather than anything on the JS stack, so the read itself is
-unaffected. Node keeps an isolate entered for the whole lifetime of the event
-loop it serves, both on the main thread and in worker threads, so the
-not-entered state does not arise during normal app execution.
+loop with nothing to do is parked in the libuv poll. Fortunately, this causes no
+problems for the reader.
 
-When the loop is idle, the CPED slot holds whatever frame was current at the
-outermost level. Node unwinds the slot as the stack unwinds; every entry into
-JavaScript goes through `InternalCallbackScope`, which exchanges the frame on
-entry and restores the prior one on scope exit. Tick, timer and promise runners
-do the same explicitly. Thus, an idle loop correctly does not retain the frame
-of the request that last ran. It normally exposes `undefined`, which the
-profiler rejects by comparison against `undefined_addr`. The exception would be
-a context installed with `enterWith` at the outermost level of the JavaScript
-program and never cleared, which does persist. This is not a common practice,
-and if it occurs, it could rightfully be considered the top-level context of the
-program.
+`cped_slot` addresses a field of the isolate rather than anything on the JS
+stack, so the read itself is unaffected. In V8, threads need to "enter" an
+isolate using an API before using them; fortunately in Node.js the threads enter
+their isolate for the entire lifetime of the event loop so it's safe to read
+from the isolates even when JavaScript code is not running.
+
+Node.js and V8 mechanisms also ensure that an idle loop correctly does not
+retain the frame of the request that last ran but rather it reverts to its
+initial program value, which is normally `undefined`.
 
 This is also mostly a wall-clock concern. A thread parked in the poll consumes
 no CPU and so is never sampled by a CPU-time profiler.
 
-
-### Reporting a sample with nothing attached
-
-A sample can come from a thread that publishes a perfectly good discovery struct
-and still has nothing attached: an idle loop, a request that has already
-finished, or application code running outside any span. This proposal has the
-profiler emit such a sample the same way it emits one from a process with no
-thread-context support at all — with no trace context — and adds no per-sample
-marker separating the two.
-
-The distinction remains available to a consumer one level up. A process that
-supports this mechanism says so in its process context, which the profiler
-already reports, so "supports it, nothing was attached here" and "does not
-support it" are separable per process without spending a bit per sample. A
-per-sample marker would only be needed to separate "nothing was attached" from
-"something was attached but the walk failed". Those two *are* distinguishable
-inside the reader — an empty slot compares equal to `undefined_addr`, a failed
-walk does not — but the place to surface that difference is the profiler's own
-error metrics, not a field on every sample.
 
 ### Memory overhead
 
