@@ -376,8 +376,6 @@ When context becomes active, the SDK:
 A record MUST stay alive for as long as its wrapper is reachable in the
 JavaScript heap, since any such wrapper can still be presented to the profiler;
 it may be released once the wrapper is known to be unreachable.
-The reference implementation uses weak references with collection callbacks
-for this, but writers are free to pick any suitable implementation for this.
 
 #### 3. Context detachment
 
@@ -512,7 +510,8 @@ auto* table =
 
 // Find the entry keyed by our AsyncLocalStorage instance. A reader uses the
 // published identity hash to walk a single bucket. Bucket and entry layout
-// follow from kOrderedHashMapHeaderSize and kTaggedSize.
+// follow from kOrderedHashMapHeaderSize and kTaggedSize. find_entry is not
+// sketched here.
 uintptr_t als = *ctx->als_handle;
 Entry* e = find_entry(table, als, ctx->als_identity_hash);
 if (!e) return NO_CONTEXT;  // not in this frame
@@ -534,14 +533,27 @@ structurally. The first tests the very pointer the next line dereferences, so it
 needs no assumption about any other field.
 
 As in OTEP 4947, the profiler SHOULD validate before trusting: a mis-stepped
-pointer walk yields garbage at the same offsets. Checking `valid == 1` is the
-minimum; sanity-checking `attrs-data-size` as well as the `OrderedHashMap`
-bucket count being a power of two are cheap additional guards.
+pointer walk yields garbage at the same offsets. It is cheap to check during the
+walk various invariants of the `OrderedHashMap`:
+* The length of the fixed array that holds the hash table must be at least 3, to
+  accommodate at least the words for number-of-buckets, number-of-elements, and
+  number-of-deleted-elements.
+* Number-of-buckets must be a power of two.
+* The sum of number-of-elements and number-of-deleted-elements must not exceed
+  capacity, which is the number-of-buckets multiplied by the hash table load
+  factor (hardcoded to 2 in V8).
+* The length of the fixed array must be at least 3 + number-of-buckets + 3 *
+  capacity (as every entry is 3 words.)
+* During the walk, indices of entries in the bucket heads and index of every
+  next entry must not exceed the sum of number-of-elements and 
+  number-of-deleted-elements.
+
+This document does not prescribe validation of the record itself, as such
+validations are presumed to already exist in the common record parsing code to
+ensure it is not reading garbage.
 
 Tagged words should also be checked for their tag before use, rather than
-assumed to be of the kind the layout calls for. In particular, `OrderedHashMap`
-header's element count can hold either an Smi or a heap-object pointer;
-"Mutation of the frame map while it is read" below explains when and why.
+assumed to be of the kind the layout calls for.
 
 ### The V8 layout constants the walk uses
 
@@ -626,7 +638,7 @@ memory in `interpreter/nodev8`.
 ### Mutation of the frame map while it is read
 
 Since `AsyncContextFrame` is a JavaScript `Map`, one can rightly ask what
-happens if it is mutated while it is being read.
+happens if it is read while it is being mutated.
 
 Let's first see the scenarios where this can happen. Node.js treats frames as
 immutable on most code paths. `enterWith` and `run` don't mutate the
@@ -640,13 +652,13 @@ adjusts the element and deleted-element counts.
 It is also possible for third-party native addons to access the map through the
 isolate's CPED getter method and then mutate it in place.
 
-Both inserting and deleting can trigger a rehash, when the map grows or shrinks.
-A rehash never exposes a half-built table: `OrderedHashTable::Rehash` allocates
-a table with the new capacity, fills it completely, and only then points the
-`JSMap` at it. A reader is therefore always walking a table that is either the
-old one or the finished new one.
+Both inserting and deleting can trigger a rehash, when the map grows or shrinks
+more than a certain threshold. A rehash never exposes a half-built table:
+`OrderedHashTable::Rehash` allocates a table with the new capacity, fills it
+completely, and only then points the `JSMap` at it. A reader is therefore always
+walking a table that is either the old one or the finished new one.
 
-What a rehash does do is destroy the old table as it copies out of it. Two
+What a rehash _does_ do is destroy the old table as it copies out of it. Two
 fields change:
 
 - The bucket heads are overwritten, as the copy proceeds, with the indices of
@@ -666,7 +678,7 @@ pointer is observable only for the few instructions between that write and the
 `JSMap` being pointed at the new table; a reader SHOULD check that the element
 count is a Smi and bail out when it is not, which is what keeps it from reading
 a pointer as a length. It could instead follow that pointer and redo the lookup
-in the new table, but for a window this narrow that is not worth the extra
+in the new table, but for a window this narrow it is not worth the extra
 reader code.
 
 ### Garbage collection
@@ -684,32 +696,33 @@ copying, but they are joined before the pause ends, and concurrent marking and
 concurrent sweeping never relocate a live object. At the end of a pause the
 evacuated memory is handed back: the semispaces are swapped and the old
 from-space is refilled by ordinary allocation, and old-space evacuation
-candidates are released outright. 
+candidates are released outright.
 
-The reader only holds raw addresses, which keep meaning what they meant only for
-as long as the pause lasts. Since a stopped thread cannot reach the end of its
-own pause, the entire read is contained within it, and it is thus protected
-against observing above effects.
+The reader holds raw addresses, which keep meaning what they meant only for as
+long as the pause lasts. Since a stopped thread cannot reach the end of its own
+pause, the entire read is contained within it, and it is thus protected against
+observing above effects.
 
-The argument rests on the collection being driven by the stopped thread itself,
+This is true as long as the collection is driven by the stopped thread itself,
 which holds because isolates share no garbage-collected memory: each has its own
-heap, collected by its own thread. V8 can be built and flagged to give a group
+heap, collected by its own thread. V8 _can_ be built and flagged to give a group
 of isolates a shared heap, collected by one of them at a global safepoint while
-the others are parked — a collection that could therefore finish while this
-thread stays stopped. That configuration is experimental and Node.js does not
-enable it, and even under it the shared heap holds only shared strings and
-shared structs, never a `JSMap`, so it cannot reach anything on this walk.
+the others are parked; such collection could finish while this thread stays
+stopped. That configuration is experimental and Node.js does not enable it, and
+even under it the shared heap holds only shared strings and shared structs,
+never a `JSMap`, so it cannot reach anything on this walk.
 
 When we say an object is moved during the collection, it is in fact copied. The
 collectors write a forwarding pointer to the new copy of the object into the map
-word of the source copy of the object, and otherwise don't write the source's
+word of the source copy of the object, but otherwise don't mutate the source's
 body. The walk never reads objects' map words so to it an evacuated object reads
 the same during a GC pause.
 
-This is a further reason for the reader not to validate what it finds by
-checking maps or instance types. During a pause a map word can hold a forwarding
-address rather than a map identifier so such a check would fail on precisely the
-objects that are still perfectly readable.
+This is a reason for the reader not to validate what it finds by checking maps
+or instance types (nothing in this document prescribes such checks). During a
+pause a map word can hold a forwarding address rather than a map identifier so
+such a check would fail on precisely the objects that are still perfectly
+readable.
 
 Reading the old copy is as good as reading the new one. No JavaScript runs
 during the pause, so neither copy is semantically mutated while the reader is
@@ -744,8 +757,9 @@ their isolate for the entire lifetime of the event loop so it's safe to read
 from the isolates even when JavaScript code is not running.
 
 Node.js and V8 mechanisms also ensure that an idle loop correctly does not
-retain the frame of the request that last ran but rather it reverts to its
-initial program value, which is normally `undefined`.
+retain in the isolate's CPED slot the frame of the request that last ran but
+rather it reverts to its top-level program value, which is normally
+`undefined`.
 
 This is also mostly a wall-clock concern. A thread parked in the poll consumes
 no CPU and so is never sampled by a CPU-time profiler.
