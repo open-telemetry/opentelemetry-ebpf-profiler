@@ -613,10 +613,9 @@ func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("OpenMapping path=%q vaddr=%#x: %w", m.Path, m.Vaddr, err)
 	}
-	rac, ok := f.(pfelf.ReadAtCloser)
-	if !ok {
-		_ = f.Close()
-		return nil, fmt.Errorf("mapping file %q does not support io.ReaderAt", m.Path)
+	file, err := pfelf.NewFileFromFS(f)
+	if err != nil {
+		return nil, fmt.Errorf("mapping file %q: %w", m.Path, err)
 	}
-	return pfelf.NewFileOwned(rac)
+	return file, nil
 }

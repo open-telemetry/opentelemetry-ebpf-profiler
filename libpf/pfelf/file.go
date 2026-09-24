@@ -256,10 +256,21 @@ func OpenFS(fsys fs.FS, name string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
+	file, err := NewFileFromFS(f)
+	if err != nil {
+		return nil, fmt.Errorf("pfelf: %s: %w", name, err)
+	}
+	return file, nil
+}
+
+// NewFileFromFS parses an already-opened fs.File as an ELF file. f must
+// additionally implement ReadAtCloser. If f implements LoadHinter, its load
+// address and musl hint are honored, same as OpenFS.
+func NewFileFromFS(f fs.File) (*File, error) {
 	rac, ok := f.(ReadAtCloser)
 	if !ok {
 		_ = f.Close()
-		return nil, fmt.Errorf("pfelf: %s: opened file does not support io.ReaderAt", name)
+		return nil, errors.New("opened file does not support io.ReaderAt")
 	}
 	var loadAddress uint64
 	var hasMusl bool
