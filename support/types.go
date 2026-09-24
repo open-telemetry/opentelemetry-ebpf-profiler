@@ -212,6 +212,9 @@ type GoRuntimeOffsets struct {
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_sp_off           uint32
+	Sched_pc_off           uint32
+	Sched_lr_off           uint32
 	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
@@ -381,7 +384,8 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
-	UnwindCommandGoAsmcgocall int32 = 0x5
+	UnwindCommandGoAsmcgocall int32 = 0x4005
+	UnwindCommandGoMorestack  int32 = 0x4006
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8

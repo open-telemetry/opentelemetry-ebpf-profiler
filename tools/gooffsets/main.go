@@ -20,6 +20,9 @@ type goRuntimeOffsets struct {
 	hmapCount           uint32
 	hmapLog2BucketCount uint32
 	hmapBuckets         uint32
+	schedSpOff          uint32
+	schedPcOff          uint32
+	schedLrOff          uint32
 	schedBpOff          uint32
 }
 
@@ -52,8 +55,8 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 		return nil, errors.New("type of m in runtime.g is not a pointer")
 	}
 
-	// Read the gobuf offset within g and the bp offset within gobuf, reported as a single
-	// bp offset within g.
+	// Read the gobuf offset within g and each field's offset within gobuf, reported as
+	// offsets within g.
 	r.Seek(g.Offset)
 	_, err = r.Next()
 	if err != nil {
@@ -63,14 +66,18 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.Seek(schedType.Offset)
-	_, err = r.Next()
-	if err != nil {
-		return nil, err
-	}
-	_, schedBpOff, err := ReadChildTypeAndOffset(r, "bp")
-	if err != nil {
-		return nil, err
+	schedOffs := map[string]int64{}
+	for _, member := range []string{"sp", "pc", "lr", "bp"} {
+		r.Seek(schedType.Offset)
+		_, err = r.Next()
+		if err != nil {
+			return nil, err
+		}
+		_, off, err := ReadChildTypeAndOffset(r, member)
+		if err != nil {
+			return nil, err
+		}
+		schedOffs[member] = schedOffset + off
 	}
 	r.Seek(schedType.Offset)
 	_, err = r.Next()
@@ -128,7 +135,10 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 			mGsignal:   uint32(gsignalOffset),
 			curg:       uint32(curgOffset),
 			labels:     uint32(labelsOffset),
-			schedBpOff: uint32(schedOffset + schedBpOff),
+			schedSpOff: uint32(schedOffs["sp"]),
+			schedPcOff: uint32(schedOffs["pc"]),
+			schedLrOff: uint32(schedOffs["lr"]),
+			schedBpOff: uint32(schedOffs["bp"]),
 		}, nil
 	}
 
@@ -163,7 +173,10 @@ func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 		hmapCount:           uint32(countOffset),
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
-		schedBpOff:          uint32(schedOffset + schedBpOff),
+		schedSpOff:          uint32(schedOffs["sp"]),
+		schedPcOff:          uint32(schedOffs["pc"]),
+		schedLrOff:          uint32(schedOffs["lr"]),
+		schedBpOff:          uint32(schedOffs["bp"]),
 	}, nil
 }
 
@@ -209,6 +222,9 @@ func main() {
 	fmt.Printf("\thmap_count:             %d,\n", offs.hmapCount)
 	fmt.Printf("\thmap_log2_bucket_count: %d,\n", offs.hmapLog2BucketCount)
 	fmt.Printf("\thmap_buckets:           %d,\n", offs.hmapBuckets)
+	fmt.Printf("\tsched_sp_off:           %d,\n", offs.schedSpOff)
+	fmt.Printf("\tsched_pc_off:           %d,\n", offs.schedPcOff)
+	fmt.Printf("\tsched_lr_off:           %d,\n", offs.schedLrOff)
 	fmt.Printf("\tsched_bp_off:           %d,\n", offs.schedBpOff)
 	fmt.Println("},")
 }
