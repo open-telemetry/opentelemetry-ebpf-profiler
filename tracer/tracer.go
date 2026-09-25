@@ -1071,13 +1071,13 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	}
 
 	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
-	frameDataLen := int(ptr.Frame_data_len) * 8
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < traceHeaderSize+frameDataLen {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+frameDataLen,
+	if len(raw) < traceHeaderSize+8*int(ptr.Variable_data_end) {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+8*int(ptr.Variable_data_end),
 			errRecordUnexpectedSize)
 	}
+	variableData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), ptr.Variable_data_end)
 
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
@@ -1090,44 +1090,42 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
+		NumFrames:        ptr.Num_frames,
 	}
 
 	if t.origins.lookup(trace.Origin) == nil {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
+	if ptr.Golang_label_end > 0 {
+		trace.CustomLabels = make(map[libpf.String]libpf.String)
+
+		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
+		labelData := variableData[ptr.Frame_data_end:ptr.Golang_label_end]
+
+		for len(labelData) >= itemsPerGolangLabel {
+			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
+			labelData = labelData[itemsPerGolangLabel:]
+			keyBytes, ok := t.customLabels.validateKey(label.Key[:])
 			if !ok {
 				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
 				continue
 			}
-			key := libpf.Intern(pfunsafe.ToString(keyBytes))
-			valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
+			valBytes, ok := t.customLabels.validateValue(label.Val[:])
 			if !ok {
-				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", pfunsafe.ToString(keyBytes))
 				continue
 			}
-			trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
+			trace.CustomLabels[libpf.Intern(pfunsafe.ToString(keyBytes))] =
+				libpf.Intern(pfunsafe.ToString(valBytes))
 		}
 	}
 
-	numKernelFrames := int(ptr.Num_kernel_frames)
-	if numKernelFrames > int(ptr.Frame_data_len) {
-		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, ptr.Frame_data_len,
-			errRecordUnexpectedSize)
-	}
-
-	trace.NumFrames = ptr.Num_frames
-	trace.NumKernelFrames = ptr.Num_kernel_frames
-	frameDataWords := int(ptr.Frame_data_len)
-	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
 	// Kernel frames are raw addresses at the front of FrameData. The process
 	// manager splits and symbolizes them so all frame processing shares one cache.
-	frameData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), frameDataWords)
+	frameData := variableData[:ptr.Frame_data_end]
+	trace.NumKernelFrames = ptr.Kernel_frame_end
+	trace.FrameData = trace.FrameDataBuf[:len(frameData)]
 	copy(trace.FrameData, frameData)
 
 	return trace, nil

@@ -90,16 +90,12 @@ const (
 
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
-type CustomLabel struct {
-	Key [16]uint8
-	Val [48]uint8
-}
-type CustomLabelsArray struct {
-	Len    uint32
-	Labels [10]CustomLabel
-}
 type Event struct {
 	Type uint32
+}
+type GolangLabel struct {
+	Key [16]uint8
+	Val [48]uint8
 }
 type OffsetRange struct {
 	Lower_offset1 uint64
@@ -173,14 +169,14 @@ type Trace struct {
 	Comm               [16]uint8
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
-	Custom_labels      CustomLabelsArray
-	Frame_data_len     uint16
+	Cpu_id             uint32
+	Kernel_frame_end   uint16
+	Frame_data_end     uint16
+	Golang_label_end   uint16
+	Variable_data_end  uint16
 	Num_frames         uint16
-	Num_kernel_frames  uint16
 	Origin             uint16
 	Value              uint64
-	Cpu_id             uint32
-	Pad_cgo_0          [4]byte
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -352,8 +348,9 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x2d8
-	Sizeof_TraceWithData = 0x2d8 + 0x6000
+	Sizeof_TraceHeader   = 0x50
+	Sizeof_TraceWithData = 0x50 + 0x6200
+	Sizeof_GolangLabel   = 0x40
 
 	sizeof_ApmIntProcInfo        = 0x8
 	sizeof_DotnetProcInfo        = 0x4
