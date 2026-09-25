@@ -11,6 +11,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -29,9 +30,10 @@ const bpfProgPrefix = "bpf_prog_"
 // bpfSymbolizerPlatform is responsible for getting updates from `PERF_RECORD_KSYMBOL`.
 // The symbolizer is not ready to use until startMonitor is called to load the symbols.
 type bpfSymbolizerPlatform struct {
-	records chan *perf.KSymbolRecord
-	reader  *perfutil.PerfSidebandReader
-	cancel  context.CancelFunc
+	records  chan *perf.KSymbolRecord
+	reader   *perfutil.PerfSidebandReader
+	cancel   context.CancelFunc
+	reloadWG sync.WaitGroup
 }
 
 // loadBPFPrograms enumerates all loaded BPF programs via the bpf syscall and
@@ -113,7 +115,9 @@ func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) erro
 		return err
 	}
 
-	go s.reloadWorker(ctx)
+	s.platform.reloadWG.Go(func() {
+		s.reloadWorker(ctx)
+	})
 
 	return nil
 }
@@ -211,15 +215,13 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 
 // close frees resources associated with bpfSymbolizer.
 func (s *bpfSymbolizer) close() {
-	// Cancel the context first so reader goroutines and reloadWorker
-	// observe ctx.Done() and exit before we close the perf events.
+	// Cancel the context first so reloadWorker observes ctx.Done() and exits.
+	// The reader stops and tears down its own events in Close().
 	if s.platform.cancel != nil {
 		s.platform.cancel()
 	}
-	// Close waits for the reader goroutines to exit before closing events,
-	// otherwise we're introducing a race that leads to a panic as go-perf
-	// may (internally) send on a closed channel.
 	if s.platform.reader != nil {
 		s.platform.reader.Close()
 	}
+	s.platform.reloadWG.Wait()
 }

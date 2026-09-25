@@ -9,13 +9,17 @@ package perfutil // import "go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/elastic/go-perf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
+
+const maxConsecutiveFailedRecords = 100
 
 // Config configures a PerfSidebandReader.
 type Config struct {
@@ -39,18 +43,23 @@ type Config struct {
 }
 
 // PerfSidebandReader owns one PERF_COUNT_SW_DUMMY perf event per CPU and forwards
-// the sideband records they emit to a handler until its context is canceled.
+// the sideband records they emit to a handler until it is closed.
 type PerfSidebandReader struct {
 	name   string
 	events []*perf.Event
+	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
 
 // Start opens a dummy perf event on every CPU in cpus, maps a ring buffer,
 // enables the events, and spawns one goroutine per CPU that forwards records to
-// cfg.OnRecord until ctx is canceled. On error, any events already opened are
-// closed before returning.
+// cfg.OnRecord until the reader is closed or the passed context is canceled. On
+// error, any events already opened are closed before returning.
 func Start(ctx context.Context, cpus []int, cfg Config) (*PerfSidebandReader, error) {
+	if cfg.OnRecord == nil {
+		return nil, fmt.Errorf("%s reader requires an OnRecord handler", cfg.Name)
+	}
+
 	attr := new(perf.Attr)
 	perf.Dummy.Configure(attr)
 	// Keep the events disabled until every ring is mapped, so no records are
@@ -92,35 +101,70 @@ func Start(ctx context.Context, cpus []int, cfg Config) (*PerfSidebandReader, er
 		}
 	}
 
+	// Own a child context so Close() is self-contained: it stops the readers
+	// without the caller having to cancel first. Canceling the passed context
+	// also stops them.
+	ctx, r.cancel = context.WithCancel(ctx)
 	for _, event := range r.events {
 		r.wg.Go(func() {
-			r.read(ctx, event, cfg.OnRecord)
+			if err := r.read(ctx, event, cfg.OnRecord); err != nil {
+				log.Errorf("Failed to read %s perf event: %v", r.name, err)
+			}
 		})
 	}
 	return r, nil
 }
 
-// read forwards one CPU's records to onRecord until ctx is canceled or a read
-// fails.
+// read forwards one CPU's records to onRecord until ctx is canceled. It returns
+// terminal event errors and the last error after too many consecutive record
+// failures.
 func (r *PerfSidebandReader) read(ctx context.Context, event *perf.Event,
-	onRecord func(context.Context, perf.Record)) {
-	for {
+	onRecord func(context.Context, perf.Record)) error {
+	consecutiveFailedRecords := 0
+	// ReadRecord's fast path returns buffered records without checking the
+	// context, so poll for cancellation between records.
+	for ctx.Err() == nil {
 		record, err := event.ReadRecord(ctx)
 		if err != nil {
-			if ctx.Err() == nil {
-				log.Errorf("Failed to read %s perf event: %v", r.name, err)
+			if ctx.Err() != nil {
+				return nil
 			}
-			return
+			// Event/lifecycle errors cannot recover by retrying. Continue for
+			// other errors so a bad or unknown record does not abandon this CPU.
+			if isTerminalReadError(err) {
+				return err
+			}
+			consecutiveFailedRecords++
+			if consecutiveFailedRecords >= maxConsecutiveFailedRecords {
+				return err
+			}
+			log.Errorf("Failed to read %s perf event: %v", r.name, err)
+			continue
 		}
+		consecutiveFailedRecords = 0
 		onRecord(ctx, record)
 	}
+	return nil
 }
 
-// Close waits for the reader goroutines to exit, then disables and closes every
-// perf event. Cancel the context passed to Start before calling Close so the
-// readers stop before the events are torn down; otherwise go-perf may send on a
-// closed channel and panic.
+func isTerminalReadError(err error) bool {
+	if errors.Is(err, perf.ErrNoReadRecord) ||
+		errors.Is(err, perf.ErrDisabled) ||
+		errors.Is(err, os.ErrClosed) ||
+		errors.Is(err, os.ErrInvalid) {
+		return true
+	}
+	var syscallErr *os.SyscallError
+	return errors.As(err, &syscallErr)
+}
+
+// Close stops the reader goroutines and waits for them to exit, then disables
+// and closes every perf event. The readers must stop before the events are torn
+// down, otherwise go-perf may (internally) send on a closed channel and panic.
 func (r *PerfSidebandReader) Close() {
+	if r.cancel != nil {
+		r.cancel()
+	}
 	r.wg.Wait()
 	r.closeEvents()
 }
