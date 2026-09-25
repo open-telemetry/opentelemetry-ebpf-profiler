@@ -29,6 +29,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -161,7 +162,7 @@ type Tracer struct {
 	mmapEventOnce   func() error
 	// mmapEventMu serializes lazy monitor startup with Close.
 	mmapEventMu sync.Mutex
-	mmapEventWG sync.WaitGroup
+	mmapReader  *perfutil.PerfSidebandReader
 
 	// hooks holds references to loaded eBPF hooks.
 	hooks xsync.RWMutex[hooksState]
@@ -410,9 +411,12 @@ func (t *Tracer) Close() {
 	if t.lifecycleCancel != nil {
 		t.lifecycleCancel()
 	}
-	// Ensure startup has registered every reader before waiting for them.
+	// Ensure startup has registered the reader before tearing it down. If it
+	// started, its goroutines observe the canceled lifecycle context above.
 	t.mmapEventMu.Lock()
-	t.mmapEventWG.Wait()
+	if t.mmapReader != nil {
+		t.mmapReader.Close()
+	}
 	t.mmapEventMu.Unlock()
 
 	events := t.perfEntrypoints.WLock()

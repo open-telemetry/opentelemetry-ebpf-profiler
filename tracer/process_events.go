@@ -10,6 +10,7 @@ import (
 	"github.com/elastic/go-perf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
@@ -39,82 +40,37 @@ func (t *Tracer) startMmapEventMonitor(ctx context.Context) error {
 		return fmt.Errorf("getting online CPUs: %w", err)
 	}
 
-	attr := &perf.Attr{
-		Options: perf.Options{
-			Disabled: true, // Enable only after every per-CPU ring has been mapped.
-			// Mmap2 emits extended mapping records, but the kernel only delivers
-			// them when Mmap is also set (see perf_event_open(2)).
-			Mmap:  true,
-			Mmap2: true,
+	reader, err := perfutil.Start(ctx, cpus, perfutil.Config{
+		Name:      "mmap event",
+		RingPages: mmapEventRingPages,
+		Configure: func(attr *perf.Attr) {
+			// Mmap2 emits extended mapping records, but the kernel only
+			// delivers them when Mmap is also set (see perf_event_open(2)).
+			attr.Options.Mmap = true
+			attr.Options.Mmap2 = true
 		},
+		OnRecord: t.handleMmapRecord,
+	})
+	if err != nil {
+		return err
 	}
-	// Wake readers when any data reaches the ring; SetWakeupWatermark also sets
-	// Options.Watermark, so sample-count wakeups (which ignore sideband records)
-	// are not used.
-	attr.SetWakeupWatermark(1)
-	if err := perf.Dummy.Configure(attr); err != nil {
-		return fmt.Errorf("configuring mmap events: %w", err)
-	}
-
-	events := make([]*perf.Event, 0, len(cpus))
-	closeEvents := func() {
-		for _, event := range events {
-			_ = event.Close()
-		}
-	}
-
-	// System-wide perf events require a concrete CPU, so open one per online CPU.
-	for _, cpu := range cpus {
-		event, err := perf.Open(attr, perf.AllThreads, cpu, nil)
-		if err != nil {
-			closeEvents()
-			return fmt.Errorf("opening mmap events on CPU %d: %w", cpu, err)
-		}
-		events = append(events, event)
-		if err := event.MapRingNumPages(mmapEventRingPages); err != nil {
-			closeEvents()
-			return fmt.Errorf("mapping mmap event ring on CPU %d: %w", cpu, err)
-		}
-	}
-
-	for _, event := range events {
-		if err := event.Enable(); err != nil {
-			closeEvents()
-			return fmt.Errorf("enabling mmap events: %w", err)
-		}
-	}
-	for _, event := range events {
-		t.mmapEventWG.Go(func() {
-			t.readMmapEvents(ctx, event)
-		})
-	}
+	t.mmapReader = reader
 	return nil
 }
 
-// readMmapEvents forwards one CPU's mapping events to PID processing.
-func (t *Tracer) readMmapEvents(ctx context.Context, event *perf.Event) {
-	defer event.Close()
-	for {
-		record, err := event.ReadRecord(ctx)
-		if err != nil {
-			if ctx.Err() == nil {
-				log.Errorf("Failed to read perf mmap event: %v", err)
-			}
-			return
-		}
-		if lost, ok := record.(*perf.LostRecord); ok {
-			log.Warnf("Lost %d perf mmap events", lost.Lost)
-			continue
-		}
-		pidTID, ok := mmapRecordPIDTID(record)
-		if !ok {
-			continue
-		}
-		select {
-		case t.pidEvents <- pidTID:
-		case <-ctx.Done():
-			return
-		}
+// handleMmapRecord forwards one mapping event to PID processing.
+func (t *Tracer) handleMmapRecord(ctx context.Context, record perf.Record) {
+	if lost, ok := record.(*perf.LostRecord); ok {
+		log.Warnf("Lost %d perf mmap events", lost.Lost)
+		return
+	}
+	pidTID, ok := mmapRecordPIDTID(record)
+	if !ok {
+		return
+	}
+	select {
+	case t.pidEvents <- pidTID:
+	case <-ctx.Done():
 	}
 }
 
