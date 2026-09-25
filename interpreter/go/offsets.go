@@ -32,11 +32,14 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 		Hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
 		Hmap_buckets: 0,
-		// Offset of the sched gobuf bp within g, that is g.sched at 56, right after the g.m
-		// pointer, plus the offset of bp within gobuf. bp is at offset 48 within gobuf in
-		// go1.24 and earlier. In go1.25 and later, it is at offset 40 because of ret field
-		// removal.
+		// Offsets of the g.sched gobuf fields within g: g.sched sits at 56, right after
+		// the g.m pointer, plus each field's offset within gobuf. sp and pc lead the
+		// struct so they do not move, but lr and bp are pushed down in go1.24 and
+		// earlier by the ret field, which go1.25 removed.
 		// go1.25: https://github.com/golang/go/blob/6e676ab2b809d46623acb5988248d95d1eb7939c/src/runtime/runtime2.go#L315
+		Sched_sp_off: 56,
+		Sched_pc_off: 64,
+		Sched_lr_off: 96,
 		Sched_bp_off: 104,
 	}
 
@@ -44,12 +47,14 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 	if version.Compare(vers, "go1.26") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 352
+		offsets.Sched_lr_off = 88
 		offsets.Sched_bp_off = 96
 		offsets.M_gsignal = 72
 		return offsets
 	} else if version.Compare(vers, "go1.25") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 344
+		offsets.Sched_lr_off = 88
 		offsets.Sched_bp_off = 96
 		offsets.M_gsignal = 72
 		return offsets
