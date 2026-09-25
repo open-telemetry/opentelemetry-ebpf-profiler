@@ -211,14 +211,11 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 
 // close frees resources associated with bpfSymbolizer.
 func (s *bpfSymbolizer) close() {
-	// Cancel the context first so reader goroutines and reloadWorker
-	// observe ctx.Done() and exit before we close the perf events.
+	// Cancel the context first so reloadWorker observes ctx.Done() and exits.
+	// The reader stops and tears down its own events in Close().
 	if s.platform.cancel != nil {
 		s.platform.cancel()
 	}
-	// Close waits for the reader goroutines to exit before closing events,
-	// otherwise we're introducing a race that leads to a panic as go-perf
-	// may (internally) send on a closed channel.
 	if s.platform.reader != nil {
 		s.platform.reader.Close()
 	}
