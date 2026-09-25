@@ -267,300 +267,173 @@ func TestExtractTSDInfo(t *testing.T) {
 			}
 		})
 	}
+
+	for _, fallback := range []struct {
+		name     string
+		fixture  string
+		soname   string
+		keyLimit uint16
+		dls3     bool
+	}{
+		{"glibc", "glibc 2.35  / Fedora 36 / x86_64", "libc.so.6", 32, false},
+		{"glibc libpthread", "glibc 2.33 / Fedora 34 / arm64", "libpthread.so.0", 32, false},
+		{"musl without SONAME", "musl 1.2.3 / Alpine 3.16 / arm64", "", 128, true},
+		{"unknown libc", "glibc 2.35  / Fedora 36 / x86_64", "libunknown.so", 1024, false},
+	} {
+		t.Run("fallback/"+fallback.name, func(t *testing.T) {
+			fixture := testCases[fallback.fixture]
+			symbol := "__pthread_getspecific"
+			if fixture.info.Indirect != 0 {
+				symbol = "pthread_getspecific"
+			}
+			syms := map[string][]byte{symbol: fixture.code}
+			if fallback.dls3 {
+				syms["__dls3"] = []byte{0, 0, 0, 0}
+			}
+			ef := buildTestELF(t, fixture.machine, fallback.soname, syms)
+			got, err := extractTSDInfo(ef)
+			require.NoError(t, err)
+			want := fixture.info
+			want.KeyLimit = fallback.keyLimit
+			assert.Equal(t, want, got)
+		})
+	}
 }
 
-func TestExtractDTVOffset(t *testing.T) {
-	testCases := map[string]struct {
-		machine elf.Machine
-		code    []byte
-		info    DTVInfo
+func TestHardcodedDTVEligibility(t *testing.T) {
+	for name, test := range map[string]struct {
+		soname   string
+		dls3     bool
+		eligible bool
 	}{
-		"glibc 2.36 / debian 12 / x86_64": {
-			machine: elf.EM_X86_64,
-			code: []byte{
-				// mov    %fs:0x8,%rdx
-				// mov    0x1fc48(%rip),%rax        # 0x7ffff7ffe0b8 <_rtld_global+4248>
-				// cmp    %rax,(%rdx)
-				// jne    0x7ffff7fde48b <__tls_get_addr+43>
-				// mov    (%rdi),%rax
-				// shl    $0x4,%rax
-				// mov    (%rdx,%rax,1),%rax
-				// cmp    $0xffffffffffffffff,%rax
-				// je     0x7ffff7fde48b <__tls_get_addr+43>
-				// add    0x8(%rdi),%rax
-				// ret
-				// push   %rbp
-				// mov    %rsp,%rbp
-				// and    $0xfffffffffffffff0,%rsp
-				// call   0x7ffff7fdbd40 <__tls_get_addr_slow>
-				// mov    %rbp,%rsp
-				// pop    %rbp
-				// ret
-				0x64, 0x48, 0x8b, 0x14, 0x25, 0x08, 0x00, 0x00, 0x00,
-				0x48, 0x8b, 0x05, 0x48, 0xfc, 0x01, 0x00,
-				0x48, 0x39, 0x02,
-				0x75, 0x16,
-				0x48, 0x8b, 0x07,
-				0x48, 0xc1, 0xe0, 0x04,
-				0x48, 0x8b, 0x04, 0x02,
-				0x48, 0x83, 0xf8, 0xff,
-				0x74, 0x05,
-				0x48, 0x03, 0x47, 0x08,
-				0xc3,
-				0x55,
-				0x48, 0x89, 0xe5,
-				0x48, 0x83, 0xe4, 0xf0,
-				0xe8, 0xa8, 0xd8, 0xff, 0xff,
-				0x48, 0x89, 0xec,
-				0x5d,
-				0xc3,
-			},
-			info: DTVInfo{
-				Offset:     8,
-				Multiplier: 16,
-			},
-		},
-		"glibc 2.32 / Fedora 33 / x86_64": {
-			machine: elf.EM_X86_64,
-			code: []byte{
-				// endbr64
-				// mov    %fs:0x8,%rdx
-				// mov    0x1394c(%rip),%rax        # 0x7f48d90c2ff0 <_rtld_local+4080>
-				// cmp    %rax,(%rdx)
-				// jne    0x7f48d90af6bf <__tls_get_addr+47>
-				// mov    (%rdi),%rax
-				// shl    $0x4,%rax
-				// mov    (%rdx,%rax,1),%rax
-				// cmp    $0xffffffffffffffff,%rax
-				// je     0x7f48d90af6bf <__tls_get_addr+47>
-				// add    0x8(%rdi),%rax
-				// ret
-				// push   %rbp
-				// mov    %rsp,%rbp
-				// and    $0xfffffffffffffff0,%rsp
-				// call   0x7f48d90a9ed0 <__tls_get_addr_slow>
-				// mov    %rbp,%rsp
-				// pop    %rbp
-				// ret
-				0xf3, 0x0f, 0x1e, 0xfa,
-				0x64, 0x48, 0x8b, 0x14, 0x25, 0x08, 0x00, 0x00, 0x00,
-				0x48, 0x8b, 0x05, 0x4c, 0x39, 0x01, 0x00,
-				0x48, 0x39, 0x02,
-				0x75, 0x16,
-				0x48, 0x8b, 0x07,
-				0x48, 0xc1, 0xe0, 0x04,
-				0x48, 0x8b, 0x04, 0x02,
-				0x48, 0x83, 0xf8, 0xff,
-				0x74, 0x05,
-				0x48, 0x03, 0x47, 0x08,
-				0xc3,
-				0x55,
-				0x48, 0x89, 0xe5,
-				0x48, 0x83, 0xe4, 0xf0,
-				0xe8, 0x04, 0xa8, 0xff, 0xff,
-				0x48, 0x89, 0xec,
-				0x5d,
-				0xc3,
-			},
-			info: DTVInfo{
-				Offset:     8,
-				Multiplier: 16,
-			},
-		},
-		"musl 1.2.5 / alpine 3.22.2 / x86_64": {
-			machine: elf.EM_X86_64,
-			code: []byte{
-				// mov    %fs:0x0,%rax
-				// mov    (%rdi),%rcx
-				// mov    0x8(%rax),%rdx
-				// mov    0x8(%rdi),%rax
-				// add    (%rdx,%rcx,8),%rax
-				// ret
-				0x64, 0x48, 0x8b, 0x04, 0x25, 0x00, 0x00, 0x00, 0x00,
-				0x48, 0x8b, 0x0f,
-				0x48, 0x8b, 0x50, 0x08,
-				0x48, 0x8b, 0x47, 0x08,
-				0x48, 0x03, 0x04, 0xca,
-				0xc3,
-			},
-			info: DTVInfo{
-				Offset:     8,
-				Multiplier: 8,
-			},
-		},
-		"musl 1.1.5 / alpine 3.1 / x86_64": {
-			machine: elf.EM_X86_64,
-			code: []byte{
-				// mov    %fs:0x0,%rax
-				// mov    0x8(%rax),%rax
-				// mov    (%rdi),%rdx
-				// cmp    %rdx,(%rax)
-				// jae    0x7f824da49ef3 <__tls_get_addr+26>
-				// jmpq   0x7f824da191d5
-				// mov    (%rax,%rdx,8),%rax
-				// add    0x8(%rdi),%rax
-				// retq
-				0x64, 0x48, 0x8b, 0x04, 0x25, 0x00, 0x00, 0x00, 0x00,
-				0x48, 0x8b, 0x40, 0x08,
-				0x48, 0x8b, 0x17,
-				0x48, 0x39, 0x10,
-				0x73, 0x05,
-				0xe9, 0xe2, 0xf2, 0xfc, 0xff,
-				0x48, 0x8b, 0x04, 0xd0,
-				0x48, 0x03, 0x47, 0x08,
-				0xc3,
-			},
-			info: DTVInfo{
-				Offset:     8,
-				Multiplier: 8,
-			},
-		},
-		"glibc 2.39 / ubuntu 24.04 / aarch64": {
-			machine: elf.EM_AARCH64,
-			code: []byte{
-				0x41, 0xd0, 0x3b, 0xd5, // mrs     x1, tpidr_el0
-				0xfd, 0x7b, 0xbf, 0xa9, // stp     x29, x30, [sp, #-16]!
-				0x83, 0x01, 0x00, 0xb0, // adrp    x3, 0xfffff7fff000 <_rtld_global+4096>
-				0xfd, 0x03, 0x00, 0x91, // mov     x29, sp
-				0x63, 0x00, 0x05, 0x91, // add     x3, x3, #0x140
-				0x21, 0x00, 0x40, 0xf9, // ldr     x1, [x1]
-				0x64, 0x00, 0x40, 0xf9, // ldr     x4, [x3]
-				0x25, 0x00, 0x40, 0xf9, // ldr     x5, [x1]
-				0xbf, 0x00, 0x04, 0xeb, // cmp     x5, x4
-				0x41, 0x01, 0x00, 0x54, // b.ne    0xfffff7fce2bc <__GI___tls_get_addr+76>  // b.any
-				0x03, 0x00, 0x40, 0xf9, // ldr     x3, [x0]
-				0x63, 0xec, 0x7c, 0xd3, // lsl     x3, x3, #4
-				0x23, 0x68, 0x63, 0xf8, // ldr     x3, [x1, x3]
-				0x7f, 0x04, 0x00, 0xb1, // cmn     x3, #0x1
-				0x00, 0x01, 0x00, 0x54, // b.eq    0xfffff7fce2c8 <__GI___tls_get_addr+88>  // b.none
-				0x00, 0x04, 0x40, 0xf9, // ldr     x0, [x0, #8]
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0x60, 0x00, 0x00, 0x8b, // add     x0, x3, x0
-				0xc0, 0x03, 0x5f, 0xd6, // ret
-				0x61, 0xfc, 0xdf, 0xc8, // ldar    x1, [x3]
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0xd3, 0xff, 0xff, 0x17, // b       0xfffff7fce210 <update_get_addr>
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0x02, 0x00, 0x80, 0xd2, // mov     x2, #0x0                        // #0
-				0xa9, 0xfc, 0xff, 0x17, // b       0xfffff7fcd574 <tls_get_addr_tail>
+		"glibc":               {"libc.so.6", false, true},
+		"libpthread":          {"libpthread.so.0", false, false},
+		"loader":              {"ld-linux-x86-64.so.2", false, false},
+		"musl":                {"libc.musl-x86_64.so.1", false, true},
+		"musl without SONAME": {"", true, true},
+		"unknown libc":        {"libunknown.so", false, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			syms := map[string][]byte{}
+			if test.dls3 {
+				syms["__dls3"] = []byte{0, 0, 0, 0}
+			}
+			ef := buildTestELF(t, elf.EM_X86_64, test.soname, syms)
+			info := extractDTVInfo(ef)
+			assert.Equal(t, test.eligible, info.Multiplier != 0)
+		})
+	}
+}
 
-			},
-			info: DTVInfo{
-				Offset:     0,
-				Multiplier: 16,
-			},
+func TestGlibcDTVInfo(t *testing.T) {
+	// Descriptor values read from Debian 12 (glibc 2.36).
+	testCases := map[string]struct {
+		machine       elf.Machine
+		dtvpOffset    uint32
+		sizeofPthread uint32
+		info          DTVInfo
+	}{
+		"x86_64": {
+			machine:       elf.EM_X86_64,
+			dtvpOffset:    8,
+			sizeofPthread: 2368,
+			info:          DTVInfo{Offset: 8, Multiplier: 16},
 		},
-		"glibc / Fedora 39 / aarch64": {
-			machine: elf.EM_AARCH64,
-			code: []byte{
-				0x5f, 0x24, 0x03, 0xd5, // bti     c
-				0x41, 0xd0, 0x3b, 0xd5, // mrs     x1, tpidr_el0
-				0x3f, 0x23, 0x03, 0xd5, // paciasp
-				0xfd, 0x7b, 0xbf, 0xa9, // stp     x29, x30, [sp, #-16]!
-				0x83, 0x01, 0x00, 0xb0, // adrp    x3, 0xeebc52855000 <_rtld_local+4096>
-				0x63, 0x40, 0x05, 0x91, // add     x3, x3, #0x150
-				0xfd, 0x03, 0x00, 0x91, // mov     x29, sp
-				0x21, 0x00, 0x40, 0xf9, // ldr     x1, [x1]
-				0x63, 0x00, 0x40, 0xf9, // ldr     x3, [x3]
-				0x24, 0x00, 0x40, 0xf9, // ldr     x4, [x1]
-				0x9f, 0x00, 0x03, 0xeb, // cmp     x4, x3
-				0x61, 0x01, 0x00, 0x54, // b.ne    0xeebc52824278 <__GI___tls_get_addr+88>  // b.any
-				0x03, 0x00, 0x40, 0xf9, // ldr     x3, [x0]
-				0x63, 0xec, 0x7c, 0xd3, // lsl     x3, x3, #4
-				0x23, 0x68, 0x63, 0xf8, // ldr     x3, [x1, x3]
-				0x7f, 0x04, 0x00, 0xb1, // cmn     x3, #0x1
-				0x20, 0x01, 0x00, 0x54, // b.eq    0xeebc52824284 <__GI___tls_get_addr+100>  // b.none
-				0x00, 0x04, 0x40, 0xf9, // ldr     x0, [x0, #8]
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0xbf, 0x23, 0x03, 0xd5, // autiasp
-				0x60, 0x00, 0x00, 0x8b, // add     x0, x3, x0
-				0xc0, 0x03, 0x5f, 0xd6, // ret
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0xbf, 0x23, 0x03, 0xd5, // autiasp
-				0xcc, 0xff, 0xff, 0x17, // b       0xeebc528241b0 <update_get_addr>
-				0xfd, 0x7b, 0xc1, 0xa8, // ldp     x29, x30, [sp], #16
-				0xbf, 0x23, 0x03, 0xd5, // autiasp
-				0x02, 0x00, 0x80, 0xd2, // mov     x2, #0x0                        // #0
-				0x70, 0xfc, 0xff, 0x17, // b       0xeebc52823450 <tls_get_addr_tail>
-			},
-			info: DTVInfo{
-				Offset:     0,
-				Multiplier: 16,
-			},
-		},
-		"glibc / Fedora 33 / aarch64": {
-			machine: elf.EM_AARCH64,
-			code: []byte{
-				0x5f, 0x24, 0x03, 0xd5, //bti     c
-				0x41, 0xd0, 0x3b, 0xd5, //mrs     x1, tpidr_el0
-				0x62, 0x01, 0x00, 0xf0, //adrp    x2, 0xf58e5fcc1000 <_rtld_local+4072>
-				0x43, 0x60, 0x40, 0xf9, //ldr     x3, [x2, #192]
-				0x21, 0x00, 0x40, 0xf9, //ldr     x1, [x1]
-				0x24, 0x00, 0x40, 0xf9, //ldr     x4, [x1]
-				0x9f, 0x00, 0x03, 0xeb, //cmp     x4, x3
-				0x21, 0x01, 0x00, 0x54, //b.ne    0xf58e5fc921e0 <__GI___tls_get_addr+64>  // b.any
-				0x03, 0x00, 0x40, 0xf9, //ldr     x3, [x0]
-				0x63, 0xec, 0x7c, 0xd3, //lsl     x3, x3, #4
-				0x23, 0x68, 0x63, 0xf8, //ldr     x3, [x1, x3]
-				0x7f, 0x04, 0x00, 0xb1, //cmn     x3, #0x1
-				0xa0, 0x00, 0x00, 0x54, //b.eq    0xf58e5fc921e4 <__GI___tls_get_addr+68>  // b.none
-				0x00, 0x04, 0x40, 0xf9, //ldr     x0, [x0, #8]
-				0x60, 0x00, 0x00, 0x8b, //add     x0, x3, x0
-				0xc0, 0x03, 0x5f, 0xd6, //ret
-				0xd4, 0xff, 0xff, 0x17, //b       0xf58e5fc92130 <update_get_addr>
-				0x02, 0x00, 0x80, 0xd2, //mov     x2, #0x0                        // #0
-				0x7e, 0xfc, 0xff, 0x17, //b       0xf58e5fc913e0 <tls_get_addr_tail>
-			},
-			info: DTVInfo{
-				Offset:     0,
-				Multiplier: 16,
-			},
-		},
-
-		"musl 1.2.5 / alpine 3.22 / aarch64": { // same as alpine 3.13, oldest on dockerhub
-			machine: elf.EM_AARCH64,
-			code: []byte{
-				0x02, 0x00, 0x40, 0xa9, // ldp     x2, x0, [x0]
-				0x41, 0xd0, 0x3b, 0xd5, // mrs     x1, tpidr_el0
-				0x21, 0x80, 0x5f, 0xf8, // ldur    x1, [x1, #-8]
-				0x21, 0x78, 0x62, 0xf8, // ldr     x1, [x1, x2, lsl #3]
-				0x20, 0x00, 0x00, 0x8b, // add     x0, x1, x0
-				0xc0, 0x03, 0x5f, 0xd6, // ret
-			},
-			info: DTVInfo{
-				Offset:     -8,
-				Multiplier: 8,
-			},
+		"aarch64": {
+			machine:       elf.EM_AARCH64,
+			dtvpOffset:    1856,
+			sizeofPthread: 1856,
+			info:          DTVInfo{Offset: 0, Multiplier: 16},
 		},
 	}
 
 	for name, test := range testCases {
 		t.Run(name, func(t *testing.T) {
-			var info DTVInfo
-			var err error
-			switch test.machine {
-			case elf.EM_X86_64:
-				info, err = extractDTVInfoX86(test.code)
-			case elf.EM_AARCH64:
-				info, err = extractDTVInfoARM(test.code)
-			}
-			if assert.NoError(t, err) {
-				assert.Equal(t, test.info, info)
-			}
+			ef := buildTestELF(t, test.machine, "libc.so.6", glibcDTVSymbols(
+				test.dtvpOffset, test.sizeofPthread, 128))
+			info, err := glibcDTVInfo(ef)
+			require.NoError(t, err)
+			assert.Equal(t, test.info, info)
 		})
 	}
 }
 
-// buildTestELF creates a minimal 64-bit ELF binary with the given dynamic symbols.
-// Each symbol maps to its corresponding code byte slice. The resulting ELF has a
-// SysV hash table so pfelf.File can resolve symbols via LookupSymbol/SymbolData.
-func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) *pfelf.File {
+func glibcDTVSymbols(dtvpOffset, sizeofPthread, entrySizeBits uint32) map[string][]byte {
+	return map[string][]byte{
+		"_thread_db_dtv_dtv":           dbDescBytes(entrySizeBits, 134217727, 0),
+		"_thread_db_pthread_dtvp":      dbDescBytes(64, 1, dtvpOffset),
+		"_thread_db_dtv_t_pointer_val": dbDescBytes(64, 1, 0),
+		"_thread_db_sizeof_pthread":    dbSizeofBytes(sizeofPthread),
+	}
+}
+
+// dbDescBytes encodes an nptl_db uint32[3] field descriptor.
+func dbDescBytes(sizeBits, nelem, offset uint32) []byte {
+	var b []byte
+	b = binary.LittleEndian.AppendUint32(b, sizeBits)
+	b = binary.LittleEndian.AppendUint32(b, nelem)
+	return binary.LittleEndian.AppendUint32(b, offset)
+}
+
+func dbSizeofBytes(size uint32) []byte {
+	return binary.LittleEndian.AppendUint32(nil, size)
+}
+
+func glibcTSDSymbols(specificOffset, sizeofPthread uint32) map[string][]byte {
+	return map[string][]byte{
+		"_thread_db_pthread_specific":             dbDescBytes(2048, 1, specificOffset),
+		"_thread_db_pthread_key_data_level2_data": dbDescBytes(128, 32, 0),
+		"_thread_db_pthread_key_data_data":        dbDescBytes(64, 1, 8),
+		"_thread_db_sizeof_pthread_key_data":      dbSizeofBytes(16),
+		"_thread_db_sizeof_pthread":               dbSizeofBytes(sizeofPthread),
+	}
+}
+
+func TestGlibcTSDInfo(t *testing.T) {
+	// Descriptor values from Debian 12 (glibc 2.36).
+	testCases := map[string]struct {
+		machine        elf.Machine
+		specificOffset uint32
+		sizeofPthread  uint32
+		info           TSDInfo
+	}{
+		"x86_64": {
+			machine:        elf.EM_X86_64,
+			specificOffset: 1296,
+			sizeofPthread:  2368,
+			info: TSDInfo{Offset: 1296, Multiplier: 16,
+				KeyLimit: 1024, BlockEntries: 32, DataOffset: 8},
+		},
+		"aarch64": {
+			machine:        elf.EM_AARCH64,
+			specificOffset: 784,
+			sizeofPthread:  1856,
+			info: TSDInfo{Offset: -1072, Multiplier: 16,
+				KeyLimit: 1024, BlockEntries: 32, DataOffset: 8},
+		},
+	}
+
+	for name, test := range testCases {
+		t.Run(name, func(t *testing.T) {
+			ef := buildTestELF(t, test.machine, "libc.so.6", glibcTSDSymbols(
+				test.specificOffset, test.sizeofPthread))
+			// Metadata must suffice without a pthread_getspecific symbol.
+			libcInfo, err := ExtractLibcInfo(ef)
+			require.NoError(t, err)
+			assert.Equal(t, test.info, libcInfo.TSDInfo)
+		})
+	}
+}
+
+// buildTestELF omits section headers to exercise dynamic symbol lookup on stripped DSOs.
+func buildTestELF(t *testing.T, machine elf.Machine, soname string,
+	symbols map[string][]byte, symbolModifiers ...func(string, *elf.Sym64)) *pfelf.File {
 	t.Helper()
 
 	// Layout: ELF header | Phdr[0] PT_LOAD | Phdr[1] PT_DYNAMIC |
 	//         strtab | symtab | hash | dyntab | code...
 	//
-	// Everything lives in one PT_LOAD segment starting at vaddr 0.
+	// Everything lives in one PT_LOAD segment.
 	const vaddr = uint64(0x1000)
 
 	// Build string table: \0 then each symbol name \0-terminated
@@ -572,6 +445,9 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 		strtab.WriteString(name)
 		strtab.WriteByte(0)
 	}
+	sonameOffset := uint32(strtab.Len())
+	strtab.WriteString(soname)
+	strtab.WriteByte(0)
 
 	// Build symbol table: Sym64[0] is always null, then one per symbol
 	numSyms := 1 + len(symbols)
@@ -595,7 +471,6 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 	}
 
 	// Build SysV hash table
-	// nbucket = numSyms, nchain = numSyms (simple 1:1 mapping)
 	nbucket := uint32(numSyms)
 	nchain := uint32(numSyms)
 
@@ -609,7 +484,11 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 	hashOff := symtabOff + numSyms*int(binary.Size(elf.Sym64{}))
 	hashSize := int(4 + 4 + 4*int(nbucket) + 4*int(nchain)) // nbucket, nchain, buckets, chains
 	dynOff := hashOff + hashSize
-	dynSize := int(4 * binary.Size(elf.Dyn64{})) // STRTAB, SYMTAB, HASH, NULL
+	// STRTAB, SYMTAB, HASH, SONAME, NULL
+	dynSize := 5 * int(binary.Size(elf.Dyn64{}))
+	if soname == "" {
+		dynSize -= int(binary.Size(elf.Dyn64{}))
+	}
 	codeOff := dynOff + dynSize
 
 	// Place code for each symbol
@@ -632,9 +511,11 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 			Value: vaddr + uint64(codeOffsets[name]),
 			Size:  uint64(len(symbols[name])),
 		}
+		for _, modify := range symbolModifiers {
+			modify(name, &symtab[idx])
+		}
 	}
 
-	// Build SysV hash: simple bucket[hash % nbucket] = sym_index, chain = 0
 	hashBuf := make([]byte, hashSize)
 	binary.LittleEndian.PutUint32(hashBuf[0:], nbucket)
 	binary.LittleEndian.PutUint32(hashBuf[4:], nchain)
@@ -670,8 +551,11 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 		{Tag: int64(elf.DT_STRTAB), Val: vaddr + uint64(strtabOff)},
 		{Tag: int64(elf.DT_SYMTAB), Val: vaddr + uint64(symtabOff)},
 		{Tag: int64(elf.DT_HASH), Val: vaddr + uint64(hashOff)},
-		{Tag: int64(elf.DT_NULL), Val: 0},
 	}
+	if soname != "" {
+		dynEntries = append(dynEntries, elf.Dyn64{Tag: int64(elf.DT_SONAME), Val: uint64(sonameOffset)})
+	}
+	dynEntries = append(dynEntries, elf.Dyn64{Tag: int64(elf.DT_NULL), Val: 0})
 
 	// Assemble the ELF
 	buf := make([]byte, totalSize)
@@ -741,49 +625,14 @@ func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) 
 	return ef
 }
 
-// TestExtractLibcInfoIndependence verifies that TSD and DTV extraction are
-// independent: failure to extract one should not prevent extraction of the other.
-// This is a regression test for a bug where ExtractLibcInfo would bail out
-// entirely if extractTSDInfo failed, even when __tls_get_addr was available
-// (e.g., in ld-linux.so which exports __tls_get_addr but not pthread_getspecific).
+// A failed TSD extraction must not discard available DTV info.
 func TestExtractLibcInfoIndependence(t *testing.T) {
-	// glibc 2.36 / debian 12 / x86_64 __tls_get_addr machine code
-	tlsGetAddrCode := []byte{
-		0x64, 0x48, 0x8b, 0x14, 0x25, 0x08, 0x00, 0x00, 0x00,
-		0x48, 0x8b, 0x05, 0x48, 0xfc, 0x01, 0x00,
-		0x48, 0x39, 0x02,
-		0x75, 0x16,
-		0x48, 0x8b, 0x07,
-		0x48, 0xc1, 0xe0, 0x04,
-		0x48, 0x8b, 0x04, 0x02,
-		0x48, 0x83, 0xf8, 0xff,
-		0x74, 0x05,
-		0x48, 0x03, 0x47, 0x08,
-		0xc3,
-	}
+	ef := buildTestELF(t, elf.EM_X86_64, "libc.so.6", nil)
 
-	// Build a minimal ELF with ONLY __tls_get_addr (no pthread_getspecific).
-	// This simulates ld-linux.so which exports __tls_get_addr but not the
-	// pthread_getspecific symbol.
-	ef := buildTestELF(t, elf.EM_X86_64, map[string][]byte{
-		"__tls_get_addr": tlsGetAddrCode,
-	})
-
-	// Call ExtractLibcInfo — previously this would return (nil, err) because
-	// extractTSDInfo failed first and short-circuited the DTV extraction.
 	info, err := ExtractLibcInfo(ef)
-
-	// Should succeed (no error) because DTV extraction works even though TSD fails.
 	require.NoError(t, err)
-	require.NotNil(t, info, "ExtractLibcInfo should return non-nil LibcInfo")
-
-	// TSD should be empty (no pthread_getspecific symbol)
-	assert.False(t, info.HasTSDInfo(), "should not have TSD info")
-
-	// DTV should be populated from __tls_get_addr
-	assert.True(t, info.HasDTVInfo(), "should have DTV info from __tls_get_addr")
-	assert.Equal(t, int16(8), info.DTVInfo.Offset)
-	assert.Equal(t, uint8(16), info.DTVInfo.Multiplier)
+	assert.False(t, info.HasTSDInfo())
+	assert.True(t, info.HasDTVInfo())
 }
 
 func TestLibcInfoIsEqual(t *testing.T) {
