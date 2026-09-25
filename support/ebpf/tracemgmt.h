@@ -522,6 +522,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
 
   Trace *trace             = &record->trace;
   trace->frame_data_len    = 0;
+  trace->label_data_bytes  = 0;
   trace->num_frames        = 0;
   trace->num_kernel_frames = 0;
   trace->pid               = 0;
@@ -530,8 +531,6 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
-
-  trace->custom_labels.len = 0;
 
   return record;
 }
@@ -652,13 +651,12 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
   const int error_frame_size = 1;
 
   // Check that there is enough space for this frame and at least one error frame.
-  u64 *pos      = &trace->frame_data[trace->frame_data_len];
+  u64 *pos      = &trace->variable_data[trace->frame_data_len];
   u8 frame_size = frame_varlen + 1;
-  if (pos >= &trace->frame_data[max_frame_size - error_frame_size - frame_size]) {
+  if (pos >= &trace->variable_data[MAX_FRAME_DATA_LEN - error_frame_size - frame_size]) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
@@ -696,12 +694,10 @@ push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 // Push a critical error frame.
 static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 {
-  const int max_frame_size = sizeof trace->frame_data / sizeof trace->frame_data[0];
-
   // Check that there is enough space for this frame and at least one error frame.
-  if (trace->frame_data_len < max_frame_size) {
+  if (trace->frame_data_len < MAX_FRAME_DATA_LEN) {
     trace->num_frames++;
-    trace->frame_data[trace->frame_data_len++] =
+    trace->variable_data[trace->frame_data_len++] =
       frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
   }
 }
@@ -713,8 +709,8 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
   _Static_assert(
-    sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
-  long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
+    MAX_FRAME_DATA_LEN * sizeof(trace->variable_data[0]) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
+  long bytes = bpf_get_stack(ctx, trace->variable_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
   if (bytes > 0) {
     int nframes              = bytes / sizeof(u64);
     trace->num_kernel_frames = nframes;
@@ -725,16 +721,14 @@ static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 // Send a trace to userspace via the `trace_events` ringbuffer.
 static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 {
-  // Explicitly clamp frame_data_len for the verifier. In production the value
+  u64 send_size = trace->frame_data_len * sizeof(trace->variable_data[0]) +
+    trace->label_data_bytes;
+
+  // Explicitly clamp the send size for the verifier. In production the value
   // is always within bounds, but when send_trace is inlined into the same
   // program as push_frame (e.g. the integration test), the verifier cannot
   // track frame_data_len through memory stores and reloads.
-  u16 len = trace->frame_data_len;
-  if (len > sizeof(trace->frame_data) / sizeof(trace->frame_data[0])) {
-    len = sizeof(trace->frame_data) / sizeof(trace->frame_data[0]);
-  }
-  const u64 send_size =
-    sizeof(Trace) - sizeof(trace->frame_data) + sizeof(trace->frame_data[0]) * len;
+  send_size = MIN(send_size, sizeof(Trace));
 
   trace->cpu_id = bpf_get_smp_processor_id();
 

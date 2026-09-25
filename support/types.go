@@ -90,14 +90,6 @@ const (
 
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
-type CustomLabel struct {
-	Key [16]uint8
-	Val [48]uint8
-}
-type CustomLabelsArray struct {
-	Len    uint32
-	Labels [10]CustomLabel
-}
 type Event struct {
 	Type uint32
 }
@@ -173,14 +165,14 @@ type Trace struct {
 	Comm               [16]uint8
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
-	Custom_labels      CustomLabelsArray
 	Frame_data_len     uint16
+	Label_data_bytes   uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
 	Origin             uint16
-	Value              uint64
 	Cpu_id             uint32
-	Frame_data         [3072]uint64
+	Value              uint64
+	Variable_data      [3200]uint64
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -352,7 +344,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d8
+	Sizeof_Trace      = 0x6450
 
 	sizeof_ApmIntProcInfo        = 0x8
 	sizeof_DotnetProcInfo        = 0x4
