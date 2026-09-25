@@ -100,8 +100,6 @@ const (
 
 type ApmSpanID C.ApmSpanID
 type ApmTraceID C.ApmTraceID
-type CustomLabel C.CustomLabel
-type CustomLabelsArray C.CustomLabelsArray
 type Event C.Event
 type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage

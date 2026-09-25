@@ -148,8 +148,8 @@ func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 		panic(fmt.Sprintf("coredump trace unexpectedly contains %d kernel frames",
 			uint16(trace.num_kernel_frames)))
 	}
-	sz := trace.frame_data_len
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.frame_data[:sz]))
+	sz := trace.frame_data_len + (trace.label_data_bytes+7)/8
+	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.variable_data[:sz]))
 	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
 	ctx.trace.NumKernelFrames = 0

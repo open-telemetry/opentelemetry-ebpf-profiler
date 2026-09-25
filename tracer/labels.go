@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // customLabelValidator validates custom label keys and values extracted from
@@ -24,9 +23,8 @@ type customLabelValidator struct {
 // byte (or an empty key) returns ok=false and bumps the drop counter, signaling
 // the caller to drop the label. A corrupted key would silently group unrelated
 // samples under a garbage name, so strictness is intentional here. The returned
-// slice aliases buf; copy or intern before the buffer is reused.
-func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
-	b := stringutil.CString(buf)
+// slice aliases 'b'; copy or intern before the buffer is reused.
+func (v *customLabelValidator) validateKey(b []byte) ([]byte, bool) {
 	if len(b) == 0 || !utf8.Valid(b) {
 		v.droppedInvalidName.Add(1)
 		return nil, false
@@ -39,9 +37,8 @@ func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
 // the longest valid UTF-8 prefix rather than discard the whole label. ok=false
 // (and bumping the drop counter) fires only when the salvage is empty, i.e.
 // the input was non-empty garbage rather than mid-rune truncation. The returned
-// slice aliases buf; copy or intern before the buffer is reused.
-func (v *customLabelValidator) validateValue(buf []byte) ([]byte, bool) {
-	b := stringutil.CString(buf)
+// slice aliases 'b'; copy or intern before the buffer is reused.
+func (v *customLabelValidator) validateValue(b []byte) ([]byte, bool) {
 	pos := len(b)
 	if !utf8.Valid(b) {
 		// Walk forward; stop at the first invalid byte. This recovers the entire

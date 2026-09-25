@@ -657,21 +657,17 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
-#define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
-// Big enough to hold UUIDs, etc.
-#define CUSTOM_LABEL_MAX_VAL_LEN 48
+// Maximum number of u64 frame data entries. This limits the number
+// of frames we can unwind, but also increases the memory needed for
+// buffering everything. The 3kB entries here is chosen to allow
+// about 1024 frames in a trace to be sent.
+#define MAX_FRAME_DATA_LEN 3072
 
-typedef struct CustomLabel {
-  u8 key[CUSTOM_LABEL_MAX_KEY_LEN];
-  u8 val[CUSTOM_LABEL_MAX_VAL_LEN];
-} CustomLabel;
+// Number of bytes reserved for label_data.
+#define MAX_LABEL_DATA_LEN 128
 
-#define MAX_CUSTOM_LABELS 10
-
-typedef struct CustomLabelsArray {
-  unsigned len;
-  CustomLabel labels[MAX_CUSTOM_LABELS];
-} CustomLabelsArray;
+// Maximum Golang labels to recover
+#define MAX_GO_LABELS 10
 
 // Container for a stack trace
 typedef struct Trace {
@@ -689,11 +685,11 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
   // The number of frame_data elements present.
   u16 frame_data_len;
-  // The number of frames present.
+  // The number of label data bytes present.
+  u16 label_data_bytes;
+  // The number of (variable length) frames present.
   u16 num_frames;
   // The number of kernel stack frames at the start of frame_data.
   // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
@@ -703,23 +699,22 @@ typedef struct Trace {
   // RODATA variable at load time.
   u16 origin;
 
+  // The CPU that captured this trace.
+  u32 cpu_id;
+
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
 
-  // The CPU that captured this trace.
-  u32 cpu_id;
+  // The variable data portion of trace layout as:
+  //   u64 kernel_frame[num_kernel_frames];
+  //   u64 frame_data[frame_data_len - num_kernel_frames];
+  //   u8  label_data[label_data_bytes];
+  u64 variable_data[MAX_FRAME_DATA_LEN + MAX_LABEL_DATA_LEN];
 
-  // The frame data of the stack trace. Each frame is variable length.
-  // Frame is currently 2-3 entries long. This array size limits the
-  // number of frames we can unwind, but also increases the memory
-  // needed for buffering everything. The 3kB entries here is chosen
-  // to allow about 1024 frames in a trace to be sent.
-  u64 frame_data[3072];
-
-  // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
+  // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `variable_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the
-  // 'frame_data_len' elements of 'frame_data' are sent.
+  // populated portion is set.
 } Trace;
 
 // Container for unwinding state
@@ -870,11 +865,14 @@ struct GoSlice {
   s64 cap;
 };
 
-// https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L109
+// https://github.com/golang/go/blob/6885bad7dd86880be6929c02085/src/internal/abi/map.go#L12
+#define GO_MAP_BUCKET_SIZE 8
+
+// https://github.com/golang/go/blob/6885bad7dd86880be6929c02085/src/runtime/map.go#L143
 typedef struct GoMapBucket {
-  char tophash[8];
-  struct GoString keys[8];
-  struct GoString values[8];
+  char tophash[GO_MAP_BUCKET_SIZE];
+  struct GoString keys[GO_MAP_BUCKET_SIZE];
+  struct GoString values[GO_MAP_BUCKET_SIZE];
   void *overflow;
 } GoMapBucket;
 
@@ -935,10 +933,11 @@ typedef struct PerCPURecord {
     PythonUnwindScratchSpace pythonUnwindScratch;
     // Scratch space for the Go unwinder
     GoUnwindScratchSpace goUnwindScratch;
-    // Go labels scratch
-    GoMapBucket goMapBucket;
-    // Scratch for Go 1.24 labels
-    struct GoString labels[MAX_CUSTOM_LABELS * 2];
+    struct {
+      // Go labels scratch
+      GoMapBucket goMapBucket;
+      struct GoString goLabels[MAX_GO_LABELS * 2];
+    };
     // Signal frame registers for unwind_one_frame (avoids 272-byte stack alloc on arm64).
     // Sized to match the kernel rt_sigframe register array for the target architecture.
 #if defined(__x86_64__)
