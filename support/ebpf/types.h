@@ -419,7 +419,8 @@ typedef enum TracePrograms {
 typedef struct TSDInfo {
   // Offset is the pointer difference from "tpbase" pointer to the C-library
   // specific struct pthread's member containing the thread specific data:
-  // .tsd (musl) or .specific (glibc).
+  // .tsd (musl), .specific (glibc metadata), or the first block's data
+  // field (glibc disassembly).
   // Note: on x86_64 it's positive value, and arm64 it is negative value as
   // "tpbase" register has different purpose and pointer value per platform ABI.
   s16 offset;
@@ -427,8 +428,14 @@ typedef struct TSDInfo {
   // Typically 8 bytes on 64bit musl and 16 bytes on 64bit glibc
   u8 multiplier;
   // Indirect is a flag indicating if the "tpbase + Offset" points to a member
-  // which is a pointer the array (musl) and not the array itself (glibc).
+  // which is a pointer to a flat array (musl) rather than inline data.
   u8 indirect;
+  // Exclusive upper bound for keys. Must be initialized.
+  u16 keyLimit;
+  // Entries per block for two-level glibc lookup. Zero selects a flat array.
+  u8 blockEntries;
+  // Offset of the first entry's data field from the block pointer.
+  u8 dataOffset;
 } TSDInfo;
 
 // DTVInfo contains data needed to read Thread Local Storage (TLS) values, which
@@ -880,6 +887,9 @@ typedef struct GoRuntimeOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  u32 sched_sp_off;
+  u32 sched_pc_off;
+  u32 sched_lr_off;
   u32 sched_bp_off;
 } GoRuntimeOffsets;
 
@@ -1015,6 +1025,14 @@ typedef struct StackDelta {
 // the unwind info array.
 #define STACK_DELTA_COMMAND_FLAG 0x8000
 
+// Commands carrying this bit are implemented by the native unwinder only. The combined
+// interpreter+native programs report such a frame to their caller instead of unwinding it
+// themselves, so that the implementation is not inlined into them. Keeping this a property
+// of the command means a new native-only command cannot forget to opt in.
+// Only meaningful when STACK_DELTA_COMMAND_FLAG is set, so it does not reduce the index
+// space of the unwind info array.
+#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000
+
 // Unsupported or no value for the register
 #define UNWIND_COMMAND_INVALID       0
 // For CFA: stop unwinding, this function is a stack root function
@@ -1027,7 +1045,10 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_FRAME_POINTER 4
 // Cross the Go runtime.asmcgocall stack-switch boundary (arm64) by reading the
 // goroutine saved context from gobuf
-#define UNWIND_COMMAND_GO_ASMCGOCALL 5
+#define UNWIND_COMMAND_GO_ASMCGOCALL (STACK_DELTA_NATIVE_COMMAND_BIT | 5)
+// Unwind past Go runtime.morestack by reading the caller registers it saved
+// into the goroutine's gobuf
+#define UNWIND_COMMAND_GO_MORESTACK  (STACK_DELTA_NATIVE_COMMAND_BIT | 6)
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {
