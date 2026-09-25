@@ -195,21 +195,23 @@ func (pm *ProcessManager) updatePIDAnonymousMappingInterest(pid libpf.PID, enabl
 // that the attach was successful OR a retry is underway.
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
-// Returns the updated anonymous executable mapping interest state for the PID.
+// Returns the updated anonymous executable mapping interest state for the PID, and
+// whether a new interpreter instance was attached (false for an already-known one).
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool) (bool, error) {
+	oid util.OnDiskFileIdentifier, data interpreter.Data, anonymousMappingsWanted bool,
+) (updatedAnonymousMappingsWanted, newInterpreterAttached bool, err error) {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
 	if _, ok := pm.interpreters[pid]; ok {
 		if _, ok := pm.interpreters[pid][oid]; ok {
-			return anonymousMappingsWanted, nil
+			return anonymousMappingsWanted, false, nil
 		}
 	}
 	// Slow path: Interpreter detection or attachment needed
 	instance, err := data.Attach(pm.ebpf, pid, bias, pr.GetRemoteMemory())
 	if err != nil {
-		return anonymousMappingsWanted, fmt.Errorf("failed to attach to %v in PID %v: %w",
+		return anonymousMappingsWanted, false, fmt.Errorf("failed to attach to %v in PID %v: %w",
 			data, pid, err)
 	}
 
@@ -223,7 +225,7 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 		}
 	}
 
-	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), nil
+	return anonymousMappingsWanted || instance.UsesAnonymousMappings(), true, nil
 }
 
 // attachProbesForMapping iterates the registered ProbeAttachers and calls Attach
@@ -395,7 +397,7 @@ var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping,
 	anonymousMappingsWanted bool,
-) (libpf.FrameMapping, bool, error) {
+) (libpf.FrameMapping, bool, bool, error) {
 	// Open the mapping's own file via OpenELFMapping (VDSO from memory plus
 	// /proc/<pid>/map_files for deleted-file safety); auxiliary opens such as
 	// .gnu_debuglink targets go through pr.OpenELF.
@@ -413,14 +415,14 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			log.Debugf("Failed to get ELF info for PID %d file %v: %v",
 				pr.PID(), m.Path, info.err)
 		}
-		return libpf.FrameMapping{}, anonymousMappingsWanted, info.err
+		return libpf.FrameMapping{}, anonymousMappingsWanted, false, info.err
 	}
 
 	elfSpaceVA, ok := info.addressMapper.FileOffsetToVirtualAddress(m.FileOffset)
 	if !ok {
 		log.Debugf("Failed to map file offset of PID %d, file %s, offset %d",
 			pr.PID(), m.Path, m.FileOffset)
-		return libpf.FrameMapping{}, anonymousMappingsWanted, errInvalidVirtualAddress
+		return libpf.FrameMapping{}, anonymousMappingsWanted, false, errInvalidVirtualAddress
 	}
 
 	fileID := host.FileIDFromLibpf(info.mappingFile.Value().FileID)
@@ -433,20 +435,22 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 		// ErrDeferredFileID is expected while this fileID is in backoff. The
 		// original failure was already logged once when the fileID entered
 		// deferredFileIDs.
-		return libpf.FrameMapping{}, anonymousMappingsWanted, err
+		return libpf.FrameMapping{}, anonymousMappingsWanted, false, err
 	}
 
+	newInterpreterAttached := false
 	pm.mu.Lock()
 	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
-		if updatedAnonymousMappingsWanted, err := pm.handleNewInterpreter(
+		if updatedAnonymousMappingsWanted, attached, err := pm.handleNewInterpreter(
 			pr, bias, m.GetOnDiskFileIdentifier(), ei.Data, anonymousMappingsWanted,
 		); err != nil {
 			log.Errorf("Failed to handle new interpreter for PID %d file %v: %v",
 				pr.PID(), m.Path, err)
 		} else {
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
+			newInterpreterAttached = attached
 		}
 	}
 	pm.attachProbesForMapping(pr, m)
@@ -457,7 +461,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 		Start:      libpf.Address(elfSpaceVA),
 		End:        libpf.Address(elfSpaceVA + m.Length),
 		FileOffset: m.FileOffset,
-	}), anonymousMappingsWanted, nil
+	}), anonymousMappingsWanted, newInterpreterAttached, nil
 }
 
 func compareMapping(a, b Mapping) int {
@@ -707,7 +711,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 				// Error is expected for non-ELF files (e.g. PE DLL);
 				// fm will be invalid and the mapping skipped below but will enter the interpreter mappings block.
 				previouslyCollectingInterpreterMappings := collectAnonymousMappings
-				fm, collectAnonymousMappings, _ = pm.newFrameMapping(
+				fm, collectAnonymousMappings, _, _ = pm.newFrameMapping(
 					pr, &m, collectAnonymousMappings)
 				if !previouslyCollectingInterpreterMappings && collectAnonymousMappings {
 					interpreterMappings.enable()
@@ -861,6 +865,116 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// additional code (e.g. plugins, Asterisk).
 		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
+	}
+}
+
+// SynchronizeMapping incrementally ingests a single executable, file-backed
+// mapping for an already-tracked process, without rescanning all of
+// /proc/<pid>/maps. It attaches any matching probes, registers the mapping for
+// unwinding and records it in the process's mapping set.
+//
+// Processes the profiler has not seen yet are left untouched: the CPU profiler's
+// reported_pids path runs a full SynchronizeProcess when it first samples them,
+// which establishes their initial mapping set.
+//
+// SynchronizeMapping must be called from the same goroutine as
+// SynchronizeProcess (the tracer's PID event processor) so that per-PID state
+// is not mutated concurrently.
+func (pm *ProcessManager) SynchronizeMapping(pr process.Process, rm *process.RawMapping) {
+	pid := pr.PID()
+
+	// Only file-backed executable mappings are ELF probe/unwind targets.
+	if !rm.IsExecutable() || !rm.IsFileBacked() {
+		return
+	}
+
+	pm.mu.Lock()
+	info, known := pm.pidToProcessInfo[pid]
+	if !known {
+		// Untracked process: leave bootstrapping to the CPU profiler's
+		// reported_pids path.
+		pm.mu.Unlock()
+		return
+	}
+	if _, exiting := pm.exitEvents[pid]; exiting {
+		pm.mu.Unlock()
+		return
+	}
+	alreadyMapped, vaddrConflict := false, false
+	for i := range info.mappings {
+		em := &info.mappings[i]
+		if uint64(em.Vaddr) != rm.Vaddr {
+			continue
+		}
+		if em.Length == rm.Length && em.Device == rm.Device && em.Inode == rm.Inode {
+			alreadyMapped = true
+		} else {
+			vaddrConflict = true
+		}
+		break
+	}
+	collectAnonymousMappings := false
+	if intrp, ok := pm.interpreters[pid]; ok {
+		for _, instance := range intrp {
+			if instance.UsesAnonymousMappings() {
+				collectAnonymousMappings = true
+				break
+			}
+		}
+	}
+	pm.mu.Unlock()
+
+	if alreadyMapped {
+		return
+	}
+	if vaddrConflict {
+		// A different mapping now occupies this address (address reuse after
+		// munmap/dlclose). The stale LPM entry still resolves the address, so
+		// sampling it will not raise a missing-mapping event and nothing would
+		// ever trigger recovery. Fall back to a full sync to replace it; rare
+		// enough that the extra cost does not matter.
+		log.Debugf("PID %v: executable mapping at %#x replaced, resynchronizing", pid, rm.Vaddr)
+		pm.SynchronizeProcess(pr)
+		return
+	}
+
+	m := *rm
+	m.Path = libpf.Intern(m.Path).String()
+
+	// newFrameMapping attaches matching probes and, if the mapping is itself an
+	// interpreter, attaches it. An invalid FrameMapping means a non-ELF file or a
+	// transient error; there is then nothing to register for unwinding.
+	fm, _, newInterpreterAttached, err := pm.newFrameMapping(pr, &m, collectAnonymousMappings)
+	if err != nil || !fm.Valid() {
+		return
+	}
+
+	mapping := Mapping{
+		Vaddr:        libpf.Address(m.Vaddr),
+		Length:       m.Length,
+		Device:       m.Device,
+		Inode:        m.Inode,
+		FrameMapping: fm,
+	}
+	numChanges := pm.processNewMapping(pid, &mapping)
+
+	pm.mu.Lock()
+	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		info.mappings = append(info.mappings, mapping)
+		// findMappingForTrace binary-searches info.mappings, so keep it sorted.
+		slices.SortFunc(info.mappings, compareMapping)
+		pm.pidPageToMappingInfoSize += numChanges
+	}
+	pm.mu.Unlock()
+
+	if newInterpreterAttached {
+		// A newly attached interpreter must be initialized with the process's full
+		// set of relevant mappings (via each instance's SynchronizeMappings), plus
+		// the anonymous-mapping interest marker, which a single mmap event cannot
+		// supply. Hand off to a full sync: the mapping just added is matched by
+		// vaddr+inode and its FrameMapping reused, so it is not re-referenced or
+		// double-counted.
+		pm.SynchronizeProcess(pr)
 	}
 }
 

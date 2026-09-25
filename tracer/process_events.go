@@ -5,12 +5,16 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
+	"debug/elf"
 	"fmt"
 
 	"github.com/elastic/go-perf"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
 // mmapEventRingPages sizes the per-CPU perf ring buffer used for mmap events.
@@ -18,8 +22,22 @@ import (
 // a smaller ring keeps the system-wide, per-CPU memory footprint modest.
 const mmapEventRingPages = 8
 
+// mmapEventBufferSize sizes the channel that carries mmap mapping events to the
+// PID event processor. It is separate from pidEvents so a burst of mmap records
+// cannot starve eBPF report_pid notifications.
+const mmapEventBufferSize = 128
+
+// mmapEvent is a single executable, file-backed mapping observed via a perf
+// mmap2 record, routed to ProcessManager.SynchronizeMapping.
+type mmapEvent struct {
+	pid     libpf.PID
+	tid     libpf.PID
+	mapping process.RawMapping
+}
+
 // ensureMmapEventMonitor starts system-wide perf readers once. Executable mapping
-// events enter the existing PID path so probes see mappings added after initial sync.
+// events are ingested via ProcessManager.SynchronizeMapping so probes see
+// mappings added after the initial process synchronization.
 func (t *Tracer) ensureMmapEventMonitor() error {
 	return t.mmapEventOnce()
 }
@@ -39,98 +57,80 @@ func (t *Tracer) startMmapEventMonitor(ctx context.Context) error {
 		return fmt.Errorf("getting online CPUs: %w", err)
 	}
 
-	attr := &perf.Attr{
-		Options: perf.Options{
-			Disabled: true, // Enable only after every per-CPU ring has been mapped.
-			// Mmap2 emits extended mapping records, but the kernel only delivers
-			// them when Mmap is also set (see perf_event_open(2)).
-			Mmap:  true,
-			Mmap2: true,
+	reader, err := perfutil.Start(ctx, cpus, perfutil.Config{
+		Name:      "mmap event",
+		RingPages: mmapEventRingPages,
+		Configure: func(attr *perf.Attr) {
+			// Mmap2 emits extended mapping records, but the kernel only
+			// delivers them when Mmap is also set (see perf_event_open(2)).
+			attr.Options.Mmap = true
+			attr.Options.Mmap2 = true
 		},
+		OnRecord: t.handleMmapRecord,
+	})
+	if err != nil {
+		return err
 	}
-	// Wake readers when any data reaches the ring; SetWakeupWatermark also sets
-	// Options.Watermark, so sample-count wakeups (which ignore sideband records)
-	// are not used.
-	attr.SetWakeupWatermark(1)
-	if err := perf.Dummy.Configure(attr); err != nil {
-		return fmt.Errorf("configuring mmap events: %w", err)
-	}
-
-	events := make([]*perf.Event, 0, len(cpus))
-	closeEvents := func() {
-		for _, event := range events {
-			_ = event.Close()
-		}
-	}
-
-	// System-wide perf events require a concrete CPU, so open one per online CPU.
-	for _, cpu := range cpus {
-		event, err := perf.Open(attr, perf.AllThreads, cpu, nil)
-		if err != nil {
-			closeEvents()
-			return fmt.Errorf("opening mmap events on CPU %d: %w", cpu, err)
-		}
-		events = append(events, event)
-		if err := event.MapRingNumPages(mmapEventRingPages); err != nil {
-			closeEvents()
-			return fmt.Errorf("mapping mmap event ring on CPU %d: %w", cpu, err)
-		}
-	}
-
-	for _, event := range events {
-		if err := event.Enable(); err != nil {
-			closeEvents()
-			return fmt.Errorf("enabling mmap events: %w", err)
-		}
-	}
-	for _, event := range events {
-		t.mmapEventWG.Go(func() {
-			t.readMmapEvents(ctx, event)
-		})
-	}
+	t.mmapReader = reader
 	return nil
 }
 
-// readMmapEvents forwards one CPU's mapping events to PID processing.
-func (t *Tracer) readMmapEvents(ctx context.Context, event *perf.Event) {
-	defer event.Close()
-	for {
-		record, err := event.ReadRecord(ctx)
-		if err != nil {
-			if ctx.Err() == nil {
-				log.Errorf("Failed to read perf mmap event: %v", err)
-			}
-			return
-		}
-		if lost, ok := record.(*perf.LostRecord); ok {
-			log.Warnf("Lost %d perf mmap events", lost.Lost)
-			continue
-		}
-		pidTID, ok := mmapRecordPIDTID(record)
-		if !ok {
-			continue
-		}
-		select {
-		case t.pidEvents <- pidTID:
-		case <-ctx.Done():
-			return
-		}
+// handleMmapRecord forwards one mapping event to PID processing.
+func (t *Tracer) handleMmapRecord(ctx context.Context, record perf.Record) {
+	if lost, ok := record.(*perf.LostRecord); ok {
+		log.Warnf("Lost %d perf mmap events", lost.Lost)
+		return
+	}
+	ev, ok := mmapRecordToEvent(record)
+	if !ok {
+		return
+	}
+	select {
+	case t.mmapEvents <- ev:
+	case <-ctx.Done():
 	}
 }
 
-func mmapRecordPIDTID(record perf.Record) (libpf.PIDTID, bool) {
-	var pid, tid uint32
-	switch record := record.(type) {
-	case *perf.Mmap2Record:
-		// Mappings without a backing inode, such as anonymous JIT code, cannot
-		// provide a file-backed ELF probe target and would only trigger an
-		// unnecessary full process resync.
-		if record.Inode == 0 {
-			return 0, false
-		}
-		pid, tid = record.Pid, record.Tid
-	default:
-		return 0, false
+// mmapRecordToEvent converts a perf mmap2 record into an mmapEvent, dropping
+// records that cannot describe a file-backed ELF probe target.
+func mmapRecordToEvent(record perf.Record) (mmapEvent, bool) {
+	rec, ok := record.(*perf.Mmap2Record)
+	if !ok {
+		return mmapEvent{}, false
 	}
-	return libpf.PIDTID(uint64(pid)<<32 | uint64(tid)), true
+	// Mappings without a backing inode, such as anonymous JIT code, cannot
+	// provide a file-backed ELF probe target.
+	if rec.Inode == 0 {
+		return mmapEvent{}, false
+	}
+	return mmapEvent{
+		pid: libpf.PID(rec.Pid),
+		tid: libpf.PID(rec.Tid),
+		mapping: process.RawMapping{
+			Vaddr:      rec.Addr,
+			Length:     rec.Len,
+			Flags:      protToProgFlags(rec.Prot),
+			FileOffset: rec.PageOffset,
+			// Encode the device like /proc/PID/maps parsing (stat(2) st_dev).
+			Device: unix.Mkdev(rec.MajorID, rec.MinorID),
+			Inode:  rec.Inode,
+			Path:   rec.Filename,
+		},
+	}, true
+}
+
+// protToProgFlags maps mmap PROT_* protection bits to ELF program flags, as used
+// by process.RawMapping.
+func protToProgFlags(prot uint32) elf.ProgFlag {
+	var flags elf.ProgFlag
+	if prot&unix.PROT_READ != 0 {
+		flags |= elf.PF_R
+	}
+	if prot&unix.PROT_WRITE != 0 {
+		flags |= elf.PF_W
+	}
+	if prot&unix.PROT_EXEC != 0 {
+		flags |= elf.PF_X
+	}
+	return flags
 }

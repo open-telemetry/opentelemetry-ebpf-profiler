@@ -29,6 +29,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -161,7 +162,7 @@ type Tracer struct {
 	mmapEventOnce   func() error
 	// mmapEventMu serializes lazy monitor startup with Close.
 	mmapEventMu sync.Mutex
-	mmapEventWG sync.WaitGroup
+	mmapReader  *perfutil.PerfSidebandReader
 
 	// hooks holds references to loaded eBPF hooks.
 	hooks xsync.RWMutex[hooksState]
@@ -184,6 +185,12 @@ type Tracer struct {
 	// It needs to be buffered to avoid locking the writers and stacking up resources when we
 	// read new PIDs at startup or notified via eBPF.
 	pidEvents chan libpf.PIDTID
+
+	// mmapEvents notifies the tracer of executable file-backed mappings observed
+	// via perf mmap2 records. They are processed by the same goroutine as
+	// pidEvents so per-PID ProcessManager state is mutated serially, while
+	// keeping mmap-driven work off the pidEvents channel used by eBPF report_pid.
+	mmapEvents chan mmapEvent
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
@@ -383,6 +390,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
+		mmapEvents:             make(chan mmapEvent, mmapEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]link.Link)}),
@@ -410,9 +418,12 @@ func (t *Tracer) Close() {
 	if t.lifecycleCancel != nil {
 		t.lifecycleCancel()
 	}
-	// Ensure startup has registered every reader before waiting for them.
+	// Ensure startup has registered the reader before tearing it down. If it
+	// started, its goroutines observe the canceled lifecycle context above.
 	t.mmapEventMu.Lock()
-	t.mmapEventWG.Wait()
+	if t.mmapReader != nil {
+		t.mmapReader.Close()
+	}
 	t.mmapEventMu.Unlock()
 
 	events := t.perfEntrypoints.WLock()
