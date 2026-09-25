@@ -4,7 +4,10 @@
 package elfunwindinfo
 
 import (
+	"fmt"
+	"math"
 	"testing"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -32,10 +35,14 @@ func TestPcval(t *testing.T) {
 	data := []byte{
 		0x02, 0x19, 0x40, 0x52, 0x10, 0x02, 0x10, 0x06,
 		0x0f, 0x01, 0x0f, 0x27, 0x3f, 0x01, 0x00}
-	p := newPcval(data, 0x2000, 1)
+	p, ok := newPcval(data, 0x2000, 1)
+	require.True(t, ok)
 	i := 0
-	for ok := true; ok; ok = p.step() {
+	for ; ok; ok = p.step() {
 		t.Logf("Pcval %d, %x", p.val, p.pcEnd)
+		// Guard the indexing below: a regression that makes the table step
+		// further than expected should fail here, not panic.
+		require.Less(t, i, len(res))
 		assert.Equal(t, res[i].val, p.val)
 		assert.Equal(t, res[i].pc, p.pcEnd)
 		i++
@@ -43,11 +50,39 @@ func TestPcval(t *testing.T) {
 	assert.Equal(t, len(res), i)
 }
 
-// Pcval with sequence that would result in out-of-bound read
-func TestPcvalInvalid(_ *testing.T) {
+// Pcval with sequence that would result in out-of-bound read. The truncated
+// varint must be rejected rather than decoded as a zero delta: doing so would
+// leave val at its -1 sentinel while reporting success.
+func TestPcvalInvalid(t *testing.T) {
 	data := []byte{0x81}
-	p := newPcval(data, 0x2000, 1)
-	for p.step() {
+	p, ok := newPcval(data, 0x2000, 1)
+	assert.False(t, ok)
+	assert.Equal(t, int32(-1), p.val)
+	assert.False(t, p.step())
+}
+
+// TestNewPcvalEmpty verifies that newPcval reports failure when the table has
+// no decodable first entry, so that callers never see the -1 sentinel in val.
+// The parse loops read val before their first step, so a sentinel would be
+// emitted as unwind information: 7 on x86 (val+8) and -1 on arm64.
+func TestNewPcvalEmpty(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		data []byte
+	}{
+		{"nil", nil},
+		{"empty", []byte{}},
+		{"terminator", []byte{0x00}},
+		{"terminatorThenData", []byte{0x00, 0x02, 0x19}},
+		{"truncatedFirstVarint", []byte{0x81}},
+		{"truncatedSecondVarint", []byte{0x02}},
+		{"truncatedContinuation", []byte{0x02, 0x81}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			p, ok := newPcval(test.data, 0x2000, 1)
+			assert.False(t, ok)
+			assert.Equal(t, int32(-1), p.val)
+		})
 	}
 }
 
@@ -133,4 +168,150 @@ func TestTextStart(t *testing.T) {
 	defer gStripped.Close()
 
 	require.Equal(t, runtimeTextAddr, gStripped.textStart)
+}
+
+// TestGetPcvalBounds verifies that an out-of-range pcval offset, which is
+// untrusted data from the pclntab function descriptor, is rejected rather than
+// slicing out of bounds. The negative cases must not panic with "slice bounds
+// out of range".
+func TestGetPcvalBounds(t *testing.T) {
+	g := &Gopclntab{
+		pctab:   []byte{0x02, 0x19, 0x00},
+		quantum: 1,
+	}
+	for _, test := range []struct {
+		name    string
+		offs    int32
+		wantErr string
+	}{
+		{"negative", -1, "out of bounds"},
+		{"minInt32", math.MinInt32, "out of bounds"},
+		{"pastEnd", int32(len(g.pctab) + 1), "out of bounds"},
+		{"maxInt32", math.MaxInt32, "out of bounds"},
+		// An offset of exactly len(pctab) yields an empty table rather than an
+		// out of range slice, so it has to be caught by the bounds check and
+		// not by the empty table check further down.
+		{"atEnd", int32(len(g.pctab)), "out of bounds"},
+		// In bounds, but pointing at the end-of-table marker.
+		{"terminator", 2, "has no valid first entry"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := g.getPcval(test.offs, 0x2000)
+			require.ErrorContains(t, err, test.wantErr)
+		})
+	}
+
+	// A valid offset still decodes the table.
+	p, err := g.getPcval(0, 0x2000)
+	require.NoError(t, err)
+	assert.Equal(t, int32(0), p.val)
+	assert.Equal(t, uint(0x2019), p.pcEnd)
+}
+
+// TestGetPcvalSentinel verifies that a table whose first entry steps
+// successfully, but leaves val negative, is rejected. Rejecting truncated
+// varints is not enough on its own: a non-canonical encoding of zero decodes
+// fine, so the -1 sentinel survives a successful step and would be emitted as
+// unwind information, as Param 7 on x86 (val+8) or -1 on arm64.
+//
+// The expected reason is asserted, not just that some error is returned, so
+// that a case cannot silently start being caught by an earlier check and stop
+// testing what its name says.
+func TestGetPcvalSentinel(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		pctab   []byte
+		wantErr string
+	}{
+		// 0x80 0x00 is a non-canonical encoding of 0, then a pc delta of 2.
+		// The value is unchanged, so val is still the sentinel, but unlike a
+		// truncated table this steps successfully.
+		{"nonCanonicalZero", []byte{0x80, 0x00, 0x02, 0x00},
+			"starts with negative value -1"},
+		// The same value, with the maximum padding getInt will consume before
+		// the shift stops contributing.
+		{"nonCanonicalZeroLong", []byte{0x80, 0x80, 0x80, 0x00, 0x02, 0x00},
+			"starts with negative value -1"},
+		// A negative delta, taking val below the sentinel rather than leaving
+		// it there. Rejected by value, not by being the sentinel.
+		{"negativeDelta", []byte{0x03, 0x02, 0x00},
+			"starts with negative value -3"},
+		// A canonical zero cannot be encoded as a leading 0x00, because that
+		// byte is the end-of-table marker. That is precisely why the
+		// non-canonical encoding above is the interesting case. Kept to pin
+		// that behavior: this is rejected as an empty table, not by value.
+		{"leadingTerminator", []byte{0x00, 0x02, 0x00},
+			"has no valid first entry"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			g := &Gopclntab{pctab: test.pctab, quantum: 1}
+			_, err := g.getPcval(0, 0x2000)
+			require.ErrorContains(t, err, test.wantErr)
+		})
+	}
+}
+
+// TestGetFuncOverflow verifies that a function offset near the top of the
+// address space does not wrap around the bounds check in getFunc. funcOff is
+// read verbatim from the file as a 64-bit value for pre-Go1.18 pclntab.
+// Check that these cases don't panic with "index out of range", and that the
+// accepted ones return a pclntabFunc that fits in the table.
+//
+// go1_2 is not covered because NewGopclntab rejects it as an unsupported
+// header, so getFunc is unreachable for it.
+func TestGetFuncOverflow(t *testing.T) {
+	// getFunc skips over the function start PC, whose width depends on the
+	// pclntab version, before returning the pclntabFunc that follows it.
+	// funSize has to account for both parts. This mirrors how NewGopclntab
+	// sets funSize; the test builds the struct directly, so it covers getFunc
+	// rather than that assignment, which real binaries exercise.
+	for _, version := range []uint8{go1_16, go1_18, go1_20} {
+		t.Run(fmt.Sprintf("version%d", version), func(t *testing.T) {
+			g := &Gopclntab{
+				functab: make([]byte, 128),
+				version: version,
+				ptrSize: 8,
+			}
+			if version >= go1_18 {
+				g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
+			} else {
+				g.funSize = g.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{}))
+			}
+			tabStart := uintptr(unsafe.Pointer(&g.functab[0]))
+			tabEnd := tabStart + uintptr(len(g.functab))
+
+			for _, test := range []struct {
+				name    string
+				funcOff uintptr
+			}{
+				{"maxUintptr", ^uintptr(0)},
+				{"wrapsToZero", ^uintptr(0) - uintptr(g.funSize) + 1},
+				{"justPastEnd", uintptr(len(g.functab))},
+				{"lastByte", uintptr(len(g.functab) - 1)},
+				{"oneTooFar", uintptr(len(g.functab)) - uintptr(g.funSize) + 1},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					pc, fun := g.getFunc(test.funcOff)
+					assert.Zero(t, pc)
+					assert.Nil(t, fun)
+				})
+			}
+
+			// The last offset that still fits a full function descriptor is
+			// accepted, and the descriptor ends exactly at the end of the
+			// table: the bound is tight, and never returns a pclntabFunc
+			// reaching past the mapping.
+			lastValid := uintptr(len(g.functab)) - uintptr(g.funSize)
+			_, fun := g.getFunc(lastValid)
+			require.NotNil(t, fun)
+			funEnd := uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
+			assert.Equal(t, tabEnd, funEnd)
+
+			// An in-range offset is still accepted, and stays in bounds.
+			_, fun = g.getFunc(0)
+			require.NotNil(t, fun)
+			funEnd = uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
+			assert.GreaterOrEqual(t, tabEnd, funEnd)
+		})
+	}
 }
