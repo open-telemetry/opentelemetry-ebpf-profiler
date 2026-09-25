@@ -188,6 +188,18 @@ func (tp *testProcess) GetRemoteMemory() remotememory.RemoteMemory {
 	return remotememory.RemoteMemory{}
 }
 
+func (tp *testProcess) OpenMappingFile(*process.RawMapping) (process.ReadAtCloser, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (tp *testProcess) GetMappingFileLastModified(*process.RawMapping) int64 {
+	return 0
+}
+
+func (tp *testProcess) CalculateMappingFileID(*process.RawMapping) (libpf.FileID, error) {
+	return libpf.FileID{}, errors.New("not implemented")
+}
+
 func (tp *testProcess) Close() error {
 	return nil
 }

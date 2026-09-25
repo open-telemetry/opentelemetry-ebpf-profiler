@@ -236,13 +236,18 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
 }
 
-// OpenMapping implements the MappingFileOpener interface.
-func (cd *CoredumpProcess) OpenMapping(_ *RawMapping) (fs.File, error) {
+// OpenMappingFile implements the Process interface.
+func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
 	// Coredumps do not contain the original backing files.
 	return nil, ErrMappingFileUnavailable
 }
 
-// CalculateMappingFileID implements the MappingFileIDCalculator interface.
+// GetMappingFileLastModified implements the Process interface.
+func (cd *CoredumpProcess) GetMappingFileLastModified(_ *RawMapping) int64 {
+	return 0
+}
+
+// CalculateMappingFileID implements the Process interface.
 func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, error) {
 	// It is not possible to calculate the real FileID as the section headers
 	// are likely missing. So just return a synthesized FileID.
@@ -270,7 +275,11 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, 
 // our old test cases from times when we didn't yet bundle the original executables with our
 // tests, we allow this fallback.
 func (cd *CoredumpProcess) Open(name string) (fs.File, error) {
-	if file, ok := cd.files[name]; ok {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+	}
+	// Coredump files are recorded by their absolute path.
+	if file, ok := cd.files["/"+name]; ok {
 		return &coredumpFileHandle{CoredumpFile: file}, nil
 	}
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}

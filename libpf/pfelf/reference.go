@@ -11,14 +11,14 @@ import "io/fs"
 // Reference is a reference to an ELF file which is loaded and cached on demand.
 type Reference struct {
 	// FS opens auxiliary files by name (e.g. debuglink targets). When open is
-	// nil it also opens the reference's own file via FS.Open(fileName).
+	// nil it also opens the reference's own file via FS.Open(FSPath(fileName)).
 	fs.FS
 
-	// fileName is the full path of the ELF to open.
+	// fileName is the absolute path of the ELF to open.
 	fileName string
 
 	// open, when non-nil, opens the reference's own file instead of
-	// OpenFS(FS, fileName). It lets callers inject context that a bare
+	// OpenFS(FS, FSPath(fileName)). It lets callers inject context that a bare
 	// filename cannot carry, e.g. a memory mapping.
 	open func() (*File, error)
 
@@ -54,7 +54,7 @@ func (ref *Reference) GetELF() (*File, error) {
 		if ref.open != nil {
 			ref.elfFile, err = ref.open()
 		} else {
-			ref.elfFile, err = OpenFS(ref.FS, ref.fileName)
+			ref.elfFile, err = OpenFS(ref.FS, FSPath(ref.fileName))
 		}
 	}
 	return ref.elfFile, err

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -23,25 +24,60 @@ type StoreCoredump struct {
 	tempFiles map[string]string
 }
 
-var _ fs.FS = &StoreCoredump{}
+var _ process.Process = &StoreCoredump{}
 
-// Open implements the fs.FS interface. It prefers content from the module
-// store (which holds the original, unmodified on-disk files bundled with the
-// test case), falling back to the coredump's own partial data for name.
-func (scd *StoreCoredump) Open(name string) (fs.File, error) {
-	info, ok := scd.modules[name]
+func (scd *StoreCoredump) openFile(path string) (*modulestore.ModuleReader, error) {
+	info, ok := scd.modules[path]
 	if !ok {
-		// Bundle miss: fall back to whatever partial data the coredump
-		// itself carries for legacy test cases without bundled modules.
-		return scd.CoredumpProcess.Open(name)
+		return nil, fmt.Errorf("failed to open file `%s`: %w", path, os.ErrNotExist)
 	}
 
 	// The module is available from store.
 	file, err := scd.store.OpenBufferedReadAt(info.Ref, 4*1024*1024)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file `%s`: %w", name, err)
+		return nil, fmt.Errorf("failed to open file `%s`: %w", path, err)
 	}
-	return process.NewFile(file), nil
+	return file, nil
+}
+
+func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
+	rac, err := scd.openFile(m.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		// Bundle miss: let OpenELFMapping fall back to Open, which
+		// can serve content from PT_LOAD segments for legacy test cases.
+		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
+	}
+	return rac, err
+}
+
+// moduleFile adapts a module store reader to fs.File.
+type moduleFile struct {
+	*io.SectionReader
+	io.Closer
+}
+
+func (*moduleFile) Stat() (fs.FileInfo, error) {
+	return nil, errors.New("stat not supported for module store files")
+}
+
+// Open implements the fs.FS interface. It prefers content from the module
+// store, falling back to the coredump's own partial data for name.
+func (scd *StoreCoredump) Open(name string) (fs.File, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+	}
+	// Modules are recorded by their absolute path.
+	file, err := scd.openFile("/" + name)
+	if errors.Is(err, os.ErrNotExist) {
+		return scd.CoredumpProcess.Open(name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &moduleFile{
+		SectionReader: io.NewSectionReader(file, 0, int64(file.Size())),
+		Closer:        file,
+	}, nil
 }
 
 // remoteReaderWithModuleFallback satisfies io.ReaderAt by first trying the
@@ -74,15 +110,11 @@ func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, erro
 	if !found {
 		return n, err
 	}
-	f, openErr := process.OpenMapping(r.scd, &covering)
+	file, openErr := r.scd.OpenMappingFile(&covering)
 	if openErr != nil {
 		return n, err
 	}
-	defer f.Close()
-	file, ok := f.(io.ReaderAt)
-	if !ok {
-		return n, err
-	}
+	defer file.Close()
 	fileOff := covering.FileOffset + (uint64(addr) - covering.Vaddr)
 	return file.ReadAt(p, int64(fileOff))
 }

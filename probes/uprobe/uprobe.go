@@ -147,7 +147,7 @@ func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
 // for the given process and stores the link for later cleanup.
 func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
 	pid := pr.PID()
-	mappingFile, err := process.OpenMapping(pr, mapping)
+	mappingFile, err := pr.OpenMappingFile(mapping)
 	if err != nil {
 		return fmt.Errorf("%s: open mapping %s: %w", p, mapping.Path, err)
 	}

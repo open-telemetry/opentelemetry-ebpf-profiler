@@ -6,6 +6,8 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"debug/elf"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -112,7 +114,11 @@ func isLibGenericRegsAllowed(elfFile *pfelf.File) bool {
 // Extract takes a filename for a modern ELF file that is accessible
 // and provides the stack delta intervals in the interval parameter
 func Extract(filename string) (*sdtypes.IntervalData, error) {
-	elfRef := pfelf.NewReference(filename, pfelf.SystemFS)
+	absPath, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, err
+	}
+	elfRef := pfelf.NewReference(absPath, os.DirFS("/"))
 	defer elfRef.Close()
 	return ExtractELF(elfRef)
 }

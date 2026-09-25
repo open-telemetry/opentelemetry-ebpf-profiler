@@ -30,9 +30,11 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -249,28 +251,24 @@ type LoadHinter interface {
 	ELFLoadHints() (loadAddress uint64, hasMusl bool)
 }
 
-// OpenFS opens name via fsys and parses it as an ELF file. The file returned
-// by fsys must additionally implement ReadAtCloser.
+// FSPath converts an absolute file path to an fs.FS path name. fs.FS names
+// are unrooted, so "/usr/lib/libc.so.6" becomes "usr/lib/libc.so.6".
+func FSPath(absPath string) string {
+	return strings.TrimPrefix(path.Clean(absPath), "/")
+}
+
+// OpenFS opens the fs.FS path name via fsys and parses it as an ELF file.
+// The file returned by fsys must additionally implement ReadAtCloser. If it
+// implements LoadHinter, its load address and musl hint are honored.
 func OpenFS(fsys fs.FS, name string) (*File, error) {
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	file, err := NewFileFromFS(f)
-	if err != nil {
-		return nil, fmt.Errorf("pfelf: %s: %w", name, err)
-	}
-	return file, nil
-}
-
-// NewFileFromFS parses an already-opened fs.File as an ELF file. f must
-// additionally implement ReadAtCloser. If f implements LoadHinter, its load
-// address and musl hint are honored, same as OpenFS.
-func NewFileFromFS(f fs.File) (*File, error) {
 	rac, ok := f.(ReadAtCloser)
 	if !ok {
 		_ = f.Close()
-		return nil, errors.New("opened file does not support io.ReaderAt")
+		return nil, fmt.Errorf("pfelf: %s: opened file does not support io.ReaderAt", name)
 	}
 	var loadAddress uint64
 	var hasMusl bool
@@ -951,7 +949,7 @@ func (f *File) OpenDebugLink(elfFilePath string, fsys fs.FS) (
 	executablePath := filepath.Dir(elfFilePath)
 	for _, debugPath := range []string{"/usr/lib/debug/"} {
 		debugFile = filepath.Join(debugPath, executablePath, linkName)
-		debugELF, err = OpenFS(fsys, debugFile)
+		debugELF, err = OpenFS(fsys, FSPath(debugFile))
 		if err != nil {
 			continue
 		}

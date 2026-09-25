@@ -61,6 +61,10 @@ func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
 	}, nil
 }
 
+func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.RawMapping) int64 {
+	return 0
+}
+
 func (tc *trackedCoredump) warnMissing(fileName string) {
 	if _, seen := tc.warn[fileName]; !seen {
 		log.Infof("Module `%s` was not found for bundling", fileName)
@@ -81,19 +85,34 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.RawMapping) (libpf.
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
+func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
+	if !m.IsVDSO() && !m.IsAnonymous() {
+		file := m.Path
+		rac, err := os.Open(path.Join(tc.prefix, file))
+		if err == nil {
+			tc.seen[file] = libpf.Void{}
+			return rac, nil
+		}
+		tc.warnMissing(file)
+	}
+	return tc.CoredumpProcess.OpenMappingFile(m)
+}
+
 // Open implements the fs.FS interface. It prefers a real on-disk file located
 // under prefix (the original process's sysroot), falling back to whatever
 // partial data the coredump itself carries for name.
 func (tc *trackedCoredump) Open(name string) (fs.File, error) {
-	m := &process.RawMapping{Path: name}
-	if m.IsFileBacked() {
-		f, err := os.Open(path.Join(tc.prefix, name))
-		if err == nil {
-			tc.seen[name] = libpf.Void{}
-			return f, nil
-		}
-		tc.warnMissing(name)
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
+	// Modules are tracked by their absolute path.
+	fileName := "/" + name
+	f, err := os.Open(path.Join(tc.prefix, name))
+	if err == nil {
+		tc.seen[fileName] = libpf.Void{}
+		return f, nil
+	}
+	tc.warnMissing(fileName)
 	return tc.CoredumpProcess.Open(name)
 }
 

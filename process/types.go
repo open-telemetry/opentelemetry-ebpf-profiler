@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -103,6 +104,9 @@ type MachineData struct {
 	DataPACMask uint64
 }
 
+// ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
+type ReadAtCloser = pfelf.ReadAtCloser
+
 // ProcessMeta contains metadata about a tracked process.
 type Meta struct {
 	// executable path retrieved from /proc/PID/exe
@@ -153,13 +157,23 @@ type Process interface {
 	// GetRemoteMemory returns a remote memory reader accessing the target process.
 	GetRemoteMemory() remotememory.RemoteMemory
 
+	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
+	OpenMappingFile(*RawMapping) (ReadAtCloser, error)
+
+	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
+	// or zero if an error occurs or mapping file is not accessible via filesystem.
+	GetMappingFileLastModified(*RawMapping) int64
+
+	// CalculateMappingFileID calculates FileID of the backing file.
+	CalculateMappingFileID(*RawMapping) (libpf.FileID, error)
+
 	io.Closer
 
-	// FS opens files specific to this process by name (e.g. an executable's
-	// path, or a mapping's backing file path). Use OpenMapping instead of
-	// Open(mapping.Path) directly: implementations may open a mapping's
-	// backing file more precisely (e.g. immune to the file having been
-	// deleted or replaced on disk since the mapping was created).
+	// FS opens files in the process's file system namespace. As required by
+	// fs.FS, names are unrooted (e.g. "usr/lib/libc.so.6" for the absolute
+	// path "/usr/lib/libc.so.6"). Callers that have a RawMapping should use
+	// OpenMappingFile instead, which can open the backing file even if it was
+	// deleted or replaced on disk.
 	fs.FS
 }
 
