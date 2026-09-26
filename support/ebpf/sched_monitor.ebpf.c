@@ -11,7 +11,7 @@
 // (TASK_COMM_LEN) array for comm.
 struct sched_process_free_ctx_pre616 {
   unsigned char skip[24];
-  pid_t pid;
+  u32 pid;
   int prio;
 };
 
@@ -20,7 +20,7 @@ struct sched_process_free_ctx_pre616 {
 // https://github.com/torvalds/linux/commit/155fd6c3e2f02efdc71a9b62888942efc217aff0
 struct sched_process_free_ctx {
   unsigned char skip[12];
-  pid_t pid;
+  u32 pid;
   int prio;
 };
 

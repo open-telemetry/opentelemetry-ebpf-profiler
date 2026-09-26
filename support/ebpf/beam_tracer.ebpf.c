@@ -14,7 +14,7 @@
 
 struct beam_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, BEAMProcInfo);
   __uint(max_entries, 256);
 } beam_procs SEC(".maps");
@@ -70,7 +70,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
 
   BEAMRangeEntry current_range = ranges->mid;
 
-  for (int i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++) {
+  for (u64 i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++) {
     if (pc < current_range.start) {
       high = current;
     } else if (pc >= current_range.end) {
@@ -115,7 +115,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
   u64 data[BEAM_STACK_FRAME_SCAN_ITERATIONS];
   bpf_probe_read_user(data, sizeof(data), (void *)(state->stack_reg + 8));
 
-  for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
+  for (u64 i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
     state->stack_reg += 8;
     pc = data[i];
 
@@ -219,7 +219,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
 
-  for (int i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++) {
+  for (u64 i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++) {
     if (record->state.pc == info->beam_normal_exit) {
       unwinder = PROG_UNWIND_STOP;
       break;

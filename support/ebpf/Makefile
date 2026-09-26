@@ -39,7 +39,7 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wall -Wextra -Werror \
 	-Wno-address-of-packed-member \
 	-Wno-unused-label \
-	-Wno-sign-compare \
+	-Wno-sign-compare -Wsign-conversion -Wshorten-64-to-32 \
 	-fno-stack-protector \
 	-D__SOURCE_DATE_EPOCH__=0 \
 	-std=gnu17 \

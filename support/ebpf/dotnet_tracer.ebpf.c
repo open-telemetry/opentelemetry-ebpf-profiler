@@ -26,7 +26,7 @@
 // we require in order to build the stack trace
 struct dotnet_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, DotnetProcInfo);
   __uint(max_entries, 1024);
 } dotnet_procs SEC(".maps");
@@ -35,9 +35,9 @@ typedef ErrorCode (*find_code_start_f)(PerCPURecord *record, u64 pc, u64 *code_s
 
 // Nibble map tunables
 // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblemapmacros.h
-#define DOTNET_CODE_ALIGN             4
-#define DOTNET_CODE_NIBBLES_PER_ENTRY 8  // 8nibbles * 4 bits/nibble = 32bit word
-#define DOTNET_CODE_BYTES_PER_NIBBLE  32 // one nibble maps to 32 bytes of code
+#define DOTNET_CODE_ALIGN             4UL
+#define DOTNET_CODE_NIBBLES_PER_ENTRY 8UL  // 8nibbles * 4 bits/nibble = 32bit word
+#define DOTNET_CODE_BYTES_PER_NIBBLE  32UL // one nibble maps to 32 bytes of code
 #define DOTNET_CODE_BYTES_PER_ENTRY   (DOTNET_CODE_BYTES_PER_NIBBLE * DOTNET_CODE_NIBBLES_PER_ENTRY)
 
 // Find method code header using a dotnet coreclr "NibbleMap"
@@ -58,7 +58,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   //   text_section_id   = pHp->pHdrMap (pointer to the nibble map)
   const UnwindState *state          = &record->state;
   DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
-  const int map_elements            = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
+  const unsigned long map_elements  = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
   u64 pc_base                       = state->text_section_bias;
   u64 pc_delta                      = pc - pc_base;
   u64 map_start                     = state->text_section_id;
@@ -87,7 +87,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   }
 
   // Determine if the first map entry contains the start region
-  int pos = map_elements;
+  u64 pos = map_elements;
   u32 val = scratch->map[--pos];
   DEBUG_PRINT("dotnet:  --> find code start for %lx: first entry %x", (unsigned long)pc_delta, val);
   val >>= 28 - ((pc_delta / DOTNET_CODE_BYTES_PER_NIBBLE) % DOTNET_CODE_NIBBLES_PER_ENTRY) * 4;
@@ -105,17 +105,17 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     // Find backwards the first non-zero entry as it marks function start
     // This is unrolled several times, so it needs to be minimal in size.
     // And currently this is the major limit for DOTNET_FRAMES_PER_PROGRAM.
-    int orig_pos = pos;
+    u64 orig_pos = pos;
     if (val == 0) {
       // pos is fixed to map_elements-2 at this point, and is even.
       // convert it from u32 to u64 offset
-      int pos64 = (map_elements - 2) / 2;
+      u64 pos64 = (map_elements - 2) / 2;
       u64 val64 = scratch->map64[--pos64];
 
       // the loop iterations is number of u64 elements minus two:
       // - the last element special handled earlier
       // - the second last element which is preloaded immediately above
-      for (int i = 0; i < map_elements / 2 - 2; i++) {
+      for (u64 i = 0; i < map_elements / 2 - 2; i++) {
         if (val64 != 0) {
           break;
         }
@@ -128,7 +128,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
         val64 >>= 32;
         pos++;
       }
-      val = val64;
+      val = (u32)val64;
     }
 
     // Adjust pc_delta based on how many iterations were done
@@ -139,9 +139,9 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     }
     pc_delta -= pc_skipped;
     DEBUG_PRINT(
-      "dotnet:  --> find code start for %lx: skipped %d, entry %x",
+      "dotnet:  --> find code start for %lx: skipped %lu, entry %x",
       (unsigned long)pc_delta,
-      orig_pos - pos,
+      (unsigned long)(orig_pos - pos),
       val);
     if (val == 0) {
       increment_metric(metricID_UnwindDotnetErrCodeTooLarge);
@@ -150,7 +150,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   }
 
   // Decode the code start info from the entry
-  for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
+  for (u64 i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
     u8 nybble = val & 0xf;
     if (nybble != 0) {
       *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
@@ -265,7 +265,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
 
   // #5.4 or contains a nibble map
 decode_nibble_map:
-  for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++) {
+  for (u64 i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++) {
     if (val & DOTNET10_NIBBLE_MASK) {
       break;
     }
@@ -439,7 +439,7 @@ static EBPF_INLINE int unwind_dotnet_core(
 
   unwinder_analyze_frame_pointer(&record->state);
 
-  for (int i = 0; i < frames_per_program; i++) {
+  for (u64 i = 0; i < frames_per_program; i++) {
     unwinder = PROG_UNWIND_STOP;
 
     error = unwind_one_dotnet_frame(record, find_code_start);

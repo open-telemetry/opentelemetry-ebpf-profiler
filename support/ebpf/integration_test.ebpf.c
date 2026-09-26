@@ -6,7 +6,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, u64 tid)
+static EBPF_INLINE void send_sample_traces(void *ctx, u32 pid, u32 tid)
 {
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();

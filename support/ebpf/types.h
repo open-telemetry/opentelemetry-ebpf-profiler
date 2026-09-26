@@ -1023,7 +1023,7 @@ typedef struct StackDelta {
 
 // unwindInfo flag indicating that the value is UNWIND_COMMAND_* value and not an index to
 // the unwind info array.
-#define STACK_DELTA_COMMAND_FLAG 0x8000
+#define STACK_DELTA_COMMAND_FLAG 0x8000UL
 
 // Commands carrying this bit are implemented by the native unwinder only. The combined
 // interpreter+native programs report such a frame to their caller instead of unwinding it
@@ -1031,7 +1031,7 @@ typedef struct StackDelta {
 // of the command means a new native-only command cannot forget to opt in.
 // Only meaningful when STACK_DELTA_COMMAND_FLAG is set, so it does not reduce the index
 // space of the unwind info array.
-#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000
+#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000UL
 
 // Unsupported or no value for the register
 #define UNWIND_COMMAND_INVALID       0
@@ -1066,11 +1066,11 @@ typedef struct StackDeltaPageInfo {
 
 // Keep stack deltas in 64kB pages to limit search space and to fit the low address
 // bits into the addrLow field of struct StackDelta.
-#define STACK_DELTA_PAGE_BITS 16
+#define STACK_DELTA_PAGE_BITS 16UL
 
 // The binary mask for STACK_DELTA_PAGE_BITS, which can be used to and/nand an address
 // for its page number and offset within that page.
-#define STACK_DELTA_PAGE_MASK ((1 << STACK_DELTA_PAGE_BITS) - 1)
+#define STACK_DELTA_PAGE_MASK ((1UL << STACK_DELTA_PAGE_BITS) - 1)
 
 // In order to determine whether a given PC falls into the main interpreter loop
 // of an interpreter, we need to store some data: The lower boundary of the loop,

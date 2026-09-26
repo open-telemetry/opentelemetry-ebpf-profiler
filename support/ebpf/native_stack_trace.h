@@ -61,7 +61,7 @@ static EBPF_INLINE void *get_stack_delta_map(int mapID)
 static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindInfo)
 {
   unsigned long exe_id = state->text_section_id;
-  unsigned long offset = state->text_section_offset - (int)state->return_address;
+  unsigned long offset = state->text_section_offset - (unsigned long)state->return_address;
 
   // Look up the stack delta page information for this address.
   StackDeltaPageKey key = {};
@@ -106,7 +106,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
-    int i;
+    u64 i;
     for (i = 0; i < 16; i++) {
       if (!bsearch_step(inner_map, &lo, &hi, page_offset)) {
         break;
@@ -163,7 +163,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
 // format "BASE_REG + param".
 static EBPF_INLINE u64 unwind_calc_register(UnwindState *state, u8 baseReg, s32 param)
 {
-  return state->regs[baseReg % (sizeof(state->regs) / sizeof(state->regs[0]))] + param;
+  return state->regs[baseReg % (sizeof(state->regs) / sizeof(state->regs[0]))] + (u64)(s64)param;
 }
 
 #if defined(__x86_64__)
@@ -174,7 +174,8 @@ static EBPF_INLINE u64 unwind_calc_register(UnwindState *state, u8 baseReg, s32 
 static EBPF_INLINE u64
 unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool deref)
 {
-  s32 preDeref = param, postDeref = 0;
+  s32 preDeref  = param;
+  u64 postDeref = 0;
 
   if (deref) {
     // For expressions that dereference the base expression, the parameter is constructed
@@ -191,7 +192,7 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
   }
 
   // Dereference, and add the postDereference adder.
-  unsigned long val;
+  u64 val;
   if (bpf_probe_read_user(&val, sizeof(val), (void *)addr)) {
     DEBUG_PRINT("unwind failed to dereference address 0x%lx", (unsigned long)addr);
     return 0;
@@ -265,7 +266,7 @@ unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
       // PLT table with one expression to reduce .eh_frame size.
       // This is the hard coded implementation of this expression. For further details,
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
-      cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
+      cfa = state->sp + 8UL + ((((state->pc & 15) >= 11) ? 1UL : 0UL) << 3);
       DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
       break;
     case UNWIND_COMMAND_SIGNAL: {
@@ -482,7 +483,7 @@ unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
     DEBUG_PRINT("RA: %016llX", (u64)ra);
 
     // read the value of RA from stack
-    int err;
+    long err;
     u64 fpra[2];
     fpra[0] = state->fp;
     if (info->flags & UNWIND_FLAG_FRAME) {

@@ -113,7 +113,7 @@ static inline EBPF_INLINE ErrorCode go_runtime_load_ctx(
   }
   u64 prefix_size = curg + sizeof(u64);
 
-  if (bpf_probe_read_user(scratch, prefix_size, (void *)m_ptr)) {
+  if (bpf_probe_read_user(scratch, (u32)prefix_size, (void *)m_ptr)) {
     DEBUG_PRINT("go runtime: failed to read m prefix");
     return ERR_GO_RUNTIME_LOAD_FAILURE;
   }
@@ -175,11 +175,11 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   // check and the g.sched fields. bp is the last of them, so the read is sized
   // from it. max_off is the highest offset a u64 can be read from, so a bound of
   // "off > max_off" already accounts for the 8 bytes read there.
-  const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
-  u64 m_off         = offs->m_offset;
-  u64 sp_off        = offs->sched_sp_off;
-  u64 pc_off        = offs->sched_pc_off;
-  u64 bp_off        = offs->sched_bp_off;
+  const u32 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u32 m_off         = offs->m_offset;
+  u32 sp_off        = offs->sched_sp_off;
+  u32 pc_off        = offs->sched_pc_off;
+  u32 bp_off        = offs->sched_bp_off;
   if (m_off > max_off || sp_off > max_off || pc_off > max_off || bp_off > max_off) {
     DEBUG_PRINT("morestack: unusable g offsets");
     return ERR_GO_RUNTIME_LOAD_FAILURE;
@@ -348,9 +348,9 @@ static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, U
   // Post-gosave because g == m.g0 happens after gosave_systemstack_switch switched tls to m.g0.
   // The read is anchored at curg, so one read of the g prefix covers both the curg.m check
   // and g.sched.bp.
-  const u64 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
-  u64 m_off         = offs->m_offset;
-  u64 bp_off        = offs->sched_bp_off;
+  const u32 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u32 m_off         = offs->m_offset;
+  u32 bp_off        = offs->sched_bp_off;
   if (m_off > max_off || bp_off > max_off) {
     DEBUG_PRINT("asmcgocall: unusable g offsets");
     goto unwind_failure;
