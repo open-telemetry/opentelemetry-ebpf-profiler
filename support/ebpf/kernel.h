@@ -62,8 +62,6 @@ typedef _Bool bool;
   #define NULL ((void *)0)
 #endif
 
-typedef int pid_t;
-
 typedef u32 __be32;
 typedef u64 __be64;
 

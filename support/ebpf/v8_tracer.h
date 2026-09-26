@@ -14,7 +14,7 @@
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#39
 #define V8_HeapObjectTag     0x1
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#42
-#define V8_HeapObjectTagMask 0x3
+#define V8_HeapObjectTagMask 0x3UL
 
 // The Trace 'file' field is split to object pointer (aligned to 8 bytes),
 // and the zero bits due to alignment are reused as the following flags.

@@ -9,7 +9,7 @@
 // we require in order to build the stack trace
 struct ruby_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, RubyProcInfo);
   __uint(max_entries, 1024);
 } ruby_procs SEC(".maps");
@@ -50,7 +50,7 @@ BPF_RODATA_VAR(bool, ruby_skip_native_resume, false)
 #define IMEMO_MENT          6
 
 // https://github.com/ruby/ruby/blob/36809a8d0c7ab67ff0919b331db926529a3e98a9/vm_core.h#L1375
-#define GC_GUARDED_PTR_REF_MASK 0x03
+#define GC_GUARDED_PTR_REF_MASK 0x03UL
 
 // https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L1380-L1385
 #define VM_FRAME_MAGIC_MASK  0x7fff0001
@@ -481,7 +481,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     }
   }
 
-  for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
+  for (u64 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
     error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
     if (error != ERR_OK)
       return error;
@@ -557,7 +557,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
       goto exit;
     }
 
-    u64 tls_current_ec_addr = tsd_base + rubyinfo->current_ec_tpbase_tls_offset;
+    u64 tls_current_ec_addr = tsd_base + (u64)rubyinfo->current_ec_tpbase_tls_offset;
 
     if (bpf_probe_read_user(
           &current_ctx_addr, sizeof(current_ctx_addr), (void *)(tls_current_ec_addr))) {

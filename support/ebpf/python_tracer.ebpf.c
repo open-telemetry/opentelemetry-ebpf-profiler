@@ -21,7 +21,7 @@ struct pt_regs;
 // we require in order to build the stack trace
 struct py_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, PyProcInfo);
   __uint(max_entries, 1024);
 } py_procs SEC(".maps");
@@ -160,10 +160,10 @@ static EBPF_INLINE ErrorCode process_python_frame(
     goto push_frame;
   }
 
-  int py_argcount       = *(int *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);
-  int py_kwonlyargcount = *(int *)(&pss->code[pyinfo->PyCodeObject_co_kwonlyargcount]);
-  int py_flags          = *(int *)(&pss->code[pyinfo->PyCodeObject_co_flags]);
-  int py_firstlineno    = *(int *)(&pss->code[pyinfo->PyCodeObject_co_firstlineno]);
+  u32 py_argcount       = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);
+  u32 py_kwonlyargcount = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_kwonlyargcount]);
+  u32 py_flags          = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_flags]);
+  u32 py_firstlineno    = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_firstlineno]);
 
   codeobject_id =
     (py_argcount << 25) + (py_kwonlyargcount << 18) + (py_flags << 10) + py_firstlineno;
@@ -203,7 +203,7 @@ static EBPF_INLINE ErrorCode get_PyThreadState(
   }
 
   // Python 3.12 and earlier: use pthread TLS
-  int key;
+  u32 key;
   if (bpf_probe_read_user(&key, sizeof(key), autoTLSkeyAddr)) {
     DEBUG_PRINT("Failed to read autoTLSkey from 0x%lx", (unsigned long)autoTLSkeyAddr);
     increment_metric(metricID_UnwindPythonErrBadAutoTlsKeyAddr);
@@ -365,7 +365,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
   {
     void *py_frame = record->pythonUnwindState.py_frame;
 
-    for (u32 t = 0; t < python_frames_per_program; t++) {
+    for (u64 t = 0; t < python_frames_per_program; t++) {
       // clang-format off
       switch (unwinder) {
       case PROG_UNWIND_PYTHON:

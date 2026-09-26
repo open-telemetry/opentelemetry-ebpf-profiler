@@ -150,7 +150,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   Trace *trace = &record->trace;
   int unwinder;
   ErrorCode error;
-  for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
+  for (u64 i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code

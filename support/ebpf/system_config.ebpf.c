@@ -37,7 +37,7 @@ int read_kernel_memory(UNUSED void *ctx)
   }
 
   // Handle the read request
-  sys->err = bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address);
+  sys->err = (s32)bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address);
   if (sys->err) {
     DEBUG_PRINT("Failed to read code from 0x%lx: %ld", (unsigned long)sys->address, (long)sys->err);
   }
@@ -80,7 +80,7 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   sys->address = (u64)regs;
 
   // Execute the read request.
-  sys->err = bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr);
+  sys->err = (s32)bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr);
   if (sys->err) {
     DEBUG_PRINT("Failed to read task_struct from 0x%lx: %ld", (unsigned long)addr, (long)sys->err);
   }
