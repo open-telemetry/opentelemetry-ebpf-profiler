@@ -43,7 +43,7 @@ func (scd *StoreCoredump) openFile(path string) (*modulestore.ModuleReader, erro
 func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
 	rac, err := scd.openFile(m.Path)
 	if errors.Is(err, os.ErrNotExist) {
-		// Bundle miss: let OpenELFMapping fall back to Open, which
+		// Bundle miss: let the caller fall back to Open, which
 		// can serve content from PT_LOAD segments for legacy test cases.
 		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
 	}

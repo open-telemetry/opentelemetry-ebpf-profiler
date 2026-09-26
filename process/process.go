@@ -36,8 +36,8 @@ var ErrNoMappings = errors.New("no mappings")
 // false, signaling that iteration was intentionally interrupted.
 var ErrCallbackStopped = errors.New("IterateMappings stopped by callback")
 
-// ErrMappingFileUnavailable signals OpenELFMapping to fall back to the
-// Process fs.FS. Returned both when the implementation has no backing-file
+// ErrMappingFileUnavailable signals callers of OpenMappingFile to fall back to
+// the Process fs.FS. Returned both when the implementation has no backing-file
 // route (CoredumpProcess) and when a specific file is missing from the
 // backing store (StoreCoredump bundle miss).
 var ErrMappingFileUnavailable = errors.New("mapping backing file unavailable")
@@ -601,7 +601,7 @@ func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, er
 }
 
 // Open implements the fs.FS interface. Callers that have a RawMapping should
-// use OpenELFMapping instead, which can open deleted or replaced files via
+// use OpenMappingFile instead, which can open deleted or replaced files via
 // /proc/<pid>/map_files.
 func (sp *systemProcess) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
@@ -610,27 +610,4 @@ func (sp *systemProcess) Open(name string) (fs.File, error) {
 	// Open the file using the process-specific root.
 	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
 	return openInProcRoot(sp.pid, name)
-}
-
-// OpenELFMapping opens a memory mapping as an ELF file. VDSO is read
-// from process memory; other mappings go through OpenMappingFile so
-// systemProcess can use /proc/<pid>/map_files for deleted-file safety.
-// Only ErrMappingFileUnavailable triggers a fallback to opening m.Path via
-// the Process fs.FS; other OpenMappingFile errors are wrapped and returned.
-func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
-	if m.IsVDSO() {
-		vdso, err := extractMapping(pr, m)
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract VDSO: %v", err)
-		}
-		return pfelf.NewFile(vdso, 0, false)
-	}
-	rac, err := pr.OpenMappingFile(m)
-	if err != nil {
-		if errors.Is(err, ErrMappingFileUnavailable) {
-			return pfelf.OpenFS(pr, pfelf.FSPath(m.Path))
-		}
-		return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w", m.Path, m.Vaddr, err)
-	}
-	return pfelf.NewFileOwned(rac)
 }
