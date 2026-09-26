@@ -8,6 +8,7 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 import (
 	"debug/elf"
 	"io"
+	"io/fs"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -127,7 +128,7 @@ type Meta struct {
 
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
-// from different goroutines. As an exception the ELFOpener and the returned
+// from different goroutines. As an exception the fs.FS and the returned
 // GetRemoteMemory object are safe for concurrent use.
 type Process interface {
 	// PID returns the process identifier.
@@ -168,7 +169,12 @@ type Process interface {
 
 	io.Closer
 
-	pfelf.ELFOpener
+	// FS opens files in the process's file system namespace. As required by
+	// fs.FS, names are unrooted (e.g. "usr/lib/libc.so.6" for the absolute
+	// path "/usr/lib/libc.so.6"). Callers that have a RawMapping should use
+	// OpenMappingFile instead, which can open the backing file even if it was
+	// deleted or replaced on disk.
+	fs.FS
 }
 
 // MetaEnricher is called once per process when it is first observed.

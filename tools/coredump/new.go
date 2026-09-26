@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -18,7 +19,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
@@ -98,18 +98,22 @@ func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadA
 	return tc.CoredumpProcess.OpenMappingFile(m)
 }
 
-func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	if fileName != process.VdsoPathName {
-		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
-		if err == nil {
-			tc.seen[fileName] = libpf.Void{}
-			return f, err
-		}
-		if !errors.Is(err, pfelf.ErrNotELF) {
-			tc.warnMissing(fileName)
-		}
+// Open implements the fs.FS interface. It prefers a real on-disk file located
+// under prefix (the original process's sysroot), falling back to whatever
+// partial data the coredump itself carries for name.
+func (tc *trackedCoredump) Open(name string) (fs.File, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
-	return tc.CoredumpProcess.OpenELF(fileName)
+	// Modules are tracked by their absolute path.
+	fileName := "/" + name
+	f, err := os.Open(path.Join(tc.prefix, name))
+	if err == nil {
+		tc.seen[fileName] = libpf.Void{}
+		return f, nil
+	}
+	tc.warnMissing(fileName)
+	return tc.CoredumpProcess.Open(name)
 }
 
 func newNewCmd(store *modulestore.Store) *ffcli.Command {
