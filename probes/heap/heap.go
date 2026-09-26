@@ -58,14 +58,54 @@ func New(cfg Config) *Probe {
 	}
 }
 
+// Derive an unbiased object-count estimator from the
+// byte-weighted values. Each event carries:
+//
+//	weighted_bytes = unbiased byte estimate (see ADR 00003)
+//	size           = raw allocation size in bytes
+//
+// Object count = weighted_bytes / size. This is the standard
+// convention used by tcmalloc, jemalloc, and Go's pprof.
+//
+// We compute this in userspace rather than eBPF to keep the
+// kernel/userspace interface simple, preserve the raw size
+// for potential future use (e.g. allocation-size histograms),
+// and avoid the eBPF program needing to transform values.
+//
+// Fall back to 1 if size is unknown/zero rather than
+// dividing by zero.
+func allocObjectsValue(weightedBytes int64, rawSize uint64) int64 {
+	size := int64(rawSize)
+	if size <= 0 {
+		return 1
+	}
+	return max(weightedBytes/size, 1)
+}
+
+func deriveAllocValues(dst []int64, meta *samples.TraceEventMeta) []int64 {
+	var weightedBytes int64
+	var size uint64
+	if len(meta.ContextValues) > 0 {
+		weightedBytes = int64(meta.ContextValues[0])
+	}
+	if len(meta.ContextValues) > 2 {
+		size = meta.ContextValues[2]
+	}
+	return append(dst, weightedBytes, allocObjectsValue(weightedBytes, size))
+}
+
 // Load implements tracer.Probe. It loads the heap eBPF programs and creates
 // the USDT discoverer used during per-process attachment.
 func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
 	// Register origin ID. The eBPF program reads this from RODATA.
 	var err error
 	hp.originAlloc, err = reg.Register(&samples.TypeMetadata{
-		SampleTypes:  []samples.SampleType{{Type: "alloc_space", Unit: "bytes"}},
+		SampleTypes: []samples.SampleType{
+			{Type: "alloc_space", Unit: "bytes"},
+			{Type: "alloc_objects", Unit: "count"},
+		},
 		ReportValues: true,
+		DeriveValues: deriveAllocValues,
 	})
 	if err != nil {
 		return fmt.Errorf("registering heap alloc origin: %w", err)
