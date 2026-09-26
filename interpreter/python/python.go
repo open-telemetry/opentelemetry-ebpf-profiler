@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -71,14 +72,21 @@ func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	return major, minor, nil
 }
 
+// pyTssTstateSymbol is the TLS variable holding the current thread state (Python 3.13+).
+const pyTssTstateSymbol = "_Py_tss_tstate"
+
 //nolint:lll
 type pythonData struct {
 	version uint16
 
 	autoTLSKey libpf.SymbolValue
 
-	// For Python 3.13+: staticTLSOffset stores the TLS offset for direct TLS access
-	// extracted from assembly analysis.
+	// tlsVar locates _Py_tss_tstate via the tls package. nil when the symbol
+	// is not discoverable.
+	tlsVar *tls.Var
+
+	// staticTLSOffset is the local-exec TLS offset read directly from the
+	// machine code of _PyThreadState_GetCurrent when the symbol is not discoverable.
 	staticTLSOffset int64
 
 	noneStruct libpf.SymbolValue
@@ -162,6 +170,24 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 		rm:               rm,
 		bias:             bias,
 		addrToCodeObject: addrToCodeObject,
+	}
+
+	// Locate _Py_tss_tstate once.
+	// dynamic TLS (ErrNeedDTV) is completed in UpdateLibcInfo once the libc
+	// DTV introspection data is available.
+	switch {
+	case d.tlsVar != nil:
+		if loc, err := d.tlsVar.Locate(rm, bias); err != nil {
+			log.Debugf("failed to locate %s: %v", pyTssTstateSymbol, err)
+		} else if info, varErr := loc.VarInfo(libc.DTVInfo{}); varErr == nil {
+			i.tls = info
+		} else if errors.Is(varErr, tls.ErrNeedDTV) {
+			i.pendingTLS = &loc
+		} else {
+			log.Debugf("unusable %s location: %v", pyTssTstateSymbol, varErr)
+		}
+	case d.staticTLSOffset != 0:
+		i.tls = support.TLSVarInfo{Tls_offset: int32(d.staticTLSOffset), Valid: true}
 	}
 
 	switch {
@@ -354,6 +380,10 @@ type pythonInstance struct {
 	rm   remotememory.RemoteMemory
 	bias libpf.Address
 
+	tls support.TLSVarInfo
+	// pendingTLS is the location of _Py_tss_tstate while waiting for the DTV layout.
+	pendingTLS *tls.VarLocation
+
 	// addrToCodeObject maps a Python Code object to a pythonCodeObject which caches
 	// the needed data from it.
 	addrToCodeObject *freelru.LRU[libpf.Address, *pythonCodeObject]
@@ -403,14 +433,22 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	libcInfo libc.LibcInfo) error {
 	d := p.d
 
-	// If we don't have a static TLS offset (Python < 3.13 or extraction failed),
-	// we need TSDInfo to access thread state via pthread_getspecific.
-	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
-	// from multiple DSOs, wait until we have TSDInfo before inserting proc data.
-	if d.staticTLSOffset == 0 && !libcInfo.HasTSDInfo() {
-		return nil
+	if p.pendingTLS != nil {
+		if info, err := p.pendingTLS.VarInfo(libcInfo.DTVInfo); err == nil {
+			p.tls = info
+			p.pendingTLS = nil
+		} else if !errors.Is(err, tls.ErrNeedDTV) {
+			log.Debugf("unusable %s location: %v", pyTssTstateSymbol, err)
+			p.pendingTLS = nil
+		}
 	}
 
+	// Without a resolved TLS descriptor we need TSDInfo to access the thread
+	// state via pthread_getspecific. Wait until we have TSDInfo before
+	// inserting proc data.
+	if !p.tls.Valid && d.staticTLSOffset == 0 && !libcInfo.HasTSDInfo() {
+		return nil
+	}
 	// Prevent duplicate inserts
 	if p.procInfoInserted {
 		return nil
@@ -421,7 +459,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
 		Version:        d.version,
-		Tls_offset:     int16(d.staticTLSOffset),
+		Tls:            p.tls,
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
@@ -870,18 +908,29 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
+	var tlsVar *tls.Var
 	var staticTLSOffset int64
 	if version >= pythonVer(3, 13) {
-		var err error
-		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
-		if err != nil {
-			log.Warnf("Failed to extract TLS offset: %v", err)
+		if sym, symErr := ef.LookupSymbol(pyTssTstateSymbol); symErr == nil {
+			if v, resolveErr := tls.Resolve(ef, sym); resolveErr == nil {
+				tlsVar = &v
+			} else {
+				log.Debugf("failed to resolve %s: %v", pyTssTstateSymbol, resolveErr)
+			}
+		}
+		if tlsVar == nil {
+			var err error
+			staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+			if err != nil {
+				log.Warnf("Failed to resolve TLS offset for %s: %v", pyTssTstateSymbol, err)
+			}
 		}
 	}
 
 	pd := &pythonData{
 		version:         version,
 		autoTLSKey:      autoTLSKey,
+		tlsVar:          tlsVar,
 		staticTLSOffset: staticTLSOffset,
 	}
 	vms := &pd.vmStructs

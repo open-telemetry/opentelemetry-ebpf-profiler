@@ -190,12 +190,13 @@ push_frame:
 static EBPF_INLINE ErrorCode get_PyThreadState(
   const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr, void **thread_state)
 {
-  if (pyinfo->tls_offset != 0) {
-    if (bpf_probe_read_user(thread_state, sizeof(void *), tsd_base + pyinfo->tls_offset)) {
+  if (pyinfo->tls.valid) {
+    if (tls_read_var(&pyinfo->tls, tsd_base, thread_state) != TLS_READ_OK) {
       DEBUG_PRINT(
-        "Failed to read direct TLS at base 0x%lx offset %d",
+        "Failed to read thread state via TLS at base 0x%lx (dtv_pos %u, offset %d)",
         (unsigned long)tsd_base,
-        pyinfo->tls_offset);
+        pyinfo->tls.dtv_pos,
+        pyinfo->tls.tls_offset);
       increment_metric(metricID_UnwindPythonErrReadThreadStateAddr);
       return ERR_PYTHON_READ_THREAD_STATE_ADDR;
     }
