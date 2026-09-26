@@ -99,12 +99,33 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				continue
 			}
 
+			// Sample order is shared by the primary profile and
+			// every derived profile below, so sample i of each refers to the
+			// same trace. This isn't part of the OTLP spec, but in practice
+			// can make it easier for OTLP consumers to recover paired samples.
+			keys := make([]samples.SampleKey, 0, len(events))
+			for k := range events {
+				keys = append(keys, k)
+			}
+
+			// Add primary profile
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, events, prof,
+				profileType, nil, events, keys, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
+			}
+
+			// Add any derived profiles
+			for i := range profileType.DerivedProfiles {
+				prof := sp.Profiles().AppendEmpty()
+				if err := p.setProfile(dic, attrMgr,
+					stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
+					profileType, &profileType.DerivedProfiles[i], events, keys, prof,
+					collectionStartTime, collectionEndTime); err != nil {
+					return profiles, err
+				}
 			}
 		}
 	}
@@ -142,7 +163,9 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
+	derived *samples.DerivedProfile,
 	events samples.SampleToEvents,
+	keys []samples.SampleKey,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -153,15 +176,35 @@ func (p *Pdata) setProfile(
 		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
 	}
 
+	// Take the derived sample type & unit if we're working with a derived profile,
+	// otherwise the default.
+	sampleType, sampleUnit := profileType.SampleType, profileType.SampleUnit
+	if derived != nil {
+		sampleType, sampleUnit = derived.SampleType, derived.SampleUnit
+	}
 	st := profile.SampleType()
-	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
+	st.SetTypeStrindex(stringSet.Add(sampleType))
+	st.SetUnitStrindex(stringSet.Add(sampleUnit))
 
-	for sampleKey, traceInfo := range events {
+	for _, sampleKey := range keys {
+		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if profileType.ReportValues {
+
+		// If we've been given a derived profile, emit for that
+		if derived != nil {
+			// One derived value per primary value, so the result stays
+			// index-aligned with Timestamps. A missing extra is passed as
+			// the zero value and the probe's callback decides what that means.
+			for i, v := range traceInfo.Values {
+				var extra [2]uint64
+				if i < len(traceInfo.ValuesExtra) {
+					extra = traceInfo.ValuesExtra[i]
+				}
+				sample.Values().Append(derived.Value(v, extra))
+			}
+		} else if profileType.ReportValues { // ... if we've not, emit for the main profile, if asked
 			sample.Values().Append(traceInfo.Values...)
 		}
 
@@ -179,78 +222,8 @@ func (p *Pdata) setProfile(
 			sample.SetLinkIndex(link)
 		}
 
-		locationIndices := make([]int32, 0, len(traceInfo.Frames))
-		// Walk every frame of the trace.
-		for _, uniqueFrame := range traceInfo.Frames {
-			frame := uniqueFrame.Value()
-			locInfo := locationInfo{
-				address:   uint64(frame.AddressOrLineno),
-				frameType: frame.Type,
-			}
-
-			index, ok := mappingSet.AddWithCheck(frame.Mapping)
-			if !ok {
-				m := frame.Mapping.Value()
-				mf := m.File.Value()
-
-				mapping := dic.MappingTable().AppendEmpty()
-				mapping.SetMemoryStart(uint64(m.Start))
-				mapping.SetMemoryLimit(uint64(m.End))
-				mapping.SetFileOffset(m.FileOffset)
-				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
-
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGNUKey,
-					mf.GnuBuildID)
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGoKey,
-					mf.GoBuildID)
-				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDHtlhashKey,
-					mf.FileID.StringNoQuotes())
-			}
-			locInfo.mappingIndex = index
-
-			if frame.FunctionName != libpf.NullString || frame.SourceFile != libpf.NullString {
-				// Store interpreted frame information as a Line message
-				locInfo.hasLine = true
-				locInfo.lineNumber = int64(frame.SourceLine)
-				locInfo.columnNumber = int64(frame.SourceColumn)
-				fi := funcInfo{
-					nameIdx:     stringSet.Add(frame.FunctionName.String()),
-					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
-				}
-				locInfo.functionIndex = funcSet.Add(fi)
-			}
-
-			idx, exists := locationSet.AddWithCheck(locInfo)
-			if !exists {
-				// Add a new Location to the dictionary
-				loc := dic.LocationTable().AppendEmpty()
-				loc.SetAddress(locInfo.address)
-				loc.SetMappingIndex(locInfo.mappingIndex)
-				if locInfo.hasLine {
-					line := loc.Lines().AppendEmpty()
-					line.SetLine(locInfo.lineNumber)
-					line.SetColumn(locInfo.columnNumber)
-					line.SetFunctionIndex(locInfo.functionIndex)
-				}
-				attrMgr.AppendOptionalString(loc.AttributeIndices(),
-					semconv.ProfileFrameTypeKey, locInfo.frameType.String())
-			}
-			locationIndices = append(locationIndices, idx)
-		} // End per-frame processing
-
-		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
-			locationIndicesHash: hashLocationIndices(locationIndices),
-		})
-		if !exists {
-			// Add a new Stack to the dictionary
-			stack := dic.StackTable().AppendEmpty()
-			for _, locIdx := range locationIndices {
-				stack.LocationIndices().Append(locIdx)
-			}
-		}
+		stackIdx := appendFramesAsStack(traceInfo.Frames, dic, attrMgr,
+			stringSet, funcSet, mappingSet, locationSet, stackSet)
 		sample.SetStackIndex(stackIdx)
 
 		for key, value := range traceInfo.Labels {
@@ -264,10 +237,12 @@ func (p *Pdata) setProfile(
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, sampleKey.Comm.String())
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, sampleKey.TID)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		if !profileType.OmitThreadContext {
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.ThreadIDKey, sampleKey.TID)
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)

@@ -345,3 +345,134 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	}
 	assert.True(t, found, "expected process.name=myapp in the attribute table")
 }
+
+// TestValuesExtraStaysAlignedWithValues pins the invariant that ValuesExtra is
+// index-aligned with Values for an origin declaring ValueExtraFields. The
+// middle event carries an all-zero ValueExtra that is nonetheless real data;
+// skipping it would shift every later extra onto the wrong value.
+func TestValuesExtraStaysAlignedWithValues(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+
+	profileType := &samples.TypeMetadata{
+		SampleType:       "alloc_space",
+		SampleUnit:       "bytes",
+		ValueExtraFields: 2,
+		ReportValues:     true,
+	}
+
+	trace := &libpf.Trace{
+		Frames: func() libpf.Frames {
+			frames := make(libpf.Frames, 0, 1)
+			frames.Append(&libpf.Frame{
+				Type:            libpf.NativeFrame,
+				AddressOrLineno: 0x1000,
+				FunctionName:    libpf.Intern("alloc"),
+			})
+			return frames
+		}(),
+	}
+
+	now := time.Now()
+	extras := [][2]uint64{{0xaa, 64}, {0, 0}, {0xcc, 128}}
+	for i, extra := range extras {
+		require.NoError(t, reporter.ReportTraceEvent(trace, &samples.TraceEventMeta{
+			Timestamp:   libpf.UnixTime64(now.Add(time.Duration(i) * time.Second).UnixNano()),
+			Comm:        libpf.NewCommFromString("app"),
+			PID:         1000,
+			TID:         1001,
+			ProfileType: profileType,
+			Value:       int64(i + 1),
+			ValueExtra:  extra,
+		}))
+	}
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+
+	var events *samples.TraceEvents
+	for _, rtp := range *treePtr {
+		for _, sampleEvents := range rtp.Events[profileType] {
+			events = sampleEvents
+		}
+	}
+	require.NotNil(t, events, "no events recorded for the declaring origin")
+
+	assert.Equal(t, []int64{1, 2, 3}, events.Values)
+	assert.Equal(t, extras, events.ValuesExtra,
+		"a zero-valued extra must still be appended, or later extras shift")
+	require.Len(t, events.ValuesExtra, len(events.Values))
+}
+
+// An origin that declares no extras must not pay for the slice at all.
+func TestValuesExtraUnusedByDefault(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+
+	trace := &libpf.Trace{Frames: make(libpf.Frames, 0)}
+	require.NoError(t, reporter.ReportTraceEvent(trace, &samples.TraceEventMeta{
+		Timestamp:   libpf.UnixTime64(time.Now().UnixNano()),
+		PID:         1000,
+		ProfileType: profileTypeSampling,
+	}))
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	for _, rtp := range *treePtr {
+		for _, events := range rtp.Events[profileTypeSampling] {
+			assert.Nil(t, events.ValuesExtra)
+		}
+	}
+}
+
+// TestMergeSnapshotsIntoTree verifies that probe snapshot samples land in
+// the event tree keyed by their process, so that Generate exports them through
+// the normal path together with any derived profiles.
+func TestMergeSnapshotsIntoTree(t *testing.T) {
+	profileType := &samples.TypeMetadata{
+		SampleType:        "inuse_space",
+		SampleUnit:        "bytes",
+		ReportValues:      true,
+		OmitThreadContext: true,
+		DerivedProfiles: []samples.DerivedProfile{{
+			SampleType: "inuse_objects",
+			SampleUnit: "count",
+			Value: func(_ int64, extra [2]uint64) int64 {
+				return int64(extra[0])
+			},
+		}},
+	}
+
+	reporter := createTestBaseReporter(t, &Config{
+		Name:             "test-agent",
+		Version:          "v1.0.0",
+		SamplesPerSecond: 100,
+		SnapshotSources: func() []samples.SnapshotProfile {
+			return []samples.SnapshotProfile{{
+				ProfileType: profileType,
+				Samples: []samples.SnapshotSample{{
+					PID:        42,
+					TraceHash:  libpf.NewTraceHash(1, 2),
+					Value:      4096,
+					ValueExtra: [2]uint64{7, 0},
+				}},
+			}}
+		},
+		ProcessMetaForPID: func(libpf.PID) samples.ProcessMeta {
+			return samples.ProcessMeta{ExecutablePath: libpf.Intern("/bin/app")}
+		},
+	})
+
+	ts := time.Unix(1700, 0)
+	tree := make(samples.TraceEventsTree)
+	reporter.mergeSnapshots(tree, ts)
+
+	rtp, ok := tree[samples.ResourceKey{PID: 42, ExecutablePath: libpf.Intern("/bin/app")}]
+	require.True(t, ok, "no resource entry for the snapshot's PID")
+	events := rtp.Events[profileType]
+	require.Len(t, events, 1)
+
+	ev, ok := events[samples.SampleKey{Hash: libpf.NewTraceHash(1, 2)}]
+	require.True(t, ok, "snapshot sample is not keyed by its trace hash")
+	assert.Equal(t, []int64{4096}, ev.Values)
+	assert.Equal(t, [][2]uint64{{7, 0}}, ev.ValuesExtra)
+	assert.Equal(t, []uint64{uint64(ts.UnixNano())}, ev.Timestamps)
+}

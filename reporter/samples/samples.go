@@ -24,9 +24,18 @@ type TraceEventMeta struct {
 	CPU            uint32
 	ProfileType    *TypeMetadata
 	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	// ValueExtra carries origin-specific auxiliary values alongside Value,
+	// mirroring libpf.EbpfTrace.ValueExtra (populated in eBPF). It is kept
+	// generic so probes other than heap (e.g. OOM) can report additional
+	// information without a bespoke field. For heap alloc events,
+	// ValueExtra[1] is the raw, un-weighted allocation size in bytes; combined
+	// with Value (the byte-weighted estimator) it lets consumers derive an
+	// unbiased object-count estimate. Zero for origins that carry no extra
+	// values.
+	ValueExtra [2]uint64
+	PID, TID   libpf.PID
+	SpanID     libpf.APMSpanID
+	TraceID    libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -35,6 +44,13 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	Values     []int64
+	// ValuesExtra holds the per-event TraceEventMeta.ValueExtra. It is either
+	// empty, for origins declaring TypeMetadata.ValueExtraFields == 0, or the
+	// same length as Values and index-aligned with it. Origins that do declare
+	// extras always append, zero-valued or not, so ValuesExtra[i] always
+	// belongs to Values[i] (e.g. heap alloc, where ValuesExtra[i][1] is the
+	// allocation size).
+	ValuesExtra [][2]uint64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -98,6 +114,38 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
+// SnapshotProfile is a set of snapshot samples produced by a probe's SnapshotSource
+// implementation at each collection interval, rather than from individual trace
+// events. The reporter folds them into the TraceEventsTree, so they are exported
+// by the same path as event-driven samples and pick up any DerivedProfiles
+// declared on ProfileType.
+type SnapshotProfile struct {
+	// ProfileType describes how the samples are exported. Snapshot profiles
+	// normally set OmitThreadContext, having no per-thread attribution.
+	ProfileType *TypeMetadata
+	// Samples are the data rows.
+	Samples []SnapshotSample
+}
+
+// SnapshotSample is a single sample row produced by a SnapshotSource probe.
+type SnapshotSample struct {
+	PID       libpf.PID
+	TraceHash libpf.TraceHash
+	Frames    libpf.Frames
+	// Value is interpreted per ProfileType.SampleType.
+	Value int64
+	// ValueExtra carries auxiliary values, mirroring TraceEventMeta.ValueExtra.
+	// It is what ProfileType's DerivedProfiles transforms receive.
+	ValueExtra [2]uint64
+}
+
+// ProcessMeta holds per-process metadata needed when building OTLP
+// resource attributes for profile export.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
+}
+
 // TypeMetadata describes how profiling events of a particular kind
 // should be interpreted and exported as an OTel profile.
 type TypeMetadata struct {
@@ -114,7 +162,36 @@ type TypeMetadata struct {
 	// SampleUnit is the unit for SampleType (e.g. "count").
 	SampleUnit string
 
+	// ValueExtraFields is the number of leading TraceEventMeta.ValueExtra
+	// elements this origin populates. Zero, the default, means the origin
+	// reports no auxiliary values and TraceEvents.ValuesExtra stays nil.
+	//
+	// We have to specify this separately so we can identify the case where
+	// ValuesExtra legitimately contains zeroes.
+	ValueExtraFields int
+
 	// ReportValues indicates whether a sample's value should be included
 	// in the exported sample (e.g. off-CPU durations).
 	ReportValues bool
+
+	// OmitThreadContext suppresses the per-sample thread and CPU attributes.
+	// Interval snapshots aggregate across threads and have no meaningful TID
+	// or CPU, so emitting zeros for them would misattribute the samples.
+	OmitThreadContext bool
+
+	// Additional profile types that can be derived from the primary profile
+	// plus any AdditionalValue data.
+	DerivedProfiles []DerivedProfile
+}
+
+// DerivedProfile are additional profiles that can be produced via a transformation
+// of the sample data emitted by a particular TypeMetadata instance.
+// This is useful for instance when we have a single profile producing both 'count'
+// and 'volume' style samples
+type DerivedProfile struct {
+	SampleType string
+	SampleUnit string
+
+	// Value derives one output value from the primary sample value and its extra
+	Value func(value int64, extra [2]uint64) int64
 }

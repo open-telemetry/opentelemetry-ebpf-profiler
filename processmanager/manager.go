@@ -386,7 +386,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
+	procMeta, resourceAttrs := pm.MetaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -398,6 +398,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		ContainerID:    procMeta.ContainerID,
 		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
+		ValueExtra:     bpfTrace.ValueExtra,
 		EnvVars:        procMeta.EnvVariables,
 		ResourceAttrs:  resourceAttrs,
 		TraceID:        bpfTrace.APMTraceID,

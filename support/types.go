@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x79
+	MetricIDBeginCumulative = 0x7b
 )
 
 const (
@@ -179,6 +179,7 @@ type Trace struct {
 	Num_kernel_frames  uint16
 	Origin             uint16
 	Value              uint64
+	Value_extra        [2]uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
 }
@@ -352,7 +353,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d8
+	Sizeof_Trace      = 0x62e8
 
 	sizeof_ApmIntProcInfo        = 0x8
 	sizeof_DotnetProcInfo        = 0x4
@@ -542,4 +543,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
 	0x77: metrics.IDUnwindThreadContextReadSuccesses,
 	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
+	0x79: metrics.IDHeapPerPIDLimitHit,
+	0x7a: metrics.IDHeapLiveMapFull,
 }
