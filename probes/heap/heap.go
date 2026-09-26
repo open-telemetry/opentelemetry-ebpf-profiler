@@ -58,6 +58,30 @@ func New(cfg Config) *Probe {
 	}
 }
 
+// Derive an unbiased object-count estimator from the
+// byte-weighted values. Each event carries:
+//
+//	weighted_bytes = unbiased byte estimate (see ADR 00003)
+//	size           = raw allocation size in bytes
+//
+// Object count = weighted_bytes / size. This is the standard
+// convention used by tcmalloc, jemalloc, and Go's pprof.
+//
+// We compute this in userspace rather than eBPF to keep the
+// kernel/userspace interface simple, preserve the raw size
+// for potential future use (e.g. allocation-size histograms),
+// and avoid the eBPF program needing to transform values.
+//
+// Fall back to 1 if size is unknown/zero rather than
+// dividing by zero.
+func allocObjectsValue(value int64, extra [2]uint64) int64 {
+	size := int64(extra[1])
+	if size <= 0 {
+		return 1
+	}
+	return max(value/size, 1)
+}
+
 // Load implements tracer.Probe. It loads the heap eBPF programs and creates
 // the USDT discoverer used during per-process attachment.
 func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
@@ -70,6 +94,11 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 		// [1] the raw allocation size.
 		ValueExtraFields: 2,
 		ReportValues:     true,
+		DerivedProfiles: []samples.DerivedProfile{{
+			SampleType: "alloc_objects",
+			SampleUnit: "count",
+			Value:      allocObjectsValue,
+		}},
 	})
 	if err != nil {
 		return fmt.Errorf("registering heap alloc origin: %w", err)

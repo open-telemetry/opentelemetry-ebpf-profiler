@@ -141,4 +141,20 @@ type TypeMetadata struct {
 	// ReportValues indicates whether a sample's value should be included
 	// in the exported sample (e.g. off-CPU durations).
 	ReportValues bool
+
+	// Additional profile types that can be derived from the primary profile
+	// plus any AdditionalValue data.
+	DerivedProfiles []DerivedProfile
+}
+
+// DerivedProfile are additional profiles that can be produced via a transformation
+// of the sample data emitted by a particular TypeMetadata instance.
+// This is useful for instance when we have a single profile producing both 'count'
+// and 'volume' style samples
+type DerivedProfile struct {
+	SampleType string
+	SampleUnit string
+
+	// Value derives one output value from the primary sample value and its extra
+	Value func(value int64, extra [2]uint64) int64
 }

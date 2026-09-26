@@ -24,37 +24,6 @@ const (
 	ExecutableCacheLifetime = 1 * time.Hour
 )
 
-// hasValuesExtra reports whether any event in the set carries per-event
-// auxiliary values (TraceEvents.ValuesExtra). When true, the reporter emits
-// a paired object-count profile alongside the primary byte-weighted profile.
-//
-// Ideally probes would control their own OTLP output rather than the
-// reporter inferring intent from the data shape. Until the Probe API
-// supports that (e.g. a probe-supplied transform from accumulated events
-// to OTLP profiles), we use the structural presence of ValuesExtra as
-// the signal.
-func hasValuesExtra(events samples.SampleToEvents) bool {
-	for _, ev := range events {
-		if len(ev.ValuesExtra) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// profileKind is a sub-profile discriminator used when a single origin
-// produces more than one OTLP Profile message from the same event set.
-// For example, heap-alloc events that carry ValuesExtra emit both a
-// byte-weighted profile and an object-count profile; the kind tells
-// setProfile which value-type semantics to apply. Origins that emit
-// only one profile use profileKindDefault.
-type profileKind uint8
-
-const (
-	profileKindDefault profileKind = iota
-	profileKindHeapAllocObjects
-)
-
 // Generate generates a pdata request out of internal profiles data, to be
 // exported. The collectionStartTime and collectionEndTime define the time window
 // during which the profiler was actively collecting samples.
@@ -130,31 +99,30 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				continue
 			}
 
-			// When events carry per-allocation sizes, we emit a paired
-			// alloc_objects profile alongside the primary alloc_space one.
-			// Both calls receive the same key slice so their samples are
-			// naturally aligned by index without needing a sort.
-			var keys []samples.SampleKey
-			if hasValuesExtra(events) {
-				keys = make([]samples.SampleKey, 0, len(events))
-				for k := range events {
-					keys = append(keys, k)
-				}
+			// Sample order is shared by the primary profile and
+			// every derived profile below, so sample i of each refers to the
+			// same trace. This isn't part of the OTLP spec, but in practice
+			// can make it easier for OTLP consumers to recover paired samples.
+			keys := make([]samples.SampleKey, 0, len(events))
+			for k := range events {
+				keys = append(keys, k)
 			}
 
+			// Add primary profile
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, profileKindDefault, events, keys, prof,
+				profileType, nil, events, keys, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 
-			if keys != nil {
+			// Add any derived profiles
+			for i := range profileType.DerivedProfiles {
 				prof := sp.Profiles().AppendEmpty()
 				if err := p.setProfile(dic, attrMgr,
 					stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-					profileType, profileKindHeapAllocObjects, events, keys, prof,
+					profileType, &profileType.DerivedProfiles[i], events, keys, prof,
 					collectionStartTime, collectionEndTime); err != nil {
 					return profiles, err
 				}
@@ -195,9 +163,9 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
-	kind profileKind,
+	derived *samples.DerivedProfile,
 	events samples.SampleToEvents,
-	keys []samples.SampleKey, // if non-nil, iterate in this order; otherwise range over events
+	keys []samples.SampleKey,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -208,55 +176,35 @@ func (p *Pdata) setProfile(
 		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
 	}
 
+	// Take the derived sample type & unit if we're working with a derived profile,
+	// otherwise the default.
+	sampleType, sampleUnit := profileType.SampleType, profileType.SampleUnit
+	if derived != nil {
+		sampleType, sampleUnit = derived.SampleType, derived.SampleUnit
+	}
 	st := profile.SampleType()
-	if kind == profileKindHeapAllocObjects {
-		st.SetTypeStrindex(stringSet.Add("alloc_objects"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	} else {
-		st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-		st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
-	}
-
-	// When keys is provided, iterate in the given order so paired profiles
-	// (e.g. alloc_space + alloc_objects) have aligned samples. Otherwise
-	// range over the map directly.
-	if keys == nil {
-		keys = make([]samples.SampleKey, 0, len(events))
-		for k := range events {
-			keys = append(keys, k)
-		}
-	}
+	st.SetTypeStrindex(stringSet.Add(sampleType))
+	st.SetUnitStrindex(stringSet.Add(sampleUnit))
 
 	for _, sampleKey := range keys {
 		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if kind == profileKindHeapAllocObjects {
-			// Derive an unbiased object-count estimator from the
-			// byte-weighted values. Each event carries:
-			//   weighted_bytes = unbiased byte estimate (see ADR 00003)
-			//   size           = raw allocation size in bytes
-			//
-			// Object count = weighted_bytes / size. This is the standard
-			// convention used by tcmalloc, jemalloc, and Go's pprof.
-			//
-			// We compute this in userspace rather than eBPF to keep the
-			// kernel/userspace interface simple, preserve the raw size
-			// for potential future use (e.g. allocation-size histograms),
-			// and avoid the eBPF program needing to transform values.
-			//
-			// Fall back to 1 if size is unknown/zero rather than
-			// dividing by zero.
-			for i, weight := range traceInfo.Values {
-				objects := int64(1)
-				// ValueExtra[1] carries the allocation size for heap origins.
-				if i < len(traceInfo.ValuesExtra) && traceInfo.ValuesExtra[i][1] > 0 {
-					objects = max(weight/int64(traceInfo.ValuesExtra[i][1]), 1)
+
+		// If we've been given a derived profile, emit for that
+		if derived != nil {
+			// One derived value per primary value, so the result stays
+			// index-aligned with Timestamps. A missing extra is passed as
+			// the zero value and the probe's callback decides what that means.
+			for i, v := range traceInfo.Values {
+				var extra [2]uint64
+				if i < len(traceInfo.ValuesExtra) {
+					extra = traceInfo.ValuesExtra[i]
 				}
-				sample.Values().Append(objects)
+				sample.Values().Append(derived.Value(v, extra))
 			}
-		} else if profileType.ReportValues {
+		} else if profileType.ReportValues { // ... if we've not, emit for the main profile, if asked
 			sample.Values().Append(traceInfo.Values...)
 		}
 
