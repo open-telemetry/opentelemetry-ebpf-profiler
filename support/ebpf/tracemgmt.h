@@ -1097,8 +1097,8 @@ static inline EBPF_INLINE long get_task_pt_regs(struct task_struct *task)
 static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 {
   #if defined(__x86_64__)
-  // On x86_64 the user mode SS should always be __USER_DS.
-  if (regs->ss != __USER_DS) {
+  // On x86_64 the user mode (16-bit) SS should always be __USER_DS.
+  if ((u16)regs->ss != __USER_DS) {
     return false;
   }
   return true;
