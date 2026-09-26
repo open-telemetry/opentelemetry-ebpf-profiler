@@ -95,14 +95,21 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.Values = append(events.Values, meta.Value)
+		if meta.ProfileType.ValueExtraFields > 0 {
+			events.ValuesExtra = append(events.ValuesExtra, meta.ValueExtra)
+		}
 		return nil
 	}
 
-	rtp.Events[meta.ProfileType][sampleKey] = &samples.TraceEvents{
+	newEvents := &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		Values:     []int64{meta.Value},
 		Labels:     trace.CustomLabels,
 	}
+	if meta.ProfileType.ValueExtraFields > 0 {
+		newEvents.ValuesExtra = [][2]uint64{meta.ValueExtra}
+	}
+	rtp.Events[meta.ProfileType][sampleKey] = newEvents
 	return nil
 }
