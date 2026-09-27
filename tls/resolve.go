@@ -57,30 +57,27 @@ func (a accessModel) String() string {
 	}
 }
 
-// Resolve determines how sym, a thread-local defined by ef, is accessed,
-// returning ErrUnsupportedModel when no model fits or the architecture's TLS
-// layout is unknown.
+// Resolve selects an access path to sym, a thread-local variable defined by ef.
+// The returned Var can then be located in a process using Locate.
 //
-// The model follows from the relocation type that references the symbol:
+// The available access paths depend on the relocations:
 //   - TLSDESC                   -> general/local-dynamic, GNU2/desc dialect
 //   - DTPMOD64 referencing sym  -> general-dynamic, GNU dialect
 //   - DTPMOD64 without a symbol -> local-dynamic, GNU dialect
 //   - TPOFF64                   -> initial-exec
 //   - no relocation, executable -> local-exec (static TLS block)
 //
-// A hidden symbol is referenced by no relocation of its own, and is resolved
-// through its module's instead.
+// Relocations for hidden symbols may omit the symbol name. Resolve then uses
+// relocations for the defining module and their addends to locate the variable.
 //
-// Returns ErrNotThreadLocal when sym is not a thread-local ef defines, and
-// ErrUnsupportedModel when it is but no model fits.
+// Resolve returns ErrNotThreadLocal if sym is undefined or not STT_TLS, and
+// ErrUnsupportedModel if no access path is found or the architecture is unsupported.
 func Resolve(ef *pfelf.File, sym *libpf.Symbol) (Var, error) {
-	// An undefined entry: another module defines the variable, so this file's
-	// relocations do not describe it.
+	// Only resolve variables defined by this ELF.
 	if sym.Shndx == uint16(elf.SHN_UNDEF) {
 		return Var{}, fmt.Errorf("%w: %s is undefined", ErrNotThreadLocal, sym.Name)
 	}
-	// Otherwise the offsets below come from a symbol that indexes something
-	// else, with only StaticTLSOffset's bounds check to catch it.
+	// Only STT_TLS symbol values are offsets within a TLS block.
 	if elf.ST_TYPE(sym.Info) != elf.STT_TLS {
 		return Var{}, fmt.Errorf("%w: %s is of type %v", ErrNotThreadLocal, sym.Name,
 			elf.ST_TYPE(sym.Info))
@@ -91,28 +88,22 @@ func Resolve(ef *pfelf.File, sym *libpf.Symbol) (Var, error) {
 		return Var{}, err
 	}
 
+	// Relocation targets for references to sym by name.
 	var tlsdescAddr, tpmodAddr, tpoffAddr libpf.Address
-	// Module-level relocations, referencing no symbol. DTPMOD64 resolves the
-	// module ID alone, shared by every hidden variable in the object, so any
-	// one of them will do. TPOFF64 is per-variable, so its addend has to match
-	// sym.Address.
+	// Symbol-less relocations refer to this module; their addends may identify
+	// an individual variable.
 	var tlsdescNoSymAddr, tpmodNoSymAddr, tpoffNoSymAddr libpf.Address
-	// Addend left for Locate by the matched descriptor, and the relocation
-	// addend it was matched on. -1 so a first candidate with addend 0 still
-	// wins.
+	// Offset Locate must add to the address represented by the selected TLSDESC.
 	var tlsdescNoSymAddend uint64
+	// Start below zero so a descriptor with addend 0 is eligible.
 	matchedRelAddend := int64(-1)
 
 	if err = ef.VisitRelocations(func(r pfelf.ElfReloc, symName string,
 		relType pfelf.RelocType) bool {
 		switch {
-		// The emptiness test keeps a nameless symbol out of this branch, where
-		// it would shadow the symbol-less rows below. Those are the ones that
-		// can resolve it: nothing references it by name.
+		// Empty names must use the module-relative matching below.
 		case symName != "" && symName == string(sym.Name):
-			// Every slot is first-wins, and the scan runs to the end, so which
-			// model a mixed-dialect object resolves to is the table below
-			// rather than the order the linker emitted its sections in.
+			// Keep the first match for each type; choose between types below.
 			switch relType {
 			case pfelf.RelTLSDESC:
 				if tlsdescAddr == 0 {
@@ -130,37 +121,37 @@ func Resolve(ef *pfelf.File, sym *libpf.Symbol) (Var, error) {
 		case symName == "":
 			switch relType {
 			case pfelf.RelTLSDESC:
-				// The loader resolves the descriptor to module_base + addend,
-				// so what Locate must add is sym.Address - addend, for any
-				// descriptor of this module: x86-64 emits one per module
-				// (addend 0, against _TLS_MODULE_BASE_), aarch64 one per
-				// variable carrying its own offset. The largest addend at or
-				// below the symbol keeps that difference non-negative.
+				// The descriptor locates module_base + r.Addend. Locate adds
+				// sym.Address - r.Addend to reach the variable. x86-64 commonly
+				// uses a module-base descriptor (addend 0), while aarch64 uses
+				// per-variable descriptors. Choose the largest addend at or
+				// below sym.Address to minimize the non-negative adjustment.
 				if r.Addend > matchedRelAddend && r.Addend <= int64(sym.Address) {
 					tlsdescNoSymAddr = libpf.Address(r.Off)
 					matchedRelAddend = r.Addend
 					tlsdescNoSymAddend = uint64(sym.Address) - uint64(r.Addend)
 				}
 			case pfelf.RelDTPMOD64:
+				// Only the module ID is relocated, so any such slot can be used.
 				if tpmodNoSymAddr == 0 {
 					tpmodNoSymAddr = libpf.Address(r.Off)
 				}
 			case pfelf.RelTPOFF64:
+				// The addend must identify this variable within the module.
 				if tpoffNoSymAddr == 0 && r.Addend == int64(sym.Address) {
 					tpoffNoSymAddr = libpf.Address(r.Off)
 				}
 			}
 		}
-		return true
+		// No later relocation can take precedence over a named TPOFF64.
+		return tpoffAddr == 0
 	}, pfelf.RelTLSDESC|pfelf.RelDTPMOD64|pfelf.RelTPOFF64); err != nil {
 		return Var{}, fmt.Errorf("failed to visit TLS relocations: %w", err)
 	}
 
-	// Ranked by what the row leaves for the caller: TPOFF64 is a TP offset on
-	// its own, TLSDESC is one too whenever its descriptor resolved to static,
-	// and DTPMOD64 always needs the DTV. A named row beats its symbol-less
-	// counterpart, which has only the addend to go by. All of them address the
-	// same variable, so the rank picks an access path, not an answer.
+	// Prefer paths that avoid a DTV lookup: TPOFF64 provides a TP-relative
+	// offset, TLSDESC may provide one, and DTPMOD64 always requires the DTV.
+	// Within each type, prefer a relocation naming sym over a symbol-less one.
 	for _, m := range []struct {
 		addr   libpf.Address
 		access accessModel
@@ -179,10 +170,8 @@ func Resolve(ef *pfelf.File, sym *libpf.Symbol) (Var, error) {
 		}
 	}
 
-	// No relocation references the symbol directly.
+	// With no usable relocation, fall back to the executable's static TLS layout.
 	if ef.IsExecutable() {
-		// The executable's own PT_TLS offset is fixed at link time, so an
-		// unreferenced symbol here is local-exec.
 		tlsOffset, err := ef.StaticTLSOffset(sym)
 		if err != nil {
 			return Var{}, fmt.Errorf("failed to get static TLS offset: %w", err)
