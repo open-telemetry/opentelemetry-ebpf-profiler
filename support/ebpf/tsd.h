@@ -98,11 +98,9 @@ static inline EBPF_INLINE TLSReadResult
 tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
 {
   if (var->dtv_pos == 0) {
-    // Sign-extended before the add: variant II puts the static block below the
-    // thread pointer, making the offset negative.
-    s64 offset = var->tls_offset;
-    DEBUG_PRINT("readTLS static at 0x%lx", (unsigned long)(tsd_base + offset));
-    if (bpf_probe_read_user(out, sizeof(*out), tsd_base + offset)) {
+    const void *tls_addr = tsd_base + var->tls_offset;
+    DEBUG_PRINT("readTLS static at 0x%lx", (unsigned long)tls_addr);
+    if (bpf_probe_read_user(out, sizeof(*out), tls_addr)) {
       return TLS_READ_ERR;
     }
     return TLS_READ_OK;

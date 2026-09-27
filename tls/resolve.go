@@ -63,7 +63,8 @@ func (a accessModel) String() string {
 //
 // The model follows from the relocation type that references the symbol:
 //   - TLSDESC                   -> general/local-dynamic, GNU2/desc dialect
-//   - DTPMOD64                  -> general-dynamic, GNU dialect
+//   - DTPMOD64 referencing sym  -> general-dynamic, GNU dialect
+//   - DTPMOD64 without a symbol -> local-dynamic, GNU dialect
 //   - TPOFF64                   -> initial-exec
 //   - no relocation, executable -> local-exec (static TLS block)
 //
