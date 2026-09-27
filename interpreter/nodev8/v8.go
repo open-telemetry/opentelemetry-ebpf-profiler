@@ -294,6 +294,7 @@ type v8Data struct {
 			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
 			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
 			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+			WrappedSharedFunctionInfo uint8 `name:"DeoptimizationDataWrappedSharedFunctionInfoIndex" zero:""`
 			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
@@ -477,6 +478,11 @@ type v8Data struct {
 			LineEnds uint16 `name:"line_ends__Object"`
 			Source   uint16 `name:"source__Object"`
 		}
+
+		InliningPositions struct {
+			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.8.374.13/src/objects/deoptimization-data-inl.h#28
+			TrustedByteArray bool
+		} `name:""`
 	}
 
 	// snapshotRange is the LOAD segment area where V8 Snapshot code blob is
@@ -1332,7 +1338,11 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// Read the complete inlining positions structure
 		inliningPositionsPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.InliningPositions*pointerSize))
-		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, vms.Type.ByteArray)
+		expectedTag = vms.Type.ByteArray
+		if vms.InliningPositions.TrustedByteArray {
+			expectedTag = vms.Type.TrustedByteArray
+		}
+		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, expectedTag)
 		if err != nil {
 			return nil, fmt.Errorf("inlining position pointer read: %v", err)
 		}
@@ -2084,9 +2094,35 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		// At least back to V8 8.4
 		vms.Script.Source = vms.Script.Name - pointerSize
 	}
+	// Lost in V8 9.4
 	if vms.BytecodeArray.SourcePositionTable == 0 {
-		// Lost in V8 9.4
-		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + 3*pointerSize
+		var nptrs uint16 = 3
+		// Unfortunately, this has historically changed pretty often. The following are valid for all
+		// versions where `kSourcePositionTableOffset` appears in bytecode-array.h:
+		// everything from 11.9.86 (inclusive) to 14.9.194 (exclusive).
+		// It also works for everything from that point until the present day (15.1.14),
+		// because even though they've gotten rid of `kSourcePositionTableOffset` the offset hasn't
+		// actually changed since then.
+		//
+		// TODO: check versions before that range, where the field lives in bytecode-array.tq. Until then, we
+		// just use "3" as the default (which is what we always used before).
+		//
+		// This being wrong breaks file/line symbolization, but apparently only for
+		// Baseline frames.
+		if d.version >= v8Ver(11, 9, 86) {
+			if d.version < v8Ver(12, 0, 67) {
+				nptrs = 2
+			} else if d.version < v8Ver(12, 1, 36) {
+				nptrs = 3
+			} else if d.version < v8Ver(12, 3, 43) {
+				nptrs = 4
+			} else if d.version < v8Ver(12, 3, 97) {
+				nptrs = 3
+			} else {
+				nptrs = 2
+			}
+		}
+		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + nptrs*pointerSize
 	}
 	if vms.BytecodeArray.Data == 0 {
 		// At least back to V8 8.4 (16 = 3*int32 + uint16)
@@ -2098,6 +2134,11 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	if vms.DeoptimizationDataIndex.LiteralArray == 0 {
 		val := vms.DeoptimizationDataIndex.InlinedFunctionCount + 1
 		vms.DeoptimizationDataIndex.LiteralArray = val
+	}
+	if vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo != 0 {
+		// these mean the same thing, it just got renamed at some point:
+		// see https://chromium-review.googlesource.com/c/v8/v8/+/5939362.
+		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper = vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo
 	}
 	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
 		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
@@ -2145,6 +2186,25 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		// This had been WeakFixedArray for a very long time,
 		// but we lost the metadata in 0698c376801dcde939850b7ad0b55c7459c83f4d.
 		vms.DeoptimizationLiteralArray.WeakFixedArray = true
+	}
+
+	if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray && vms.Type.TrustedWeakFixedArray == 0 {
+		if d.version >= v8Ver(12, 8, 0) {
+			// Since 134fcd57b07, there is another
+			// type between TrustedFixedArray and TrustedWeakFixedArray
+			// (to wit: TrustedForeign).
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 2
+		} else {
+			// Before that, TrustedWeakFixedArray
+			// immediately follows TrustedFixedArray.
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 1
+		}
+	}
+
+	// Changed from ByteArray to TrustedByteArray
+	// in f6c936e836b4d8ffafe790bcc3586f2ba5ffcf74
+	if d.version >= v8Ver(12, 6, 0) {
+		vms.InliningPositions.TrustedByteArray = true
 	}
 
 	for i := 0; i < vmVal.NumField(); i++ {
