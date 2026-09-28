@@ -40,6 +40,7 @@ func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
 	i.code = code
 	i.CodeAddress = address
 	i.pc = 0
+	i.Regs.setPC(address)
 }
 
 func (i *Interpreter) Loop() (arm64asm.Inst, error) {
