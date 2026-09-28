@@ -154,6 +154,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 
 import (
 	"bytes"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"io"
@@ -167,7 +168,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"github.com/elastic/go-freelru"
+	"golang.org/x/arch/arm64/arm64asm"
+	"golang.org/x/arch/x86/x86asm"
 
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -508,6 +514,17 @@ type v8Data struct {
 
 	// frametypeToName caches frametype's name
 	frametypeToName [MaxFrameType]libpf.String
+
+	// leaptiering is true if V8 was built with V8_ENABLE_LEAPTIERING.
+	leaptiering bool
+
+	// jsDispatchTableOffset is the offset of js_dispatch_table_ in IsolateGroup.
+	// Only valid if leaptiering = true.
+	jsDispatchTableOffset uint32
+
+	// defaultIsolateGroupAddr is the address of the
+	// IsolateGroup::default_isolate_group_ pointer variable.
+	defaultIsolateGroupAddr libpf.Address
 }
 
 type v8Instance struct {
@@ -1365,8 +1382,12 @@ func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32) (*v8Code, e
 	return i.readCode(taggedPtr, cookie, nil)
 }
 
-// getCodeFromJSFunction reads and caches needed V8 Code object data from a JSFunction pointer.
-func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
+// getCodeFromJSFunction reads and caches needed V8 Code object data using
+// the SFI from a JSFunction pointer. Finding the Code from a JSFunction pointer
+// is complicated in Node >= v24, (search "leaptiering" in v8_tracer.ebpf.c), so
+// unlike in previous revisions of this function, we just expect it to be passed in
+// from eBPF, and don't do the work of finding it again.
+func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32, codeTaggedPtr libpf.Address) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
 		if code.cookie == cookie {
 			return code, nil
@@ -1390,8 +1411,7 @@ func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (
 		return nil, fmt.Errorf("getSFI: %w", err)
 	}
 
-	// Chase and read the Code object
-	codeTaggedPtr := npsr.Ptr(jsfunc, uint(vms.JSFunction.Code))
+	// Read the Code object
 	return i.readCode(codeTaggedPtr, cookie, sfi)
 }
 
@@ -1787,9 +1807,13 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
 		if subframeType == support.V8FileTypeNativeCode {
+			log.Debugf("calling getCode with pointer %#x", pointer)
 			code, err = i.getCode(pointer, codeCookie)
 		} else {
-			code, err = i.getCodeFromJSFunc(pointer, codeCookie)
+			codePointerAndType := libpf.Address(ef.Variable(2))
+			codePointer := codePointerAndType&^support.V8FileTypeMask | HeapObjectTag
+			log.Debugf("calling getCodeFromJSFunc with pointer %#x; codePointer: %#x", pointer, codePointer)
+			code, err = i.getCodeFromJSFunc(pointer, codeCookie, codePointer)
 		}
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
@@ -1821,7 +1845,7 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 	return uint8(slotOffset)
 }
 
-func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
+func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	vms := &d.vmStructs
@@ -1858,6 +1882,11 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		Codekind_shift:    vms.CodeKind.FieldShift,
 		Codekind_mask:     uint8(vms.CodeKind.FieldMask),
 		Codekind_baseline: vms.CodeKind.Baseline,
+	}
+	if d.leaptiering {
+		data.Leaptiering = 1
+		data.Default_isolate_group = uint64(rm.Ptr(d.defaultIsolateGroupAddr + bias))
+		data.Js_dispatch_table_offset = d.jsDispatchTableOffset
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -2270,6 +2299,9 @@ func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util
 type relevantSymbols struct {
 	DefaultSnapshotBlob *libpf.Symbol `sym:"_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"`
 	BytecodeSizes       *libpf.Symbol `sym:"_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"`
+
+	JSDispatchTableAddress *libpf.Symbol `sym:"_ZN2v88internal17ExternalReference25js_dispatch_table_addressEv"`
+	DefaultIsolateGroup    *libpf.Symbol `sym:"_ZN2v88internal12IsolateGroup22default_isolate_group_E"`
 }
 
 // scan gets the symbols needed for Node unwinding
@@ -2332,6 +2364,61 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	}
 }
 
+func findJsDispatchTableOffset(ef *pfelf.File, syms relevantSymbols) (uint64, error) {
+	sym := syms.JSDispatchTableAddress
+	if sym == nil {
+		return 0, errors.New("js_dispatch_table_address not found; can't analyze it to find js_dispatch_table_ offset")
+	}
+	// the most I've observed mattering is 80 bytes
+	// and that was in debug mode; allow up to 256 just to be safe.
+	sz := min(sym.Size, 256)
+	code := make([]byte, sz)
+	if _, err := ef.ReadAt(code, int64(sym.Address)); err != nil {
+		return 0, fmt.Errorf("failed to read js_dispatch_table_address code: %w", err)
+	}
+
+	return decodeJsDispatchTableOffset(ef.Machine, code, uint64(sym.Address))
+}
+
+// decodeJsDispatchTableOffset runs js_dispatch_table_address(), whose code
+// starts at addr, up to its first `ret`, and returns the offset in
+// IsolateGroup that the return value was loaded from.
+func decodeJsDispatchTableOffset(machine elf.Machine, code []byte, addr uint64) (uint64, error) {
+	var retval expression.Expression
+	switch machine {
+	case elf.EM_AARCH64:
+		it := arm.NewInterpreterWithCodeAt(code, expression.Imm(addr))
+		_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
+			return i.Op == arm64asm.RET
+		})
+		if err != nil {
+			return 0, err
+		}
+		retval = it.Regs.Get(arm.X0)
+	case elf.EM_X86_64:
+		it := amd.NewInterpreterWithCodeAt(code, expression.Imm(addr))
+		_, err := it.LoopWithBreak(func(i x86asm.Inst) bool {
+			return i.Op == x86asm.RET
+		})
+		if err != nil {
+			return 0, err
+		}
+		retval = it.Regs.Get(amd.RAX)
+	default:
+		return 0, fmt.Errorf("unsupported arch %s", machine.String())
+	}
+	// The IsolateGroup pointer is loaded either directly from
+	// default_isolate_group_ or through its GOT entry.
+	slot := expression.NewImmediateCapture("slot")
+	offset := expression.NewImmediateCapture("offset")
+	group := expression.Mem8(slot)
+	if retval.Match(expression.Mem8(expression.Add(group, offset))) ||
+		retval.Match(expression.Mem8(expression.Add(expression.Mem8(group), offset))) {
+		return offset.CapturedValue(), nil
+	}
+	return 0, errors.New("failed to find js_dispatch_table_ field offset")
+}
+
 func GetLoader(_ Config) interpreter.Loader {
 	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
 		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindV8), ProgName: "unwind_v8"},
@@ -2374,6 +2461,18 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	d := &v8Data{
 		version:       version,
 		snapshotRange: locateSnapshotArea(info, syms),
+		leaptiering:   syms.JSDispatchTableAddress != nil,
+	}
+	if d.leaptiering {
+		offset, err := findJsDispatchTableOffset(ef, syms)
+		if err != nil {
+			log.Warnf("leaptiering on, but failed to find js_dispatch_table_ offset: %v. Proceeding as though leaptiering were off; line numbers will likely be wrong.", err)
+			d.leaptiering = false
+		}
+		d.jsDispatchTableOffset = uint32(offset)
+	}
+	if syms.DefaultIsolateGroup != nil {
+		d.defaultIsolateGroupAddr = libpf.Address(syms.DefaultIsolateGroup.Address)
 	}
 
 	sym := syms.BytecodeSizes
