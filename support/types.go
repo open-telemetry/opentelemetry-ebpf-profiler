@@ -347,7 +347,9 @@ type V8ProcInfo struct {
 	Codekind_shift               uint8
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
-	Pad_cgo_0                    [2]byte
+	Default_isolate_group        uint64
+	Leaptiering                  uint8
+	Js_dispatch_table_offset     uint32
 }
 
 const (
