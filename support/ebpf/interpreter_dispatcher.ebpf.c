@@ -333,6 +333,15 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
+  if (defer_off_cpu && trace->origin == origin_id_off_cpu) {
+    u64 task     = trace->value;
+    trace->value = 0;
+    if (bpf_map_update_elem(&off_cpu_traces, &task, trace, BPF_ANY) < 0) {
+      DEBUG_PRINT("Failed to store off-CPU trace for task %llx", task);
+    }
+    return 0;
+  }
+
   // Does not return once it dispatches, so anything below runs only when the
   // Go path did not fill custom labels.
   maybe_add_go_custom_labels(ctx, record);
@@ -343,6 +352,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   return 0;
 }
+
 MULTI_USE_FUNC(unwind_stop)
 
 char _license[] SEC("license") = "GPL";

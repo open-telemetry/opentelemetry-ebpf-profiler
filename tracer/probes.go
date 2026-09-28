@@ -5,6 +5,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
@@ -21,9 +22,25 @@ import (
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
+	unwinders        []ProgLoaderHelper
+	probeMaps        map[string]*cebpf.Map
 	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+}
+
+func probeProgramName(prog ProgLoaderHelper) string {
+	if !prog.NoTailCallTarget {
+		return "kprobe_" + prog.Name
+	}
+	return prog.Name
+}
+
+func tracepointProgramName(prog ProgLoaderHelper) string {
+	if !prog.NoTailCallTarget {
+		return "kprobe_" + prog.Name
+	}
+	return prog.Name
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -74,6 +91,19 @@ func (c *ProbeContext) CollectionSpecWith(
 		}
 		filtered.Programs[name] = p.Copy()
 	}
+	if needsCompatibleUnwinders(filtered.Programs) {
+		for _, unwinder := range c.unwinders {
+			name := probeProgramName(unwinder)
+			if _, exists := filtered.Programs[name]; exists {
+				continue
+			}
+			p, ok := full.Programs[name]
+			if !ok {
+				return nil, fmt.Errorf("unwinder program %q not found", name)
+			}
+			filtered.Programs[name] = p.Copy()
+		}
+	}
 
 	// Mandatory system variables must be present in the ELF on all supported arches.
 	for _, s := range c.sysVarSetters() {
@@ -96,6 +126,16 @@ func (c *ProbeContext) CollectionSpecWith(
 	}
 
 	return filtered, nil
+}
+
+func needsCompatibleUnwinders(progs map[string]*cebpf.ProgramSpec) bool {
+	for _, prog := range progs {
+		switch prog.Type {
+		case cebpf.Tracing, cebpf.RawTracepoint, cebpf.TracePoint:
+			return true
+		}
+	}
+	return false
 }
 
 // sysVar pairs an eBPF variable name with its runtime value.
@@ -144,10 +184,12 @@ func (c *ProbeContext) applySystemVars(coll *cebpf.CollectionSpec) error {
 }
 
 // RewriteMaps rewrites program map references in coll. The tracer's shared maps are
-// merged with probeMaps; probe map names must not shadow tracer-owned map names.
+// merged with probeMaps; a probe map with the same name replaces the shared map for
+// this collection.
 // Only maps actually referenced by the probe's programs are rewritten; tracer-internal
 // maps that the probe does not use are silently skipped.
 func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[string]*cebpf.Map) error {
+	c.probeMaps = probeMaps
 	// Build pool: shared tracer maps plus probe-specific maps.
 	// .rodata.var is excluded: each probe creates its own isolated RODATA map
 	// in LoadProbeUnwinders so that probe-specific variables (e.g. origin_id_probe)
@@ -157,12 +199,12 @@ func (c *ProbeContext) RewriteMaps(coll *cebpf.CollectionSpec, probeMaps map[str
 		if k == ".rodata.var" {
 			continue
 		}
+		if _, overridden := probeMaps[k]; overridden {
+			continue
+		}
 		pool[k] = v
 	}
 	for k, v := range probeMaps {
-		if _, exists := pool[k]; exists {
-			return fmt.Errorf("probe map %q conflicts with a tracer-owned map", k)
-		}
 		pool[k] = v
 	}
 
@@ -209,10 +251,6 @@ func (c *ProbeContext) LoadProbeUnwinders(
 			return err
 		}
 	}
-	kprobeProgs := c.maps["kprobe_progs"]
-	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
-	}
 	perfProgs := c.maps["perf_progs"]
 	if perfProgs == nil {
 		return fmt.Errorf("perf_progs map not available")
@@ -225,8 +263,59 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	if perCPURecordsKp == nil {
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
-	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+	allProgs := make([]ProgLoaderHelper, 0, len(c.unwinders)+len(progs))
+	allProgs = append(allProgs, c.unwinders...)
+	allProgs = append(allProgs, progs...)
+	programType, err := probeProgramType(coll, progs)
+	if err != nil {
+		return err
+	}
+	if programType == probeProgram {
+		kprobeProgs := c.maps["kprobe_progs"]
+		if kprobeProgs == nil {
+			return fmt.Errorf("kprobe_progs map not available")
+		}
+		return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
+			bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+	}
+	tailcallMap, err := probeTailCallMap(coll, c.probeMaps)
+	if err != nil {
+		return err
+	}
+	return loadTracepointUnwinders(coll, ebpfProgs, tailcallMap, allProgs,
+		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp, programType)
+}
+
+func probeProgramType(coll *cebpf.CollectionSpec, progs []ProgLoaderHelper) (tracepointProgramType, error) {
+	for _, prog := range progs {
+		if !prog.Enable || !prog.NoTailCallTarget {
+			continue
+		}
+		spec, ok := coll.Programs[prog.Name]
+		if !ok {
+			return 0, fmt.Errorf("program %q not found", prog.Name)
+		}
+		switch spec.Type {
+		case cebpf.Tracing:
+			return btfTracepointProgram, nil
+		case cebpf.RawTracepoint:
+			return rawTracepointProgram, nil
+		case cebpf.TracePoint:
+			return tracepointProgram, nil
+		default:
+			return probeProgram, nil
+		}
+	}
+	return 0, errors.New("probe entry program not found")
+}
+
+func probeTailCallMap(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) (*cebpf.Map, error) {
+	for name, spec := range coll.Maps {
+		if spec.Type == cebpf.ProgramArray && maps[name] != nil {
+			return maps[name], nil
+		}
+	}
+	return nil, errors.New("probe tail-call map not found")
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -421,19 +510,15 @@ type PostTraceHandler interface {
 // registered to intercept traces before symbolization or receive them after
 // symbolization, respectively.
 //
-// Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
-// startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
-// Without the chain the probe attaches successfully but its tail calls into
-// kprobe_progs silently miss, producing no stack samples.
-//
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:    t.ebpfMaps,
-		sysVars: t.sysConfigVars,
-		reg:     t.origins,
+		maps:      t.ebpfMaps,
+		sysVars:   t.sysConfigVars,
+		unwinders: t.unwinders,
+		reg:       t.origins,
 		registerAttacher: func(a pm.ProbeAttacher) error {
 			// Per-process probes need resynchronization when executable mappings are added.
 			if err := t.ensureMmapEventMonitor(); err != nil {
