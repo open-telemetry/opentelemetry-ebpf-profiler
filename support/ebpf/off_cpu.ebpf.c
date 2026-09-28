@@ -13,9 +13,10 @@ struct kprobe_progs_t {
 // sched_times keeps track of sched_switch call times.
 struct sched_times_t {
   __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
-  __type(key, u64);         // pid_tgid
-  __type(value, u64);       // time in ns
-  __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
+  __type(key, u64);                       // pid_tgid
+  __type(value, u64);                     // time in ns
+  __uint(max_entries, 256);               // value is adjusted at load time in loadAllMaps.
+  __uint(map_flags, BPF_F_NO_COMMON_LRU); // use a dedicated LRU per CPU
 } sched_times SEC(".maps");
 
 // off_cpu_threshold is set during load time.
