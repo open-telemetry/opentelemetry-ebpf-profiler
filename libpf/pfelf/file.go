@@ -268,7 +268,7 @@ func OpenFS(fsys fs.FS, name string) (*File, error) {
 	rac, ok := f.(ReadAtCloser)
 	if !ok {
 		_ = f.Close()
-		return nil, fmt.Errorf("pfelf: %s: opened file does not support io.ReaderAt", name)
+		return nil, fmt.Errorf("pfelf: %s: opened file does not support ReadAtCloser", name)
 	}
 	var loadAddress uint64
 	var hasMusl bool

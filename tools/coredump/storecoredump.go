@@ -6,7 +6,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 
@@ -41,6 +40,9 @@ func (scd *StoreCoredump) openFile(path string) (*modulestore.ModuleReader, erro
 }
 
 func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
+	if m.IsVDSO() {
+		return scd.CoredumpProcess.OpenMappingFile(m)
+	}
 	rac, err := scd.openFile(m.Path)
 	if errors.Is(err, os.ErrNotExist) {
 		// Bundle miss: let the caller fall back to Open, which
@@ -48,16 +50,6 @@ func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAt
 		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
 	}
 	return rac, err
-}
-
-// moduleFile adapts a module store reader to fs.File.
-type moduleFile struct {
-	*io.SectionReader
-	io.Closer
-}
-
-func (*moduleFile) Stat() (fs.FileInfo, error) {
-	return nil, errors.New("stat not supported for module store files")
 }
 
 // Open implements the fs.FS interface. It prefers content from the module
@@ -74,10 +66,7 @@ func (scd *StoreCoredump) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &moduleFile{
-		SectionReader: io.NewSectionReader(file, 0, int64(file.Size())),
-		Closer:        file,
-	}, nil
+	return file, nil
 }
 
 // remoteReaderWithModuleFallback satisfies io.ReaderAt by first trying the

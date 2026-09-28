@@ -528,6 +528,22 @@ func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
 	return bytes.NewReader(data), nil
 }
 
+// memoryFile is a ReadAtCloser over mapping data copied from process memory.
+type memoryFile struct {
+	*bytes.Reader
+}
+
+func (memoryFile) Close() error { return nil }
+
+// openVDSO returns the VDSO mapping's content, read from process memory.
+func openVDSO(pr Process, m *RawMapping) (ReadAtCloser, error) {
+	vdso, err := extractMapping(pr, m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract VDSO: %v", err)
+	}
+	return memoryFile{vdso}, nil
+}
+
 // openInProcRoot opens a file within a process's filesystem namespace.
 func openInProcRoot(pid libpf.PID, filePath string) (*os.File, error) {
 	return openInRoot(fmt.Sprintf("/proc/%d/root", pid), filePath)
@@ -560,6 +576,9 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 }
 
 func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+	if m.IsVDSO() {
+		return openVDSO(sp, m)
+	}
 	return sp.getMappingFile(m)
 }
 

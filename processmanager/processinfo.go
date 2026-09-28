@@ -12,7 +12,6 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 // HA/tracer and tools/coredump modules only.
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -397,19 +396,12 @@ var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping,
 	anonymousMappingsWanted bool,
 ) (libpf.FrameMapping, bool, error) {
-	// Open the mapping's own file: VDSO is read from process memory, other
-	// mappings go through OpenMappingFile which can open deleted or replaced
-	// files (e.g. via /proc/<pid>/map_files). Only ErrMappingFileUnavailable
-	// falls back to opening the path via the pr fs.FS. Auxiliary opens such as
-	// .gnu_debuglink targets also go through the pr fs.FS.
+	// Open the mapping's own file via OpenMappingFile, which can open deleted
+	// or replaced files (e.g. via /proc/<pid>/map_files) and VDSO from process
+	// memory. Only ErrMappingFileUnavailable falls back to opening the path via
+	// the pr fs.FS. Auxiliary opens such as .gnu_debuglink targets also go
+	// through the pr fs.FS.
 	elfRef := pfelf.NewReferenceWithOpenFunc(m.Path, pr, func() (*pfelf.File, error) {
-		if m.IsVDSO() {
-			vdso := make([]byte, m.Length)
-			if _, err := pr.GetRemoteMemory().ReadAt(vdso, int64(m.Vaddr)); err != nil {
-				return nil, fmt.Errorf("failed to extract VDSO at %#x: %w", m.Vaddr, err)
-			}
-			return pfelf.NewFile(bytes.NewReader(vdso), 0, false)
-		}
 		rac, err := pr.OpenMappingFile(m)
 		if errors.Is(err, process.ErrMappingFileUnavailable) {
 			return pfelf.OpenFS(pr, pfelf.FSPath(m.Path))

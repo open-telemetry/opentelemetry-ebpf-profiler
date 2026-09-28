@@ -237,7 +237,10 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 }
 
 // OpenMappingFile implements the Process interface.
-func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
+func (cd *CoredumpProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+	if m.IsVDSO() {
+		return openVDSO(cd, m)
+	}
 	// Coredumps do not contain the original backing files.
 	return nil, ErrMappingFileUnavailable
 }
