@@ -61,3 +61,13 @@ int tracepoint__sched_process_free_pre616(struct sched_process_free_ctx_pre616 *
 {
   return do_process_free(ctx, ctx->pid);
 }
+
+// A task that exits after its final switch-out will never switch in again. The
+// raw tracepoint exposes the task pointer and runs before task_struct is freed,
+// so deletion cannot race with reuse of either a TID or a task_struct address.
+SEC("raw_tracepoint/sched_process_free")
+int off_cpu_raw_tracepoint__sched_process_free(struct bpf_raw_tracepoint_args *ctx)
+{
+  u64 task = ctx->args[0];
+  return bpf_map_delete_elem(&off_cpu_traces, &task);
+}

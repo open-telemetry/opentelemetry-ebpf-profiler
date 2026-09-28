@@ -20,7 +20,7 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace(ctx, origin_id_probe, pid, tid, group_leader, ts, value);
+  return collect_trace(ctx, origin_id_probe, pid, tid, group_leader, ts, value, false);
 }
 
 // kprobe__generic serves as entry point for kprobe based profiling.
