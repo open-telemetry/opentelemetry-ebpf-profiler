@@ -58,7 +58,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   //   text_section_id   = pHp->pHdrMap (pointer to the nibble map)
   const UnwindState *state          = &record->state;
   DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
-  const unsigned long map_elements  = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
+  const u64 map_elements            = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
   u64 pc_base                       = state->text_section_bias;
   u64 pc_delta                      = pc - pc_base;
   u64 map_start                     = state->text_section_id;
@@ -412,7 +412,7 @@ push_frame:
 static EBPF_INLINE int unwind_dotnet_core(
   struct pt_regs *ctx,
   u8 unwinder_program,
-  int frames_per_program,
+  u64 frames_per_program,
   find_code_start_f find_code_start)
 {
   PerCPURecord *record = get_per_cpu_record();
