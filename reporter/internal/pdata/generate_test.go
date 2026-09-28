@@ -43,6 +43,27 @@ var (
 		SampleUnit:   "nanoseconds",
 		ReportValues: true,
 	}
+	// profileTypeDerived exercises the generic DerivedProfiles mechanism: a
+	// primary byte-weighted profile plus a derived "count" profile computed
+	// from the primary value and its ValueExtra (here: value/extra[1] with a
+	// fall back to 1 for a zero divisor).
+	profileTypeDerived = &samples.TypeMetadata{
+		SampleType:    "primary_space",
+		SampleUnit:    "bytes",
+		ReportValues:  true,
+		ValueExtraLen: 2,
+		DerivedProfiles: []samples.DerivedProfile{{
+			SampleType: "derived_count",
+			SampleUnit: "count",
+			Value: func(value int64, extra [2]uint64) int64 {
+				size := int64(extra[1])
+				if size <= 0 {
+					return 1
+				}
+				return max(value/size, 1)
+			},
+		}},
+	}
 )
 
 // testGenerate is a helper that calls Generate with the standard test collection window
@@ -1018,4 +1039,119 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 		string(semconv.ProcessExecutableNameKey): "svc",
 	}
 	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+func TestDerivedProfileProducesPrimaryAndDerived(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerived: {
+					{}: &samples.TraceEvents{
+						Frames:      frames,
+						Timestamps:  timestamps,
+						Values:      []int64{128, 256},
+						ValuesExtra: [][2]uint64{{0, 64}, {0, 128}},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len())
+
+	profilesByType := make(map[string]pprofile.Profile)
+	strings := profiles.Dictionary().StringTable()
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		sampleType := prof.SampleType()
+		profilesByType[strings.At(int(sampleType.TypeStrindex()))] = prof
+	}
+
+	primary, ok := profilesByType["primary_space"]
+	require.True(t, ok)
+	assert.Equal(t, "bytes", strings.At(int(primary.SampleType().UnitStrindex())))
+	require.Equal(t, 1, primary.Samples().Len())
+	assert.Equal(t, []int64{128, 256}, primary.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, primary.Samples().At(0).TimestampsUnixNano().AsRaw())
+
+	derivedCount, ok := profilesByType["derived_count"]
+	require.True(t, ok)
+	assert.Equal(t, "count", strings.At(int(derivedCount.SampleType().UnitStrindex())))
+	require.Equal(t, 1, derivedCount.Samples().Len())
+	assert.Equal(t, []int64{2, 2}, derivedCount.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, derivedCount.Samples().At(0).TimestampsUnixNano().AsRaw())
+}
+
+// TestDerivedProfileValueTransform verifies that the derived profile applies
+// the profile type's value transform per sample (here value/extra[1]), not a
+// flat value, and that a zero divisor falls back to 1 rather than dividing by
+// zero.
+func TestDerivedProfileValueTransform(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+		uint64(time.Unix(1030, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerived: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						// value=1000 @ extra[1]=100 -> 10.
+						// value=64 @ extra[1]=64 -> 1.
+						// value=500 @ extra[1]=0 (unknown) -> falls back to 1.
+						Values:      []int64{1000, 64, 500},
+						ValuesExtra: [][2]uint64{{0, 100}, {0, 64}, {0, 0}},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	strings := profiles.Dictionary().StringTable()
+	var derivedCount pprofile.Profile
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		if strings.At(int(prof.SampleType().TypeStrindex())) == "derived_count" {
+			derivedCount = prof
+		}
+	}
+	require.Equal(t, 1, derivedCount.Samples().Len())
+	assert.Equal(t, []int64{10, 1, 1}, derivedCount.Samples().At(0).Values().AsRaw())
 }

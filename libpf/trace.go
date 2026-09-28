@@ -202,6 +202,7 @@ type EbpfTrace struct {
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64
 	Value            int64
+	ValueExtra       [2]uint64
 	KTime            int64
 	CpuID            uint32
 	TID              PID
