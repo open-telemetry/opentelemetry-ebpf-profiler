@@ -714,6 +714,10 @@ typedef struct Trace {
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
 
+  // value_extra carries origin-specific auxiliary data alongside the
+  // trace. Interpretation depends on the origin; unused slots are zero.
+  u64 value_extra[2];
+
   // The CPU that captured this trace.
   u32 cpu_id;
 
