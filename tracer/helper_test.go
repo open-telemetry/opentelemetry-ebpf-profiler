@@ -81,6 +81,38 @@ func TestIntersectCPURanges(t *testing.T) {
 	}
 }
 
+func TestProbeProgramName(t *testing.T) {
+	require.Equal(t, "kprobe_unwind_stop", probeProgramName(ProgLoaderHelper{
+		ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop",
+	}))
+	require.Equal(t, "kprobe_unwind_native", probeProgramName(ProgLoaderHelper{
+		ProgID: uint32(support.ProgUnwindNative), Name: "unwind_native",
+	}))
+	// Entry programs aren't tail-call targets, and their zero-value program ID
+	// must not make them look like PROG_UNWIND_STOP.
+	require.Equal(t, "probe_entry", probeProgramName(ProgLoaderHelper{
+		Name: "probe_entry", NoTailCallTarget: true,
+	}))
+}
+
+func TestCompatibleProbeProgram(t *testing.T) {
+	original := &cebpf.ProgramSpec{Name: "kprobe_unwind_native", Type: cebpf.Kprobe}
+	entry := &cebpf.ProgramSpec{
+		Type:        cebpf.Tracing,
+		AttachType:  cebpf.AttachTraceRawTp,
+		AttachTo:    "example_hook",
+		SectionName: "tp_btf/example_hook",
+	}
+
+	compatible := compatibleProbeProgram(original, entry, "unwind_native")
+	require.Equal(t, "probe_unwind_native", compatible.Name)
+	require.Equal(t, entry.Type, compatible.Type)
+	require.Equal(t, entry.AttachType, compatible.AttachType)
+	require.Equal(t, entry.AttachTo, compatible.AttachTo)
+	require.Equal(t, entry.SectionName, compatible.SectionName)
+	require.Equal(t, cebpf.Kprobe, original.Type)
+}
+
 func TestDisableVMAHelperCalls(t *testing.T) {
 	findVMA := asm.FnFindVma.Call().WithSymbol("find_vma")
 	getTask := asm.FnGetCurrentTaskBtf.Call()

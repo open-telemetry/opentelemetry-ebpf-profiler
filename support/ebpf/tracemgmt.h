@@ -68,6 +68,10 @@ extern u16 origin_id_sampling;
 // pid_ns_translation_mode is declared in native_stack_trace.ebpf.c
 extern u8 pid_ns_translation_mode;
 
+// Deferred trace delivery configuration is declared in deferred_trace.ebpf.c.
+extern bool defer_traces;
+extern u16 deferred_origin_id;
+
 // target_pid_ns_inode is declared in native_stack_trace.ebpf.c
 extern u64 target_pid_ns_inode;
 
@@ -1120,12 +1124,12 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 // if something fails. has_usermode_regs is set to true if a user-mode register
 // context was found: not every thread that we interrupt will actually have
 // a user-mode context (e.g. kernel worker threads won't).
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE ErrorCode get_usermode_regs(
+  struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs, bool use_task_pt_regs)
 {
   ErrorCode error;
 
-  if (!ptregs_is_usermode(ctx)) {
+  if (use_task_pt_regs || !ptregs_is_usermode(ctx)) {
     // Use the current task's entry pt_regs
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
     long ptregs_addr         = get_task_pt_regs(task);
@@ -1153,8 +1157,8 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE ErrorCode get_usermode_regs(
+  struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs, UNUSED bool use_task_pt_regs)
 {
   // Coredumps provide always usermode pt_regs directly.
   ErrorCode error = copy_state_regs(state, ctx, false);
@@ -1173,7 +1177,8 @@ static inline EBPF_INLINE int collect_trace(
   u32 tid,
   u64 group_leader,
   u64 trace_timestamp,
-  u64 value)
+  u64 value,
+  bool use_task_pt_regs)
 {
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
@@ -1219,7 +1224,7 @@ static inline EBPF_INLINE int collect_trace(
   // Recursive unwind frames
   int unwinder           = PROG_UNWIND_STOP;
   bool has_usermode_regs = false;
-  ErrorCode error        = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
+  ErrorCode error = get_usermode_regs(ctx, &record->state, &has_usermode_regs, use_task_pt_regs);
   if (error || !has_usermode_regs) {
     goto exit;
   }
@@ -1244,6 +1249,20 @@ exit:
   tail_call(ctx, unwinder);
   DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
   return -1;
+}
+
+// Tracepoint contexts aren't pt_regs. Force collection of the current task's
+// saved user registers instead of inspecting ctx.
+static inline EBPF_INLINE int collect_trace_from_current_task(
+  struct pt_regs *ctx,
+  u16 origin,
+  u32 pid,
+  u32 tid,
+  u64 group_leader,
+  u64 trace_timestamp,
+  u64 value)
+{
+  return collect_trace(ctx, origin, pid, tid, group_leader, trace_timestamp, value, true);
 }
 
 #endif
