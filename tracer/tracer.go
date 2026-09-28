@@ -1065,18 +1065,17 @@ var (
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
-	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
-
-	if len(raw) < frameListOffs {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs, errRecordTooSmall)
+	traceHeaderSize := int(unsafe.Sizeof(support.Trace{}))
+	if len(raw) < traceHeaderSize {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize, errRecordTooSmall)
 	}
 
-	ptr := traceFromRaw(raw)
+	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
 	frameDataLen := int(ptr.Frame_data_len) * 8
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < frameListOffs+frameDataLen {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs+frameDataLen,
+	if len(raw) < traceHeaderSize+frameDataLen {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+frameDataLen,
 			errRecordUnexpectedSize)
 	}
 
@@ -1128,7 +1127,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
 	// Kernel frames are raw addresses at the front of FrameData. The process
 	// manager splits and symbolizes them so all frame processing shares one cache.
-	copy(trace.FrameData, ptr.Frame_data[:frameDataWords])
+	frameData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), frameDataWords)
+	copy(trace.FrameData, frameData)
 
 	return trace, nil
 }
