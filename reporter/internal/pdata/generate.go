@@ -99,12 +99,35 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				continue
 			}
 
+			// When a profile type declares derived profiles, emit them
+			// alongside the primary one from the same events. A shared key
+			// ordering keeps every profile's samples index-aligned without
+			// needing a sort.
+			var keys []samples.SampleKey
+			if len(profileType.DerivedProfiles) > 0 {
+				keys = make([]samples.SampleKey, 0, len(events))
+				for k := range events {
+					keys = append(keys, k)
+				}
+			}
+
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, events, prof,
+				profileType, nil, events, keys, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
+			}
+
+			for i := range profileType.DerivedProfiles {
+				derived := &profileType.DerivedProfiles[i]
+				prof := sp.Profiles().AppendEmpty()
+				if err := p.setProfile(dic, attrMgr,
+					stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
+					profileType, derived, events, keys, prof,
+					collectionStartTime, collectionEndTime); err != nil {
+					return profiles, err
+				}
 			}
 		}
 	}
@@ -142,7 +165,10 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
+	// derived is nil for the primary profile, or the derived profile to emit.
+	derived *samples.DerivedProfile,
 	events samples.SampleToEvents,
+	keys []samples.SampleKey, // if non-nil, iterate in this order; otherwise range over events
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -154,14 +180,42 @@ func (p *Pdata) setProfile(
 	}
 
 	st := profile.SampleType()
-	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
+	if derived != nil {
+		st.SetTypeStrindex(stringSet.Add(derived.SampleType))
+		st.SetUnitStrindex(stringSet.Add(derived.SampleUnit))
+	} else {
+		st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
+		st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
+	}
 
-	for sampleKey, traceInfo := range events {
+	// When keys is provided, iterate in the given order so a primary profile
+	// and its derived profiles have index-aligned samples. Otherwise range
+	// over the map directly.
+	if keys == nil {
+		keys = make([]samples.SampleKey, 0, len(events))
+		for k := range events {
+			keys = append(keys, k)
+		}
+	}
+
+	for _, sampleKey := range keys {
+		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if profileType.ReportValues {
+		if derived != nil {
+			// Derived profiles transform each primary sample value (and its
+			// auxiliary ValueExtra) via a probe-supplied closure, so the
+			// reporter stays agnostic to the semantics. ValuesExtra is
+			// index-aligned with Values (see TypeMetadata.ValueExtraLen).
+			for i, v := range traceInfo.Values {
+				var extra [2]uint64
+				if i < len(traceInfo.ValuesExtra) {
+					extra = traceInfo.ValuesExtra[i]
+				}
+				sample.Values().Append(derived.Value(v, extra))
+			}
+		} else if profileType.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
