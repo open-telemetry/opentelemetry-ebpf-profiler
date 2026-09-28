@@ -1046,7 +1046,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
-  state->return_address = interrupted_kernelmode && (int)regs->orig_ax != -1;
+  state->return_address = interrupted_kernelmode && regs->orig_ax != -1UL;
 #elif defined(__aarch64__)
   // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
