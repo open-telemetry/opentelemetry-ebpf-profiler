@@ -1029,7 +1029,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // Check if the process is running in 32-bit mode on the x86_64 system.
   // This check follows the Linux kernel implementation of user_64bit_mode() in
   // arch/x86/include/asm/ptrace.h.
-  if (regs->cs == __USER32_CS) {
+  if ((u16)regs->cs == __USER32_CS) {
     return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
   }
   state->pc  = regs->ip;
@@ -1098,7 +1098,7 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 {
   #if defined(__x86_64__)
   // On x86_64 the user mode SS should always be __USER_DS.
-  if (regs->ss != __USER_DS) {
+  if ((u16)regs->ss != __USER_DS) {
     return false;
   }
   return true;
