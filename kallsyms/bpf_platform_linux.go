@@ -30,8 +30,8 @@ const bpfProgPrefix = "bpf_prog_"
 // The symbolizer is not ready to use until startMonitor is called to load the symbols.
 type bpfSymbolizerPlatform struct {
 	records chan *perf.KSymbolRecord
-	events  []*perf.Event
 	cancel  context.CancelFunc
+	events  []*perf.Event
 	wg      sync.WaitGroup
 }
 
