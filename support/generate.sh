@@ -10,7 +10,7 @@ cat <<EOF >types_gen.go
 EOF
 
 # Generate Go definitions from C
-go tool cgo -godefs types_def.go >> types_gen.go
+go tool cgo -godefs -- -DEBPF_TRACE_HEADER_ONLY types_def.go >> types_gen.go
 
 # Properly format the generated code
 go fmt .
