@@ -29,3 +29,15 @@
 #define V8_LINE_COOKIE_SHIFT 32
 #define V8_LINE_COOKIE_MASK  0xffffffff00000000
 #define V8_LINE_DELTA_MASK   0x00000000ffffffff
+
+// Leaptiering (V8_ENABLE_LEAPTIERING) JSDispatchTable constants. Under leaptiering
+// the JSFunction holds a 32-bit dispatch handle that indexes a JSDispatchTable;
+// each 16-byte entry encodes the Code pointer in its second word.
+// kJSDispatchHandleShift (src/common/globals.h), 8 unless V8_LOWER_LIMITS_MODE.
+#define V8_JSDISPATCH_HANDLE_SHIFT         8
+// sizeof(JSDispatchEntry) == kJSDispatchTableEntrySize (src/common/globals.h).
+#define V8_JSDISPATCH_ENTRY_SIZE           16
+// JSDispatchEntry::encoded_word_ offset (== kCodeObjectOffset == kSystemPointerSize).
+#define V8_JSDISPATCH_ENCODED_WORD_OFFSET  8
+// JSDispatchEntry::kObjectPointerShift: Code pointer occupies the high bits.
+#define V8_JSDISPATCH_OBJECT_POINTER_SHIFT 16

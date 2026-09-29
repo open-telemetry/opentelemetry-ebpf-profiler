@@ -85,3 +85,17 @@ func TestLuaOffsets(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0x41C, result)
 }
+
+// TestResetCodeSetsPC checks that an adrp at the start of the code
+// resolves against the address passed to ResetCode.
+func TestResetCodeSetsPC(t *testing.T) {
+	// 0x7c8668: adrp x8, #0x32ee000
+	code := []byte{0x28, 0x59, 0x01, 0xd0}
+	it := NewInterpreter()
+	it.ResetCode(code, expression.Imm(0x7c8668))
+	_, err := it.Step()
+	require.NoError(t, err)
+	page, ok := expression.AsConstant(it.Regs.Get(X8))
+	require.True(t, ok)
+	require.Equal(t, uint64(0x32ee000), page)
+}

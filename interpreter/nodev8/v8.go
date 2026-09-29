@@ -154,6 +154,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 
 import (
 	"bytes"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"io"
@@ -167,7 +168,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"github.com/elastic/go-freelru"
+	"golang.org/x/arch/arm64/arm64asm"
+	"golang.org/x/arch/x86/x86asm"
 
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -294,6 +300,7 @@ type v8Data struct {
 			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
 			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
 			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+			WrappedSharedFunctionInfo uint8 `name:"DeoptimizationDataWrappedSharedFunctionInfoIndex" zero:""`
 			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
@@ -477,6 +484,11 @@ type v8Data struct {
 			LineEnds uint16 `name:"line_ends__Object"`
 			Source   uint16 `name:"source__Object"`
 		}
+
+		InliningPositions struct {
+			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.8.374.13/src/objects/deoptimization-data-inl.h#28
+			TrustedByteArray bool
+		} `name:""`
 	}
 
 	// snapshotRange is the LOAD segment area where V8 Snapshot code blob is
@@ -493,6 +505,17 @@ type v8Data struct {
 
 	// frametypeToName caches frametype's name
 	frametypeToName [MaxFrameType]libpf.String
+
+	// leaptiering is true if V8 was built with V8_ENABLE_LEAPTIERING.
+	leaptiering bool
+
+	// jsDispatchTableOffset is the offset of js_dispatch_table_ in IsolateGroup.
+	// Only valid if leaptiering = true.
+	jsDispatchTableOffset uint32
+
+	// defaultIsolateGroupAddr is the address of the
+	// IsolateGroup::default_isolate_group_ pointer variable.
+	defaultIsolateGroupAddr libpf.Address
 }
 
 type v8Instance struct {
@@ -1332,7 +1355,11 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// Read the complete inlining positions structure
 		inliningPositionsPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.InliningPositions*pointerSize))
-		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, vms.Type.ByteArray)
+		expectedTag = vms.Type.ByteArray
+		if vms.InliningPositions.TrustedByteArray {
+			expectedTag = vms.Type.TrustedByteArray
+		}
+		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, expectedTag)
 		if err != nil {
 			return nil, fmt.Errorf("inlining position pointer read: %v", err)
 		}
@@ -1369,8 +1396,12 @@ func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32) (*v8Code, e
 	return i.readCode(taggedPtr, cookie, nil)
 }
 
-// getCodeFromJSFunction reads and caches needed V8 Code object data from a JSFunction pointer.
-func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
+// getCodeFromJSFunction reads and caches needed V8 Code object data using
+// the SFI from a JSFunction pointer. Finding the Code from a JSFunction pointer
+// is complicated in Node >= v24, (search "leaptiering" in v8_tracer.ebpf.c), so
+// unlike in previous revisions of this function, we just expect it to be passed in
+// from eBPF, and don't do the work of finding it again.
+func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32, codeTaggedPtr libpf.Address) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
 		if code.cookie == cookie {
 			return code, nil
@@ -1394,8 +1425,7 @@ func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (
 		return nil, fmt.Errorf("getSFI: %w", err)
 	}
 
-	// Chase and read the Code object
-	codeTaggedPtr := npsr.Ptr(jsfunc, uint(vms.JSFunction.Code))
+	// Read the Code object
 	return i.readCode(codeTaggedPtr, cookie, sfi)
 }
 
@@ -1791,9 +1821,13 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
 		if subframeType == support.V8FileTypeNativeCode {
+			log.Debugf("calling getCode with pointer %#x", pointer)
 			code, err = i.getCode(pointer, codeCookie)
 		} else {
-			code, err = i.getCodeFromJSFunc(pointer, codeCookie)
+			codePointerAndType := libpf.Address(ef.Variable(2))
+			codePointer := codePointerAndType&^support.V8FileTypeMask | HeapObjectTag
+			log.Debugf("calling getCodeFromJSFunc with pointer %#x; codePointer: %#x", pointer, codePointer)
+			code, err = i.getCodeFromJSFunc(pointer, codeCookie, codePointer)
 		}
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
@@ -1825,7 +1859,7 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 	return uint8(slotOffset)
 }
 
-func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
+func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	vms := &d.vmStructs
@@ -1862,6 +1896,11 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		Codekind_shift:    vms.CodeKind.FieldShift,
 		Codekind_mask:     uint8(vms.CodeKind.FieldMask),
 		Codekind_baseline: vms.CodeKind.Baseline,
+	}
+	if d.leaptiering {
+		data.Leaptiering = 1
+		data.Default_isolate_group = uint64(rm.Ptr(d.defaultIsolateGroupAddr + bias))
+		data.Js_dispatch_table_offset = d.jsDispatchTableOffset
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -2084,9 +2123,35 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		// At least back to V8 8.4
 		vms.Script.Source = vms.Script.Name - pointerSize
 	}
+	// Lost in V8 9.4
 	if vms.BytecodeArray.SourcePositionTable == 0 {
-		// Lost in V8 9.4
-		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + 3*pointerSize
+		var nptrs uint16 = 3
+		// Unfortunately, this has historically changed pretty often. The following are valid for all
+		// versions where `kSourcePositionTableOffset` appears in bytecode-array.h:
+		// everything from 11.9.86 (inclusive) to 14.9.194 (exclusive).
+		// It also works for everything from that point until the present day (15.1.14),
+		// because even though they've gotten rid of `kSourcePositionTableOffset` the offset hasn't
+		// actually changed since then.
+		//
+		// TODO: check versions before that range, where the field lives in bytecode-array.tq. Until then, we
+		// just use "3" as the default (which is what we always used before).
+		//
+		// This being wrong breaks file/line symbolization, but apparently only for
+		// Baseline frames.
+		if d.version >= v8Ver(11, 9, 86) {
+			if d.version < v8Ver(12, 0, 67) {
+				nptrs = 2
+			} else if d.version < v8Ver(12, 1, 36) {
+				nptrs = 3
+			} else if d.version < v8Ver(12, 3, 43) {
+				nptrs = 4
+			} else if d.version < v8Ver(12, 3, 97) {
+				nptrs = 3
+			} else {
+				nptrs = 2
+			}
+		}
+		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + nptrs*pointerSize
 	}
 	if vms.BytecodeArray.Data == 0 {
 		// At least back to V8 8.4 (16 = 3*int32 + uint16)
@@ -2098,6 +2163,11 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	if vms.DeoptimizationDataIndex.LiteralArray == 0 {
 		val := vms.DeoptimizationDataIndex.InlinedFunctionCount + 1
 		vms.DeoptimizationDataIndex.LiteralArray = val
+	}
+	if vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo != 0 {
+		// these mean the same thing, it just got renamed at some point:
+		// see https://chromium-review.googlesource.com/c/v8/v8/+/5939362.
+		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper = vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo
 	}
 	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
 		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
@@ -2145,6 +2215,25 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		// This had been WeakFixedArray for a very long time,
 		// but we lost the metadata in 0698c376801dcde939850b7ad0b55c7459c83f4d.
 		vms.DeoptimizationLiteralArray.WeakFixedArray = true
+	}
+
+	if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray && vms.Type.TrustedWeakFixedArray == 0 {
+		if d.version >= v8Ver(12, 8, 0) {
+			// Since 134fcd57b07, there is another
+			// type between TrustedFixedArray and TrustedWeakFixedArray
+			// (to wit: TrustedForeign).
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 2
+		} else {
+			// Before that, TrustedWeakFixedArray
+			// immediately follows TrustedFixedArray.
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 1
+		}
+	}
+
+	// Changed from ByteArray to TrustedByteArray
+	// in f6c936e836b4d8ffafe790bcc3586f2ba5ffcf74
+	if d.version >= v8Ver(12, 6, 0) {
+		vms.InliningPositions.TrustedByteArray = true
 	}
 
 	for i := 0; i < vmVal.NumField(); i++ {
@@ -2198,32 +2287,37 @@ func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util
 }
 
 type relevantSymbols struct {
-	DefaultSnapshotBlob *libpf.Symbol
-	BytecodeSizes       *libpf.Symbol
+	DefaultSnapshotBlob *libpf.Symbol `sym:"_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"`
+	BytecodeSizes       *libpf.Symbol `sym:"_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"`
+
+	JSDispatchTableAddress *libpf.Symbol `sym:"_ZN2v88internal17ExternalReference25js_dispatch_table_addressEv"`
+	DefaultIsolateGroup    *libpf.Symbol `sym:"_ZN2v88internal12IsolateGroup22default_isolate_group_E"`
 }
 
-const (
-	defaultSnapshotBlobSymbol libpf.SymbolName = "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"
-	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"
-)
-
-// scanForRelevantSymbols gets the symbols needed for Node unwinding
+// scan gets the symbols needed for Node unwinding
 // by scanning the symtab.
-func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
-	rv := relevantSymbols{}
-	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
-		if sym.Name == defaultSnapshotBlobSymbol {
-			rv.DefaultSnapshotBlob = &sym
+func (rv *relevantSymbols) scan(ef *pfelf.File) error {
+	remaining := make(map[libpf.SymbolName]int)
+	val := reflect.ValueOf(rv).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		fval := val.Field(i)
+		if fval.IsNil() {
+			tag := val.Type().Field(i).Tag.Get("sym")
+			remaining[libpf.SymbolName(tag)] = i
 		}
-		if sym.Name == bytecodeSizesSymbol {
-			rv.BytecodeSizes = &sym
-		}
-		return rv.DefaultSnapshotBlob == nil || rv.BytecodeSizes == nil
-	})
-	if err != nil {
-		return relevantSymbols{}, err
 	}
-	return rv, nil
+	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if field, ok := remaining[sym.Name]; ok {
+			val.Field(field).Set(reflect.ValueOf(&sym))
+			delete(remaining, sym.Name)
+		}
+		return len(remaining) > 0
+	})
+	if errors.Is(err, pfelf.ErrSectionNotPresent) {
+		log.Info("Couldn't find node symtab")
+		err = nil
+	}
+	return err
 }
 
 // lookupRelevantSymbols tries to get the symbols needed for Node unwinding.
@@ -2234,29 +2328,87 @@ func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 // then fall back to scanning for them in the symtab.
 func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
-	sym, err := ef.LookupSymbol(defaultSnapshotBlobSymbol)
-	if errors.Is(err, libpf.ErrSymbolNotFound) {
-		// If the first one failed, they are probably all going to fail.
-		// Scan instead.
-		return scanForRelevantSymbols(ef)
+	val := reflect.ValueOf(&rv).Elem()
+	typ := val.Type()
+	anyFailed := false
+	for i := 0; i < val.NumField(); i++ {
+		ftyp := typ.Field(i)
+		fval := val.Field(i)
+		tag := ftyp.Tag.Get("sym")
+
+		sym, err := ef.LookupSymbol(libpf.SymbolName(tag))
+		if err != nil {
+			if !errors.Is(err, libpf.ErrSymbolNotFound) {
+				log.Warnf("Couldn't get V8 symbol %s: %v", ftyp.Name, err)
+			}
+			anyFailed = true
+		} else {
+			fval.Set(reflect.ValueOf(sym))
+		}
 	}
-	// Match historic behavior: keep going, even if we can't get the snapshot blob.
-	// (TODO: Figure out when/why this can happen)
-	if err != nil {
-		log.Debugf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
+	if anyFailed {
+		err := rv.scan(ef)
+		return rv, err
 	} else {
-		rv.DefaultSnapshotBlob = sym
+		return rv, nil
 	}
-	// If the first one succeeded, they should all succeed, so keep
-	// using `ef.LookupSymbol`.
-	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
-	if err != nil {
-		// As above, keep going to match historic behavior (why?)
-		log.Debugf("Couldn't get V8 BytecodeSizes: %v", err)
-	} else {
-		rv.BytecodeSizes = sym
+}
+
+func findJsDispatchTableOffset(ef *pfelf.File, syms relevantSymbols) (uint64, error) {
+	sym := syms.JSDispatchTableAddress
+	if sym == nil {
+		return 0, errors.New("js_dispatch_table_address not found; can't analyze it to find js_dispatch_table_ offset")
 	}
-	return rv, nil
+	// the most I've observed mattering is 80 bytes
+	// and that was in debug mode; allow up to 256 just to be safe.
+	sz := min(sym.Size, 256)
+	code := make([]byte, sz)
+	if _, err := ef.ReadAt(code, int64(sym.Address)); err != nil {
+		return 0, fmt.Errorf("failed to read js_dispatch_table_address code: %w", err)
+	}
+
+	return decodeJsDispatchTableOffset(ef.Machine, code, uint64(sym.Address))
+}
+
+// decodeJsDispatchTableOffset runs js_dispatch_table_address(), whose code
+// starts at addr, up to its first `ret`, and returns the offset in
+// IsolateGroup that the return value was loaded from.
+func decodeJsDispatchTableOffset(machine elf.Machine, code []byte, addr uint64) (uint64, error) {
+	var retval expression.Expression
+	switch machine {
+	case elf.EM_AARCH64:
+		it := arm.NewInterpreter()
+		it.ResetCode(code, expression.Imm(addr))
+		_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
+			return i.Op == arm64asm.RET
+		})
+		if err != nil {
+			return 0, err
+		}
+		retval = it.Regs.Get(arm.X0)
+	case elf.EM_X86_64:
+		it := amd.NewInterpreter()
+		it.ResetCode(code, expression.Imm(addr))
+		_, err := it.LoopWithBreak(func(i x86asm.Inst) bool {
+			return i.Op == x86asm.RET
+		})
+		if err != nil {
+			return 0, err
+		}
+		retval = it.Regs.Get(amd.RAX)
+	default:
+		return 0, fmt.Errorf("unsupported arch %s", machine.String())
+	}
+	// The IsolateGroup pointer is loaded either directly from
+	// default_isolate_group_ or through its GOT entry.
+	slot := expression.NewImmediateCapture("slot")
+	offset := expression.NewImmediateCapture("offset")
+	group := expression.Mem8(slot)
+	if retval.Match(expression.Mem8(expression.Add(group, offset))) ||
+		retval.Match(expression.Mem8(expression.Add(expression.Mem8(group), offset))) {
+		return offset.CapturedValue(), nil
+	}
+	return 0, errors.New("failed to find js_dispatch_table_ field offset")
 }
 
 func GetLoader(_ Config) interpreter.Loader {
@@ -2301,6 +2453,18 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	d := &v8Data{
 		version:       version,
 		snapshotRange: locateSnapshotArea(info, syms),
+		leaptiering:   syms.JSDispatchTableAddress != nil,
+	}
+	if d.leaptiering {
+		offset, err := findJsDispatchTableOffset(ef, syms)
+		if err != nil {
+			log.Warnf("leaptiering on, but failed to find js_dispatch_table_ offset: %v. Proceeding as though leaptiering were off; line numbers will likely be wrong.", err)
+			d.leaptiering = false
+		}
+		d.jsDispatchTableOffset = uint32(offset)
+	}
+	if syms.DefaultIsolateGroup != nil {
+		d.defaultIsolateGroupAddr = libpf.Address(syms.DefaultIsolateGroup.Address)
 	}
 
 	sym := syms.BytecodeSizes

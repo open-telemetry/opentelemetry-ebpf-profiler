@@ -4,7 +4,10 @@
     {
       "lwp": 27330,
       "frames": [
+        "writeOrBuffer+0 in node:internal/streams/writable:0",
         "_write+0 in node:internal/streams/writable:0",
+        "Writable.write+0 in node:internal/streams/writable:0",
+        "value+0 in node:internal/console/constructor:0",
         "log+0 in node:internal/console/constructor:0",
         "V8::InternalFrame+0 in :0",
         "V8::EntryFrame+0 in :0",
@@ -13,7 +16,7 @@
         "node+0xb42107",
         "node+0xa46483",
         "V8::UnknownFrame+0 in :0",
-        "utf8+0 in /local/hello3.js:1",
+        "utf8+9 in /local/hello3.js:10",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",
