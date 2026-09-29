@@ -286,7 +286,7 @@ static inline EBPF_INLINE bool process_is_too_new(u64 ts, u64 group_leader)
 // Notifications for GENERIC_PID will be automatically inhibited until HA resets the type.
 static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
-  int inhibit_key    = event_type;
+  u32 inhibit_key    = event_type;
   bool inhibit_value = true;
 
   // This is a global notification mechanism that may trigger eBPF map
@@ -325,18 +325,18 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
 struct bpf_perf_event_data;
 
 // pid_information looks up the per-PID marker in pid_page_to_mapping_info.
-static inline EBPF_INLINE PIDPageMappingInfo *pid_information(int pid)
+static inline EBPF_INLINE PIDPageMappingInfo *pid_information(u32 pid)
 {
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.pid       = __constant_cpu_to_be32(pid);
   key.page      = 0;
 
   return bpf_map_lookup_elem(&pid_page_to_mapping_info, &key);
 }
 
 // pid_information_exists checks if the given pid exists in pid_page_to_mapping_info or not.
-static inline EBPF_INLINE bool pid_information_exists(int pid)
+static inline EBPF_INLINE bool pid_information_exists(u32 pid)
 {
   return pid_information(pid) != NULL;
 }
@@ -716,7 +716,7 @@ static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
     sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
   long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
   if (bytes > 0) {
-    int nframes              = bytes / sizeof(u64);
+    u16 nframes              = (unsigned long)bytes / sizeof(u64);
     trace->num_kernel_frames = nframes;
     trace->frame_data_len    = nframes;
   }
@@ -826,7 +826,7 @@ static inline EBPF_INLINE VMAInfo find_vma_info_for_pc(u64 pc)
 static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
 {
   UnwindState *state = &record->state;
-  pid_t pid          = record->trace.pid;
+  u32 pid            = record->trace.pid;
   u64 pc             = state->pc;
 
   if (is_kernel_address(pc)) {
@@ -849,7 +849,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
 
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.pid       = __constant_cpu_to_be32(pid);
   key.page      = __constant_cpu_to_be64(pc);
 
   // Check if we have the data for this virtual address
@@ -1046,7 +1046,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
-  state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
+  state->return_address = interrupted_kernelmode && regs->orig_ax != -1UL;
 #elif defined(__aarch64__)
   // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
