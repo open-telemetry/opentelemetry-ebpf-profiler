@@ -520,6 +520,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
+  trace->context_value_end = 0;
   trace->kernel_frame_end  = 0;
   trace->frame_data_end    = 0;
   trace->thread_label_end  = 0;
@@ -660,6 +661,28 @@ static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
     trace->variable_data_end = (end + 7U) & ~7U;
   }
   return end;
+}
+
+// push_context_value appends an origin-specific context value to the trace.
+// Context values lead variable_data, so this must be called before any kernel
+// or user frames are pushed. Returns false if that ordering is violated or the
+// value does not fit.
+static inline EBPF_INLINE bool push_context_value(Trace *trace, u64 value)
+{
+  // Detect ordering violations without comparing variable_data_end against
+  // context_value_end: that equality lets clang bounds-check one register but
+  // index with the other, which the verifier rejects.
+  if (trace->num_frames != 0 || trace->kernel_frame_end != 0) {
+    return false;
+  }
+  u64 *pos = reserve_variable_data(trace, sizeof(u64), MAX_FRAME_TRAILER_DATA_SZ);
+  if (!pos) {
+    return false;
+  }
+  pos[0] = value;
+  commit_variable_data(trace, sizeof(u64));
+  trace->context_value_end = end_variable_data(trace, sizeof(u64));
+  return true;
 }
 
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)

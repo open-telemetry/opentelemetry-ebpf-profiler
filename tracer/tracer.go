@@ -1137,7 +1137,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
 		Value:            int64(ptr.Value),
-		ValueExtra:       ptr.Value_extra,
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 		NumFrames:        ptr.Num_frames,
@@ -1149,7 +1148,15 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 
 	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
 
-	var err error
+	// Context values (e.g. the heap alloc/free pointer and size) are the first
+	// variable data region, written ahead of any kernel/user frames. Lift them
+	// into ValueExtra; len(ValueExtra) caps how many we surface.
+	contextValues, err := vd.copyUint64(ptr.Context_value_end, "context value")
+	if err != nil {
+		return nil, err
+	}
+	copy(trace.ValueExtra[:], contextValues)
+
 	trace.KernelFrames, err = vd.copyUint64(ptr.Kernel_frame_end, "kernel_frame")
 	if err != nil {
 		return nil, err
