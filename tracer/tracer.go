@@ -1088,7 +1088,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
 		Value:            int64(ptr.Value),
-		ValueExtra:       ptr.Value_extra,
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 	}
@@ -1116,20 +1115,37 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		}
 	}
 
+	// Context values (e.g. the heap alloc/free pointer and size) are transported
+	// as num_context_values raw u64 words at the front of frame_data, ahead of any
+	// kernel/user frames. Lift them into ValueExtra and strip them here so that
+	// downstream frame decoding is unaffected. len(ValueExtra) caps how many we
+	// surface; only uprobe origins (which carry no kernel frames) use this today.
+	numContextValues := int(ptr.Num_context_values)
+	frameData := unsafe.Slice(
+		(*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))),
+		int(ptr.Frame_data_len),
+	)
+	if numContextValues > int(ptr.Frame_data_len) {
+		return nil, fmt.Errorf("context values %d > frame_data_len %d: %w",
+			numContextValues, ptr.Frame_data_len, errRecordUnexpectedSize)
+	}
+	for i := 0; i < numContextValues && i < len(trace.ValueExtra); i++ {
+		trace.ValueExtra[i] = frameData[i]
+	}
+
 	numKernelFrames := int(ptr.Num_kernel_frames)
-	if numKernelFrames > int(ptr.Frame_data_len) {
-		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, ptr.Frame_data_len,
+	frameDataWords := int(ptr.Frame_data_len) - numContextValues
+	if numKernelFrames > frameDataWords {
+		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, frameDataWords,
 			errRecordUnexpectedSize)
 	}
 
 	trace.NumFrames = ptr.Num_frames
 	trace.NumKernelFrames = ptr.Num_kernel_frames
-	frameDataWords := int(ptr.Frame_data_len)
 	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
 	// Kernel frames are raw addresses at the front of FrameData. The process
 	// manager splits and symbolizes them so all frame processing shares one cache.
-	frameData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), frameDataWords)
-	copy(trace.FrameData, frameData)
+	copy(trace.FrameData, frameData[numContextValues:])
 
 	return trace, nil
 }

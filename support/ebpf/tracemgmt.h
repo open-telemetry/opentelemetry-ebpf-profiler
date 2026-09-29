@@ -521,11 +521,12 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
-  trace->frame_data_len    = 0;
-  trace->num_frames        = 0;
-  trace->num_kernel_frames = 0;
-  trace->pid               = 0;
-  trace->tid               = 0;
+  trace->frame_data_len     = 0;
+  trace->num_frames         = 0;
+  trace->num_kernel_frames  = 0;
+  trace->num_context_values = 0;
+  trace->pid                = 0;
+  trace->tid                = 0;
 
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;

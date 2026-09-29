@@ -706,6 +706,14 @@ typedef struct Trace {
   // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
   u16 num_kernel_frames;
 
+  // num_context_values is the number of leading frame_data entries that carry
+  // origin-specific auxiliary values: raw u64 words stored ahead of any kernel
+  // or user frames. Userspace lifts these into libpf.EbpfTrace.ValueExtra and
+  // strips them before frame decoding, so the fixed field does not need to live
+  // on every Trace. Zero for origins that emit no auxiliary values. Only uprobe
+  // origins (which carry no kernel frames) use this today.
+  u16 num_context_values;
+
   // origin indicates the source of the trace and it is set as
   // RODATA variable at load time.
   u16 origin;
@@ -713,10 +721,6 @@ typedef struct Trace {
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
-
-  // value_extra carries origin-specific auxiliary data alongside the
-  // trace. Interpretation depends on the origin; unused slots are zero.
-  u64 value_extra[2];
 
   // The CPU that captured this trace.
   u32 cpu_id;

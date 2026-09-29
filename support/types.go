@@ -177,9 +177,9 @@ type Trace struct {
 	Frame_data_len     uint16
 	Num_frames         uint16
 	Num_kernel_frames  uint16
+	Num_context_values uint16
 	Origin             uint16
 	Value              uint64
-	Value_extra        [2]uint64
 	Cpu_id             uint32
 	Pad_cgo_0          [4]byte
 }
@@ -353,8 +353,8 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x2e8
-	Sizeof_TraceWithData = 0x2e8 + 0x6000
+	Sizeof_TraceHeader   = 0x2d8
+	Sizeof_TraceWithData = 0x2d8 + 0x6000
 
 	sizeof_ApmIntProcInfo        = 0x8
 	sizeof_DotnetProcInfo        = 0x4
