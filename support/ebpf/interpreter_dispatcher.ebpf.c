@@ -142,14 +142,14 @@ struct traces_ctx_v1_t {
 
 struct apm_int_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, ApmIntProcInfo);
   __uint(max_entries, 128);
 } apm_int_procs SEC(".maps");
 
 struct thread_context_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, ThreadContextProcInfo);
   __uint(max_entries, 1024);
 } thread_context_procs SEC(".maps");
@@ -313,7 +313,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
       increment_metric(metricID_NumUnknownPC);
     }
     // fallthrough
-  default: increment_metric(state->error_metric);
+  default: increment_metric((u32)state->error_metric);
   }
 
   // TEMPORARY HACK

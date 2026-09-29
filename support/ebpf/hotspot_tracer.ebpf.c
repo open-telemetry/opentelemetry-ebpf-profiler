@@ -93,7 +93,7 @@ typedef enum HotspotUnwindAction {
 
 struct hotspot_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, HotspotProcInfo);
   // This is the maximum number of JVM processes. Few machines should ever exceed 256 simultaneous
   // JVMs running. Increase this value if 256 turns out to be insufficient.
@@ -171,7 +171,7 @@ static EBPF_INLINE u64 hotspot_find_codeblob(const UnwindState *state, const Hot
   // Segment map start is put in to the PidPageMapping's file_id.
   segmap_start = (state->text_section_id >> HS_TSID_SEG_MAP_BIT) & HS_TSID_SEG_MAP_MASK;
 
-  for (int i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++) {
+  for (u64 i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++) {
     if (bpf_probe_read_user(&tag, sizeof(tag), (void *)(segmap_start + segment))) {
       return 0;
     }
@@ -296,8 +296,8 @@ static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
   // Interpreted frames send different pointers to host agent than other frame types.
   ui->file                 = method;
   ui->line.subtype         = FRAME_HOTSPOT_INTERPRETER;
-  ui->line.pc_delta_or_bci = bcp;
-  ui->line.ptr_check       = cmethod >> 3;
+  ui->line.pc_delta_or_bci = (u32)bcp;
+  ui->line.ptr_check       = (u32)(cmethod >> 3);
 
   *action = UA_UNWIND_COMPLETE;
   return ERR_OK;
@@ -435,7 +435,7 @@ static EBPF_INLINE bool hotspot_handle_epilogue(
   // Is 'ret' instruction *possible* in the next 'code' bytes?
   // NOTE: This can find false positives because x86 is variable length
   // instruction set.
-  for (int i = CODE_CUR + 1; i < sizeof(code); i++) {
+  for (u64 i = CODE_CUR + 1; i < sizeof(code); i++) {
     if (code[i] == 0xc3) {
       goto found_ret;
     }
@@ -616,7 +616,7 @@ static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
         (unsigned long)orig,
         (s32)cbi->orig_pc_offset);
       ui->pc                   = orig;
-      ui->line.pc_delta_or_bci = ui->pc - cbi->code_start;
+      ui->line.pc_delta_or_bci = (u32)(ui->pc - cbi->code_start);
     }
   }
 
@@ -669,10 +669,10 @@ static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   // the value is actually inside the code area and that the CodeBlob is in valid state.
   u64 stack[HOTSPOT_RA_SEARCH_SLOTS];
   bpf_probe_read_user(stack, sizeof(stack), (void *)(ui->sp - sizeof(u64)));
-  for (int i = 0; i < HOTSPOT_RA_SEARCH_SLOTS; i++, ui->sp += sizeof(u64)) {
-    DEBUG_PRINT("jvm:    -> %u pc candidate 0x%lx", i, (unsigned long)stack[i]);
+  for (u64 i = 0; i < HOTSPOT_RA_SEARCH_SLOTS; i++, ui->sp += sizeof(u64)) {
+    DEBUG_PRINT("jvm:    -> %lu pc candidate 0x%lx", (unsigned long)i, (unsigned long)stack[i]);
     if (hotspot_addr_in_codecache(trace->pid, stack[i])) {
-      DEBUG_PRINT("jvm:  -> unwinding complete frame + %d words", i);
+      DEBUG_PRINT("jvm:  -> unwinding complete frame + %lu words", (unsigned long)i);
       *action = UA_UNWIND_REGS;
       return ERR_OK;
     }
@@ -885,7 +885,7 @@ hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_t
   // For most frame types, the CodeBlob address also serves as the file.
   ui.file                 = cbi.address;
   ui.line.ptr_check       = cbi.frame_type;
-  ui.line.pc_delta_or_bci = ui.pc - cbi.code_start;
+  ui.line.pc_delta_or_bci = (u32)(ui.pc - cbi.code_start);
 
   HotspotUnwindAction action = UA_UNWIND_INVALID;
   switch (cbi.frame_type) {
@@ -921,7 +921,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
     return -1;
 
   Trace *trace = &record->trace;
-  pid_t pid    = trace->pid;
+  u32 pid      = trace->pid;
   DEBUG_PRINT("==== jvm: unwind %d ====", trace->num_frames);
 
   int unwinder    = PROG_UNWIND_STOP;
@@ -934,7 +934,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
     goto exit;
   }
 
-  for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
+  for (u64 i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
     error    = hotspot_unwind_one_frame(record, ji, i == 0);
     if (error) {
