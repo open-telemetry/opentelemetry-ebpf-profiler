@@ -85,13 +85,13 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.RawMapping) (libpf.
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
-func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
+func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (fs.File, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
 		file := m.Path
-		rac, err := os.Open(path.Join(tc.prefix, file))
+		f, err := os.Open(path.Join(tc.prefix, file))
 		if err == nil {
 			tc.seen[file] = libpf.Void{}
-			return rac, nil
+			return f, nil
 		}
 		tc.warnMissing(file)
 	}

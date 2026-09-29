@@ -257,18 +257,29 @@ func FSPath(absPath string) string {
 	return strings.TrimPrefix(path.Clean(absPath), "/")
 }
 
-// OpenFS opens the fs.FS path name via fsys and parses it as an ELF file.
-// The file returned by fsys must additionally implement ReadAtCloser. If it
-// implements LoadHinter, its load address and musl hint are honored.
+// OpenFS opens the fs.FS path name via fsys and parses it as an ELF file,
+// see NewFileFromFS.
 func OpenFS(fsys fs.FS, name string) (*File, error) {
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, err
 	}
+	ef, err := NewFileFromFS(f)
+	if err != nil {
+		return nil, fmt.Errorf("pfelf: %s: %w", name, err)
+	}
+	return ef, nil
+}
+
+// NewFileFromFS takes ownership of f and parses it as an ELF file. f must
+// additionally implement ReadAtCloser. If it implements LoadHinter, its load
+// address and musl hint are honored. f is closed by the returned File's
+// Close, or before returning on error.
+func NewFileFromFS(f fs.File) (*File, error) {
 	rac, ok := f.(ReadAtCloser)
 	if !ok {
 		_ = f.Close()
-		return nil, fmt.Errorf("pfelf: %s: opened file does not support ReadAtCloser", name)
+		return nil, errors.New("opened file does not support ReadAtCloser")
 	}
 	var loadAddress uint64
 	var hasMusl bool

@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -104,9 +103,6 @@ type MachineData struct {
 	DataPACMask uint64
 }
 
-// ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
-type ReadAtCloser = pfelf.ReadAtCloser
-
 // ProcessMeta contains metadata about a tracked process.
 type Meta struct {
 	// executable path retrieved from /proc/PID/exe
@@ -157,8 +153,11 @@ type Process interface {
 	// GetRemoteMemory returns a remote memory reader accessing the target process.
 	GetRemoteMemory() remotememory.RemoteMemory
 
-	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
-	OpenMappingFile(*RawMapping) (ReadAtCloser, error)
+	// OpenMappingFile returns the backing file of the mapping. The returned
+	// fs.File is of the same kind as those returned by Open (in particular it
+	// implements io.ReaderAt), but it may also be able to access the file
+	// even if it was deleted or replaced on disk after being mapped.
+	OpenMappingFile(*RawMapping) (fs.File, error)
 
 	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
 	// or zero if an error occurs or mapping file is not accessible via filesystem.

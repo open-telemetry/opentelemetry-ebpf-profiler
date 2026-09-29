@@ -30,7 +30,7 @@ import (
 type CoredumpProcess struct {
 	*pfelf.File
 
-	// files contains coredump's files by name.
+	// files contains coredump's files by their fs.FS path name.
 	files map[string]*CoredumpFile
 
 	// pid is the original PID from which the coredump was generated.
@@ -236,13 +236,14 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
 }
 
-// OpenMappingFile implements the Process interface.
-func (cd *CoredumpProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+// OpenMappingFile implements the Process interface. Coredumps do not contain
+// the original backing files, so this returns the partial file data the
+// coredump carries (see Open for the caveats).
+func (cd *CoredumpProcess) OpenMappingFile(m *RawMapping) (fs.File, error) {
 	if m.IsVDSO() {
 		return openVDSO(cd, m)
 	}
-	// Coredumps do not contain the original backing files.
-	return nil, ErrMappingFileUnavailable
+	return cd.Open(pfelf.FSPath(m.Path))
 }
 
 // GetMappingFileLastModified implements the Process interface.
@@ -281,8 +282,7 @@ func (cd *CoredumpProcess) Open(name string) (fs.File, error) {
 	if !fs.ValidPath(name) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
-	// Coredump files are recorded by their absolute path.
-	if file, ok := cd.files["/"+name]; ok {
+	if file, ok := cd.files[name]; ok {
 		return &coredumpFileHandle{CoredumpFile: file}, nil
 	}
 	return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
@@ -293,7 +293,8 @@ var curInode atomic.Uint64
 
 // getFile returns (creating if needed) a matching CoredumpFile for given file name.
 func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
-	if cf, ok := cd.files[name]; ok {
+	key := pfelf.FSPath(name)
+	if cf, ok := cd.files[key]; ok {
 		return cf
 	}
 	if strings.Contains(name, "/ld-musl-") {
@@ -304,7 +305,7 @@ func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 		inode:  curInode.Add(1),
 		Name:   libpf.Intern(name),
 	}
-	cd.files[name] = cf
+	cd.files[key] = cf
 	return cf
 }
 

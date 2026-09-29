@@ -188,7 +188,7 @@ func (tp *testProcess) GetRemoteMemory() remotememory.RemoteMemory {
 	return remotememory.RemoteMemory{}
 }
 
-func (tp *testProcess) OpenMappingFile(*process.RawMapping) (process.ReadAtCloser, error) {
+func (tp *testProcess) OpenMappingFile(*process.RawMapping) (fs.File, error) {
 	return nil, errors.New("not implemented")
 }
 

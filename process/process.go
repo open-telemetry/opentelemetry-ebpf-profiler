@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -35,12 +36,6 @@ var ErrNoMappings = errors.New("no mappings")
 // ErrCallbackStopped is returned when the IterateMappings callback returns
 // false, signaling that iteration was intentionally interrupted.
 var ErrCallbackStopped = errors.New("IterateMappings stopped by callback")
-
-// ErrMappingFileUnavailable signals callers of OpenMappingFile to fall back to
-// the Process fs.FS. Returned both when the implementation has no backing-file
-// route (CoredumpProcess) and when a specific file is missing from the
-// backing store (StoreCoredump bundle miss).
-var ErrMappingFileUnavailable = errors.New("mapping backing file unavailable")
 
 const (
 	containerSource = "[0-9a-f]{64}"
@@ -528,20 +523,36 @@ func extractMapping(pr Process, m *RawMapping) (*bytes.Reader, error) {
 	return bytes.NewReader(data), nil
 }
 
-// memoryFile is a ReadAtCloser over mapping data copied from process memory.
+// memoryFile is an fs.File over mapping data copied from process memory.
 type memoryFile struct {
 	*bytes.Reader
+	name string
 }
 
 func (memoryFile) Close() error { return nil }
 
+func (f memoryFile) Stat() (fs.FileInfo, error) {
+	return memoryFileInfo{f}, nil
+}
+
+type memoryFileInfo struct {
+	f memoryFile
+}
+
+func (i memoryFileInfo) Name() string       { return i.f.name }
+func (i memoryFileInfo) Size() int64        { return i.f.Reader.Size() }
+func (i memoryFileInfo) Mode() fs.FileMode  { return 0o444 }
+func (i memoryFileInfo) ModTime() time.Time { return time.Time{} }
+func (i memoryFileInfo) IsDir() bool        { return false }
+func (i memoryFileInfo) Sys() any           { return nil }
+
 // openVDSO returns the VDSO mapping's content, read from process memory.
-func openVDSO(pr Process, m *RawMapping) (ReadAtCloser, error) {
+func openVDSO(pr Process, m *RawMapping) (fs.File, error) {
 	vdso, err := extractMapping(pr, m)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract VDSO: %v", err)
 	}
-	return memoryFile{vdso}, nil
+	return memoryFile{Reader: vdso, name: VdsoPathName}, nil
 }
 
 // openInProcRoot opens a file within a process's filesystem namespace.
@@ -575,7 +586,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 	return os.Open(filename)
 }
 
-func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+func (sp *systemProcess) OpenMappingFile(m *RawMapping) (fs.File, error) {
 	if m.IsVDSO() {
 		return openVDSO(sp, m)
 	}

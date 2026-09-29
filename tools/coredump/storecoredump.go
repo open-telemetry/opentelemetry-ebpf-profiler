@@ -6,6 +6,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 
@@ -39,17 +40,17 @@ func (scd *StoreCoredump) openFile(path string) (*modulestore.ModuleReader, erro
 	return file, nil
 }
 
-func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
-	if m.IsVDSO() {
+func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (fs.File, error) {
+	file, err := scd.openFile(m.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		// Bundle miss: fall back to the coredump, which serves VDSO from
+		// memory and content from PT_LOAD segments for legacy test cases.
 		return scd.CoredumpProcess.OpenMappingFile(m)
 	}
-	rac, err := scd.openFile(m.Path)
-	if errors.Is(err, os.ErrNotExist) {
-		// Bundle miss: let the caller fall back to Open, which
-		// can serve content from PT_LOAD segments for legacy test cases.
-		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
+	if err != nil {
+		return nil, err
 	}
-	return rac, err
+	return file, nil
 }
 
 // Open implements the fs.FS interface. It prefers content from the module
@@ -99,11 +100,15 @@ func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, erro
 	if !found {
 		return n, err
 	}
-	file, openErr := r.scd.OpenMappingFile(&covering)
+	f, openErr := r.scd.OpenMappingFile(&covering)
 	if openErr != nil {
 		return n, err
 	}
-	defer file.Close()
+	defer f.Close()
+	file, ok := f.(io.ReaderAt)
+	if !ok {
+		return n, err
+	}
 	fileOff := covering.FileOffset + (uint64(addr) - covering.Vaddr)
 	return file.ReadAt(p, int64(fileOff))
 }

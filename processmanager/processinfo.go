@@ -398,19 +398,15 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 ) (libpf.FrameMapping, bool, error) {
 	// Open the mapping's own file via OpenMappingFile, which can open deleted
 	// or replaced files (e.g. via /proc/<pid>/map_files) and VDSO from process
-	// memory. Only ErrMappingFileUnavailable falls back to opening the path via
-	// the pr fs.FS. Auxiliary opens such as .gnu_debuglink targets also go
-	// through the pr fs.FS.
+	// memory. Auxiliary opens such as .gnu_debuglink targets go through the
+	// pr fs.FS.
 	elfRef := pfelf.NewReferenceWithOpenFunc(m.Path, pr, func() (*pfelf.File, error) {
-		rac, err := pr.OpenMappingFile(m)
-		if errors.Is(err, process.ErrMappingFileUnavailable) {
-			return pfelf.OpenFS(pr, pfelf.FSPath(m.Path))
-		}
+		f, err := pr.OpenMappingFile(m)
 		if err != nil {
 			return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w",
 				m.Path, m.Vaddr, err)
 		}
-		return pfelf.NewFileOwned(rac)
+		return pfelf.NewFileFromFS(f)
 	})
 	defer elfRef.Close()
 
