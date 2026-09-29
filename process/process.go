@@ -540,7 +540,7 @@ type memoryFileInfo struct {
 }
 
 func (i memoryFileInfo) Name() string       { return i.f.name }
-func (i memoryFileInfo) Size() int64        { return i.f.Reader.Size() }
+func (i memoryFileInfo) Size() int64        { return i.f.Size() }
 func (i memoryFileInfo) Mode() fs.FileMode  { return 0o444 }
 func (i memoryFileInfo) ModTime() time.Time { return time.Time{} }
 func (i memoryFileInfo) IsDir() bool        { return false }
