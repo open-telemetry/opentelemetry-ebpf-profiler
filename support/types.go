@@ -170,6 +170,7 @@ type Trace struct {
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
 	Cpu_id             uint32
+	Context_value_end  uint16
 	Kernel_frame_end   uint16
 	Frame_data_end     uint16
 	Golang_label_end   uint16
@@ -177,7 +178,6 @@ type Trace struct {
 	Num_frames         uint16
 	Origin             uint16
 	Value              uint64
-	Value_extra        [2]uint64
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -349,8 +349,8 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x60
-	Sizeof_TraceWithData = 0x60 + 0x6280
+	Sizeof_TraceHeader   = 0x58
+	Sizeof_TraceWithData = 0x58 + 0x6280
 	Sizeof_GolangLabel   = 0x40
 
 	sizeof_ApmIntProcInfo        = 0x8

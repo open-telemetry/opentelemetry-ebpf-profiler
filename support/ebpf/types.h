@@ -678,7 +678,8 @@ typedef struct GolangLabel {
 #define MAX_FRAME_TRAILER_DATA_LEN MAX_GO_LABEL_DATA_LEN
 
 // The variable data portion of trace layout as:
-//   u64          kernel_frame[kernel_frame_end];
+//   u64          context_value[context_value_end];
+//   u64          kernel_frame[kernel_frame_end-context_value_end];
 //   u64          frame_data[(frame_data_end-kernel_frame_end)];
 //   GolangLabel  golang_labels[(golang_label_end-frame_data_end)*8/sizeof(GolangLabel)];
 typedef u64 TraceData[MAX_FRAME_DATA_LEN + MAX_FRAME_TRAILER_DATA_LEN];
@@ -704,6 +705,9 @@ typedef struct Trace {
   u32 cpu_id;
 
   // Variable data offsets
+  // context_value_end marks the end of the origin-specific context values.
+  // They are written first, before unwinding, so they lead variable_data.
+  u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;
   u16 golang_label_end;
@@ -718,10 +722,6 @@ typedef struct Trace {
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
-
-  // value_extra carries origin-specific auxiliary data alongside the
-  // trace. Interpretation depends on the origin; unused slots are zero.
-  u64 value_extra[2];
 
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `variable_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the
