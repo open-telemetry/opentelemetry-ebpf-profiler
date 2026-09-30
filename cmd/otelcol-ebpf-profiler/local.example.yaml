@@ -15,6 +15,14 @@
 receivers:
   profiling:
 
+# Uncomment to enable the pprof extension for Go profiling of the collector itself.
+# extensions:
+#   pprof:
+#     endpoint: localhost:1777
+#
+# service:
+#   extensions: [pprof]
+
 exporters:
   otlp/local:
     # equivalent to -collection-agent deprecated cli flag
