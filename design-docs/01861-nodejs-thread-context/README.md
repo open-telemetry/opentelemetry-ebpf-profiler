@@ -282,12 +282,16 @@ pointer:
 | :--- | :----- | :-------- | :---- |
 | `cped_slot` | `0` | pointer | Address of this thread's isolate's `ContinuationPreservedEmbedderData` slot. The slot holds a tagged V8 word; dereferencing it yields the active Node.js `AsyncContextFrame`. Lets the profiler reach the active frame without any V8 internal symbol lookup. Doubles as the **gate**: an all-zero value means the SDK has not published on this thread, has torn it down again, or has closed the gate temporarily, and no other field may be used while it reads zero. |
 | `als_handle` | `sizeof(void *)` | pointer | A `v8::Global<Object>` referring to the published `AsyncLocalStorage` instance in this thread's isolate. Its representation is a single V8 internal pointer; dereference it to obtain the instance's tagged address, which is the key to look up in the frame. |
-| `als_identity_hash` | `2 * sizeof(void *)` | int32, followed by 4 bytes of padding | The JS identity hash of that instance, so the profiler can restrict its search to one hash bucket rather than scanning every entry. |
+| `als_identity_hash` | `2 * sizeof(void *)` | int32 | The JS identity hash of that instance, so the profiler can restrict its search to one hash bucket rather than scanning every entry. |
+| `record_slot_offset` | `2 * sizeof(void *) + 4` | uint8 | Byte offset, within the wrapper `JSObject`, of the slot holding the pointer to its record. See "The V8 layout constants the walk uses" below for details. |
+| reserved | `2 * sizeof(void *) + 5` | 3 bytes | Zero. Readers MUST ignore them. |
 | `undefined_addr` | `3 * sizeof(void *)` | tagged word | This thread's isolate's tagged address of the `undefined` singleton. Lets the profiler detect "no context attached" by comparison, rather than by structurally validating whatever the frame maps our key to. |
 
-All four fields are fixed while the isolate lives, but they are not written only
-once: the SDK populates them when it installs its hook and zeroes them again at
-teardown.
+`cped_slot`, `als_handle`, `als_identity_hash` and `undefined_addr` are fixed
+while the isolate lives, but they are not written only once: the SDK populates
+them when it installs its hook and zeroes them again at teardown.
+`record_slot_offset` is a property of the SDK's build rather than of the
+isolate, so an SDK MAY set it statically, and need not clear it at teardown.
 
 Additionally, a writer MAY temporarily set the `cped_slot` to zero and later
 restore its previous value if it wishes to prevent reads for a period of time
@@ -479,20 +483,24 @@ or interrupted.
 The pseudo-code below assumes the build this schema presumes: 64-bit, with
 pointer compression and the V8 sandbox both off, which is how Node.js is built
 by default. The layout constants it opens with are fixed by the schema version
-rather than read from the target; "The V8 layout constants the walk uses" below
-covers all four. **Tagged values** can either be small integers ("Smi" in V8
-parlance) or pointers stored in a single machine word. Pointers have their low
-bit set, that's the tag; clear it to get the object address. Smis use the upper
-32 bits of the word to represent signed integer values and thus need to be
-right-shifted by 32 bits to get the actual value.
+rather than read from the target, except for the record slot offset, which the
+struct carries; "The V8 layout constants the walk uses" below covers all four.
+**Tagged values** can either be small integers ("Smi" in V8 parlance) or
+pointers stored in a single machine word. Pointers have their low bit set,
+that's the tag; clear it to get the object address. Smis use the upper 32 bits
+of the word to represent signed integer values and thus need to be right-shifted
+by 32 bits to get the actual value.
 
 ```cpp
 // Fixed by the schema version, not read from the target; see below.
 constexpr size_t kTaggedSize = 8, kJSMapTableOffset = 24,
-                 kOrderedHashMapHeaderSize = 16, kRecordSlotOffset = 24;
+                 kOrderedHashMapHeaderSize = 16;
 
 auto* ctx = read_tls<otel_thread_ctx_nodejs_v1_t>();
 if (ctx->cped_slot == 0) return NO_CONTEXT;  // nothing published here
+size_t record_slot_offset = ctx->record_slot_offset;
+// A slot is always tagged-word aligned
+if (record_slot_offset % kTaggedSize != 0) return NO_CONTEXT;
 // No async-context frame is active.
 if (*ctx->cped_slot == ctx->undefined_addr) return NO_CONTEXT;
 
@@ -512,7 +520,7 @@ if (value == ctx->undefined_addr) return NO_CONTEXT;  // explicitly detached
 // The value is the wrapper JSObject; internal field 0 holds the record pointer.
 auto* wrapper = untag<JSObject>(value);
 auto* record =
-    *(OtelThreadCtxRecord**)((char*)wrapper + kRecordSlotOffset);
+    *(OtelThreadCtxRecord**)((char*)wrapper + record_slot_offset);
 if (record == nullptr) return NO_CONTEXT;  // teardown in progress
 if (record->valid != 1) return NO_CONTEXT;  // invalidated or mid-update
 // Parse exactly as in OTEP 4947 from here on.
@@ -594,7 +602,7 @@ ensure it is not reading garbage.
 
 ### The V8 layout constants the walk uses
 
-The four constants the pseudo-code declares are not read from the target. This
+Three of the constants the pseudo-code uses are not read from the target. This
 schema fixes them, so a reader holds them as it would any protocol constant,
 pinned by `schema_version`:
 
@@ -603,25 +611,36 @@ pinned by `schema_version`:
 | `kTaggedSize` | 8 | V8's tagged-pointer width in bytes. |
 | `kJSMapTableOffset` | 24 | Byte offset, within a V8 `JSMap`, of the tagged pointer to its backing `OrderedHashMap` table. |
 | `kOrderedHashMapHeaderSize` | 16 | Size of the header preceding the table's element-count fields. |
-| `kRecordSlotOffset` | 24 | Byte offset, within the wrapper `JSObject`, of the slot holding the pointer to its record. That slot is internal field 0: JavaScript objects can be allocated with space for internal fields, which are typically used to hold pointers to native data structures. |
 
-All four are functions of two V8 build switches, pointer compression and the V8
+All three are functions of two V8 build switches, pointer compression and the V8
 sandbox. This schema version disallows both of them. An SDK compiled with either
 MUST NOT declare the schema, per "Runtime requirements" above. If they ever need
 supporting, a later schema version can be introduced.
 
-On the writer's side the values can be checked because all four values follow
-from constants in V8's `v8-internal.h` public header:
+On the writer's side the values can be checked because all three follow from
+constants in V8's `v8-internal.h` public header:
 
 | Constant | Derived from |
 | :------- | :----------- |
 | `kTaggedSize` | `kApiTaggedSize` |
 | `kJSMapTableOffset` | `kJSObjectHeaderSize` |
 | `kOrderedHashMapHeaderSize` | `kFixedArrayHeaderSize` |
-| `kRecordSlotOffset` | `kJSObjectHeaderSize` + `kEmbedderDataSlotExternalPointerOffset` |
 
 With static assertions against the V8 in SDK's native addon code it should fail
 to compile a build that deviates from this schema.
+
+The fourth, `record_slot_offset`, is the byte offset within the wrapper
+`JSObject` of the slot holding the pointer to its record. That slot is internal
+field 0: JavaScript objects can be allocated with space for internal fields,
+which are typically used to hold pointers to native data structures. Unlike the
+other three, it differs between V8 versions within the default build: it is 24
+on Node.js 22 and 32 from Node.js 23 onward.
+
+The writer publishes it in the thread-local struct rather than the schema fixing
+it, because the writer can compute it from the V8 headers of the Node.js it is
+compiled for: `kJSAPIObjectWithEmbedderSlotsHeaderSize` from Node.js 23,
+`kJSObjectHeaderSize` for Node.js 22, plus
+`kEmbedderDataSlotExternalPointerOffset` in either case. 
 
 ### Interaction with existing functionality
 
@@ -654,15 +673,17 @@ of V8's public API, and any of the offsets could change in a future V8.
 
 **Mitigation:** the layout the reader assumes is pinned by `schema_version`, and
 the writer's side of it is checked at build time rather than trusted: the SDK's
-addon derives the same four constants from the V8 headers it is compiled against
-and static-asserts them, so a V8 this schema does not describe fails to compile
-instead of yielding a process that publishes a contract a reader would
-mis-walk. A V8 that moves these fields, or restructures them more deeply needs a
-new schema version. It is possible to build versions of Node.js from source with
-non-default layouts using certain build flags, e.g. enabling V8's pointer
-compression feature. We explicitly do not support such builds with the current
-schema as it would result in more complexity, and future support – should the
-need for it arise – would need to introduce a new schema.
+addon derives the same three fixed constants from the V8 headers it is compiled
+against and static-asserts them, so a V8 this schema does not describe fails to
+compile instead of yielding a process that publishes a contract a reader would
+mis-walk. The one offset known to move within the supported range, the record
+slot's, is published by the writer rather than fixed. A V8 that moves these
+fields, or restructures them more deeply needs a new schema version. It is
+possible to build versions of Node.js from source with non-default layouts using
+certain build flags, e.g. enabling V8's pointer compression feature. We
+explicitly do not support such builds with the current schema as it would result
+in more complexity, and future support – should the need for it arise – would
+need to introduce a new schema.
 
 ### Reader complexity relative to OTEP 4947
 
@@ -819,12 +840,11 @@ incomplete and to lose symbols between releases — the existing `nodev8` code
 documents this and carries fallbacks for it, which is tolerable for a
 best-effort unwinder and not for a mechanism that must either be right or read
 nothing. Second, there is nothing to discover: this schema version admits only a
-default Node.js build, for which all four values are constants, and the SDK
-static-asserts that at compile time. Resolving them at runtime would add a
-failure mode without buying coverage the contract offers. Nothing prevents a
-future implementation from using `v8dbg_*` as a *cross-check*, or as the
-mechanism by which a later, parametrized schema version reaches non-default
-builds.
+default Node.js build, for which three of the values are constants that the SDK
+static-asserts at compile time, and the fourth is published by the writer, which
+knows it from the headers it was built against. Nothing prevents a future
+implementation from using `v8dbg_*` as a *cross-check*, or as the mechanism by
+which a later, parametrized schema version reaches non-default builds.
 
 **Publishing the V8 layout constants as process context attributes.** An
 earlier revision of this proposal did that: four `threadlocal.*` integers
@@ -835,6 +855,10 @@ of the contract to carry a layout-negotiation path that would essentially never
 be exercised, and the profiler to treat every walk offset as a runtime value.
 Fixing the values in the schema and bumping the version if a build ever needs
 different ones keeps the common case simple and the uncommon one explicit.
+
+The record slot offset is the exception, because it does differ across the
+Node.js releases this schema covers. It is published, but in the thread-local
+struct rather than as a process context attribute.
 
 **Requiring the profiler to derive the layout from build flags.** Rejected: it
 makes the profiler track V8's pointer-compression and sandbox configuration
@@ -876,8 +900,8 @@ for a mechanism of this kind.
   running one of the reference writers. This is the only part of the strategy
   that needs a Node.js toolchain in CI, and it is the part that would catch a
   writer/reader disagreement that synthesized memory cannot.
-- **Cross-version coverage.** Because the layout constants are fixed by the
-  schema rather than read from the target, a release that moves these fields is
-  as much a risk as one whose `JSMap` structure changed — though the SDK's
+- **Cross-version coverage.** Because the fixed layout constants are pinned by
+  the schema rather than read from the target, a release that moves these fields
+  is as much a risk as one whose `JSMap` structure changed — though the SDK's
   static assertions catch the former where it is built. Coredump cases from each
   supported major (22 with the flag, 24, and newer) are how that gets detected.
