@@ -21,35 +21,32 @@ import (
 
 var (
 	profileTypeSampling = &samples.TypeMetadata{
-		PeriodType: "cpu",
-		PeriodUnit: "nanoseconds",
-		SampleType: "samples",
-		SampleUnit: "count",
+		PeriodType:  "cpu",
+		PeriodUnit:  "nanoseconds",
+		SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
+		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
 	}
 	profileTypeProbe = &samples.TypeMetadata{
-		SampleType: "events",
-		SampleUnit: "count",
+		SampleTypes: []samples.ValueType{{Type: "events", Unit: "count"}},
 	}
 	profileTypeDerived = &samples.TypeMetadata{
-		SampleType:   "alloc_space",
-		SampleUnit:   "bytes",
+		SampleTypes: []samples.ValueType{
+			{Type: "alloc_space", Unit: "bytes"},
+			{Type: "alloc_objects", Unit: "count"},
+		},
 		ReportValues: true,
-		DerivedTypes: []samples.DerivedTypeMetadata{{
-			SampleType: "alloc_objects",
-			SampleUnit: "count",
-			Derive: func(value int64, extra [2]uint64) int64 {
-				size := int64(extra[1])
-				if size <= 0 {
-					return 1
-				}
-				return max(value/size, 1)
-			},
-		}},
+		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			value := int64(meta.ContextValues[0])
+			size := int64(meta.ContextValues[2])
+			objects := int64(1)
+			if size > 0 {
+				objects = max(value/size, 1)
+			}
+			return append(dst, value, objects)
+		},
 	}
 )
 
@@ -132,6 +129,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            1001,
 		CPU:            0,
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -144,7 +142,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            2001,
 		CPU:            1,
 		ProfileType:    profileTypeOffCPU,
-		Value:          5000000, // 5ms
+		ContextValues:  []uint64{5000000}, // 5ms
 	}
 
 	err := reporter.ReportTraceEvent(trace1, meta1)
@@ -194,9 +192,8 @@ func TestBaseReporterGenerate(t *testing.T) {
 		"Should have at least one profile")
 }
 
-// TestReportTraceEventDerivesValuesEagerly verifies that the reporter computes
-// a profile type's derived values when each event is recorded, storing them on
-// TraceEvents.DerivedValues index-aligned with Values.
+// TestReportTraceEventDerivesValuesEagerly verifies that the reporter transforms
+// each event's context values into a fixed-width group when the event is recorded.
 func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
 	trace := singleNativeFrameTrace()
@@ -210,8 +207,7 @@ func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
 			PID:            1234,
 			TID:            1235,
 			ProfileType:    profileTypeDerived,
-			Value:          value,
-			ValueExtra:     [2]uint64{0, size},
+			ContextValues:  []uint64{uint64(value), 0, size},
 		}
 	}
 
@@ -226,12 +222,30 @@ func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
 	for _, rtp := range *treePtr {
 		events := rtp.Events[profileTypeDerived]
 		require.Len(t, events, 1)
-		for _, te := range events {
-			assert.Equal(t, []int64{1000, 64, 500}, te.Values)
-			require.Len(t, te.DerivedValues, 1)
-			assert.Equal(t, []int64{10, 1, 1}, te.DerivedValues[0])
+		for _, traceEvents := range events {
+			assert.Equal(t, []int64{1000, 10, 64, 1, 500, 1}, traceEvents.Values)
 		}
 	}
+}
+
+func TestReportTraceEventRejectsWrongValueCount(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	profileType := &samples.TypeMetadata{
+		SampleTypes: []samples.ValueType{
+			{Type: "space", Unit: "bytes"},
+			{Type: "objects", Unit: "count"},
+		},
+		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			return append(dst, int64(meta.ContextValues[0]))
+		},
+	}
+	meta := &samples.TraceEventMeta{
+		ProfileType:   profileType,
+		ContextValues: []uint64{42},
+	}
+
+	err := reporter.ReportTraceEvent(singleNativeFrameTrace(), meta)
+	require.ErrorContains(t, err, "appended 1 values, expected 2")
 }
 
 func serviceAttrs(name string) attribute.Set {
@@ -259,6 +273,7 @@ func baseMetaWithResourceAttrs(resourceAttrs attribute.Set) *samples.TraceEventM
 		PID:            1234,
 		TID:            1235,
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 		ResourceAttrs:  resourceAttrs,
 	}
 }
@@ -364,6 +379,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		CPU:            0,
 		ExtraMeta:      map[libpf.String]string{libpf.Intern("process.name"): "myapp"},
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 	}
 
 	err := reporter.ReportTraceEvent(trace, meta)

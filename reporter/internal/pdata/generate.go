@@ -96,43 +96,42 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
 		for profileType, events := range toEvents.Events {
-			if len(events) == 0 {
+			if len(events) == 0 || len(profileType.SampleTypes) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
 
-			// When a profile type declares derived profiles, emit them
-			// alongside the primary one from the same events. A shared key
-			// ordering keeps every profile's samples index-aligned without
-			// needing a sort.
+			// Every emitted profile shares the same event and sample structure.
+			// Materialize one key order so cloned samples stay aligned while each
+			// profile selects its column from the flat event-major Values array.
 			keys := slices.Collect(maps.Keys(events))
+			valueWidth := len(profileType.SampleTypes)
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, events, keys, prof,
-				collectionStartTime, collectionEndTime); err != nil {
+				profileType, profileType.SampleTypes[0], 0, valueWidth,
+				events, keys, prof, collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 
-			// Derived profiles share the primary's sample structure (frames,
-			// locations, timestamps, links, attributes); only the value column
-			// differs. Clone each primary sample and swap in the values derived
-			// eagerly when the events were recorded, so the heavy per-sample
-			// work is done exactly once.
-			for i := range profileType.DerivedTypes {
-				derived := &profileType.DerivedTypes[i]
+			// CopyTo deep-copies the sample into the additional profile because pdata
+			// samples cannot be shared between profiles. This reuses the resolved stack,
+			// links, timestamps, and attributes without repeating frame processing; the
+			// copied value slice's capacity is reused below for the selected value column.
+			for i := 1; i < valueWidth; i++ {
+				sampleType := profileType.SampleTypes[i]
 				dp := sp.Profiles().AppendEmpty()
 				p.initProfileMeta(stringSet, dp,
 					profileType.PeriodType, profileType.PeriodUnit,
-					derived.SampleType, derived.SampleUnit,
+					sampleType.Type, sampleType.Unit,
 					collectionStartTime, collectionEndTime)
 				src := prof.Samples()
 				for j, k := range keys {
 					s := dp.Samples().AppendEmpty()
 					src.At(j).CopyTo(s)
 					if profileType.ReportValues {
-						s.Values().FromRaw(events[k].DerivedValues[i])
+						setSampleValues(s, events[k].Values, i, valueWidth)
 					}
 				}
 			}
@@ -161,7 +160,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 }
 
 // initProfileMeta sets the profile-level metadata (period, sample type, and
-// collection window) shared by a primary profile and its derived profiles.
+// collection window) shared by profiles emitted from the same event type.
 func (p *Pdata) initProfileMeta(
 	stringSet orderedset.OrderedSet[string],
 	profile pprofile.Profile,
@@ -193,16 +192,18 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
+	sampleType samples.ValueType,
+	valueIndex, valueWidth int,
 	events samples.SampleToEvents,
-	// keys fixes the iteration order over events so a primary profile and its
-	// derived profiles have index-aligned samples.
+	// keys fixes the iteration order over events so all emitted profiles have
+	// index-aligned samples.
 	keys []samples.SampleKey,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
 	p.initProfileMeta(stringSet, profile,
 		profileType.PeriodType, profileType.PeriodUnit,
-		profileType.SampleType, profileType.SampleUnit,
+		sampleType.Type, sampleType.Unit,
 		collectionStartTime, collectionEndTime)
 
 	for _, sampleKey := range keys {
@@ -212,7 +213,7 @@ func (p *Pdata) setProfile(
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 
 		if profileType.ReportValues {
-			sample.Values().Append(traceInfo.Values...)
+			setSampleValues(sample, traceInfo.Values, valueIndex, valueWidth)
 		}
 
 		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
@@ -328,6 +329,16 @@ func (p *Pdata) setProfile(
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
 	return nil
+}
+
+// setSampleValues replaces a sample's values with the value at index from
+// each width-sized event group.
+func setSampleValues(sample pprofile.Sample, values []int64, index, width int) {
+	dst := sample.Values()
+	dst.FromRaw(nil)
+	for i := index; i < len(values); i += width {
+		dst.Append(values[i])
+	}
 }
 
 func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
