@@ -11,6 +11,7 @@ dist:
   name: otelcol-ebpf-profiler
   description: Local OpenTelemetry Collector binary, testing only.
   version: dev
+  output_path: ./cmd/otelcol-ebpf-profiler
 
 extensions:
   - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202636
