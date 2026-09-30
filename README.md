@@ -52,20 +52,32 @@ For development, testing and debugging, a local `otelcol-ebpf-profiler` binary c
 ### Platform Requirements
 The profiler can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
-### Building `otelcol-ebpf-profiler` locally (Without Docker)
-You can build the local `otelcol-ebpf-profiler` binary by running:
+For **Linux**, the following steps apply:
+1. Build for your current machine's architecture:
+    ```sh
+    make agent
+    ```
+2. To cross-compile for a different architecture (e.g. arm64):
+    ```sh
+    make agent TARGET_ARCH=arm64
+    ```
+
+The resulting binary will be named `otelcol-ebpf-profiler` in the current directory.
+
+### Other OSes
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run it. Use the same make targets above after the Linux environment is configured in the VM.
+
+### Building without Docker
+You can build without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, run:
 ```sh
-make otelcol-ebpf-profiler
+make
 ```
-or to cross-compile for a different architecture (e.g. arm64):
+or to build for a specific architecture (e.g. arm64):
 ```sh
 make otelcol-ebpf-profiler TARGET_ARCH=arm64
 ```
 
 See [local.example.yaml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
-
-### Other OSes
-Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run it.
 
 ## Running
 
