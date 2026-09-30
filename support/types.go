@@ -177,7 +177,7 @@ type Trace struct {
 	Variable_data_end  uint16
 	Num_frames         uint16
 	Origin             uint16
-	Value              uint64
+	Pad_cgo_0          [6]byte
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -349,8 +349,8 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x58
-	Sizeof_TraceWithData = 0x58 + 0x6280
+	Sizeof_TraceHeader   = 0x50
+	Sizeof_TraceWithData = 0x50 + 0x6280
 	Sizeof_GolangLabel   = 0x40
 
 	sizeof_ApmIntProcInfo        = 0x8

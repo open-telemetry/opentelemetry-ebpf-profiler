@@ -93,32 +93,37 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ExtraMeta: extraMeta,
 	}
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
-		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		events.Values = append(events.Values, meta.Value)
-		for i := range meta.ProfileType.DerivedTypes {
-			events.DerivedValues[i] = append(events.DerivedValues[i],
-				meta.ProfileType.DerivedTypes[i].Derive(meta.Value, meta.ValueExtra))
+		values, err := appendEventValues(events.Values, meta)
+		if err != nil {
+			return err
 		}
+		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
+		events.Values = values
 		return nil
 	}
 
-	newEvents := &samples.TraceEvents{
+	values, err := appendEventValues(nil, meta)
+	if err != nil {
+		return err
+	}
+	rtp.Events[meta.ProfileType][sampleKey] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
-		Values:     []int64{meta.Value},
+		Values:     values,
 		Labels:     trace.CustomLabels,
 	}
-	if n := len(meta.ProfileType.DerivedTypes); n > 0 {
-		// Derive each derived value eagerly and keep it index-aligned with
-		// Values so the generator can clone the primary samples and swap in
-		// these values without recomputing anything.
-		newEvents.DerivedValues = make([][]int64, n)
-		for i := range meta.ProfileType.DerivedTypes {
-			newEvents.DerivedValues[i] = []int64{
-				meta.ProfileType.DerivedTypes[i].Derive(meta.Value, meta.ValueExtra),
-			}
-		}
-	}
-	rtp.Events[meta.ProfileType][sampleKey] = newEvents
 	return nil
+}
+
+// appendEventValues applies the event type's transform and verifies its fixed
+// output width before the values become index-aligned with a timestamp.
+func appendEventValues(dst []int64, meta *samples.TraceEventMeta) ([]int64, error) {
+	start := len(dst)
+	values := meta.ProfileType.AppendValues(dst, meta)
+	got := len(values) - start
+	want := len(meta.ProfileType.SampleTypes)
+	if got != want {
+		return dst, fmt.Errorf("profile value transform appended %d values, expected %d", got, want)
+	}
+	return values, nil
 }

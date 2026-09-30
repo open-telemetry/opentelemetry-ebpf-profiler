@@ -1116,7 +1116,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		PID:              libpf.PID(ptr.Pid),
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
-		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 		NumFrames:        ptr.Num_frames,
@@ -1128,14 +1127,24 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 
 	vd := variableDataDecoder{raw: variableData}
 
-	// Context values (e.g. the heap alloc/free pointer and size) are the first
-	// variable data region, written ahead of any kernel/user frames. Lift them
-	// into ValueExtra; len(ValueExtra) caps how many we surface.
-	if contextValues, err := vd.decode(ptr.Context_value_end); err != nil {
-		return nil, err
-	} else {
-		copy(trace.ValueExtra[:], contextValues)
+	// Context values are the first variable data region, written ahead of any
+	// kernel/user frames; the first one is the primary profile value. Copy the
+	// context values and frames once, then expose non-overlapping slices of the
+	// pooled buffer for each.
+	if ptr.Context_value_end == 0 {
+		return nil, fmt.Errorf("trace without context values: %w", errRecordUnexpectedSize)
 	}
+	if int(ptr.Frame_data_end) > len(trace.FrameDataBuf) {
+		return nil, fmt.Errorf("frame_data_end %d > capacity %d: %w",
+			ptr.Frame_data_end, len(trace.FrameDataBuf), errRecordUnexpectedSize)
+	}
+	contextValues, err := vd.decode(ptr.Context_value_end)
+	if err != nil {
+		return nil, err
+	}
+	numContextValues := len(contextValues)
+	trace.ContextValues = trace.FrameDataBuf[:numContextValues]
+	copy(trace.ContextValues, contextValues)
 
 	if ptr.Kernel_frame_end > 0 {
 		// Validate and use Kernel_frame_end only to calculate number of kernel frames.
@@ -1150,7 +1159,9 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	if frameData, err := vd.decode(ptr.Frame_data_end); err != nil {
 		return nil, err
 	} else if len(frameData) > 0 {
-		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
+		// Kernel frames are raw addresses at the front of FrameData. The process
+		// manager splits and symbolizes them so all frame processing shares one cache.
+		trace.FrameData = trace.FrameDataBuf[numContextValues : numContextValues+len(frameData)]
 		copy(trace.FrameData, frameData)
 	}
 

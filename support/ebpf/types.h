@@ -706,7 +706,10 @@ typedef struct Trace {
 
   // Variable data offsets
   // context_value_end marks the end of the origin-specific context values.
-  // They are written first, before unwinding, so they lead variable_data.
+  // They are written first, before unwinding, so they lead variable_data. The
+  // first entry is the primary profile value (e.g. off-CPU time in nanoseconds);
+  // an origin may append further values after it. Userspace exposes them as
+  // libpf.EbpfTrace.ContextValues.
   u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;
@@ -718,10 +721,6 @@ typedef struct Trace {
   // origin indicates the source of the trace and it is set as
   // RODATA variable at load time.
   u16 origin;
-
-  // value stores context-specific data that was collected with the stack.
-  // e.g. time in nanoseconds for off-CPU traces
-  u64 value;
 
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `variable_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the

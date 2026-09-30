@@ -1237,7 +1237,9 @@ static inline EBPF_INLINE int collect_trace(
   trace->pid    = pid;
   trace->tid    = tid;
   trace->ktime  = trace_timestamp;
-  trace->value  = value;
+  // The primary profile value is the first context value. It always fits in
+  // the pristine trace.
+  push_context_value(trace, value);
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }

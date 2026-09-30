@@ -135,7 +135,7 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 
 type trace struct {
 	numKernelFrames int
-	contextValue    uint64
+	contextValues   []uint64
 	frames          libpf.EbpfFrame
 }
 
@@ -252,7 +252,7 @@ Loop:
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
 				numKernelFrames: int(ebpfTrace.NumKernelFrames),
-				contextValue:    ebpfTrace.ValueExtra[0],
+				contextValues:   slices.Clone(ebpfTrace.ContextValues),
 				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
 			}
 		}
@@ -266,21 +266,26 @@ Loop:
 		id uint8
 		// hasKernelFrames indicates if the trace should contain kernel frames.
 		hasKernelFrames bool
-		// contextValue is the value expected before the kernel frames in frame_data.
-		contextValue uint64
+		// contextValues are the values expected before the kernel frames in frame_data.
+		contextValues []uint64
 		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
 		// that will be verified against the returned Trace.
 		userSpaceTrace libpf.EbpfFrame
 	}{
 		"Single Native Frame": {
 			id:             1,
+			contextValues:  []uint64{0},
 			userSpaceTrace: nativeFrame,
 		},
 		"Single Native Frame with Kernel Frames": {
 			id:              2,
 			hasKernelFrames: true,
-			contextValue:    0x123456789abcdef0,
-			userSpaceTrace:  nativeFrame,
+			contextValues: []uint64{
+				0x123456789abcdef0,
+				0x2222222222222222,
+				0x3333333333333333,
+			},
+			userSpaceTrace: nativeFrame,
 		},
 	}
 
@@ -288,7 +293,7 @@ Loop:
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
-			require.Equal(t, testcase.contextValue, trace.contextValue)
+			require.Equal(t, testcase.contextValues, trace.contextValues)
 
 			numKernelFrames := trace.numKernelFrames
 
