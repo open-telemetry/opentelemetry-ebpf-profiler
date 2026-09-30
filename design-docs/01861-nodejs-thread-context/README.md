@@ -128,19 +128,14 @@ While Node.js does offer callbacks for detecting these context switches, they
 carry high costs — installing custom code in the promise-switching path
 deoptimizes V8 — and they are deprecated and slated for removal.
 
-As called out in OTEP 4947, this combination of constant switching and the high
-cost of running code at each switch means an implementation of that spec would
-not be efficient for current versions of Node.js. The code that would have to
-run is also worse than ordinary JavaScript: OTEP 4947 keeps its record pointer
-in a native thread-local, so keeping that pointer current from JavaScript means
-an FFI crossing at every switch. Running code at each switch is expensive;
-crossing into native code at each switch is worse. Avoiding both is what the
-success criteria below are built around. As a consequence, Node.js remains one
-of the few runtimes for which the profiler already ships an unwinder
-(`interpreter/nodev8`) but would still have no way to attribute a sample to a
-trace even if an OTEP 4947 thread-context reader for its default schema ships.
+This combination of constant switching and the high cost of running code at each
+switch means a straightforward implementation of OTEP 4947 would not be
+efficient for Node.js. Running code at each switch is already expensive; an FFI
+crossing at each switch to update the record pointer in the OTEP 4947 native
+thread-local would be even worse. Avoiding running code and especially native
+code on every switch is what we want to achieve below.
 
-Thus, similarly to how Go is already supported under its own schema version, we
+Similarly to how Go is already supported under its own schema version, we
 propose a Node.js-specific discovery mechanism for the same record format.
 
 ## Success Criteria
@@ -301,10 +296,8 @@ motivating example.
 
 The profiler MUST therefore re-read at least the `cped_slot` each time it
 samples the thread, and MUST NOT substitute cached values for other fields when
-it changes. That costs one read of four words, which is negligible beside the
-walk it precedes. A reader using a stale value of `cped_slot` after it changed
-could go on walking a dead isolate's `cped_slot`. The profiler also MUST NOT
-infer from a zero reading that a thread is permanently uninstrumented.
+it changes. The profiler also MUST NOT infer from a zero reading that a thread
+is permanently uninstrumented.
 
 Upon initialization implementations MUST write the nonzero `cped_slot` value
 last, and upon isolate teardown they MUST write the zero `cped_slot` value
@@ -665,7 +658,11 @@ addon derives the same four constants from the V8 headers it is compiled against
 and static-asserts them, so a V8 this schema does not describe fails to compile
 instead of yielding a process that publishes a contract a reader would
 mis-walk. A V8 that moves these fields, or restructures them more deeply needs a
-new schema version.
+new schema version. It is possible to build versions of Node.js from source with
+non-default layouts using certain build flags, e.g. enabling V8's pointer
+compression feature. We explicitly do not support such builds with the current
+schema as it would result in more complexity, and future support – should the
+need for it arise – would need to introduce a new schema.
 
 ### Reader complexity relative to OTEP 4947
 
@@ -727,66 +724,41 @@ reader code.
 
 ### Garbage collection
 
-The objects on the walk (`AsyncContextFrame`, its backing table, the wrapper)
-live in the V8 heap and can be moved by a garbage collection. OTEP 4947's
-signal-handler model assumes the sampled thread is stopped, which prevents the
-writer from racing the reader — but it does not by itself establish that no
-*other* thread can relocate the objects being walked while the sampled thread is
-stopped.
+In this section we discuss what can happen when the profiler does the walk
+through the heap while V8 is performing garbage collection (GC) on it. GC is
+special in that it moves objects around, so we want to examine it more closely.
 
-V8 moves objects only during an atomic pause, and that pause is driven by the
-isolate's own thread — the stopped one. Parallel evacuation tasks do much of the
-copying, but they are joined before the pause ends, and concurrent marking and
-concurrent sweeping never relocate a live object. At the end of a pause the
-evacuated memory is handed back: the semispaces are swapped and the old
-from-space is refilled by ordinary allocation, and old-space evacuation
-candidates are released outright.
+The record itself is not a V8 heap object; it is malloc'd memory owned by the
+wrapper, so it never moves as a result of GC. The objects on the path to reach
+it (`AsyncContextFrame`, its backing table, the wrapper) on the other hand do
+live in the V8 heap and can be moved by garbage collection.
 
-The reader holds raw addresses, which keep meaning what they meant only for as
-long as the pause lasts. Since a stopped thread cannot reach the end of its own
-pause, the entire read is contained within it, and it is thus protected against
-observing above effects.
+When we say an object is moved during GC, it is in fact first copied into a new
+location, and the old location is not freed until the last phase of the GC
+cycle. The collectors write a forwarding pointer to the new copy of the object
+in the header area of the source copy of the object, but otherwise don't mutate
+the source's body. The walk never reads that header so to it an evacuated object
+reads the same during GC.
 
-This is true as long as the collection is driven by the stopped thread itself,
-which holds because isolates share no garbage-collected memory: each has its own
-heap, collected by its own thread. V8 _can_ be built and flagged to give a group
-of isolates a shared heap, collected by one of them at a global safepoint while
-the others are parked; such collection could finish while this thread stays
-stopped. That configuration is experimental and Node.js does not enable it, and
-even under it the shared heap holds only shared strings and shared structs,
-never a `JSMap`, so it cannot reach anything on this walk.
+Pointers to moved objects are updated non-atomically so the profiler can end up
+walking a mixture of pointers to pre- and post-move addresses. This is
+fortunately harmless; no JavaScript runs during the pause, so neither copy is
+semantically mutated during the walk, and the profiler sees the same values
+either way.
 
-When we say an object is moved during the collection, it is in fact copied. The
-collectors write a forwarding pointer to the new copy of the object into the map
-word of the source copy of the object, but otherwise don't mutate the source's
-body. The walk never reads objects' map words so to it an evacuated object reads
-the same during a GC pause.
+The old addresses are freed/reused only at the end of the GC cycle, but that
+fortunately can not happen during a walk. OTEP 4947's signal-handler model
+assumes the sampled thread is stopped, and GC is controlled by it. (Each isolate
+has its own heap, collected by its own thread.) V8 does use parallel threads in
+some cases to perform much of the copying, and those won't be stopped along with
+the sampled thread. This is fortunately also not a concern since no memory is
+freed until the sampled thread is resumed and ends the GC cycle.
 
-This is a reason for the reader not to validate what it finds by checking maps
-or instance types (nothing in this document prescribes such checks). During a
-pause a map word can hold a forwarding address rather than a map identifier so
-such a check would fail on precisely the objects that are still perfectly
-readable.
-
-Reading the old copy is as good as reading the new one. No JavaScript runs
-during the pause, so neither copy is semantically mutated while the reader is
-looking at it, and a walk that follows a mixture of pre- and post-move addresses
-— which it can, since referring slots are updated one at a time — sees the same
-values either way. The new copy is not necessarily complete at the moment it
-becomes reachable as various writes use relaxed ordering. On weakly ordered
-hardware a reader can in principle follow a pointer to a new address where the
-body was not written yet. The consequence is the one the walk tolerates
-everywhere else: it reads something that is not the key it is looking for, and
-the lookup misses.
-
-Note that the record itself is not a V8 heap object; it is malloc'd memory owned
-by the wrapper, so it never moves as a result of GC. Only the path to it
-involves heap objects.
-
-A writer MAY choose to zero the `cped_slot` before a collection and then re-set
-it after it, to stop the reader from reading during a collection. The profiler
-already stops at a zero `cped_slot` and is forbidden from treating it as
-permanent.
+The worst case scenario of GC interfering with a walk comes from the use of
+parallel copying threads. With them, the new copy is not necessarily complete at
+the moment it becomes reachable as various writes use relaxed ordering. The
+consequence is the same one that the walk tolerates everywhere else: it reads
+something that is not the key it is looking for, and the lookup misses.
 
 ### Sampling a thread that is not executing JavaScript
 
@@ -909,11 +881,3 @@ for a mechanism of this kind.
   as much a risk as one whose `JSMap` structure changed — though the SDK's
   static assertions catch the former where it is built. Coredump cases from each
   supported major (22 with the flag, 24, and newer) are how that gets detected.
-
-
-# Future Possibilities
-
-- **libuv thread pool attribution.** Out of scope here because Node.js offers no
-  mechanism to carry a record onto a pool thread. Those threads would in fact
-  suit OTEP 4947's original design well, since each runs one work item at a
-  time.
