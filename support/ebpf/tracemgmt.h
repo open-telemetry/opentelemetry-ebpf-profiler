@@ -520,7 +520,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->customLabelsState.go_m_ptr        = NULL;
   record->goOffsets                         = (GoRuntimeOffsets){};
 
-  Trace *trace             = &record->trace;
+  Trace *trace              = &record->trace;
   trace->frame_data_len     = 0;
   trace->num_frames         = 0;
   trace->num_kernel_frames  = 0;
@@ -708,18 +708,26 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses at the beginning of frame_data. Must be called before any
-// userspace frames are pushed. The num_kernel_frames field tells userspace how
-// many leading frame_data entries are kernel addresses.
+// the raw addresses after any context-value prefix in frame_data. Must be called
+// before any userspace frames are pushed. The num_kernel_frames field tells
+// userspace how many entries following the prefix are kernel addresses.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
-  _Static_assert(
-    sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
-  long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
+  const u32 max_frames = sizeof(trace->frame_data) / sizeof(trace->frame_data[0]);
+  _Static_assert(max_frames > PERF_MAX_STACK_DEPTH, "frame data too small");
+
+  u32 offset = trace->num_context_values;
+  // Ensure the maximum kernel stack fits after the context-value prefix.
+  if (offset + PERF_MAX_STACK_DEPTH > max_frames) {
+    return;
+  }
+
+  long bytes =
+    bpf_get_stack(ctx, &trace->frame_data[offset], PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
   if (bytes > 0) {
     u16 nframes              = (unsigned long)bytes / sizeof(u64);
     trace->num_kernel_frames = nframes;
-    trace->frame_data_len    = nframes;
+    trace->frame_data_len    = offset + nframes;
   }
 }
 
