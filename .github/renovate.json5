@@ -7,9 +7,6 @@
   postUpdateOptions: [
     'gomodTidy',
   ],
-  ignorePaths: [
-    'LICENSES/**',
-  ],
   ocb: {
     managerFilePatterns: [
       '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',

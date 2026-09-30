@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent legal \
+	test-junit test-luajit-offsets protobuf docker-image agent \
 	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	processctx-execs host-integration-tests \
@@ -119,10 +119,10 @@ format-ebpf:
 	$(MAKE) format -C support/ebpf
 
 vanity-import-check:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
@@ -199,8 +199,6 @@ docker-image:
 agent:
 	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
-legal:
-	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
 
 codespell:
 	@codespell

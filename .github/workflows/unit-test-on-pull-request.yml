@@ -10,27 +10,6 @@ permissions:
   contents: read
 
 jobs:
-  legal:
-    name: Check licenses of dependencies
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Clone code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - name: Check for changes in licenses of dependencies
-        run: |
-          make legal
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "run \"make legal\"."
-            exit 1
-          fi
-
   lint:
     name: Lint (${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
