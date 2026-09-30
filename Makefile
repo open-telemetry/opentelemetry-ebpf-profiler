@@ -197,7 +197,7 @@ agent:
 	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
 legal:
-	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
+	go tool $(GO_TOOLS) go-licenses save --force ./... --save_path=LICENSES
 
 codespell:
 	@codespell
