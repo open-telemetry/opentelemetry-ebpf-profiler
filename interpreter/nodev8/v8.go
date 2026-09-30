@@ -293,8 +293,7 @@ type v8Data struct {
 			InlinedFunctionCount      uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
 			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
 			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
-			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
-			WrappedSharedFunctionInfo uint8 `name:"DeoptimizationDataWrappedSharedFunctionInfoIndex" zero:""`
+SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex,DeoptimizationDataWrappedSharedFunctionInfoIndex" zero:""`
 			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
