@@ -88,7 +88,7 @@ func forceContextSwitch() {
 	wg.Wait()
 }
 
-func attachKernelFrameProbe(t *testing.T, tr *tracer.Tracer) link.Link {
+func attachKernelFrameProbes(t *testing.T, tr *tracer.Tracer) []link.Link {
 	t.Helper()
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
@@ -100,31 +100,42 @@ func attachKernelFrameProbe(t *testing.T, tr *tracer.Tracer) link.Link {
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
-	require.NoError(t, err)
-	defer prog.Close()
+	programNames := []string{
+		"tracepoint_integration__sched_switch_no_kernel",
+		"tracepoint_integration__sched_switch_with_kernel",
+	}
+	events := make([]link.Link, 0, len(programNames))
+	for _, name := range programNames {
+		prog, err := cebpf.NewProgram(coll.Programs[name])
+		require.NoError(t, err)
+		defer prog.Close()
 
-	ev, err := link.Tracepoint("sched", "sched_switch", prog, nil)
-	require.NoError(t, err)
-	return ev
+		ev, err := link.Tracepoint("sched", "sched_switch", prog, nil)
+		require.NoError(t, err)
+		events = append(events, ev)
+	}
+	return events
 }
 
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	t.Helper()
-	ev := attachKernelFrameProbe(t, tr)
-	t.Logf("probe for Kernel frames installed on sched/sched_switch")
+	events := attachKernelFrameProbes(t, tr)
+	t.Logf("probes for Kernel frames installed on sched/sched_switch")
 
 	// Manually trigger the tracepoint on sched/sched_switch.
 	forceContextSwitch()
 
 	t.Logf("tracepoint sched_switch triggered")
-	require.NoError(t, ev.Close())
+	for _, event := range events {
+		require.NoError(t, event.Close())
+	}
 }
 
 type trace struct {
 	numKernelFrames int
+	contextValue    uint64
 	frames          libpf.EbpfFrame
 }
 
@@ -241,6 +252,7 @@ Loop:
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
 				numKernelFrames: int(ebpfTrace.NumKernelFrames),
+				contextValue:    ebpfTrace.ValueExtra[0],
 				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
 			}
 		}
@@ -254,6 +266,8 @@ Loop:
 		id uint8
 		// hasKernelFrames indicates if the trace should contain kernel frames.
 		hasKernelFrames bool
+		// contextValue is the value expected before the kernel frames in frame_data.
+		contextValue uint64
 		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
 		// that will be verified against the returned Trace.
 		userSpaceTrace libpf.EbpfFrame
@@ -265,6 +279,7 @@ Loop:
 		"Single Native Frame with Kernel Frames": {
 			id:              2,
 			hasKernelFrames: true,
+			contextValue:    0x123456789abcdef0,
 			userSpaceTrace:  nativeFrame,
 		},
 	}
@@ -273,6 +288,7 @@ Loop:
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
+			require.Equal(t, testcase.contextValue, trace.contextValue)
 
 			numKernelFrames := trace.numKernelFrames
 
@@ -367,8 +383,12 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	traceChan := make(chan *libpf.EbpfTrace, 1024)
 	require.NoError(t, tr.StartMapMonitors(t.Context(), traceChan))
 
-	event := attachKernelFrameProbe(t, tr)
-	defer event.Close()
+	events := attachKernelFrameProbes(t, tr)
+	defer func() {
+		for _, event := range events {
+			_ = event.Close()
+		}
+	}()
 
 	cmd := newPIDNamespaceCommand("-pid-namespace-translation-role=" + pidNamespaceTarget)
 	require.NoError(t, cmd.Start())
