@@ -1201,12 +1201,14 @@ static inline EBPF_INLINE int collect_trace(
     return -1;
   }
 
-  Trace *trace  = &record->trace;
-  trace->origin = origin;
-  trace->pid    = pid;
-  trace->tid    = tid;
-  trace->ktime  = trace_timestamp;
-  trace->value  = value;
+  Trace *trace              = &record->trace;
+  trace->origin             = origin;
+  trace->pid                = pid;
+  trace->tid                = tid;
+  trace->ktime              = trace_timestamp;
+  trace->frame_data[0]      = value;
+  trace->frame_data_len     = 1;
+  trace->num_context_values = 1;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }

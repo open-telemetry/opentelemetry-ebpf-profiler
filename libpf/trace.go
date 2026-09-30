@@ -197,12 +197,15 @@ func putUint64(b []byte, v uint64) int {
 
 // EbpfTrace holds data sourced from eBPF.
 type EbpfTrace struct {
-	CustomLabels     map[String]String
-	Comm             Comm
+	CustomLabels map[String]String
+	Comm         Comm
+	// ContextValues contains the raw origin-specific values carried with the
+	// stack. The first entry is the primary profile value; later entries may hold
+	// data such as pointers or allocation sizes. It aliases the leading portion
+	// of FrameDataBuf and is valid for the lifetime of this pooled trace.
+	ContextValues    []uint64
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64
-	Value            int64
-	ValueExtra       [2]uint64
 	KTime            int64
 	CpuID            uint32
 	TID              PID

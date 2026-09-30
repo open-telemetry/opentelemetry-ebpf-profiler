@@ -33,37 +33,28 @@ var (
 
 var (
 	profileTypeSampling = &samples.TypeMetadata{
-		PeriodType: "cpu",
-		PeriodUnit: "nanoseconds",
-		SampleType: "samples",
-		SampleUnit: "count",
+		PeriodType:  "cpu",
+		PeriodUnit:  "nanoseconds",
+		SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
+		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
 	}
-	// profileTypeDerived exercises the generic derived-profile mechanism in the
-	// generator: a primary byte-weighted profile plus a derived "count" profile.
-	// The generator consumes pre-derived values from TraceEvents.DerivedValues
-	// (base_reporter is what derives them; see base_reporter_test), so Derive is
-	// left unset here.
+	// profileTypeDerived exercises multiple profiles emitted from one flat,
+	// fixed-width value group per event.
 	profileTypeDerived = &samples.TypeMetadata{
-		SampleType:   "primary_space",
-		SampleUnit:   "bytes",
+		SampleTypes: []samples.ValueType{
+			{Type: "primary_space", Unit: "bytes"},
+			{Type: "derived_count", Unit: "count"},
+		},
 		ReportValues: true,
-		DerivedTypes: []samples.DerivedTypeMetadata{{
-			SampleType: "derived_count",
-			SampleUnit: "count",
-		}},
 	}
 	// profileTypeDerivedNoReport is profileTypeDerived with reporting disabled,
-	// to verify neither the primary nor derived profile emits values.
+	// to verify neither emitted profile contains values.
 	profileTypeDerivedNoReport = &samples.TypeMetadata{
-		SampleType:   "primary_space",
-		SampleUnit:   "bytes",
+		SampleTypes:  profileTypeDerived.SampleTypes,
 		ReportValues: false,
-		DerivedTypes: profileTypeDerived.DerivedTypes,
 	}
 )
 
@@ -1063,10 +1054,9 @@ func TestDerivedTypeProducesPrimaryAndDerived(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeDerived: {
 					{}: &samples.TraceEvents{
-						Frames:        frames,
-						Timestamps:    timestamps,
-						Values:        []int64{128, 256},
-						DerivedValues: [][]int64{{2, 2}},
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{128, 2, 256, 2},
 					},
 				},
 			},
@@ -1126,10 +1116,9 @@ func TestDerivedTypeReportValuesFalse(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeDerivedNoReport: {
 					{}: &samples.TraceEvents{
-						Frames:        frames,
-						Timestamps:    timestamps,
-						Values:        []int64{128, 256},
-						DerivedValues: [][]int64{{2, 2}},
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{128, 2, 256, 2},
 					},
 				},
 			},
@@ -1147,9 +1136,8 @@ func TestDerivedTypeReportValuesFalse(t *testing.T) {
 	}
 }
 
-// TestDerivedTypeCopiesPerSampleValues verifies that a derived profile carries
-// its own per-sample values (from TraceEvents.DerivedValues), index-aligned
-// with the primary samples, rather than reusing the primary values.
+// TestDerivedTypeCopiesPerSampleValues verifies that each emitted profile
+// selects its own column from the flat, event-major TraceEvents.Values array.
 func TestDerivedTypeCopiesPerSampleValues(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
@@ -1172,10 +1160,9 @@ func TestDerivedTypeCopiesPerSampleValues(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeDerived: {
 					{}: &samples.TraceEvents{
-						Frames:        frames,
-						Timestamps:    timestamps,
-						Values:        []int64{1000, 64, 500},
-						DerivedValues: [][]int64{{10, 1, 1}},
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{1000, 10, 64, 1, 500, 1},
 					},
 				},
 			},
