@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  legal:
+  license-check:
     name: Check licenses of dependencies
     runs-on: ubuntu-26.04
     steps:
@@ -24,7 +24,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Check licenses of dependencies
-        run: make legal
+        run: make license-check
 
   lint:
     name: Lint (${{ matrix.target_arch }})
