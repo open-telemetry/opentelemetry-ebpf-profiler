@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent \
+	test-junit test-luajit-offsets protobuf docker-image agent legal \
 	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	processctx-execs host-integration-tests \
@@ -199,6 +199,11 @@ docker-image:
 agent:
 	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
+legal:
+	go tool $(GO_TOOLS) go-licenses check \
+		--allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC,MPL-2.0 \
+		--ignore go.opentelemetry.io/ebpf-profiler/tools \
+		./...
 
 codespell:
 	@codespell
