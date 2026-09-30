@@ -70,8 +70,7 @@ ebpf: generate
 generate-collector:
 	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
-		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
-		--output-path cmd/otelcol-ebpf-profiler
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml
 
 ebpf-profiler: ebpf
 	go build -tags $(GO_TAGS)
