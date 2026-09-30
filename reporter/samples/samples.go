@@ -27,9 +27,8 @@ type TraceEventMeta struct {
 	// ValueExtra carries origin-specific auxiliary values alongside Value,
 	// mirroring libpf.EbpfTrace.ValueExtra (populated in eBPF). It is kept
 	// generic so any origin can attach additional per-sample data without a
-	// bespoke field. Whether these values are recorded, and how many entries
-	// are meaningful, is declared by ProfileType.ValueExtraLen. Zero for
-	// origins that carry no extra values.
+	// bespoke field. It feeds a profile type's derived values via
+	// DerivedTypeMetadata.Derive. Zero for origins that carry no extra values.
 	ValueExtra [2]uint64
 	PID, TID   libpf.PID
 	SpanID     libpf.APMSpanID
@@ -42,11 +41,11 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	Values     []int64
-	// ValuesExtra holds the per-event TraceEventMeta.ValueExtra, index-aligned
-	// with Values. Populated only for profile types that declare
-	// ValueExtraLen > 0; in that case the append is unconditional so the slice
-	// stays aligned with Values even when a sample's extra values are all zero.
-	ValuesExtra [][2]uint64
+	// DerivedValues[i] holds the values for ProfileType.DerivedTypes[i],
+	// index-aligned with Values. Each entry is derived eagerly from a sample's
+	// primary Value and its ValueExtra via DerivedTypeMetadata.Derive when the
+	// event is recorded. Nil for profile types with no derived types.
+	DerivedValues [][]int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -130,30 +129,23 @@ type TypeMetadata struct {
 	// in the exported sample (e.g. off-CPU durations).
 	ReportValues bool
 
-	// ValueExtraLen declares how many leading entries of a sample's ValueExtra
-	// carry meaningful data for this profile type. Zero means ValueExtra is
-	// unused and must not be recorded. When > 0, the reporter records
-	// ValueExtra for every sample (including all-zero ones) so that
-	// TraceEvents.ValuesExtra stays index-aligned with Values.
-	ValueExtraLen int
-
-	// DerivedProfiles are additional profiles emitted from the same event set,
+	// DerivedTypes are additional profiles emitted from the same event set,
 	// each computed by transforming a sample's primary Value (and its
 	// ValueExtra). Empty for origins that emit a single profile.
-	DerivedProfiles []DerivedProfile
+	DerivedTypes []DerivedTypeMetadata
 }
 
-// DerivedProfile describes an additional profile produced from the same
+// DerivedTypeMetadata describes an additional profile produced from the same
 // events as its parent TypeMetadata. It lets a probe declare a secondary
 // view (for example an object-count derived from a byte-weighted value)
 // without the reporter needing to know the semantics: the reporter simply
-// applies Value to each sample.
-type DerivedProfile struct {
+// applies Derive to each sample.
+type DerivedTypeMetadata struct {
 	// SampleType and SampleUnit name the derived profile's value axis.
 	SampleType string
 	SampleUnit string
 
-	// Value derives one output value from a sample's primary value and its
+	// Derive derives one output value from a sample's primary value and its
 	// ValueExtra.
-	Value func(value int64, extra [2]uint64) int64
+	Derive func(value int64, extra [2]uint64) int64
 }

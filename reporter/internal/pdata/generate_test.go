@@ -43,26 +43,27 @@ var (
 		SampleUnit:   "nanoseconds",
 		ReportValues: true,
 	}
-	// profileTypeDerived exercises the generic DerivedProfiles mechanism: a
-	// primary byte-weighted profile plus a derived "count" profile computed
-	// from the primary value and its ValueExtra (here: value/extra[1] with a
-	// fall back to 1 for a zero divisor).
+	// profileTypeDerived exercises the generic derived-profile mechanism in the
+	// generator: a primary byte-weighted profile plus a derived "count" profile.
+	// The generator consumes pre-derived values from TraceEvents.DerivedValues
+	// (base_reporter is what derives them; see base_reporter_test), so Derive is
+	// left unset here.
 	profileTypeDerived = &samples.TypeMetadata{
-		SampleType:    "primary_space",
-		SampleUnit:    "bytes",
-		ReportValues:  true,
-		ValueExtraLen: 2,
-		DerivedProfiles: []samples.DerivedProfile{{
+		SampleType:   "primary_space",
+		SampleUnit:   "bytes",
+		ReportValues: true,
+		DerivedTypes: []samples.DerivedTypeMetadata{{
 			SampleType: "derived_count",
 			SampleUnit: "count",
-			Value: func(value int64, extra [2]uint64) int64 {
-				size := int64(extra[1])
-				if size <= 0 {
-					return 1
-				}
-				return max(value/size, 1)
-			},
 		}},
+	}
+	// profileTypeDerivedNoReport is profileTypeDerived with reporting disabled,
+	// to verify neither the primary nor derived profile emits values.
+	profileTypeDerivedNoReport = &samples.TypeMetadata{
+		SampleType:   "primary_space",
+		SampleUnit:   "bytes",
+		ReportValues: false,
+		DerivedTypes: profileTypeDerived.DerivedTypes,
 	}
 )
 
@@ -1041,7 +1042,7 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 	assert.Equal(t, expected, attrs.AsRaw())
 }
 
-func TestDerivedProfileProducesPrimaryAndDerived(t *testing.T) {
+func TestDerivedTypeProducesPrimaryAndDerived(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
 
@@ -1062,10 +1063,10 @@ func TestDerivedProfileProducesPrimaryAndDerived(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeDerived: {
 					{}: &samples.TraceEvents{
-						Frames:      frames,
-						Timestamps:  timestamps,
-						Values:      []int64{128, 256},
-						ValuesExtra: [][2]uint64{{0, 64}, {0, 128}},
+						Frames:        frames,
+						Timestamps:    timestamps,
+						Values:        []int64{128, 256},
+						DerivedValues: [][]int64{{2, 2}},
 					},
 				},
 			},
@@ -1101,11 +1102,55 @@ func TestDerivedProfileProducesPrimaryAndDerived(t *testing.T) {
 	assert.Equal(t, timestamps, derivedCount.Samples().At(0).TimestampsUnixNano().AsRaw())
 }
 
-// TestDerivedProfileValueTransform verifies that the derived profile applies
-// the profile type's value transform per sample (here value/extra[1]), not a
-// flat value, and that a zero divisor falls back to 1 rather than dividing by
-// zero.
-func TestDerivedProfileValueTransform(t *testing.T) {
+// TestDerivedTypeReportValuesFalse verifies that when ReportValues is false,
+// neither the primary nor the derived profile emits sample values (timestamps
+// are still kept).
+func TestDerivedTypeReportValuesFalse(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerivedNoReport: {
+					{}: &samples.TraceEvents{
+						Frames:        frames,
+						Timestamps:    timestamps,
+						Values:        []int64{128, 256},
+						DerivedValues: [][]int64{{2, 2}},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len())
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		sample := sp.Profiles().At(i).Samples().At(0)
+		assert.Empty(t, sample.Values().AsRaw())
+		assert.Equal(t, timestamps, sample.TimestampsUnixNano().AsRaw())
+	}
+}
+
+// TestDerivedTypeCopiesPerSampleValues verifies that a derived profile carries
+// its own per-sample values (from TraceEvents.DerivedValues), index-aligned
+// with the primary samples, rather than reusing the primary values.
+func TestDerivedTypeCopiesPerSampleValues(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
 
@@ -1127,13 +1172,10 @@ func TestDerivedProfileValueTransform(t *testing.T) {
 			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
 				profileTypeDerived: {
 					{}: &samples.TraceEvents{
-						Frames:     frames,
-						Timestamps: timestamps,
-						// value=1000 @ extra[1]=100 -> 10.
-						// value=64 @ extra[1]=64 -> 1.
-						// value=500 @ extra[1]=0 (unknown) -> falls back to 1.
-						Values:      []int64{1000, 64, 500},
-						ValuesExtra: [][2]uint64{{0, 100}, {0, 64}, {0, 0}},
+						Frames:        frames,
+						Timestamps:    timestamps,
+						Values:        []int64{1000, 64, 500},
+						DerivedValues: [][]int64{{10, 1, 1}},
 					},
 				},
 			},

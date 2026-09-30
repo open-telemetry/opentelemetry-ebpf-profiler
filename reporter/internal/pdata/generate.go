@@ -4,7 +4,9 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -103,30 +105,35 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			// alongside the primary one from the same events. A shared key
 			// ordering keeps every profile's samples index-aligned without
 			// needing a sort.
-			var keys []samples.SampleKey
-			if len(profileType.DerivedProfiles) > 0 {
-				keys = make([]samples.SampleKey, 0, len(events))
-				for k := range events {
-					keys = append(keys, k)
-				}
-			}
+			keys := slices.Collect(maps.Keys(events))
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, nil, events, keys, prof,
+				profileType, events, keys, prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 
-			for i := range profileType.DerivedProfiles {
-				derived := &profileType.DerivedProfiles[i]
-				prof := sp.Profiles().AppendEmpty()
-				if err := p.setProfile(dic, attrMgr,
-					stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-					profileType, derived, events, keys, prof,
-					collectionStartTime, collectionEndTime); err != nil {
-					return profiles, err
+			// Derived profiles share the primary's sample structure (frames,
+			// locations, timestamps, links, attributes); only the value column
+			// differs. Clone each primary sample and swap in the values derived
+			// eagerly when the events were recorded, so the heavy per-sample
+			// work is done exactly once.
+			for i := range profileType.DerivedTypes {
+				derived := &profileType.DerivedTypes[i]
+				dp := sp.Profiles().AppendEmpty()
+				p.initProfileMeta(stringSet, dp,
+					profileType.PeriodType, profileType.PeriodUnit,
+					derived.SampleType, derived.SampleUnit,
+					collectionStartTime, collectionEndTime)
+				src := prof.Samples()
+				for j, k := range keys {
+					s := dp.Samples().AppendEmpty()
+					src.At(j).CopyTo(s)
+					if profileType.ReportValues {
+						s.Values().FromRaw(events[k].DerivedValues[i])
+					}
 				}
 			}
 		}
@@ -153,6 +160,27 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	return profiles, nil
 }
 
+// initProfileMeta sets the profile-level metadata (period, sample type, and
+// collection window) shared by a primary profile and its derived profiles.
+func (p *Pdata) initProfileMeta(
+	stringSet orderedset.OrderedSet[string],
+	profile pprofile.Profile,
+	periodType, periodUnit, sampleType, sampleUnit string,
+	collectionStartTime, collectionEndTime time.Time,
+) {
+	if periodType != "" {
+		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(stringSet.Add(periodType))
+		pt.SetUnitStrindex(stringSet.Add(periodUnit))
+	}
+	st := profile.SampleType()
+	st.SetTypeStrindex(stringSet.Add(sampleType))
+	st.SetUnitStrindex(stringSet.Add(sampleUnit))
+	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
+	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
+}
+
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
@@ -165,57 +193,25 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
-	// derived is nil for the primary profile, or the derived profile to emit.
-	derived *samples.DerivedProfile,
 	events samples.SampleToEvents,
-	keys []samples.SampleKey, // if non-nil, iterate in this order; otherwise range over events
+	// keys fixes the iteration order over events so a primary profile and its
+	// derived profiles have index-aligned samples.
+	keys []samples.SampleKey,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
-	if profileType.PeriodType != "" {
-		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
-		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add(profileType.PeriodType))
-		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
-	}
-
-	st := profile.SampleType()
-	if derived != nil {
-		st.SetTypeStrindex(stringSet.Add(derived.SampleType))
-		st.SetUnitStrindex(stringSet.Add(derived.SampleUnit))
-	} else {
-		st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-		st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
-	}
-
-	// When keys is provided, iterate in the given order so a primary profile
-	// and its derived profiles have index-aligned samples. Otherwise range
-	// over the map directly.
-	if keys == nil {
-		keys = make([]samples.SampleKey, 0, len(events))
-		for k := range events {
-			keys = append(keys, k)
-		}
-	}
+	p.initProfileMeta(stringSet, profile,
+		profileType.PeriodType, profileType.PeriodUnit,
+		profileType.SampleType, profileType.SampleUnit,
+		collectionStartTime, collectionEndTime)
 
 	for _, sampleKey := range keys {
 		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if derived != nil {
-			// Derived profiles transform each primary sample value (and its
-			// auxiliary ValueExtra) via a probe-supplied closure, so the
-			// reporter stays agnostic to the semantics. ValuesExtra is
-			// index-aligned with Values (see TypeMetadata.ValueExtraLen).
-			for i, v := range traceInfo.Values {
-				var extra [2]uint64
-				if i < len(traceInfo.ValuesExtra) {
-					extra = traceInfo.ValuesExtra[i]
-				}
-				sample.Values().Append(derived.Value(v, extra))
-			}
-		} else if profileType.ReportValues {
+
+		if profileType.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
@@ -330,9 +326,6 @@ func (p *Pdata) setProfile(
 	} // End sample processing
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
-
-	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
-	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
 
 	return nil
 }

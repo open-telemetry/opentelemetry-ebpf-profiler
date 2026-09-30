@@ -35,6 +35,22 @@ var (
 		SampleType: "events",
 		SampleUnit: "count",
 	}
+	profileTypeDerived = &samples.TypeMetadata{
+		SampleType:   "alloc_space",
+		SampleUnit:   "bytes",
+		ReportValues: true,
+		DerivedTypes: []samples.DerivedTypeMetadata{{
+			SampleType: "alloc_objects",
+			SampleUnit: "count",
+			Derive: func(value int64, extra [2]uint64) int64 {
+				size := int64(extra[1])
+				if size <= 0 {
+					return 1
+				}
+				return max(value/size, 1)
+			},
+		}},
+	}
 )
 
 // createTestBaseReporter creates a minimal baseReporter for testing purposes
@@ -176,6 +192,46 @@ func TestBaseReporterGenerate(t *testing.T) {
 	// Verify profiles exist
 	assert.Positive(t, scopeProfile.Profiles().Len(),
 		"Should have at least one profile")
+}
+
+// TestReportTraceEventDerivesValuesEagerly verifies that the reporter computes
+// a profile type's derived values when each event is recorded, storing them on
+// TraceEvents.DerivedValues index-aligned with Values.
+func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	trace := singleNativeFrameTrace()
+
+	// Same stack + meta so all three events aggregate into one TraceEvents.
+	meta := func(ts, value int64, size uint64) *samples.TraceEventMeta {
+		return &samples.TraceEventMeta{
+			Timestamp:      libpf.UnixTime64(time.Unix(ts, 0).UnixNano()),
+			Comm:           libpf.NewCommFromString("app"),
+			ExecutablePath: libpf.Intern("/usr/bin/app"),
+			PID:            1234,
+			TID:            1235,
+			ProfileType:    profileTypeDerived,
+			Value:          value,
+			ValueExtra:     [2]uint64{0, size},
+		}
+	}
+
+	// Derive is value/size (min 1); a zero size falls back to 1.
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1010, 1000, 100)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1020, 64, 64)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1030, 500, 0)))
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	require.Len(t, *treePtr, 1)
+	for _, rtp := range *treePtr {
+		events := rtp.Events[profileTypeDerived]
+		require.Len(t, events, 1)
+		for _, te := range events {
+			assert.Equal(t, []int64{1000, 64, 500}, te.Values)
+			require.Len(t, te.DerivedValues, 1)
+			assert.Equal(t, []int64{10, 1, 1}, te.DerivedValues[0])
+		}
+	}
 }
 
 func serviceAttrs(name string) attribute.Set {

@@ -95,10 +95,9 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if events, exists := rtp.Events[meta.ProfileType][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.Values = append(events.Values, meta.Value)
-		if meta.ProfileType.ValueExtraLen > 0 {
-			// Append unconditionally so ValuesExtra stays index-aligned with
-			// Values, even when this sample's extra values are all zero.
-			events.ValuesExtra = append(events.ValuesExtra, meta.ValueExtra)
+		for i := range meta.ProfileType.DerivedTypes {
+			events.DerivedValues[i] = append(events.DerivedValues[i],
+				meta.ProfileType.DerivedTypes[i].Derive(meta.Value, meta.ValueExtra))
 		}
 		return nil
 	}
@@ -109,8 +108,16 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		Values:     []int64{meta.Value},
 		Labels:     trace.CustomLabels,
 	}
-	if meta.ProfileType.ValueExtraLen > 0 {
-		newEvents.ValuesExtra = [][2]uint64{meta.ValueExtra}
+	if n := len(meta.ProfileType.DerivedTypes); n > 0 {
+		// Derive each derived value eagerly and keep it index-aligned with
+		// Values so the generator can clone the primary samples and swap in
+		// these values without recomputing anything.
+		newEvents.DerivedValues = make([][]int64, n)
+		for i := range meta.ProfileType.DerivedTypes {
+			newEvents.DerivedValues[i] = []int64{
+				meta.ProfileType.DerivedTypes[i].Derive(meta.Value, meta.ValueExtra),
+			}
+		}
 	}
 	rtp.Events[meta.ProfileType][sampleKey] = newEvents
 	return nil

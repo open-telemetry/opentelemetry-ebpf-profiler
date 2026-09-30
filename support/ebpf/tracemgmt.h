@@ -758,8 +758,8 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses in the variable data. Must be called before any
-// userspace frames are pushed.
+// the raw addresses in the variable data, after any context values. Must be
+// called before any userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
   const u32 max_bytes = sizeof(u64[PERF_MAX_STACK_DEPTH]);
