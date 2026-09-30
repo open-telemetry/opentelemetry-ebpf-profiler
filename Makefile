@@ -1,7 +1,7 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit test-luajit-offsets protobuf docker-image agent legal \
 	integration-test-binaries \
-	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
+	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
@@ -48,7 +48,7 @@ MAKEFLAGS += -j$(shell nproc)
 
 JUNIT_OUT_DIR ?= /tmp/testresults
 
-all: ebpf-profiler
+all: otelcol-ebpf-profiler
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -71,9 +71,6 @@ generate-collector:
 	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
 		--config cmd/otelcol-ebpf-profiler/manifest.yaml
-
-ebpf-profiler: ebpf
-	go build -tags $(GO_TAGS)
 
 otelcol-ebpf-profiler: ebpf generate-collector
 	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
