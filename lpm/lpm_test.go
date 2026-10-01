@@ -40,6 +40,10 @@ func TestCalculatePrefixList(t *testing.T) {
 	}{
 		"4k to 0": {start: 4096, end: 0, err: true},
 		"0 to 2":  {start: 0, end: 2, expect: []Prefix{{0, 63}}},
+		"high address": {start: 0x8000000000000000, end: 0x8000000000001000,
+			expect: []Prefix{{0x8000000000000000, 52}}},
+		"near uint64 maximum": {start: ^uint64(0) - 1, end: ^uint64(0),
+			expect: []Prefix{{^uint64(0) - 1, 64}}},
 		"10 to 22": {start: 0b1010, end: 0b10110,
 			expect: []Prefix{{0b1010, 63}, {0b1100, 62}, {0b10000, 62},
 				{0b10100, 63}}},
