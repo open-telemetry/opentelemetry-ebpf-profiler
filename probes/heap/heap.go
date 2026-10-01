@@ -28,9 +28,6 @@ const (
 	allocOriginVar    = "origin_id_heap_alloc"
 )
 
-// Config holds configuration for the heap probe.
-type Config struct{}
-
 type attachmentKey struct {
 	fileID libpf.FileID
 	name   string
@@ -39,7 +36,6 @@ type attachmentKey struct {
 
 // Probe implements tracer.Probe and processmanager.ProbeAttacher for USDT heap profiling.
 type Probe struct {
-	cfg        Config
 	discoverer *usdt.Discoverer
 	programs   map[string]*cebpf.Program
 
@@ -50,10 +46,9 @@ type Probe struct {
 	originAlloc uint16
 }
 
-// New creates a heap probe with the given configuration.
-func New(cfg Config) *Probe {
+// New creates a heap probe.
+func New() *Probe {
 	return &Probe{
-		cfg:         cfg,
 		attachments: make(map[libpf.PID]map[attachmentKey]link.Link),
 	}
 }
@@ -152,8 +147,7 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	}
 
 	// Register for per-process callbacks via ProbeAttacher.
-	pctx.AddAttacher(hp)
-	return nil
+	return pctx.AddAttacher(hp)
 }
 
 // Match implements processmanager.ProbeAttacher. The heap probe matches all

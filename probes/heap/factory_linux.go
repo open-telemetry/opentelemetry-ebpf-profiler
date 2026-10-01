@@ -25,5 +25,5 @@ func NewFactory() extension.Factory {
 }
 
 func createExtension(_ context.Context, _ extension.Settings, _ component.Config) (extension.Extension, error) {
-	return &heapExtension{p: New(Config{})}, nil
+	return &heapExtension{p: New()}, nil
 }
