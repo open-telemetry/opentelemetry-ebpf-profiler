@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent license-check \
+	test-junit test-luajit-offsets protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	processctx-execs host-integration-tests \
@@ -119,10 +119,10 @@ format-ebpf:
 	$(MAKE) format -C support/ebpf
 
 vanity-import-check:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
@@ -209,6 +209,9 @@ license-check:
 		--allowed_licenses=Apache-2.0,0BSD,BSD-2-Clause,BSD-2-Clause-FreeBSD,BSD-3-Clause,MIT,MIT-0,ISC,OpenSSL,PSF-2.0,Python-2.0,Python-2.0.1,PostgreSQL,UPL-1.0,X11,Zlib \
 		--ignore github.com/hashicorp/go-version \
 		./...
+
+license-save:
+	go tool $(GO_TOOLS) go-licenses save --force ./... --save_path=LICENSES
 
 codespell:
 	@codespell

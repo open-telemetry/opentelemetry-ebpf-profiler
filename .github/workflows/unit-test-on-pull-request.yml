@@ -25,6 +25,13 @@ jobs:
           cache-dependency-path: go.sum
       - name: Check licenses of dependencies
         run: make license-check
+      - name: Check LICENSES is up to date
+        run: |
+          make license-save
+          if [ -n "$(git status --porcelain LICENSES)" ]; then
+            echo 'LICENSES is out of date, run "make license-save".'
+            exit 1
+          fi
 
   lint:
     name: Lint (${{ matrix.target_arch }})
