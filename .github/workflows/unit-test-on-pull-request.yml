@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  legal:
+  license-check:
     name: Check licenses of dependencies
     runs-on: ubuntu-26.04
     steps:
@@ -23,11 +23,13 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
-      - name: Check for changes in licenses of dependencies
+      - name: Check licenses of dependencies
+        run: make license-check
+      - name: Check LICENSES is up to date
         run: |
-          make legal
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "run \"make legal\"."
+          make license-save
+          if [ -n "$(git status --porcelain LICENSES)" ]; then
+            echo 'LICENSES is out of date, run "make license-save".'
             exit 1
           fi
 

@@ -68,20 +68,20 @@ func compareSymbol(a, b symbol) int {
 
 // Module contains symbols and metadata for one kernel module.
 type Module struct {
-	start libpf.Address
-	end   libpf.Address
-	mtime int64
-	stub  bool
-
 	mapping libpf.FrameMapping
 
 	names   []byte
 	symbols []symbol
+
+	start libpf.Address
+	end   libpf.Address
+	mtime int64
+	stub  bool
 }
 
 type moduleTable struct {
-	generation Generation
 	modules    []Module
+	generation Generation
 }
 
 func (t *moduleTable) Modules() []Module {
@@ -132,11 +132,11 @@ const (
 
 // AddressResolution is the symbol source and generation covering an address.
 type AddressResolution struct {
-	Source     SymbolSource
-	Generation Generation
-	BPFName    string
-	BPFOffset  uint
 	Module     *Module
+	BPFName    string
+	Generation Generation
+	BPFOffset  uint
+	Source     SymbolSource
 }
 
 // Resolver is a live kernel/BPF symbol resolver. Its symbol tables can change

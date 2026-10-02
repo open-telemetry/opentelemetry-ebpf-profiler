@@ -29,6 +29,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -161,7 +162,7 @@ type Tracer struct {
 	mmapEventOnce   func() error
 	// mmapEventMu serializes lazy monitor startup with Close.
 	mmapEventMu sync.Mutex
-	mmapEventWG sync.WaitGroup
+	mmapReader  *perfutil.PerfSidebandReader
 
 	// hooks holds references to loaded eBPF hooks.
 	hooks xsync.RWMutex[hooksState]
@@ -410,9 +411,12 @@ func (t *Tracer) Close() {
 	if t.lifecycleCancel != nil {
 		t.lifecycleCancel()
 	}
-	// Ensure startup has registered every reader before waiting for them.
+	// Ensure startup has registered the reader before tearing it down. If it
+	// started, its goroutines observe the canceled lifecycle context above.
 	t.mmapEventMu.Lock()
-	t.mmapEventWG.Wait()
+	if t.mmapReader != nil {
+		t.mmapReader.Close()
+	}
 	t.mmapEventMu.Unlock()
 
 	events := t.perfEntrypoints.WLock()
@@ -707,7 +711,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case)
 	// TODO: Base this on present CPUs instead, as runtime.NumCPU is fixed for the lifetime
 	// of the process?
-	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_Trace)
+	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_TraceWithData)
 	adaption["trace_events"] = uint32(min(util.NextPowerOfTwo(ringbufSize), 1<<31))
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
@@ -1065,18 +1069,17 @@ var (
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
-	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
-
-	if len(raw) < frameListOffs {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs, errRecordTooSmall)
+	traceHeaderSize := int(support.Sizeof_TraceHeader)
+	if len(raw) < traceHeaderSize {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize, errRecordTooSmall)
 	}
 
-	ptr := traceFromRaw(raw)
+	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
 	frameDataLen := int(ptr.Frame_data_len) * 8
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < frameListOffs+frameDataLen {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs+frameDataLen,
+	if len(raw) < traceHeaderSize+frameDataLen {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+frameDataLen,
 			errRecordUnexpectedSize)
 	}
 
@@ -1128,7 +1131,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
 	// Kernel frames are raw addresses at the front of FrameData. The process
 	// manager splits and symbolizes them so all frame processing shares one cache.
-	copy(trace.FrameData, ptr.Frame_data[:frameDataWords])
+	frameData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), frameDataWords)
+	copy(trace.FrameData, frameData)
 
 	return trace, nil
 }

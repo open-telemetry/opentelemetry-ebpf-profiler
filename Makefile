@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent legal \
+	test-junit test-luajit-offsets protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
@@ -71,8 +71,7 @@ ebpf: generate
 generate-collector:
 	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
-		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
-		--output-path cmd/otelcol-ebpf-profiler
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml
 
 ebpf-profiler: ebpf
 	go build -tags $(GO_TAGS)
@@ -205,8 +204,19 @@ docker-image:
 agent:
 	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
-legal:
-	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
+# Allowed licenses follow the CNCF allowlist:
+# https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md
+# github.com/hashicorp/go-version (MPL-2.0) is ignored: it's an indirect
+# dependency pulled in by go.opentelemetry.io/collector/featuregate, not
+# something this project imports directly.
+license-check:
+	go tool $(GO_TOOLS) go-licenses check \
+		--allowed_licenses=Apache-2.0,0BSD,BSD-2-Clause,BSD-2-Clause-FreeBSD,BSD-3-Clause,MIT,MIT-0,ISC,OpenSSL,PSF-2.0,Python-2.0,Python-2.0.1,PostgreSQL,UPL-1.0,X11,Zlib \
+		--ignore github.com/hashicorp/go-version \
+		./...
+
+license-save:
+	go tool $(GO_TOOLS) go-licenses save --force ./... --save_path=LICENSES
 
 codespell:
 	@codespell
