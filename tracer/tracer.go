@@ -186,6 +186,12 @@ type Tracer struct {
 	// read new PIDs at startup or notified via eBPF.
 	pidEvents chan libpf.PIDTID
 
+	// mmapEvents notifies the tracer of executable file-backed mappings observed
+	// via perf mmap2 records. They are processed by the same goroutine as
+	// pidEvents so per-PID ProcessManager state is mutated serially, while
+	// keeping mmap-driven work off the pidEvents channel used by eBPF report_pid.
+	mmapEvents chan mmapEvent
+
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
 
@@ -384,6 +390,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
+		mmapEvents:             make(chan mmapEvent, mmapEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]link.Link)}),
