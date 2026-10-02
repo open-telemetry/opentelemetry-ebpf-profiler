@@ -504,7 +504,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	needTPBase := !interpretersConfig.Perl.IsDisabled() ||
 		!interpretersConfig.Python.IsDisabled() ||
 		!interpretersConfig.Ruby.IsDisabled() ||
-		!interpretersConfig.Go.IsLabelsDisabled()
+		!interpretersConfig.Go.IsLabelsDisabled() ||
+		!interpretersConfig.ThreadContext.IsDisabled()
 	err := parseBTF(vars, needTPBase, needProcessStartTime, pidNamespaceMode)
 	if err != nil {
 		if pidNamespaceMode == PIDNamespaceTranslationModeRecursive {

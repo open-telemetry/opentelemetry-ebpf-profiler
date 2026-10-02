@@ -7,8 +7,12 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // customLabelValidator validates custom label keys and values extracted from
@@ -75,4 +79,84 @@ func (v *customLabelValidator) getAndResetMetrics() []metrics.Metric {
 			Value: metrics.MetricValue(v.droppedInvalidValue.Swap(0)),
 		},
 	}
+}
+
+type threadContextLabelMetrics struct {
+	// Samples dropped whole, for want of a schema to name their key indices.
+	droppedSamplesNoSchema atomic.Int64
+	// Individual entries dropped from an otherwise decodable sample.
+	droppedEntriesUndecodable atomic.Int64
+}
+
+func (m *threadContextLabelMetrics) getAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextDroppedSamplesNoSchema,
+			Value: metrics.MetricValue(m.droppedSamplesNoSchema.Swap(0)),
+		},
+		{
+			ID:    metrics.IDThreadContextDroppedEntriesUndecodable,
+			Value: metrics.MetricValue(m.droppedEntriesUndecodable.Swap(0)),
+		},
+	}
+}
+
+// goCustomLabels decodes the Go runtime/pprof variant of the Trace custom
+// labels union. Returns nil rather than an empty map when there are no labels.
+func (t *Tracer) goCustomLabels(src *support.CustomLabelsArray) map[libpf.String]libpf.String {
+	// get_go_custom_labels sets the tag even for an empty label slice.
+	n := int(src.Len)
+	if n == 0 {
+		return nil
+	}
+	labels := make(map[libpf.String]libpf.String, n)
+	for _, lbl := range src.Labels[:n] {
+		keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
+		if !ok {
+			log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+			continue
+		}
+		key := libpf.Intern(pfunsafe.ToString(keyBytes))
+		valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
+		if !ok {
+			log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+			continue
+		}
+		labels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
+	}
+	return labels
+}
+
+// threadContextCustomLabels decodes the opaque variant of the Trace custom
+// labels union against the schema pid published.
+func (t *Tracer) threadContextCustomLabels(payload *support.CustomLabelsData,
+	pid libpf.PID) map[libpf.String]libpf.String {
+	size := int(payload.Size)
+	if size > len(payload.Data) {
+		// Not a publisher fault: the eBPF producer must clamp this, so exceeding
+		// it means the eBPF and user-space layouts disagree and nothing in the
+		// payload can be trusted.
+		log.Warnf("Thread context payload size %d exceeds the %d byte buffer "+
+			"(PID %d): eBPF and user-space layouts disagree, dropping labels",
+			size, len(payload.Data), pid)
+		return nil
+	}
+	if size == 0 {
+		// The common case: a process publishing only trace/span IDs sends no
+		// attributes, so skip the decoder lookup and its lock.
+		return nil
+	}
+	// Key indices mean nothing without the published schema. A PID with none
+	// can be permanent (no publisher, or an unsupported schema version) rather
+	// than a startup race, so count instead of logging.
+	dec := t.processManager.LabelDecoderForPID(pid)
+	if dec == nil {
+		t.threadContextLabels.droppedSamplesNoSchema.Add(1)
+		return nil
+	}
+	labels, dropped := dec.DecodeLabels(payload.Data[:size])
+	if dropped > 0 {
+		t.threadContextLabels.droppedEntriesUndecodable.Add(int64(dropped))
+	}
+	return labels
 }

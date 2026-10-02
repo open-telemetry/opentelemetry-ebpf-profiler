@@ -43,6 +43,15 @@ var expectedResourceAttrs = map[string]string{
 	"resource.key2":               "resource.value2",
 }
 
+// expectedThreadLabels is what update_thread_context() in
+// testdata/processctx_lib.c encodes, resolved through the attribute_key_map
+// published with the process context.
+var expectedThreadLabels = map[string]string{
+	"http_route":  "some_endpoint",
+	"http_method": "GET",
+	"user_id":     "some_user_id",
+}
+
 type mockIntervals struct{}
 
 func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Second }
@@ -50,17 +59,25 @@ func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.M
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
 
-// captureReporter exposes the TraceEventMeta that HandleTrace resolved.
+// capturedEvent pairs the TraceEventMeta HandleTrace resolved with the trace's
+// custom labels, which the tracer decoded from thread-local storage.
+type capturedEvent struct {
+	meta   *samples.TraceEventMeta
+	labels map[libpf.String]libpf.String
+}
+
+// captureReporter exposes the reported trace events.
 type captureReporter struct {
-	metaCh chan *samples.TraceEventMeta
+	eventCh chan capturedEvent
 }
 
 func newCaptureReporter() *captureReporter {
-	return &captureReporter{metaCh: make(chan *samples.TraceEventMeta, 64)}
+	return &captureReporter{eventCh: make(chan capturedEvent, 64)}
 }
 
-func (r *captureReporter) ReportTraceEvent(_ *libpf.Trace, meta *samples.TraceEventMeta) error {
-	r.metaCh <- meta
+func (r *captureReporter) ReportTraceEvent(trace *libpf.Trace,
+	meta *samples.TraceEventMeta) error {
+	r.eventCh <- capturedEvent{meta: meta, labels: trace.CustomLabels}
 	return nil
 }
 
@@ -93,11 +110,16 @@ func Test_ProcessContext(t *testing.T) {
 			exeName: "processctx_exe_glibc",
 			env:     []string{"OTEL_PROCESS_CTX_PUBLISH_DELAY_MS=200"},
 		},
-		// "musl_exe":     {exeName: "processctx_exe_musl"},
-		// "glibc_lib":    {exeName: "processctx_lib_glibc"},
-		// "musl_lib":     {exeName: "processctx_lib_musl"},
-		// "glibc_dlopen": {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
-		// "musl_dlopen":  {exeName: "processctx_dlopen_musl", args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
+		// dlopen'd libraries: the module loads after startup, so the variable
+		// is in dynamic TLS and eBPF reaches it through the DTV. Both libcs,
+		// whose DTV entry sizes differ and only one of which allocates a
+		// module's block lazily. With the static arm above that is both arms of
+		// the eBPF read. Which access model reaches which arm is pinned in
+		// tls/tls_integration_test.go.
+		"glibc_dlopen": {exeName: "processctx_dlopen_glibc",
+			args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
+		"musl_dlopen": {exeName: "processctx_dlopen_musl",
+			args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
 	}
 
 	for name, tc := range tests {
@@ -173,27 +195,34 @@ func Test_ProcessContext(t *testing.T) {
 			timeout := time.NewTimer(10 * time.Second)
 			defer timeout.Stop()
 
-			ok := false
+			// Tracked separately: a sample can land before the context is
+			// published, or while update_thread_context() has the thread
+			// context marked invalid, so neither implies the other.
+			gotResource, gotLabels := false, false
 		Loop:
-			for {
+			for !gotResource || !gotLabels {
 				select {
 				case <-timeout.C:
 					break Loop
-				case meta := <-rep.metaCh:
-					if meta.PID != libpf.PID(cmd.Process.Pid) {
+				case ev := <-rep.eventCh:
+					if ev.meta.PID != libpf.PID(cmd.Process.Pid) {
 						continue
 					}
-					if !attributesMatch(meta.ResourceAttrs, expectedResourceAttrs) {
-						continue
+					if !gotResource && attributesMatch(ev.meta.ResourceAttrs,
+						expectedResourceAttrs) {
+						t.Logf("Got expected resource for PID %d", ev.meta.PID)
+						gotResource = true
 					}
-					t.Logf("Got expected resource for PID %d", meta.PID)
-					ok = true
-					break Loop
+					if !gotLabels && labelsMatch(ev.labels, expectedThreadLabels) {
+						t.Logf("Got expected thread labels for PID %d", ev.meta.PID)
+						gotLabels = true
+					}
 				}
 			}
 			cancel()
 			wg.Wait()
-			require.True(t, ok, "process context not received")
+			require.True(t, gotResource, "process context not received")
+			require.True(t, gotLabels, "thread context labels not received")
 			t.Log("Exiting test case")
 		})
 	}
@@ -205,6 +234,21 @@ func attributesMatch(attrs attribute.Set, want map[string]string) bool {
 	for k, v := range want {
 		got, ok := attrs.Value(attribute.Key(k))
 		if !ok || got.Type() != attribute.STRING || got.AsString() != v {
+			return false
+		}
+	}
+	return true
+}
+
+// labelsMatch reports whether labels holds exactly want, so a wrong key index
+// or a truncated value fails rather than going unnoticed.
+func labelsMatch(labels map[libpf.String]libpf.String, want map[string]string) bool {
+	if len(labels) != len(want) {
+		return false
+	}
+	for k, v := range want {
+		got, ok := labels[libpf.Intern(k)]
+		if !ok || got.String() != v {
 			return false
 		}
 	}
