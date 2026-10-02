@@ -196,6 +196,8 @@ type Prog struct {
 type Section struct {
 	elf.SectionHeader
 
+	nameString libpf.String
+
 	// elfReader is the same ReadAt as used for the File
 	elfReader io.ReaderAt
 }
@@ -477,6 +479,7 @@ func (f *File) LoadSections() error {
 		return err
 	}
 
+	nameIndexToSection := make(map[uint32]*Section, hdr.Shnum)
 	f.Sections = make([]Section, hdr.Shnum)
 	for i, sh := range sections {
 		s := &f.Sections[i]
@@ -492,25 +495,22 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
+		nameIndexToSection[sh.Name] = s
 		s.elfReader = f.getReader()
 	}
 
 	// Load the section name string table
 	strsh := f.Sections[hdr.Shstrndx]
-	strtab, err := strsh.Data(maxBytesLargeSection)
-	if err != nil {
-		return err
-	}
-	for i := range f.Sections {
-		sh := &f.Sections[i]
-		var ok bool
-		sh.Name, ok = getString(strtab, int(sections[i].Name))
-		if !ok {
-			return fmt.Errorf("bad section name index (section %d, index %d/%d)",
-				i, sections[i].Name, len(strtab))
-		}
-	}
+	rdr := pfbufio.NewReader(f.elfReader, int64(strsh.Offset), int64(strsh.Size))
+	defer pfbufio.PutReader(rdr)
 
+	rdr.WalkAllStrings(func(offs int64, str string) error {
+		if section, ok := nameIndexToSection[uint32(offs)]; ok {
+			section.nameString = libpf.Intern(str)
+			section.Name = section.nameString.String()
+		}
+		return nil
+	})
 	return nil
 }
 
