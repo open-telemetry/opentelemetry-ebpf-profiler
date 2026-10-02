@@ -20,7 +20,7 @@
 // Map from PHP process IDs to the address of the `executor_globals` for that process
 struct php_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, PHPProcInfo);
   __uint(max_entries, 1024);
 } php_procs SEC(".maps");
@@ -140,10 +140,10 @@ static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo
 
   int unwinder  = PROG_UNWIND_PHP;
   u32 type_info = 0;
-  for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
+  for (u64 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
     int metric = process_php_frame(record, phpinfo, is_jitted, execute_data, &type_info);
     if (metric >= 0) {
-      increment_metric(metric);
+      increment_metric((u32)metric);
     }
     if (metric != metricID_UnwindPHPFrames) {
       goto err;

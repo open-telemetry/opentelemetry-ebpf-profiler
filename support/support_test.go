@@ -28,7 +28,7 @@ func TestSizeOfCGoStruct(t *testing.T) {
 		// member alone. generate.sh diffs generated against generated, so a
 		// member outgrowing CustomLabelsArray would shift fields only in C.
 		{name: "Trace", input: unsafe.Sizeof(Trace{}),
-			want: Sizeof_Trace},
+			want: Sizeof_TraceHeader},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

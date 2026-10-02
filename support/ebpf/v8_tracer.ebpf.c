@@ -23,7 +23,7 @@
 // we require in order to build the stack trace
 struct v8_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, V8ProcInfo);
   __uint(max_entries, 1024);
 } v8_procs SEC(".maps");
@@ -251,7 +251,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
         return ERR_V8_BAD_FP;
       }
 
-      int i;
+      s64 i;
       for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
         if (stk[i] >= code_start && stk[i] < code_end) {
           break;
@@ -346,7 +346,7 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   unwinder_analyze_frame_pointer(&record->state);
 
-  for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
+  for (u64 i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
     error = unwind_one_v8_frame(record, vi, i == 0);

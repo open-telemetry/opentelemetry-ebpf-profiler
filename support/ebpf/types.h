@@ -419,7 +419,8 @@ typedef enum TracePrograms {
 typedef struct TSDInfo {
   // Offset is the pointer difference from "tpbase" pointer to the C-library
   // specific struct pthread's member containing the thread specific data:
-  // .tsd (musl) or .specific (glibc).
+  // .tsd (musl), .specific (glibc metadata), or the first block's data
+  // field (glibc disassembly).
   // Note: on x86_64 it's positive value, and arm64 it is negative value as
   // "tpbase" register has different purpose and pointer value per platform ABI.
   s16 offset;
@@ -427,8 +428,14 @@ typedef struct TSDInfo {
   // Typically 8 bytes on 64bit musl and 16 bytes on 64bit glibc
   u8 multiplier;
   // Indirect is a flag indicating if the "tpbase + Offset" points to a member
-  // which is a pointer the array (musl) and not the array itself (glibc).
+  // which is a pointer to a flat array (musl) rather than inline data.
   u8 indirect;
+  // Exclusive upper bound for keys. Must be initialized.
+  u16 keyLimit;
+  // Entries per block for two-level glibc lookup. Zero selects a flat array.
+  u8 blockEntries;
+  // Offset of the first entry's data field from the block pointer.
+  u8 dataOffset;
 } TSDInfo;
 
 // DTVInfo contains data needed to read Thread Local Storage (TLS) values, which
@@ -681,6 +688,13 @@ enum CustomLabelsType {
   CUSTOM_LABELS_TYPE_THREAD_CONTEXT,
 };
 
+// The frame data of a stack trace. Each frame is variable length,
+// and is about 2 or 3 entries long. This array defines the ebpf buffer
+// to record the frames, and thus limits the number of frames we can
+// unwind. The 3kB entries here is chosen to allow about 1024 frames
+// in a trace to be sent.
+typedef u64 TraceFrameData[3072];
+
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
@@ -724,16 +738,13 @@ typedef struct Trace {
   // The CPU that captured this trace.
   u32 cpu_id;
 
-  // The frame data of the stack trace. Each frame is variable length.
-  // Frame is currently 2-3 entries long. This array size limits the
-  // number of frames we can unwind, but also increases the memory
-  // needed for buffering everything. The 3kB entries here is chosen
-  // to allow about 1024 frames in a trace to be sent.
-  u64 frame_data[3072];
-
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the
-  // 'frame_data_len' elements of 'frame_data' are sent.
+  // 'frame_data_len' elements of 'frame_data' are sent. And the UM code accesses
+  // the above header using this struct, and copies the frame data separately.
+#ifndef EBPF_TRACE_HEADER_ONLY
+  TraceFrameData frame_data;
+#endif
 } Trace;
 
 // cgo -godefs mirrors only the first union member, so every field after the
@@ -1044,7 +1055,7 @@ typedef struct StackDelta {
 
 // unwindInfo flag indicating that the value is UNWIND_COMMAND_* value and not an index to
 // the unwind info array.
-#define STACK_DELTA_COMMAND_FLAG 0x8000
+#define STACK_DELTA_COMMAND_FLAG 0x8000UL
 
 // Commands carrying this bit are implemented by the native unwinder only. The combined
 // interpreter+native programs report such a frame to their caller instead of unwinding it
@@ -1052,7 +1063,7 @@ typedef struct StackDelta {
 // of the command means a new native-only command cannot forget to opt in.
 // Only meaningful when STACK_DELTA_COMMAND_FLAG is set, so it does not reduce the index
 // space of the unwind info array.
-#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000
+#define STACK_DELTA_NATIVE_COMMAND_BIT 0x4000UL
 
 // Unsupported or no value for the register
 #define UNWIND_COMMAND_INVALID       0
@@ -1087,11 +1098,11 @@ typedef struct StackDeltaPageInfo {
 
 // Keep stack deltas in 64kB pages to limit search space and to fit the low address
 // bits into the addrLow field of struct StackDelta.
-#define STACK_DELTA_PAGE_BITS 16
+#define STACK_DELTA_PAGE_BITS 16UL
 
 // The binary mask for STACK_DELTA_PAGE_BITS, which can be used to and/nand an address
 // for its page number and offset within that page.
-#define STACK_DELTA_PAGE_MASK ((1 << STACK_DELTA_PAGE_BITS) - 1)
+#define STACK_DELTA_PAGE_MASK ((1UL << STACK_DELTA_PAGE_BITS) - 1)
 
 // In order to determine whether a given PC falls into the main interpreter loop
 // of an interpreter, we need to store some data: The lower boundary of the loop,

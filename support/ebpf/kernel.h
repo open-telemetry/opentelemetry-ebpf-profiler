@@ -62,8 +62,6 @@ typedef _Bool bool;
   #define NULL ((void *)0)
 #endif
 
-typedef int pid_t;
-
 typedef u32 __be32;
 typedef u64 __be64;
 
@@ -76,7 +74,7 @@ struct vm_area_struct;
 #define VM_EXEC 0x00000004UL
 
 // Defined in arch/{x86,arm64}/include/asm/ptrace.h
-#if defined(__x86_64)
+#if defined(__x86_64__)
 struct pt_regs {
   unsigned long r15;
   unsigned long r14;

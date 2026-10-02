@@ -161,9 +161,9 @@ static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_pr
 __attribute__((format(printf, 1, 3))) static int (*bpf_trace_printk)(
   const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;
 
-static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) = (void *)
+static long (*bpf_probe_read_user)(void *dst, u32 size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_user;
-static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) = (void *)
+static long (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_kernel;
 static long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;
 
