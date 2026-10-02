@@ -673,6 +673,13 @@ typedef struct CustomLabelsArray {
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
 
+// The frame data of a stack trace. Each frame is variable length,
+// and is about 2 or 3 entries long. This array defines the ebpf buffer
+// to record the frames, and thus limits the number of frames we can
+// unwind. The 3kB entries here is chosen to allow about 1024 frames
+// in a trace to be sent.
+typedef u64 TraceFrameData[3072];
+
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
@@ -710,16 +717,13 @@ typedef struct Trace {
   // The CPU that captured this trace.
   u32 cpu_id;
 
-  // The frame data of the stack trace. Each frame is variable length.
-  // Frame is currently 2-3 entries long. This array size limits the
-  // number of frames we can unwind, but also increases the memory
-  // needed for buffering everything. The 3kB entries here is chosen
-  // to allow about 1024 frames in a trace to be sent.
-  u64 frame_data[3072];
-
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the
-  // 'frame_data_len' elements of 'frame_data' are sent.
+  // 'frame_data_len' elements of 'frame_data' are sent. And the UM code accesses
+  // the above header using this struct, and copies the frame data separately.
+#ifndef EBPF_TRACE_HEADER_ONLY
+  TraceFrameData frame_data;
+#endif
 } Trace;
 
 // Container for unwinding state

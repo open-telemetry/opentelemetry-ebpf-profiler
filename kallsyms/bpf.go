@@ -12,16 +12,16 @@ import (
 )
 
 type bpfSymbol struct {
+	name    string
 	address libpf.Address
 	size    uint32
-	name    string
 }
 
 // bpfSymbolTable is a sorted (by address) snapshot of all known BPF program
 // symbols. It is stored atomically so readers never block writers.
 type bpfSymbolTable struct {
-	generation Generation
 	symbols    []bpfSymbol
+	generation Generation
 }
 
 // lookup returns the symbol containing addr, or ("", false) if none does.
