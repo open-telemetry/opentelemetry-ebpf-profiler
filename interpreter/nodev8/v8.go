@@ -2134,11 +2134,6 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		val := vms.DeoptimizationDataIndex.InlinedFunctionCount + 1
 		vms.DeoptimizationDataIndex.LiteralArray = val
 	}
-	if vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo != 0 {
-		// these mean the same thing, it just got renamed at some point:
-		// see https://chromium-review.googlesource.com/c/v8/v8/+/5939362.
-		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper = vms.DeoptimizationDataIndex.WrappedSharedFunctionInfo
-	}
 	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
 		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
 		vms.DeoptimizationDataIndex.SharedFunctionInfo = 6
