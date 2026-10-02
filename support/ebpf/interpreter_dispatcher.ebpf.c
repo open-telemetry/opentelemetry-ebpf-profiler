@@ -286,8 +286,10 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
 
   // If the stack is otherwise empty, push an error for that: we should
-  // never encounter empty stacks for successful unwinding.
-  if (trace->frame_data_len == 0) {
+  // never encounter empty stacks for successful unwinding. Any leading
+  // context values (num_context_values) are not frames, so the stack is
+  // empty when frame_data_len has not advanced past them.
+  if (trace->frame_data_len == trace->num_context_values) {
     DEBUG_PRINT("unwind_stop called but the stack is empty");
     increment_metric(metricID_ErrEmptyStack);
     if (!state->unwind_error) {
@@ -326,7 +328,9 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // through different data structures, we'd have to keep a list of known empty traces to
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
-  if (trace->frame_data_len == 1 && state->unwind_error) {
+  // A single error frame sits right after any context-value prefix, so the
+  // trace is "only an error frame" when frame_data_len is num_context_values + 1.
+  if (trace->frame_data_len == trace->num_context_values + 1 && state->unwind_error) {
     if (filter_error_frames) {
       return 0;
     }

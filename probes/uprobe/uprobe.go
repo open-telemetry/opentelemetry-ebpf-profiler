@@ -28,6 +28,7 @@ import (
 	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -83,8 +84,7 @@ func New(cfg Config) (tracer.Probe, error) {
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleType: "events",
-		SampleUnit: "count",
+		SampleTypes: []samples.ValueType{{Type: "events", Unit: "count"}},
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)
@@ -145,7 +145,9 @@ func (p *probe) Match(_ process.Process, mapping *process.RawMapping) bool {
 
 // Attach implements processmanager.ProbeAttacher. Opens a PID-restricted uprobe
 // for the given process and stores the link for later cleanup.
-func (p *probe) Attach(pr process.Process, mapping *process.RawMapping) error {
+func (p *probe) Attach(pr process.Process, mapping *process.RawMapping,
+	_ libpf.FileID, _ *pfelf.Reference,
+) error {
 	pid := pr.PID()
 	mappingFile, err := pr.OpenMappingFile(mapping)
 	if err != nil {

@@ -149,8 +149,10 @@ func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 			uint16(trace.num_kernel_frames)))
 	}
 	sz := trace.frame_data_len
+	numContextValues := trace.num_context_values
 	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.frame_data[:sz]))
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
+	ctx.trace.ContextValues = ctx.trace.FrameDataBuf[:numContextValues]
+	ctx.trace.FrameData = ctx.trace.FrameDataBuf[numContextValues:sz]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
 	ctx.trace.NumKernelFrames = 0
 }
