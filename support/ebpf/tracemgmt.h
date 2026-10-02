@@ -703,9 +703,8 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses at the beginning of frame_data. Must be called before any
-// userspace frames are pushed. The num_kernel_frames field tells userspace how
-// many leading frame_data entries are kernel addresses.
+// the raw addresses in the variable data. Must be called before any
+// userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
   const u32 max_bytes = PERF_MAX_STACK_DEPTH * sizeof(u64);
@@ -730,10 +729,7 @@ static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
   u64 send_size = __builtin_offsetof(struct Trace, variable_data) +
                   trace->variable_data_end * sizeof(trace->variable_data[0]);
 
-  // Explicitly clamp the send size for the verifier. In production the value
-  // is always within bounds, but when send_trace is inlined into the same
-  // program as push_frame (e.g. the integration test), the verifier cannot
-  // track frame_data_len through memory stores and reloads.
+  // Explicitly clamp the send size to satisfy verifier.
   send_size = MIN(send_size, sizeof(Trace));
 
   trace->cpu_id = bpf_get_smp_processor_id();

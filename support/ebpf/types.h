@@ -724,6 +724,11 @@ typedef struct Trace {
 #endif
 } Trace;
 
+// Trace can be defined with or without TraceData, and the offsetof variable_data
+// is expected to match sizeof the header portion. This holds true as long as the
+// alignment of the struct and the field matches. See tracer/tracer.go.
+_Static_assert(_Alignof(Trace) == _Alignof(TraceData), "Trace alignment mismatch");
+
 // Container for unwinding state
 typedef struct UnwindState {
   // CPU register state
@@ -924,7 +929,7 @@ typedef struct PerCPURecord {
   PHPUnwindState phpUnwindState;
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
-  // State for Go and Native custom labels
+  // State for Go labels
   GolangLabelsState golangLabelsState;
   // Per-process Go runtime offsets, preloaded once per trace from go_procs in
   // collect_trace. m_offset is always non-zero for a Go process.
