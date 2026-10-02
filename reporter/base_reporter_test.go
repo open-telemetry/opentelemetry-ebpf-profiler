@@ -21,19 +21,32 @@ import (
 
 var (
 	profileTypeSampling = &samples.TypeMetadata{
-		PeriodType: "cpu",
-		PeriodUnit: "nanoseconds",
-		SampleType: "samples",
-		SampleUnit: "count",
+		PeriodType:  "cpu",
+		PeriodUnit:  "nanoseconds",
+		SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
+		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
 	}
 	profileTypeProbe = &samples.TypeMetadata{
-		SampleType: "events",
-		SampleUnit: "count",
+		SampleTypes: []samples.ValueType{{Type: "events", Unit: "count"}},
+	}
+	profileTypeDerived = &samples.TypeMetadata{
+		SampleTypes: []samples.ValueType{
+			{Type: "alloc_space", Unit: "bytes"},
+			{Type: "alloc_objects", Unit: "count"},
+		},
+		ReportValues: true,
+		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			value := int64(meta.ContextValues[0])
+			size := int64(meta.ContextValues[2])
+			objects := int64(1)
+			if size > 0 {
+				objects = max(value/size, 1)
+			}
+			return append(dst, value, objects)
+		},
 	}
 )
 
@@ -116,6 +129,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            1001,
 		CPU:            0,
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -128,7 +142,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            2001,
 		CPU:            1,
 		ProfileType:    profileTypeOffCPU,
-		Value:          5000000, // 5ms
+		ContextValues:  []uint64{5000000}, // 5ms
 	}
 
 	err := reporter.ReportTraceEvent(trace1, meta1)
@@ -178,6 +192,62 @@ func TestBaseReporterGenerate(t *testing.T) {
 		"Should have at least one profile")
 }
 
+// TestReportTraceEventDerivesValuesEagerly verifies that the reporter transforms
+// each event's context values into a fixed-width group when the event is recorded.
+func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	trace := singleNativeFrameTrace()
+
+	// Same stack + meta so all three events aggregate into one TraceEvents.
+	meta := func(ts, value int64, size uint64) *samples.TraceEventMeta {
+		return &samples.TraceEventMeta{
+			Timestamp:      libpf.UnixTime64(time.Unix(ts, 0).UnixNano()),
+			Comm:           libpf.NewCommFromString("app"),
+			ExecutablePath: libpf.Intern("/usr/bin/app"),
+			PID:            1234,
+			TID:            1235,
+			ProfileType:    profileTypeDerived,
+			ContextValues:  []uint64{uint64(value), 0, size},
+		}
+	}
+
+	// Derive is value/size (min 1); a zero size falls back to 1.
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1010, 1000, 100)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1020, 64, 64)))
+	require.NoError(t, reporter.ReportTraceEvent(trace, meta(1030, 500, 0)))
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	require.Len(t, *treePtr, 1)
+	for _, rtp := range *treePtr {
+		events := rtp.Events[profileTypeDerived]
+		require.Len(t, events, 1)
+		for _, traceEvents := range events {
+			assert.Equal(t, []int64{1000, 10, 64, 1, 500, 1}, traceEvents.Values)
+		}
+	}
+}
+
+func TestReportTraceEventRejectsWrongValueCount(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	profileType := &samples.TypeMetadata{
+		SampleTypes: []samples.ValueType{
+			{Type: "space", Unit: "bytes"},
+			{Type: "objects", Unit: "count"},
+		},
+		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			return append(dst, int64(meta.ContextValues[0]))
+		},
+	}
+	meta := &samples.TraceEventMeta{
+		ProfileType:   profileType,
+		ContextValues: []uint64{42},
+	}
+
+	err := reporter.ReportTraceEvent(singleNativeFrameTrace(), meta)
+	require.ErrorContains(t, err, "appended 1 values, expected 2")
+}
+
 func serviceAttrs(name string) attribute.Set {
 	return attribute.NewSet(semconv.ServiceName(name))
 }
@@ -203,6 +273,7 @@ func baseMetaWithResourceAttrs(resourceAttrs attribute.Set) *samples.TraceEventM
 		PID:            1234,
 		TID:            1235,
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 		ResourceAttrs:  resourceAttrs,
 	}
 }
@@ -308,6 +379,7 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		CPU:            0,
 		ExtraMeta:      map[libpf.String]string{libpf.Intern("process.name"): "myapp"},
 		ProfileType:    profileTypeSampling,
+		ContextValues:  []uint64{0},
 	}
 
 	err := reporter.ReportTraceEvent(trace, meta)
@@ -344,4 +416,53 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected process.name=myapp in the attribute table")
+}
+
+// TestMergeSnapshotsIntoTree verifies that probe snapshot samples land in the
+// event tree keyed by their process and use the same value transform as events.
+func TestMergeSnapshotsIntoTree(t *testing.T) {
+	profileType := &samples.TypeMetadata{
+		SampleTypes: []samples.ValueType{
+			{Type: "inuse_space", Unit: "bytes"},
+			{Type: "inuse_objects", Unit: "count"},
+		},
+		ReportValues:      true,
+		OmitThreadContext: true,
+		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			return append(dst, int64(meta.ContextValues[0]), int64(meta.ContextValues[1]))
+		},
+	}
+
+	reporter := createTestBaseReporter(t, &Config{
+		Name:             "test-agent",
+		Version:          "v1.0.0",
+		SamplesPerSecond: 100,
+		SnapshotSources: func() []samples.SnapshotProfile {
+			return []samples.SnapshotProfile{{
+				ProfileType: profileType,
+				Samples: []samples.SnapshotSample{{
+					PID:           42,
+					TraceHash:     libpf.NewTraceHash(1, 2),
+					ContextValues: []uint64{4096, 7},
+				}},
+			}}
+		},
+		ProcessMetaForPID: func(libpf.PID) samples.ProcessMeta {
+			return samples.ProcessMeta{ExecutablePath: libpf.Intern("/bin/app")}
+		},
+	})
+
+	ts := time.Unix(1700, 0)
+	tree := make(samples.TraceEventsTree)
+	reporter.mergeSnapshots(tree, ts)
+
+	rtp, ok := tree[samples.ResourceKey{PID: 42, ExecutablePath: libpf.Intern("/bin/app")}]
+	require.True(t, ok, "no resource entry for the snapshot's PID")
+	events := rtp.Events[profileType]
+	require.Len(t, events, 1)
+
+	ev, ok := events[samples.SampleKey{Hash: libpf.NewTraceHash(1, 2)}]
+	require.True(t, ok, "snapshot sample is not keyed by its trace hash")
+	assert.Equal(t, []int64{4096, 7}, ev.Values)
+	assert.Equal(t, []uint64{uint64(ts.UnixNano())}, ev.Timestamps)
 }

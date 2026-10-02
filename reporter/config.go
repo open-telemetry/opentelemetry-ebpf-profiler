@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -48,4 +49,12 @@ type Config struct {
 	// GRPCDialOptions allows passing additional gRPC dial options when establishing
 	// the connection to the collector. These options are appended after the default options.
 	GRPCDialOptions []grpc.DialOption
+
+	// SnapshotSources returns additional profiles produced by probes at each
+	// collection interval.
+	SnapshotSources func() []samples.SnapshotProfile
+
+	// ProcessMetaForPID resolves PID to process metadata for profile resource
+	// attributes.
+	ProcessMetaForPID func(libpf.PID) samples.ProcessMeta
 }

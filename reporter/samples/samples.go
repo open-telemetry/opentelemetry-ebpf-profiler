@@ -23,10 +23,13 @@ type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
 	ProfileType    *TypeMetadata
-	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	// ContextValues aliases the origin-specific value prefix in the pooled
+	// libpf.EbpfTrace. It is valid only while the trace event is being handled
+	// and must not be retained by the reporter.
+	ContextValues []uint64
+	PID, TID      libpf.PID
+	SpanID        libpf.APMSpanID
+	TraceID       libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -34,7 +37,9 @@ type TraceEvents struct {
 	Labels     map[libpf.String]libpf.String
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
-	Values     []int64
+	// Values stores one contiguous group per event, with one value for each
+	// TypeMetadata.SampleTypes entry. Groups are index-aligned with Timestamps.
+	Values []int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -98,8 +103,40 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
-// TypeMetadata describes how profiling events of a particular kind
-// should be interpreted and exported as an OTel profile.
+// ValueType describes what a profile's sample values measure and the unit
+// those values use.
+type ValueType struct {
+	Type string
+	Unit string
+}
+
+// SnapshotProfile is a set of snapshot samples produced by a probe's
+// SnapshotSource implementation at each collection interval. The reporter folds
+// them into the TraceEventsTree so they share the event-driven export path.
+type SnapshotProfile struct {
+	// ProfileType describes how the samples are exported. Snapshot profiles
+	// normally set OmitThreadContext, having no per-thread attribution.
+	ProfileType *TypeMetadata
+	Samples     []SnapshotSample
+}
+
+// SnapshotSample is a single sample row produced by a SnapshotSource probe.
+type SnapshotSample struct {
+	PID           libpf.PID
+	TraceHash     libpf.TraceHash
+	Frames        libpf.Frames
+	ContextValues []uint64
+}
+
+// ProcessMeta holds per-process metadata needed when building OTLP resource
+// attributes for profile export.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
+}
+
+// TypeMetadata describes how profiling events of a particular kind should be
+// interpreted and exported as OTel profiles.
 type TypeMetadata struct {
 	// PeriodType describes what is measured per period (e.g. "cpu").
 	// Empty means this profile type has no period (e.g. event-driven kinds).
@@ -108,13 +145,31 @@ type TypeMetadata struct {
 	// PeriodUnit is the unit for PeriodType (e.g. "nanoseconds").
 	PeriodUnit string
 
-	// SampleType describes what a single sample represents (e.g. "samples").
-	SampleType string
+	// SampleTypes has one entry per profile emitted from this event type.
+	SampleTypes []ValueType
 
-	// SampleUnit is the unit for SampleType (e.g. "count").
-	SampleUnit string
-
-	// ReportValues indicates whether a sample's value should be included
-	// in the exported sample (e.g. off-CPU durations).
+	// ReportValues indicates whether sample values should be included in the
+	// exported profiles (e.g. off-CPU durations).
 	ReportValues bool
+
+	// DeriveValues appends one reportable value per SampleTypes entry for a
+	// single event. Nil appends int64(meta.ContextValues[0]). The function must
+	// consume ContextValues synchronously because they may alias a pooled trace.
+	DeriveValues func(dst []int64, meta *TraceEventMeta) []int64
+
+	// OmitThreadContext suppresses the per-sample thread and CPU attributes.
+	// Interval snapshots aggregate across threads and have no meaningful TID
+	// or CPU, so emitting zeros for them would misattribute the samples.
+	OmitThreadContext bool
+}
+
+// AppendValues appends the reportable values for one event.
+func (m *TypeMetadata) AppendValues(dst []int64, meta *TraceEventMeta) []int64 {
+	if m.DeriveValues != nil {
+		return m.DeriveValues(dst, meta)
+	}
+	if len(meta.ContextValues) == 0 {
+		return dst
+	}
+	return append(dst, int64(meta.ContextValues[0]))
 }

@@ -218,6 +218,14 @@ type Tracer struct {
 	// that origin. Only traces with a matching origin are dispatched.
 	postTraceHandlers map[uint16][]PostTraceHandler
 
+	// snapshotSources are probes that implement SnapshotSource and produce
+	// additional profiles at each collection interval.
+	snapshotSources []SnapshotSource
+
+	// metricsProviders are probes that implement MetricsProvider and expose
+	// operational metrics collected once per report interval.
+	metricsProviders []MetricsProvider
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -229,6 +237,11 @@ type Tracer struct {
 // when the tracer should be stopped.
 func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
+}
+
+// ProcessManager returns the process manager.
+func (t *Tracer) ProcessManager() *pm.ProcessManager {
+	return t.processManager
 }
 
 // signalDone closes the done channel to indicate an unrecoverable error.
@@ -1075,11 +1088,12 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	}
 
 	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
-	frameDataLen := int(ptr.Frame_data_len) * 8
+	frameDataLen := int(ptr.Frame_data_len)
+	frameDataBytes := frameDataLen * 8
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < traceHeaderSize+frameDataLen {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+frameDataLen,
+	if len(raw) < traceHeaderSize+frameDataBytes {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+frameDataBytes,
 			errRecordUnexpectedSize)
 	}
 
@@ -1091,7 +1105,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		PID:              libpf.PID(ptr.Pid),
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
-		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 	}
@@ -1119,20 +1132,37 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		}
 	}
 
+	// Context values are transported as leading frame_data words ahead of any
+	// kernel/user frames. Copy the complete variable payload once, then expose
+	// non-overlapping slices of the pooled buffer for values and frames.
+	numContextValues := int(ptr.Num_context_values)
+	if frameDataLen > len(trace.FrameDataBuf) {
+		return nil, fmt.Errorf("frame_data_len %d > capacity %d: %w",
+			frameDataLen, len(trace.FrameDataBuf), errRecordUnexpectedSize)
+	}
+	if numContextValues == 0 || numContextValues > frameDataLen {
+		return nil, fmt.Errorf("context values %d outside frame_data_len %d: %w",
+			numContextValues, ptr.Frame_data_len, errRecordUnexpectedSize)
+	}
+
 	numKernelFrames := int(ptr.Num_kernel_frames)
-	if numKernelFrames > int(ptr.Frame_data_len) {
-		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, ptr.Frame_data_len,
+	frameDataWords := frameDataLen - numContextValues
+	if numKernelFrames > frameDataWords {
+		return nil, fmt.Errorf("%d > %d: %w", numKernelFrames, frameDataWords,
 			errRecordUnexpectedSize)
 	}
 
+	frameData := unsafe.Slice(
+		(*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))),
+		frameDataLen,
+	)
+	copy(trace.FrameDataBuf[:frameDataLen], frameData)
+	trace.ContextValues = trace.FrameDataBuf[:numContextValues]
+	trace.FrameData = trace.FrameDataBuf[numContextValues:frameDataLen]
 	trace.NumFrames = ptr.Num_frames
 	trace.NumKernelFrames = ptr.Num_kernel_frames
-	frameDataWords := int(ptr.Frame_data_len)
-	trace.FrameData = trace.FrameDataBuf[:frameDataWords]
 	// Kernel frames are raw addresses at the front of FrameData. The process
 	// manager splits and symbolizes them so all frame processing shares one cache.
-	frameData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), frameDataWords)
-	copy(trace.FrameData, frameData)
 
 	return trace, nil
 }

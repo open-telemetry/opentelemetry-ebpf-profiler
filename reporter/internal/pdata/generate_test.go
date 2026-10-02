@@ -33,15 +33,28 @@ var (
 
 var (
 	profileTypeSampling = &samples.TypeMetadata{
-		PeriodType: "cpu",
-		PeriodUnit: "nanoseconds",
-		SampleType: "samples",
-		SampleUnit: "count",
+		PeriodType:  "cpu",
+		PeriodUnit:  "nanoseconds",
+		SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
+		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
+	}
+	// profileTypeDerived exercises multiple profiles emitted from one flat,
+	// fixed-width value group per event.
+	profileTypeDerived = &samples.TypeMetadata{
+		SampleTypes: []samples.ValueType{
+			{Type: "primary_space", Unit: "bytes"},
+			{Type: "derived_count", Unit: "count"},
+		},
+		ReportValues: true,
+	}
+	// profileTypeDerivedNoReport is profileTypeDerived with reporting disabled,
+	// to verify neither emitted profile contains values.
+	profileTypeDerivedNoReport = &samples.TypeMetadata{
+		SampleTypes:  profileTypeDerived.SampleTypes,
+		ReportValues: false,
 	}
 )
 
@@ -735,6 +748,70 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
 }
 
+// TestOmitThreadContextDropsThreadAttrs verifies that a profile type declaring
+// OmitThreadContext emits no thread.id or cpu.logical_number attributes. Interval
+// snapshots have no TID or CPU, and a zero for either would misattribute the
+// sample to thread 0 on CPU 0.
+func TestOmitThreadContextDropsThreadAttrs(t *testing.T) {
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(11, 12),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	for _, tc := range []struct {
+		name        string
+		omit        bool
+		wantThreadA bool
+	}{
+		{name: "omitted", omit: true, wantThreadA: false},
+		{name: "reported", omit: false, wantThreadA: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := New(100, nil)
+			require.NoError(t, err)
+
+			profileType := &samples.TypeMetadata{
+				SampleTypes:       []samples.ValueType{{Type: "inuse_space", Unit: "bytes"}},
+				ReportValues:      true,
+				OmitThreadContext: tc.omit,
+			}
+			profiles, err := testGenerate(d, samples.TraceEventsTree{
+				{ExecutablePath: libpf.Intern("/bin/app")}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileType: {
+							{TID: 7, CPU: 3}: &samples.TraceEvents{
+								Frames:     frames,
+								Timestamps: []uint64{1},
+								Values:     []int64{4096},
+							},
+						},
+					},
+				},
+			}, "agent", "v1")
+			require.NoError(t, err)
+
+			dic := profiles.Dictionary()
+			sample := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).
+				Profiles().At(0).Samples().At(0)
+
+			var gotTID, gotCPU bool
+			for _, idx := range sample.AttributeIndices().AsRaw() {
+				attr := dic.AttributeTable().At(int(idx))
+				switch dic.StringTable().At(int(attr.KeyStrindex())) {
+				case string(semconv.ThreadIDKey):
+					gotTID = true
+				case string(semconv.CPULogicalNumberKey):
+					gotCPU = true
+				}
+			}
+			assert.Equal(t, tc.wantThreadA, gotTID, "thread.id presence")
+			assert.Equal(t, tc.wantThreadA, gotCPU, "cpu.logical_number presence")
+		})
+	}
+}
+
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -1018,4 +1095,156 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 		string(semconv.ProcessExecutableNameKey): "svc",
 	}
 	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+func TestDerivedTypeProducesPrimaryAndDerived(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerived: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{128, 2, 256, 2},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len())
+
+	profilesByType := make(map[string]pprofile.Profile)
+	strings := profiles.Dictionary().StringTable()
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		sampleType := prof.SampleType()
+		profilesByType[strings.At(int(sampleType.TypeStrindex()))] = prof
+	}
+
+	primary, ok := profilesByType["primary_space"]
+	require.True(t, ok)
+	assert.Equal(t, "bytes", strings.At(int(primary.SampleType().UnitStrindex())))
+	require.Equal(t, 1, primary.Samples().Len())
+	assert.Equal(t, []int64{128, 256}, primary.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, primary.Samples().At(0).TimestampsUnixNano().AsRaw())
+
+	derivedCount, ok := profilesByType["derived_count"]
+	require.True(t, ok)
+	assert.Equal(t, "count", strings.At(int(derivedCount.SampleType().UnitStrindex())))
+	require.Equal(t, 1, derivedCount.Samples().Len())
+	assert.Equal(t, []int64{2, 2}, derivedCount.Samples().At(0).Values().AsRaw())
+	assert.Equal(t, timestamps, derivedCount.Samples().At(0).TimestampsUnixNano().AsRaw())
+}
+
+// TestDerivedTypeReportValuesFalse verifies that when ReportValues is false,
+// neither the primary nor the derived profile emits sample values (timestamps
+// are still kept).
+func TestDerivedTypeReportValuesFalse(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerivedNoReport: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{128, 2, 256, 2},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	require.Equal(t, 2, sp.Profiles().Len())
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		sample := sp.Profiles().At(i).Samples().At(0)
+		assert.Empty(t, sample.Values().AsRaw())
+		assert.Equal(t, timestamps, sample.TimestampsUnixNano().AsRaw())
+	}
+}
+
+// TestDerivedTypeCopiesPerSampleValues verifies that each emitted profile
+// selects its own column from the flat, event-major TraceEvents.Values array.
+func TestDerivedTypeCopiesPerSampleValues(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(11, 12),
+			FileName: libpf.Intern("/bin/heap-app"),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	timestamps := []uint64{
+		uint64(time.Unix(1010, 0).UnixNano()),
+		uint64(time.Unix(1020, 0).UnixNano()),
+		uint64(time.Unix(1030, 0).UnixNano()),
+	}
+	tree := samples.TraceEventsTree{
+		{ExecutablePath: libpf.Intern("/bin/heap-app")}: samples.ResourceToProfiles{
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeDerived: {
+					{}: &samples.TraceEvents{
+						Frames:     frames,
+						Timestamps: timestamps,
+						Values:     []int64{1000, 10, 64, 1, 500, 1},
+					},
+				},
+			},
+		},
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	sp := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0)
+	strings := profiles.Dictionary().StringTable()
+	var derivedCount pprofile.Profile
+	for i := 0; i < sp.Profiles().Len(); i++ {
+		prof := sp.Profiles().At(i)
+		if strings.At(int(prof.SampleType().TypeStrindex())) == "derived_count" {
+			derivedCount = prof
+		}
+	}
+	require.Equal(t, 1, derivedCount.Samples().Len())
+	assert.Equal(t, []int64{10, 1, 1}, derivedCount.Samples().At(0).Values().AsRaw())
 }
