@@ -431,6 +431,10 @@ const (
 	LJCframeSpaceArm = 0xd0
 )
 
+const (
+	LJFileId = 0x2a
+)
+
 var MetricsTranslation = []metrics.MetricID{
 	0x0:  metrics.IDUnwindCallInterpreter,
 	0x1:  metrics.IDUnwindErrZeroPC,

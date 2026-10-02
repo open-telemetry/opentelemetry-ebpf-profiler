@@ -216,6 +216,10 @@ const (
 	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
 )
 
+const (
+	LJFileId = C.LUAJIT_JIT_FILE_ID
+)
+
 var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindCallInterpreter:                      metrics.IDUnwindCallInterpreter,
 	C.metricID_UnwindErrZeroPC:                            metrics.IDUnwindErrZeroPC,
