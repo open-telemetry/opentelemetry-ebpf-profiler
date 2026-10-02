@@ -493,6 +493,41 @@ type state struct {
 	stack [2]vmRegs
 	// stackNdx is the current stack nesting level for remember/restore opcodes
 	stackNdx int
+	// cfaFrame is the largest CFA offset seen in this FDE, that is the offset
+	// of the fully established frame
+	cfaFrame sleb128
+	// cfaRaw is the CFA offset as last encoded in this FDE, before rebasing
+	cfaRaw sleb128
+	// cfaRebase is added to the encoded CFA offsets after an epilogue that was
+	// not bracketed with DW_CFA_remember_state / DW_CFA_restore_state
+	cfaRebase sleb128
+	// cfaSaved records that this FDE saves and restores its state, so the
+	// offsets it encodes after an epilogue are the ones it intended
+	cfaSaved bool
+}
+
+// defCFAOffset assigns the CFA offset, rebasing it if the CFI lost its state.
+//
+// An FDE that never saves its state has nothing to restore after its first
+// epilogue, so the assembler's running CFA offset stays where that epilogue
+// left it. A second epilogue then subtracts from the leftover instead of from
+// the established frame, and every offset it encodes lands below the stack
+// pointer, where it describes no frame at all. Rebasing the descent onto the
+// established frame recovers the real offsets: the leftover cancels out, so
+// only the established frame and the epilogue's own descent matter.
+//
+// An FDE that does save and restore its state is left alone. Its offsets are
+// the ones it meant to encode, and a negative one there is a defect of a
+// different kind that getUnwindInfoX86 reports as invalid.
+func (st *state) defCFAOffset(off sleb128) {
+	if off < 0 && !st.cfaSaved && st.cfaRebase == 0 && st.cfaFrame > st.cfaRaw {
+		st.cfaRebase = st.cfaFrame - st.cfaRaw
+	}
+	if off > st.cfaFrame {
+		st.cfaFrame = off
+	}
+	st.cfaRaw = off
+	st.cur.cfa.off = off + st.cfaRebase
 }
 
 // advance increments current virtual address by given delta and code alignment
@@ -577,6 +612,7 @@ func (st *state) step(r *reader) error {
 			}
 			st.stack[st.stackNdx] = st.cur
 			st.stackNdx++
+			st.cfaSaved = true
 		case cfaRestoreState:
 			if st.stackNdx == 0 {
 				return fmt.Errorf("dwarf stack underflow at %x",
@@ -586,11 +622,11 @@ func (st *state) step(r *reader) error {
 			st.cur = st.stack[st.stackNdx]
 		case cfaDefCfa:
 			st.cur.cfa.reg = r.uleb()
-			st.cur.cfa.off = sleb128(r.uleb())
+			st.defCFAOffset(sleb128(r.uleb()))
 		case cfaDefCfaRegister:
 			st.cur.cfa.reg = r.uleb()
 		case cfaDefCfaOffset:
-			st.cur.cfa.off = sleb128(r.uleb())
+			st.defCFAOffset(sleb128(r.uleb()))
 		case cfaDefCfaExpression:
 			expr, err := r.expression()
 			if err == nil {
@@ -612,9 +648,9 @@ func (st *state) step(r *reader) error {
 			st.rule(r.uleb(), regCFA, r.sleb())
 		case cfaDefCfaSf:
 			st.cur.cfa.reg = r.uleb()
-			st.cur.cfa.off = r.sleb() * st.cie.dataAlign
+			st.defCFAOffset(r.sleb() * st.cie.dataAlign)
 		case cfaDefCfaOffsetSf:
-			st.cur.cfa.off = r.sleb() * st.cie.dataAlign
+			st.defCFAOffset(r.sleb() * st.cie.dataAlign)
 		case cfaValOffset:
 			st.rule(r.uleb(), regCFAVal, sleb128(r.uleb()))
 		case cfaValOffsetSf:
@@ -907,7 +943,12 @@ func (r *reader) parseFDE(id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExt
 		return fde, nil
 	}
 
-	st := state{cie: cie, cur: cie.initialState}
+	st := state{
+		cie:      cie,
+		cur:      cie.initialState,
+		cfaFrame: cie.initialState.cfa.off,
+		cfaRaw:   cie.initialState.cfa.off,
+	}
 
 	// Process the FDE opcodes
 	if !ee.hooks.fdeHook(st.cie, &fde) {
