@@ -1118,17 +1118,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	}
 
 	vd := variableDataDecoder{raw: variableData}
-	if frameData, err := vd.decode(ptr.Frame_data_end); err == nil {
+	if frameData, err := vd.decode(ptr.Frame_data_end); err != nil {
+		return nil, err
+	} else if len(frameData) > 0 {
 		// Kernel frames are raw addresses at the front of FrameData. The process
 		// manager splits and symbolizes them so all frame processing shares one cache.
 		trace.NumKernelFrames = uint16(len(frameData)) - (ptr.Frame_data_end - ptr.Kernel_frame_end)
 		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
 		copy(trace.FrameData, frameData)
-	} else {
-		return nil, err
 	}
 
-	if labelData, err := vd.decode(ptr.Golang_label_end); err == nil {
+	if labelData, err := vd.decode(ptr.Golang_label_end); err != nil {
+		return nil, err
+	} else if len(labelData) > 0 {
 		trace.CustomLabels = make(map[libpf.String]libpf.String)
 		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
 
@@ -1148,8 +1150,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			trace.CustomLabels[libpf.Intern(pfunsafe.ToString(keyBytes))] =
 				libpf.Intern(pfunsafe.ToString(valBytes))
 		}
-	} else {
-		return nil, err
 	}
 	return trace, nil
 }

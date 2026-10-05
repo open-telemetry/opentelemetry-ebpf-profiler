@@ -109,7 +109,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   }
 
   // Limit extracted labels to MAX_GO_LABELS
-  u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]) / 8;
+  const u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]) / 8;
 
   // If the map has more than 16 buckets we just don't support it, pprof maps are typically
   // small and if its a problem upgrading to Go 1.24+ is a potential solution.
@@ -123,15 +123,17 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
     if (bpf_probe_read_user(bucket, sizeof(GoMapBucket), &label_buckets[b])) {
       goto done;
     }
+
     for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
       // map tophash values for Go 1.12 (first supported) to 1.23 (last used in pprof)
       // https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L82-L87
       const u8 emptyRest = 0, minTopHash = 5;
-      if (bucket->tophash[i] < minTopHash) {
-        if (bucket->tophash[i] == emptyRest)
-          break;
+
+      u8 tophash = bucket->tophash[i];
+      if (tophash == emptyRest)
+        break;
+      if (tophash < minTopHash)
         continue;
-      }
       if (record->trace.variable_data_end > max_end)
         goto done;
       if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
