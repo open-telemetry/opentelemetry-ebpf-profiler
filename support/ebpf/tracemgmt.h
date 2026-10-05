@@ -675,16 +675,16 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const u64 error_frame_size = 1;
+  const u64 error_frame_len = 1;
+  u64       frame_len       = 1 + frame_varlen;
 
-  u8 frame_size = frame_varlen + 1;
-  u64 *pos      = push_variable_data(trace, frame_size, error_frame_size + MAX_FRAME_TRAILER_DATA_LEN);
+  u64 *pos = push_variable_data(trace, frame_len, error_frame_len + MAX_FRAME_TRAILER_DATA_LEN);
   if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->num_frames++;
-  pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
+  pos[0] = frame_header(frame_type, frame_flags, frame_len, frame_data);
   return &pos[1];
 }
 

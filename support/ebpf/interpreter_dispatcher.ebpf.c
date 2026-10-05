@@ -326,8 +326,8 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // through different data structures, we'd have to keep a list of known empty traces to
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
-  if (trace->num_frames == 1 && state->unwind_error) {
-    if (filter_error_frames) {
+  if (filter_error_frames) {
+    if (trace->num_frames == 1 && trace->kernel_frame_end == 0 && state->unwind_error) {
       return 0;
     }
   }

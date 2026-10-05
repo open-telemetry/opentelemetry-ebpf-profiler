@@ -61,7 +61,9 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
 
   // Convert the data from the scratch array to event label data payload
   bool ret = false;
-  for (u64 i = 0; i < num; i += 2) {
+  for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
+    if (i >= num)
+      goto done;
     if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
       goto done;
   }
@@ -122,7 +124,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
     for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
       // Use bitwise OR to reduce code size and jumps; otherwise this loop would
       // need to be unrolled to pass the verifier.
-      if ((bucket->tophash[i] == 0) | (bucket->keys[i].str == NULL) | (++num_labels >= MAX_GO_LABELS))
+      if (!bucket->tophash[i] | (bucket->keys[i].str == NULL) | (num_labels++ >= MAX_GO_LABELS))
         continue;
       if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
         goto done;
