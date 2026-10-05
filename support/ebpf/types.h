@@ -671,14 +671,17 @@ typedef struct GolangLabel {
 // about 1024 frames in a trace to be sent.
 #define MAX_FRAME_DATA_LEN 3072
 
-// Number of u64 entries reserved for label_data.
-#define MAX_LABEL_DATA_LEN 64
+// Maximum number of u64 frame data entries for Go labels.
+#define MAX_GO_LABEL_DATA_LEN (MAX_GO_LABELS * sizeof(GolangLabel) / 8)
+
+// Number of u64 entries reserved for data after frames.
+#define MAX_FRAME_TRAILER_DATA_LEN MAX_GO_LABEL_DATA_LEN
 
 // The variable data portion of trace layout as:
-//   u64          kernel_frame[kernel_frame_end/8];
-//   u64          frame_data[(frame_data_end-kernel_frame_end)/8];
-//   GolangLabel  golang_labels[(golang_label_end-frame_data_end)/sizeof(GolangLabel)];
-typedef u64 TraceData[MAX_FRAME_DATA_LEN + MAX_LABEL_DATA_LEN];
+//   u64          kernel_frame[kernel_frame_end];
+//   u64          frame_data[(frame_data_end-kernel_frame_end)];
+//   GolangLabel  golang_labels[(golang_label_end-frame_data_end)*8/sizeof(GolangLabel)];
+typedef u64 TraceData[MAX_FRAME_DATA_LEN + MAX_FRAME_TRAILER_DATA_LEN];
 
 // Container for a stack trace
 typedef struct Trace {

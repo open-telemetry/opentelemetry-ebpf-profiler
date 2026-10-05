@@ -16,12 +16,11 @@ struct go_procs_t {
 
 static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct GoString *v)
 {
-  u64 index = trace->variable_data_end;
-  if (index > (sizeof(trace->variable_data) - sizeof(GolangLabel)) / 8) {
+  const u64 num_elems = sizeof(GolangLabel) / sizeof(trace->variable_data[0]);
+  GolangLabel *l      = reserve_variable_data(trace, num_elems, 0);
+  if (!l) {
     return false;
   }
-
-  GolangLabel *volatile l = (GolangLabel *)&trace->variable_data[index];
 
   u64 klen = MIN(k->len, sizeof l->key - 1);
   if (bpf_probe_read_user(l->key, (u32)klen, k->str)) {
@@ -36,8 +35,8 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
     return false;
   }
   l->val[vlen] = 0;
+  commit_variable_data(trace, num_elems);
 
-  trace->variable_data_end += sizeof(GolangLabel) / 8;
   return true;
 }
 
@@ -62,9 +61,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
 
   // Convert the data from the scratch array to event label data payload
   bool ret = false;
-  for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
-    if (i >= num)
-      break;
+  for (u64 i = 0; i < num; i += 2) {
     if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
       goto done;
   }
@@ -112,6 +109,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   // If the map has more than 16 buckets we just don't support it, pprof maps are typically
   // small and if its a problem upgrading to Go 1.24+ is a potential solution.
   u64 bucket_count = 1UL << log_2_bucket_count;
+  u64 num_labels   = 0;
   bool ret         = false;
   for (u64 b = 0; b < 16; b++) {
     if (b >= bucket_count)
@@ -122,9 +120,9 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
       goto done;
     }
     for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
-      if (bucket->tophash[i] == 0)
-        continue;
-      if (bucket->keys[i].str == NULL)
+      // Use bitwise OR to reduce code size and jumps; otherwise this loop would
+      // need to be unrolled to pass the verifier.
+      if ((bucket->tophash[i] == 0) | (bucket->keys[i].str == NULL) | (++num_labels >= MAX_GO_LABELS))
         continue;
       if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
         goto done;

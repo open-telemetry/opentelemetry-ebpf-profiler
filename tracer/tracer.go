@@ -1063,6 +1063,26 @@ var (
 	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
+type variableDataDecoder struct {
+	raw []uint64
+	pos uint16
+}
+
+func (vd *variableDataDecoder) decode(end uint16) ([]uint64, error) {
+	if end == 0 {
+		return nil, nil
+	}
+	if end < vd.pos {
+		return nil, fmt.Errorf("invalid variable data end pointer %d < %d", end, vd.pos)
+	}
+	if int(end) > len(vd.raw) {
+		return nil, fmt.Errorf("invalid variable data end pointer %d > %d", end, len(vd.raw))
+	}
+	data := vd.raw[vd.pos:end]
+	vd.pos = end
+	return data, nil
+}
+
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	traceHeaderSize := int(support.Sizeof_TraceHeader)
@@ -1097,11 +1117,20 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Golang_label_end > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String)
+	vd := variableDataDecoder{raw: variableData}
+	if frameData, err := vd.decode(ptr.Frame_data_end); err == nil {
+		// Kernel frames are raw addresses at the front of FrameData. The process
+		// manager splits and symbolizes them so all frame processing shares one cache.
+		trace.NumKernelFrames = uint16(len(frameData)) - (ptr.Frame_data_end - ptr.Kernel_frame_end)
+		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
+		copy(trace.FrameData, frameData)
+	} else {
+		return nil, err
+	}
 
+	if labelData, err := vd.decode(ptr.Golang_label_end); err == nil {
+		trace.CustomLabels = make(map[libpf.String]libpf.String)
 		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
-		labelData := variableData[ptr.Frame_data_end:ptr.Golang_label_end]
 
 		for len(labelData) >= itemsPerGolangLabel {
 			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
@@ -1119,15 +1148,9 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			trace.CustomLabels[libpf.Intern(pfunsafe.ToString(keyBytes))] =
 				libpf.Intern(pfunsafe.ToString(valBytes))
 		}
+	} else {
+		return nil, err
 	}
-
-	// Kernel frames are raw addresses at the front of FrameData. The process
-	// manager splits and symbolizes them so all frame processing shares one cache.
-	frameData := variableData[:ptr.Frame_data_end]
-	trace.NumKernelFrames = ptr.Kernel_frame_end
-	trace.FrameData = trace.FrameDataBuf[:len(frameData)]
-	copy(trace.FrameData, frameData)
-
 	return trace, nil
 }
 

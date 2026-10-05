@@ -629,6 +629,30 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
   return unwinder_unwind_frame_pointer_regs(state, regs);
 }
 
+static inline EBPF_INLINE void commit_variable_data(Trace *trace, u64 alloc_len)
+{
+  trace->variable_data_end += alloc_len;
+}
+
+static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u64 alloc_len, u64 reserve_len)
+{
+  const u64 data_elems = sizeof(trace->variable_data) / sizeof(trace->variable_data[0]);
+
+  u64 index = trace->variable_data_end;
+  if (index > data_elems - alloc_len - reserve_len) {
+    return NULL;
+  }
+  u64 *ptr = &trace->variable_data[index];
+  return ptr;
+}
+
+static inline EBPF_INLINE u64 *push_variable_data(Trace *trace, u64 alloc_len, u64 reserve_len)
+{
+  u64 *ptr = reserve_variable_data(trace, alloc_len, reserve_len);
+  commit_variable_data(trace, alloc_len);
+  return ptr;
+}
+
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
 {
   // frame header format (fixed size):
@@ -651,17 +675,15 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const int error_frame_size = 1;
+  const u64 error_frame_size = 1;
 
-  // Check that there is enough space for this frame and at least one error frame.
-  u64 *pos      = &trace->variable_data[trace->variable_data_end];
   u8 frame_size = frame_varlen + 1;
-  if (pos >= &trace->variable_data[MAX_FRAME_DATA_LEN - error_frame_size - frame_size]) {
+  u64 *pos      = push_variable_data(trace, frame_size, error_frame_size + MAX_FRAME_TRAILER_DATA_LEN);
+  if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->num_frames++;
-  trace->variable_data_end += frame_size;
   pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
   return &pos[1];
 }
