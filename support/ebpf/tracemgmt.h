@@ -676,7 +676,7 @@ static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
   const u64 error_frame_len = 1;
-  u64       frame_len       = 1 + frame_varlen;
+  u64 frame_len             = 1 + frame_varlen;
 
   u64 *pos = push_variable_data(trace, frame_len, error_frame_len + MAX_FRAME_TRAILER_DATA_LEN);
   if (!pos) {
