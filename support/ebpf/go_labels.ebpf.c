@@ -134,7 +134,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
         break;
       if (tophash < minTopHash)
         continue;
-      if (record->trace.variable_data_end > max_end)
+      if (record->trace.variable_data_end >= max_end)
         goto done;
       if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
         goto done;
