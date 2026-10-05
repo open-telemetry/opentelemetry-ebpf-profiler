@@ -885,7 +885,7 @@ struct GoSlice {
 
 // https://github.com/golang/go/blob/6885bad7dd86880be6929c02085/src/runtime/map.go#L143
 typedef struct GoMapBucket {
-  char tophash[GO_MAP_BUCKET_SIZE];
+  u8 tophash[GO_MAP_BUCKET_SIZE];
   struct GoString keys[GO_MAP_BUCKET_SIZE];
   struct GoString values[GO_MAP_BUCKET_SIZE];
   void *overflow;
