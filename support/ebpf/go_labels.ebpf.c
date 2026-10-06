@@ -197,7 +197,9 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
     pid,
     (unsigned long)record->customLabelsState.go_m_ptr);
   bool success = get_go_custom_labels(record);
-  if (!success) {
+  if (success) {
+    record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
+  } else {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
 
