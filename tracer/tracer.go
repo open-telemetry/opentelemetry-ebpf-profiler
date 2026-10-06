@@ -544,7 +544,8 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// specifications ("perf_" and "kprobe_" prefixed), and the probe unwinders only
 	// depend on already loaded maps, not on the loaded perf programs. Collect the load
 	// jobs of both so that all of them are verified by the kernel concurrently.
-	perfJobs, err := perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
+	var perfJobs, probeJobs []loadJob
+	perfJobs, err = perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to prepare perf eBPF programs: %v", err)
 	}
@@ -553,7 +554,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// probeUnwinderJobs repoints the probe unwinder's per_cpu_records references
 	// to per_cpu_records_kp so a perf sampler can't clobber an in-flight uprobe unwind;
 	// the perf unwinder keeps per_cpu_records.
-	probeJobs, err := probeUnwinderJobs(coll, ebpfMaps["kprobe_progs"], tailCallProgs,
+	probeJobs, err = probeUnwinderJobs(coll, ebpfMaps["kprobe_progs"], tailCallProgs,
 		ebpfMaps["perf_progs"].FD(), ebpfMaps["per_cpu_records"].FD(),
 		ebpfMaps["per_cpu_records_kp"])
 	if err != nil {
@@ -984,6 +985,9 @@ type loadJob struct {
 	prog *cebpf.Program
 	// err is the error returned by the kernel, populated by loadPrograms.
 	err error
+	// loadTime is how long the kernel took to load and verify the program,
+	// populated by loadPrograms.
+	loadTime time.Duration
 }
 
 // loadPrograms loads the given eBPF programs into the kernel and populates the related
@@ -1034,7 +1038,9 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 		eg.Go(func() error {
 			// Load the eBPF program into the kernel. If no error is returned,
 			// the eBPF program can be used/called/triggered from now on.
+			start := time.Now()
 			prog, err := cebpf.NewProgramWithOptions(job.progSpec, programOptions)
+			job.loadTime = time.Since(start)
 			if err != nil {
 				// The error is only recorded here and reported once all loads
 				// have finished: verifier errors are hundreds of lines long and
@@ -1056,6 +1062,14 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 			}
 		}
 		return reportLoadErrors(jobs)
+	}
+
+	// Logged in job order, which is the order the loads were started in, so that
+	// the instruction count heuristic used above can be compared against the load
+	// times it is standing in for.
+	for i := range jobs {
+		log.Debugf("Loaded eBPF program %s in %v (%d instructions)",
+			jobs[i].progSpec.Name, jobs[i].loadTime, len(jobs[i].progSpec.Instructions))
 	}
 
 	for i := range jobs {

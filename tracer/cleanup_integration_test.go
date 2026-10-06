@@ -35,7 +35,8 @@ func countBPFObjects(t *testing.T) int {
 		if err != nil {
 			continue
 		}
-		if target == "anon_inode:bpf-map" || target == "anon_inode:bpf-prog" {
+		if target == "anon_inode:bpf-map" || target == "anon_inode:bpf-prog" ||
+			target == "anon_inode:btf" {
 			n++
 		}
 	}
