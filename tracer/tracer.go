@@ -1120,12 +1120,20 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	}
 
 	vd := variableDataDecoder{raw: variableData}
+
+	if ptr.Kernel_frame_end > 0 {
+		// Validate and use Kernel_frame_end only to calculate number of kernel frames.
+		// The kernel frames are copied together with the regular frames in the next step.
+		if vd.pos > ptr.Kernel_frame_end || ptr.Kernel_frame_end > ptr.Frame_data_end {
+			return nil, fmt.Errorf("invalid kernel_frame_end %d < %d < %d: %w",
+				vd.pos, ptr.Kernel_frame_end, ptr.Frame_data_end,
+				errRecordUnexpectedSize)
+		}
+		trace.NumKernelFrames = ptr.Kernel_frame_end - vd.pos
+	}
 	if frameData, err := vd.decode(ptr.Frame_data_end); err != nil {
 		return nil, err
 	} else if len(frameData) > 0 {
-		// Kernel frames are raw addresses at the front of FrameData. The process
-		// manager splits and symbolizes them so all frame processing shares one cache.
-		trace.NumKernelFrames = uint16(len(frameData)) - (ptr.Frame_data_end - ptr.Kernel_frame_end)
 		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
 		copy(trace.FrameData, frameData)
 	}
