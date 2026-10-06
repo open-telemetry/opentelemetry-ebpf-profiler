@@ -63,7 +63,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
   bool ret = false;
   for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
     if (i >= num)
-      goto done;
+      break;
     if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
       goto done;
   }
@@ -134,12 +134,13 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
         break;
       if (tophash < minTopHash)
         continue;
-      if (record->trace.variable_data_end >= max_end)
-        goto done;
       if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
         goto done;
+      if (record->trace.variable_data_end >= max_end)
+        goto success;
     }
   }
+success:
   ret = true;
 done:
   return ret;
