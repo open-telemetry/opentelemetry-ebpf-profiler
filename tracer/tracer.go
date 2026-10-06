@@ -1073,10 +1073,12 @@ func (vd *variableDataDecoder) decode(end uint16) ([]uint64, error) {
 		return nil, nil
 	}
 	if end < vd.pos {
-		return nil, fmt.Errorf("invalid variable data end pointer %d < %d", end, vd.pos)
+		return nil, fmt.Errorf("invalid variable data end pointer %d < %d: %w",
+			end, vd.pos, errRecordUnexpectedSize)
 	}
 	if int(end) > len(vd.raw) {
-		return nil, fmt.Errorf("invalid variable data end pointer %d > %d", end, len(vd.raw))
+		return nil, fmt.Errorf("invalid variable data end pointer %d > %d: %w",
+			end, len(vd.raw), errRecordUnexpectedSize)
 	}
 	data := vd.raw[vd.pos:end]
 	vd.pos = end
