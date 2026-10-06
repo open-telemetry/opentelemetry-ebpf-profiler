@@ -50,7 +50,7 @@ type luajitInstance struct {
 	// Currently mapped prefixes for entire memory regions
 	prefixes map[regionKey][]lpm.Prefix
 
-	cycle       int
+	cycle int
 }
 
 var (
