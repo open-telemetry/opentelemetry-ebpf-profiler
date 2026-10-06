@@ -8,10 +8,10 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 import (
 	"debug/elf"
 	"io"
+	"io/fs"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -103,9 +103,6 @@ type MachineData struct {
 	DataPACMask uint64
 }
 
-// ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
-type ReadAtCloser = pfelf.ReadAtCloser
-
 // ProcessMeta contains metadata about a tracked process.
 type Meta struct {
 	// executable path retrieved from /proc/PID/exe
@@ -127,7 +124,7 @@ type Meta struct {
 
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
-// from different goroutines. As an exception the ELFOpener and the returned
+// from different goroutines. As an exception the fs.FS and the returned
 // GetRemoteMemory object are safe for concurrent use.
 type Process interface {
 	// PID returns the process identifier.
@@ -156,8 +153,11 @@ type Process interface {
 	// GetRemoteMemory returns a remote memory reader accessing the target process.
 	GetRemoteMemory() remotememory.RemoteMemory
 
-	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
-	OpenMappingFile(*RawMapping) (ReadAtCloser, error)
+	// OpenMappingFile returns the backing file of the mapping. The returned
+	// fs.File is of the same kind as those returned by Open (in particular it
+	// implements io.ReaderAt), but it may also be able to access the file
+	// even if it was deleted or replaced on disk after being mapped.
+	OpenMappingFile(*RawMapping) (fs.File, error)
 
 	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
 	// or zero if an error occurs or mapping file is not accessible via filesystem.
@@ -168,7 +168,12 @@ type Process interface {
 
 	io.Closer
 
-	pfelf.ELFOpener
+	// FS opens files in the process's file system namespace. As required by
+	// fs.FS, names are unrooted (e.g. "usr/lib/libc.so.6" for the absolute
+	// path "/usr/lib/libc.so.6"). Callers that have a RawMapping should use
+	// OpenMappingFile instead, which can open the backing file even if it was
+	// deleted or replaced on disk.
+	fs.FS
 }
 
 // MetaEnricher is called once per process when it is first observed.

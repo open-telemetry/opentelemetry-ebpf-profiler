@@ -8,9 +8,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
-	"path"
 	"strconv"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
@@ -42,9 +43,10 @@ type newCmd struct {
 type trackedCoredump struct {
 	*process.CoredumpProcess
 
-	prefix string
-	seen   libpf.Set[string]
-	warn   libpf.Set[string]
+	// sysroot holds the original files of the process the coredump is from.
+	sysroot fs.FS
+	seen    libpf.Set[string]
+	warn    libpf.Set[string]
 }
 
 func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
@@ -53,12 +55,29 @@ func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
 		return nil, err
 	}
 
+	if filePrefix == "" {
+		filePrefix = "/"
+	}
 	return &trackedCoredump{
 		CoredumpProcess: core,
-		prefix:          filePrefix,
+		sysroot:         os.DirFS(filePrefix),
 		seen:            libpf.Set[string]{},
 		warn:            libpf.Set[string]{},
 	}, nil
+}
+
+// openFromSysroot opens the fs.FS path name from the sysroot, and tracks it
+// for bundling by its absolute path.
+func (tc *trackedCoredump) openFromSysroot(name string) (fs.File, error) {
+	f, err := tc.sysroot.Open(name)
+	if err != nil {
+		if !errors.Is(err, fs.ErrInvalid) {
+			tc.warnMissing("/" + name)
+		}
+		return nil, err
+	}
+	tc.seen["/"+name] = libpf.Void{}
+	return f, nil
 }
 
 func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.RawMapping) int64 {
@@ -74,42 +93,37 @@ func (tc *trackedCoredump) warnMissing(fileName string) {
 
 func (tc *trackedCoredump) CalculateMappingFileID(m *process.RawMapping) (libpf.FileID, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		file := m.Path
-		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, file))
-		if err == nil {
-			tc.seen[file] = libpf.Void{}
-			return fid, nil
+		if f, err := tc.openFromSysroot(pfelf.FSPath(m.Path)); err == nil {
+			defer f.Close()
+			if rs, ok := f.(io.ReadSeeker); ok {
+				return libpf.FileIDFromExecutableReader(rs)
+			}
 		}
-		tc.warnMissing(file)
 	}
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
-func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
+func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (fs.File, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		file := m.Path
-		rac, err := os.Open(path.Join(tc.prefix, file))
-		if err == nil {
-			tc.seen[file] = libpf.Void{}
-			return rac, nil
+		if f, err := tc.openFromSysroot(pfelf.FSPath(m.Path)); err == nil {
+			return f, nil
 		}
-		tc.warnMissing(file)
 	}
 	return tc.CoredumpProcess.OpenMappingFile(m)
 }
 
-func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	if fileName != process.VdsoPathName {
-		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
-		if err == nil {
-			tc.seen[fileName] = libpf.Void{}
-			return f, err
-		}
-		if !errors.Is(err, pfelf.ErrNotELF) {
-			tc.warnMissing(fileName)
-		}
+// Open implements the fs.FS interface. It prefers a real on-disk file from
+// the sysroot, falling back to whatever partial data the coredump itself
+// carries for name.
+func (tc *trackedCoredump) Open(name string) (fs.File, error) {
+	f, err := tc.openFromSysroot(name)
+	if errors.Is(err, fs.ErrInvalid) {
+		return nil, err
 	}
-	return tc.CoredumpProcess.OpenELF(fileName)
+	if err == nil {
+		return f, nil
+	}
+	return tc.CoredumpProcess.Open(name)
 }
 
 func newNewCmd(store *modulestore.Store) *ffcli.Command {

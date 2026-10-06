@@ -28,10 +28,13 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -237,6 +240,53 @@ type ReadAtCloser interface {
 // on error.
 func NewFileOwned(rc ReadAtCloser) (*File, error) {
 	return newFile(rc, rc, 0, false)
+}
+
+// LoadHinter is an optional capability of an fs.File returned by an fs.FS:
+// implementations whose content is only meaningful at a specific load
+// address (e.g. ELF segments extracted from a coredump, which may also need
+// musl-specific dynamic table handling) report it here so OpenFS parses the
+// file correctly.
+type LoadHinter interface {
+	ELFLoadHints() (loadAddress uint64, hasMusl bool)
+}
+
+// FSPath converts an absolute file path to an fs.FS path name. fs.FS names
+// are unrooted, so "/usr/lib/libc.so.6" becomes "usr/lib/libc.so.6".
+func FSPath(absPath string) string {
+	return strings.TrimPrefix(path.Clean(absPath), "/")
+}
+
+// OpenFS opens the fs.FS path name via fsys and parses it as an ELF file,
+// see NewFileFromFS.
+func OpenFS(fsys fs.FS, name string) (*File, error) {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	ef, err := NewFileFromFS(f)
+	if err != nil {
+		return nil, fmt.Errorf("pfelf: %s: %w", name, err)
+	}
+	return ef, nil
+}
+
+// NewFileFromFS takes ownership of f and parses it as an ELF file. f must
+// additionally implement ReadAtCloser. If it implements LoadHinter, its load
+// address and musl hint are honored. f is closed by the returned File's
+// Close, or before returning on error.
+func NewFileFromFS(f fs.File) (*File, error) {
+	rac, ok := f.(ReadAtCloser)
+	if !ok {
+		_ = f.Close()
+		return nil, errors.New("opened file does not support ReadAtCloser")
+	}
+	var loadAddress uint64
+	var hasMusl bool
+	if lh, ok := f.(LoadHinter); ok {
+		loadAddress, hasMusl = lh.ELFLoadHints()
+	}
+	return newFile(rac, rac, loadAddress, hasMusl)
 }
 
 // newFile builds a File from r. A non-nil closer is owned and closed by the
@@ -709,11 +759,11 @@ func (f *File) GetBuildID() (string, error) {
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
-func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
+func (f *File) DebuglinkFileName(elfFilePath string, fsys fs.FS) string {
 	if f.debuglinkPath != notYetProcessed {
 		return f.debuglinkPath
 	}
-	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
+	file, path := f.OpenDebugLink(elfFilePath, fsys)
 	if file != nil {
 		_ = file.Close()
 	}
@@ -895,7 +945,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 }
 
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
-func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
+func (f *File) OpenDebugLink(elfFilePath string, fsys fs.FS) (
 	debugELF *File, debugFile string,
 ) {
 	f.debuglinkPath = ""
@@ -910,7 +960,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	executablePath := filepath.Dir(elfFilePath)
 	for _, debugPath := range []string{"/usr/lib/debug/"} {
 		debugFile = filepath.Join(debugPath, executablePath, linkName)
-		debugELF, err = elfOpener.OpenELF(debugFile)
+		debugELF, err = OpenFS(fsys, FSPath(debugFile))
 		if err != nil {
 			continue
 		}
