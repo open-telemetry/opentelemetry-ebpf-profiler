@@ -1131,8 +1131,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	if labelData, err := vd.decode(ptr.Golang_label_end); err != nil {
 		return nil, err
 	} else if len(labelData) > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/itemsPerGolangLabel)
 		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
+		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/itemsPerGolangLabel)
 
 		for len(labelData) >= itemsPerGolangLabel {
 			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
