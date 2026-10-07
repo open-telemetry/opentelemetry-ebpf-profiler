@@ -293,7 +293,7 @@ type v8Data struct {
 			InlinedFunctionCount      uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
 			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
 			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
-			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex,DeoptimizationDataWrappedSharedFunctionInfoIndex" zero:""`
 			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
@@ -477,6 +477,21 @@ type v8Data struct {
 			LineEnds uint16 `name:"line_ends__Object"`
 			Source   uint16 `name:"source__Object"`
 		}
+
+		InliningPositions struct {
+			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.8.374.13/src/objects/deoptimization-data-inl.h#28
+			TrustedByteArray bool
+		} `name:""`
+	}
+
+	// expectedTypes contains the instance types of objects whose type depends
+	// on the V8 version. These are resolved from vmStructs after all the
+	// introspection data has been read.
+	expectedTypes struct {
+		SourcePositionTable        uint16
+		DeoptimizationData         uint16
+		DeoptimizationLiteralArray uint16
+		InliningPositions          uint16
 	}
 
 	// snapshotRange is the LOAD segment area where V8 Snapshot code blob is
@@ -1165,13 +1180,9 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		} else {
 			log.Debugf("Bytecode, %d bytes, not available", length)
 		}
-		typ := vms.Type.ByteArray
-		if vms.SourcePositionTable.TrustedByteArray {
-			typ = vms.Type.TrustedByteArray
-		}
 		sfi.bytecodePositionTable, err = i.readFixedTablePtr(
 			fdAddr+libpf.Address(vms.BytecodeArray.SourcePositionTable),
-			typ, 1, 0)
+			i.d.expectedTypes.SourcePositionTable, 1, 0)
 		log.Debugf("Bytecode positions: %d bytes: %v", len(sfi.bytecodePositionTable), err)
 	}
 
@@ -1196,6 +1207,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 // readCode reads and caches needed V8 Code object data.
 func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI) (*v8Code, error) {
 	vms := &i.d.vmStructs
+	types := &i.d.expectedTypes
 
 	codeAddr, err := i.getTypedObject(taggedPtr, vms.Type.Code)
 	if err != nil {
@@ -1218,11 +1230,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read in full source position tables
 	sourcePositionPtr := npsr.Ptr(code, uint(vms.Code.SourcePositionTable))
-	if vms.SourcePositionTable.TrustedByteArray {
-		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.TrustedByteArray)
-	} else {
-		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
-	}
+	sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, types.SourcePositionTable)
 	if err != nil {
 		return nil, fmt.Errorf("code source position pointer read: %v", err)
 	}
@@ -1253,13 +1261,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read the deoptimization data
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
-	if vms.DeoptimizationData.ProtectedFixedArray {
-		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFixedArray)
-	} else if vms.DeoptimizationData.TrustedFixedArray {
-		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
-	} else {
-		deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
-	}
+	deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, types.DeoptimizationData)
 	if err != nil {
 		return nil, fmt.Errorf("deoptimization data pointer read: %v", err)
 	}
@@ -1311,15 +1313,9 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	if numSFI > 0 {
 		// The first numSFI entries of literal array are the pointers for
 		// inlined function's SFI structures
-		expectedTag := vms.Type.FixedArray
-		if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray {
-			expectedTag = vms.Type.TrustedWeakFixedArray
-		} else if vms.DeoptimizationLiteralArray.WeakFixedArray {
-			expectedTag = vms.Type.WeakFixedArray
-		}
 		literalArrayPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.LiteralArray*pointerSize))
-		literalArrayPtr, err = i.getTypedObject(literalArrayPtr, expectedTag)
+		literalArrayPtr, err = i.getTypedObject(literalArrayPtr, types.DeoptimizationLiteralArray)
 		if err != nil {
 			return nil, fmt.Errorf("literal array pointer read: %v", err)
 		}
@@ -1332,7 +1328,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// Read the complete inlining positions structure
 		inliningPositionsPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.InliningPositions*pointerSize))
-		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, vms.Type.ByteArray)
+		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, types.InliningPositions)
 		if err != nil {
 			return nil, fmt.Errorf("inlining position pointer read: %v", err)
 		}
@@ -2084,9 +2080,36 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		// At least back to V8 8.4
 		vms.Script.Source = vms.Script.Name - pointerSize
 	}
+	// Lost in V8 9.4
 	if vms.BytecodeArray.SourcePositionTable == 0 {
-		// Lost in V8 9.4
-		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + 3*pointerSize
+		var nptrs uint16 = 3
+		// Unfortunately, this has historically changed pretty often. The following are valid for all
+		// versions where `kSourcePositionTableOffset` appears in bytecode-array.h:
+		// everything from 11.9.86 (inclusive) to 14.9.194 (exclusive).
+		// It also works for everything from that point until the present day (15.1.14),
+		// because even though they've gotten rid of `kSourcePositionTableOffset` the offset hasn't
+		// actually changed since then.
+		//
+		// TODO: check versions before that range, where the field lives in bytecode-array.tq. Until then, we
+		// just use "3" as the default (which is what we always used before).
+		//
+		// This being wrong breaks file/line symbolization, but apparently only for
+		// Baseline frames.
+		switch {
+		case d.version < v8Ver(11, 9, 86):
+			// Keep the default.
+		case d.version < v8Ver(12, 0, 67):
+			nptrs = 2
+		case d.version < v8Ver(12, 1, 36):
+			nptrs = 3
+		case d.version < v8Ver(12, 3, 43):
+			nptrs = 4
+		case d.version < v8Ver(12, 3, 97):
+			nptrs = 3
+		default:
+			nptrs = 2
+		}
+		vms.BytecodeArray.SourcePositionTable = vms.FixedArrayBase.Length + nptrs*pointerSize
 	}
 	if vms.BytecodeArray.Data == 0 {
 		// At least back to V8 8.4 (16 = 3*int32 + uint16)
@@ -2147,6 +2170,25 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		vms.DeoptimizationLiteralArray.WeakFixedArray = true
 	}
 
+	if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray && vms.Type.TrustedWeakFixedArray == 0 {
+		if d.version >= v8Ver(12, 8, 0) {
+			// Since 134fcd57b07, there is another
+			// type between TrustedFixedArray and TrustedWeakFixedArray
+			// (to wit: TrustedForeign).
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 2
+		} else {
+			// Before that, TrustedWeakFixedArray
+			// immediately follows TrustedFixedArray.
+			vms.Type.TrustedWeakFixedArray = vms.Type.TrustedFixedArray + 1
+		}
+	}
+
+	// Changed from ByteArray to TrustedByteArray
+	// in f6c936e836b4d8ffafe790bcc3586f2ba5ffcf74
+	if d.version >= v8Ver(12, 6, 0) {
+		vms.InliningPositions.TrustedByteArray = true
+	}
+
 	for i := 0; i < vmVal.NumField(); i++ {
 		classVal := vmVal.Field(i)
 		classType := vmType.Field(i)
@@ -2163,6 +2205,34 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 			}
 		}
 	}
+
+	// Resolve the expected types of objects whose type depends on the V8 version
+	types := &d.expectedTypes
+	types.SourcePositionTable = vms.Type.ByteArray
+	if vms.SourcePositionTable.TrustedByteArray {
+		types.SourcePositionTable = vms.Type.TrustedByteArray
+	}
+	switch {
+	case vms.DeoptimizationData.ProtectedFixedArray:
+		types.DeoptimizationData = vms.Type.ProtectedFixedArray
+	case vms.DeoptimizationData.TrustedFixedArray:
+		types.DeoptimizationData = vms.Type.TrustedFixedArray
+	default:
+		types.DeoptimizationData = vms.Type.FixedArray
+	}
+	switch {
+	case vms.DeoptimizationLiteralArray.TrustedWeakFixedArray:
+		types.DeoptimizationLiteralArray = vms.Type.TrustedWeakFixedArray
+	case vms.DeoptimizationLiteralArray.WeakFixedArray:
+		types.DeoptimizationLiteralArray = vms.Type.WeakFixedArray
+	default:
+		types.DeoptimizationLiteralArray = vms.Type.FixedArray
+	}
+	types.InliningPositions = vms.Type.ByteArray
+	if vms.InliningPositions.TrustedByteArray {
+		types.InliningPositions = vms.Type.TrustedByteArray
+	}
+	log.Debugf("V8: expected types: %+v", *types)
 
 	return nil
 }

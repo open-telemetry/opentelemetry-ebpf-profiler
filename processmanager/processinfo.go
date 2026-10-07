@@ -396,11 +396,17 @@ var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping,
 	anonymousMappingsWanted bool,
 ) (libpf.FrameMapping, bool, error) {
-	// Open the mapping's own file via OpenELFMapping (VDSO from memory plus
-	// /proc/<pid>/map_files for deleted-file safety); auxiliary opens such as
-	// .gnu_debuglink targets go through pr.OpenELF.
+	// Open the mapping's own file via OpenMappingFile, which can open deleted
+	// or replaced files (e.g. via /proc/<pid>/map_files) and VDSO from process
+	// memory. Auxiliary opens such as .gnu_debuglink targets go through the
+	// pr fs.FS.
 	elfRef := pfelf.NewReferenceWithOpenFunc(m.Path, pr, func() (*pfelf.File, error) {
-		return process.OpenELFMapping(pr, m)
+		f, err := pr.OpenMappingFile(m)
+		if err != nil {
+			return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w",
+				m.Path, m.Vaddr, err)
+		}
+		return pfelf.NewFileFromFS(f)
 	})
 	defer elfRef.Close()
 

@@ -517,22 +517,21 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->tailCalls                         = 0;
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
-  record->customLabelsState.go_m_ptr        = NULL;
   record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
-  trace->frame_data_len    = 0;
+  trace->kernel_frame_end  = 0;
+  trace->frame_data_end    = 0;
+  trace->golang_label_end  = 0;
+  trace->thread_label_end  = 0;
+  trace->variable_data_end = 0;
   trace->num_frames        = 0;
-  trace->num_kernel_frames = 0;
   trace->pid               = 0;
   trace->tid               = 0;
 
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
-
-  trace->custom_labels_type = CUSTOM_LABELS_TYPE_NONE;
-  trace->custom_labels.len  = 0;
 
   return record;
 }
@@ -631,6 +630,28 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
   return unwinder_unwind_frame_pointer_regs(state, regs);
 }
 
+// reserve_variable_data reserves 'alloc_len' 64-bit slots of variable_data from
+// a trace. The 'reserve_len' is the number of additional slots reserve for potential
+// other portions.
+static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u64 alloc_len, u64 reserve_len)
+{
+  const u64 data_elems = sizeof(trace->variable_data) / sizeof(trace->variable_data[0]);
+
+  u64 index = trace->variable_data_end;
+  if (index > data_elems - alloc_len - reserve_len) {
+    return NULL;
+  }
+  u64 *ptr = &trace->variable_data[index];
+  return ptr;
+}
+
+// commit_variable_data advances the write pointer for variable data. The 'commit_len'
+// should not exceed the matching 'alloc_len' in the preceding reserve_variable_data call.
+static inline EBPF_INLINE void commit_variable_data(Trace *trace, u64 commit_len)
+{
+  trace->variable_data_end += commit_len;
+}
+
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
 {
   // frame header format (fixed size):
@@ -653,19 +674,17 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
-  const int error_frame_size = 1;
+  const u64 error_frame_len = 1;
+  u64 frame_len             = 1 + frame_varlen;
 
-  // Check that there is enough space for this frame and at least one error frame.
-  u64 *pos      = &trace->frame_data[trace->frame_data_len];
-  u8 frame_size = frame_varlen + 1;
-  if (pos >= &trace->frame_data[max_frame_size - error_frame_size - frame_size]) {
+  u64 *pos = reserve_variable_data(trace, frame_len, error_frame_len + MAX_FRAME_TRAILER_DATA_LEN);
+  if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->num_frames++;
-  trace->frame_data_len += frame_size;
-  pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
+  commit_variable_data(trace, frame_len);
+  pos[0] = frame_header(frame_type, frame_flags, frame_len, frame_data);
   return &pos[1];
 }
 
@@ -697,45 +716,43 @@ push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 // Push a critical error frame.
 static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 {
-  const int max_frame_size = sizeof trace->frame_data / sizeof trace->frame_data[0];
-
-  // Check that there is enough space for this frame and at least one error frame.
-  if (trace->frame_data_len < max_frame_size) {
+  u64 *pos = reserve_variable_data(trace, 1, MAX_FRAME_TRAILER_DATA_LEN);
+  if (pos) {
+    pos[0] = frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
+    commit_variable_data(trace, 1);
     trace->num_frames++;
-    trace->frame_data[trace->frame_data_len++] =
-      frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
   }
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses at the beginning of frame_data. Must be called before any
-// userspace frames are pushed. The num_kernel_frames field tells userspace how
-// many leading frame_data entries are kernel addresses.
+// the raw addresses in the variable data. Must be called before any
+// userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
+  const u32 max_bytes = PERF_MAX_STACK_DEPTH * sizeof(u64);
   _Static_assert(
-    sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
-  long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
+    MAX_FRAME_DATA_LEN * sizeof(trace->variable_data[0]) > max_bytes, "frame data too small");
+
+  void *data = reserve_variable_data(trace, PERF_MAX_STACK_DEPTH, MAX_FRAME_TRAILER_DATA_LEN);
+  if (!data) {
+    return;
+  }
+  long bytes = bpf_get_stack(ctx, data, max_bytes, 0);
   if (bytes > 0) {
-    u16 nframes              = (unsigned long)bytes / sizeof(u64);
-    trace->num_kernel_frames = nframes;
-    trace->frame_data_len    = nframes;
+    u16 nframes = (unsigned long)bytes / sizeof(u64);
+    commit_variable_data(trace, nframes);
+    trace->kernel_frame_end = trace->variable_data_end;
   }
 }
 
 // Send a trace to userspace via the `trace_events` ringbuffer.
 static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 {
-  // Explicitly clamp frame_data_len for the verifier. In production the value
-  // is always within bounds, but when send_trace is inlined into the same
-  // program as push_frame (e.g. the integration test), the verifier cannot
-  // track frame_data_len through memory stores and reloads.
-  u16 len = trace->frame_data_len;
-  if (len > sizeof(trace->frame_data) / sizeof(trace->frame_data[0])) {
-    len = sizeof(trace->frame_data) / sizeof(trace->frame_data[0]);
-  }
-  const u64 send_size =
-    sizeof(Trace) - sizeof(trace->frame_data) + sizeof(trace->frame_data[0]) * len;
+  u64 send_size = __builtin_offsetof(struct Trace, variable_data) +
+                  trace->variable_data_end * sizeof(trace->variable_data[0]);
+
+  // Explicitly clamp the send size to satisfy verifier.
+  send_size = MIN(send_size, sizeof(Trace));
 
   trace->cpu_id = bpf_get_smp_processor_id();
 

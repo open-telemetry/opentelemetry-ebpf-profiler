@@ -24,9 +24,8 @@ func TestSizeOfCGoStruct(t *testing.T) {
 			want: sizeof_RubyProcInfo},
 		{name: "ThreadContextProcInfo", input: unsafe.Sizeof(ThreadContextProcInfo{}),
 			want: sizeof_ThreadContextProcInfo},
-		// Guards the union in Trace, which cgo -godefs mirrors as its first
-		// member alone. generate.sh diffs generated against generated, so a
-		// member outgrowing CustomLabelsArray would shift fields only in C.
+		{name: "ThreadLabelData", input: unsafe.Sizeof(ThreadLabelData{}),
+			want: Sizeof_ThreadLabelData},
 		{name: "Trace", input: unsafe.Sizeof(Trace{}),
 			want: Sizeof_TraceHeader},
 	}

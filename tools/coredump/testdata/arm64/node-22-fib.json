@@ -36,7 +36,7 @@
         "fib+5 in file:///home/brennan/app.mjs:6:10",
         "fib+4 in file:///home/brennan/app.mjs:5:10",
         "fib+4 in file:///home/brennan/app.mjs:5:10",
-        "cpuBurn+0 in file:///home/brennan/app.mjs:11",
+        "cpuBurn+2 in file:///home/brennan/app.mjs:13:12",
         "listOnTimeout+0 in node:internal/timers:0",
         "processTimers+0 in node:internal/timers:0",
         "V8::InternalFrame+0 in :0",

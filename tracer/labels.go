@@ -4,12 +4,12 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"fmt"
 	"sync/atomic"
 	"unicode/utf8"
+	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -101,60 +101,34 @@ func (m *threadContextLabelMetrics) getAndResetMetrics() []metrics.Metric {
 	}
 }
 
-// goCustomLabels decodes the Go runtime/pprof variant of the Trace custom
-// labels union. Returns nil rather than an empty map when there are no labels.
-func (t *Tracer) goCustomLabels(src *support.CustomLabelsArray) map[libpf.String]libpf.String {
-	// get_go_custom_labels sets the tag even for an empty label slice.
-	n := int(src.Len)
-	if n == 0 {
-		return nil
+// threadLabelPayload extracts the attribute bytes from a ThreadLabelData section,
+// excluding its header and alignment padding.
+func threadLabelPayload(data []byte) ([]byte, error) {
+	if len(data) < support.Sizeof_ThreadLabelData {
+		return nil, fmt.Errorf("thread label section is smaller than its header: %w",
+			errRecordUnexpectedSize)
 	}
-	labels := make(map[libpf.String]libpf.String, n)
-	for _, lbl := range src.Labels[:n] {
-		keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
-		if !ok {
-			log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
-			continue
-		}
-		key := libpf.Intern(pfunsafe.ToString(keyBytes))
-		valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
-		if !ok {
-			log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
-			continue
-		}
-		labels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
+	header := (*support.ThreadLabelData)(unsafe.Pointer(unsafe.SliceData(data)))
+	payload := data[support.Sizeof_ThreadLabelData:]
+	if int(header.Size) > len(payload) {
+		return nil, fmt.Errorf("thread label size %d exceeds payload size %d: %w",
+			header.Size, len(payload), errRecordUnexpectedSize)
 	}
-	return labels
+	return payload[:header.Size], nil
 }
 
-// threadContextCustomLabels decodes the opaque variant of the Trace custom
-// labels union against the schema pid published.
-func (t *Tracer) threadContextCustomLabels(payload *support.CustomLabelsData,
-	pid libpf.PID) map[libpf.String]libpf.String {
-	size := int(payload.Size)
-	if size > len(payload.Data) {
-		// Not a publisher fault: the eBPF producer must clamp this, so exceeding
-		// it means the eBPF and user-space layouts disagree and nothing in the
-		// payload can be trusted.
-		log.Warnf("Thread context payload size %d exceeds the %d byte buffer "+
-			"(PID %d): eBPF and user-space layouts disagree, dropping labels",
-			size, len(payload.Data), pid)
-		return nil
-	}
-	if size == 0 {
-		// The common case: a process publishing only trace/span IDs sends no
-		// attributes, so skip the decoder lookup and its lock.
-		return nil
-	}
+// threadContextCustomLabels decodes a thread-context attribute section against
+// the schema published by the process. The payload excludes alignment padding.
+func (t *Tracer) threadContextCustomLabels(payload []byte,
+	dec libpf.ThreadLabelDecoder) map[libpf.String]libpf.String {
 	// Key indices mean nothing without the published schema. A PID with none
 	// can be permanent (no publisher, or an unsupported schema version) rather
 	// than a startup race, so count instead of logging.
-	dec := t.processManager.LabelDecoderForPID(pid)
 	if dec == nil {
 		t.threadContextLabels.droppedSamplesNoSchema.Add(1)
 		return nil
 	}
-	labels, dropped := dec.DecodeLabels(payload.Data[:size])
+	labels, dropped := dec.DecodeLabels(payload)
 	if dropped > 0 {
 		t.threadContextLabels.droppedEntriesUndecodable.Add(int64(dropped))
 	}

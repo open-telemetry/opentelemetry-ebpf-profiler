@@ -242,7 +242,7 @@ func getFrameSpace(machine elf.Machine) (int32, error) {
 }
 
 func extractStackDeltas(target string, ef *pfelf.File) (sdtypes.IntervalData, int32, error) {
-	intervals, err := elfunwindinfo.Extract(target)
+	intervals, err := elfunwindinfo.Extract(os.DirFS("/"), pfelf.FSPath(target))
 	if err != nil {
 		return *intervals, 0, err
 	}

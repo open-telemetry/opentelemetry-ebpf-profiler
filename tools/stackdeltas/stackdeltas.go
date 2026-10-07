@@ -10,9 +10,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -124,7 +126,7 @@ func analyzeFile(filename string, s *stats, dump bool) error {
 			filename, err)
 	}
 
-	intervals, err := elfunwindinfo.Extract(absPath)
+	intervals, err := elfunwindinfo.Extract(os.DirFS("/"), pfelf.FSPath(absPath))
 	if err != nil {
 		return fmt.Errorf("failed to extract stack deltas: %v", err)
 	}
