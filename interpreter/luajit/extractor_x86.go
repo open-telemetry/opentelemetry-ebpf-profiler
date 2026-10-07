@@ -247,8 +247,7 @@ func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (libpf
 //
 //nolint:lll
 func (x *x86Extractor) findLjDispatchUpdateAddr(b []byte, addr libpf.Address) (libpf.Address, error) {
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(addr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(addr)))
 	// L is initial RDI (SysV first arg). lj_dispatch_update's first arg is G,
 	// reached via L->glref at offset 0x10. We don't care which register the
 	// compiler parks L in - symbolic tracking handles the chain.
@@ -336,8 +335,7 @@ func (x *x86Extractor) findG2TracesOffsetFromChecktrace(b []byte) (libpf.Address
 }
 
 func (x *x86Extractor) findFirstCall(b []byte, baseAddr libpf.Address) (libpf.Address, error) {
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	for {
 		i, err := it.Step()
 		if errors.Is(err, io.EOF) {
@@ -359,8 +357,7 @@ func (x *x86Extractor) findFirstCall(b []byte, baseAddr libpf.Address) (libpf.Ad
 
 // Return true if the code in b calls targetCall.
 func (x *x86Extractor) callExists(b []byte, baseAddr, targetCall libpf.Address) (bool, error) {
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	for {
 		i, err := it.Step()
 
@@ -390,8 +387,7 @@ func (x *x86Extractor) callExists(b []byte, baseAddr, targetCall libpf.Address) 
 //
 //nolint:lll
 func (x *x86Extractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall libpf.Address) (libpf.Address, error) {
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	callsLeft := 2
 
 	for {
@@ -500,8 +496,7 @@ func (x *x86Extractor) find3rdArgToLibPreregCall(b []byte, baseAddr libpf.Addres
 	// libluajit-5.1.so[0x700dd] <+189>: movl   $0x12, %edx
 	// libluajit-5.1.so[0x700e2] <+194>: leaq   0x9b0a(%rip), %rsi
 	// libluajit-5.1.so[0x700e9] <+201>: callq  0x9af0         ; symbol stub for: lua_pushlstring
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	err := skipCallsAABA(it, baseAddr)
 	if err != nil {
 		return 0, err
@@ -547,8 +542,7 @@ func (x *x86Extractor) find3rdArgToLibPreregCall(b []byte, baseAddr libpf.Addres
 // bbbe:	48 83 c4 08          	add    $0x8,%rsp
 // bbc2:	c3                   	ret
 func (x *x86Extractor) find4thArgToLibRegCall(b []byte, baseAddr libpf.Address) (libpf.Address, error) {
-	it := amd.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := amd.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	// luaopen_jit_util's body is: set up call args (RCX via either
 	// `lea $rip-rel, %rcx` or `mov $imm, %ecx`), then call lj_lib_register.
 	// Step until that CALL, then read RCX symbolically.
