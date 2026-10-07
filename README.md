@@ -153,7 +153,7 @@ For more information about the maintainer role, see the
 ### Approvers
 
 - [Roger Coll](https://github.com/rogercoll), Elastic
-- [Florian Lehner](https://github.com/florianl), Elastic
+- [Florian Lehner](https://github.com/florianl), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
 
 For more information about the approver role, see the
