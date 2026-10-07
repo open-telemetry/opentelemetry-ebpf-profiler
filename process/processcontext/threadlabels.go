@@ -6,6 +6,7 @@ package processcontext // import "go.opentelemetry.io/ebpf-profiler/process/proc
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"unicode/utf8"
 
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
@@ -26,6 +27,13 @@ const (
 	// since it reads the key index as a single byte.
 	maxThreadCtxAttributeKeys = 256
 )
+
+// schemaRejected counts processes that published a thread-context schema the
+// agent refused. Swapped into the process manager's periodic metric summary.
+var schemaRejected atomic.Int64
+
+// TakeSchemaRejectedCount returns the rejections seen since the previous call.
+func TakeSchemaRejectedCount() int64 { return schemaRejected.Swap(0) }
 
 // threadContextInfo is one process's published per-thread label schema.
 type threadContextInfo struct {
@@ -99,18 +107,25 @@ func (t *threadContextInfo) DecodeLabels(data []byte) (labels libpf.ThreadLabels
 	for len(data) > 0 {
 		if len(data) < 2 {
 			dropped++
+			log.Debugf("thread context: dropping truncated entry header")
 			break
 		}
 		keyIndex := int(data[0])
 		valueLen := int(data[1])
 		if len(data) < 2+valueLen {
 			dropped++
+			log.Debugf("thread context: dropping entry, value length %d exceeds %d bytes left",
+				valueLen, len(data)-2)
 			break
 		}
 		val := data[2 : 2+valueLen]
 		data = data[2+valueLen:]
 		if keyIndex >= len(t.attributeKeyMap) {
 			dropped++
+			// Publisher's schema and payload disagree, or its key map is not
+			// published yet.
+			log.Debugf("thread context: dropping entry, key index %d but schema has %d keys",
+				keyIndex, len(t.attributeKeyMap))
 			continue
 		}
 		// valueLen already bounds val to what the publisher declared, so an

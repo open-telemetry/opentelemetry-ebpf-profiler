@@ -2272,5 +2272,12 @@
     "name": "ThreadContextDroppedEntriesUndecodable",
     "field": "agent.threadctx.dropped_entries.undecodable",
     "id": 311
+  },
+  {
+    "description": "Number of processes whose published thread-context label schema was rejected",
+    "type": "counter",
+    "name": "ThreadContextSchemaRejected",
+    "field": "agent.threadctx.schema_rejected",
+    "id": 312
   }
 ]

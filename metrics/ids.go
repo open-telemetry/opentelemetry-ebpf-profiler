@@ -722,6 +722,9 @@ const (
 	// Number of thread-context label entries dropped as undecodable
 	IDThreadContextDroppedEntriesUndecodable = 311
 
+	// Number of processes whose published thread-context label schema was rejected
+	IDThreadContextSchemaRejected = 312
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 312
+	IDMax = 313
 )
