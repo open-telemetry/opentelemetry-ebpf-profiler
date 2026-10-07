@@ -77,6 +77,7 @@ type Config struct {
 	// Use the otlpexporter retry_on_failure setting instead.
 	MaxGRPCRetries uint32 `mapstructure:"max_grpc_retries"`
 	// Deprecated: only passed to reporter factories wrapping the deprecated reporter.NewOTLP.
+	// Use an otlpexporter gRPC middleware instead.
 	MaxRPCMsgSize int `mapstructure:"max_rpc_msg_size"`
 
 	// Configuration options that users can not set directly:

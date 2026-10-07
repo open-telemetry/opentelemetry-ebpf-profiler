@@ -25,7 +25,7 @@ type Config struct {
 
 	// MaxRPCMsgSize defines the maximum size of a gRPC message.
 	//
-	// Deprecated: only used by NewOTLP.
+	// Deprecated: only used by NewOTLP. Use an otlpexporter gRPC middleware instead.
 	MaxRPCMsgSize int
 
 	// Disable secure communication with Collection Agent.
@@ -61,7 +61,7 @@ type Config struct {
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.
 	//
-	// Deprecated: only used by NewOTLP. Use the otlpexporter headers or auth settings instead.
+	// Deprecated: only used by NewOTLP. Use the otlpexporter headers, auth or middlewares settings instead.
 	GRPCClientInterceptor grpc.UnaryClientInterceptor
 
 	// ExtraSampleAttrProd is an optional hook point for adding custom
@@ -71,6 +71,6 @@ type Config struct {
 	// GRPCDialOptions allows passing additional gRPC dial options when establishing
 	// the connection to the collector. These options are appended after the default options.
 	//
-	// Deprecated: only used by NewOTLP.
+	// Deprecated: only used by NewOTLP. Use an otlpexporter gRPC middleware instead.
 	GRPCDialOptions []grpc.DialOption
 }

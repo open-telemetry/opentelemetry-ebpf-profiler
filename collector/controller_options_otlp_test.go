@@ -78,6 +78,8 @@ func newOTLPReporterFactory(endpoint string, disableTLS bool,
 	}
 }
 
+// ExampleWithReporterFactory exports profiles with the collector's otlpexporter:
+// https://github.com/open-telemetry/opentelemetry-collector/tree/main/exporter/otlpexporter
 func ExampleWithReporterFactory() {
 	createProfiles := BuildProfilesReceiver(
 		WithReporterFactory(newOTLPReporterFactory("localhost:4317", true)),
