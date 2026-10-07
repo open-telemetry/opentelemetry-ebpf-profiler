@@ -100,9 +100,8 @@ const (
 
 type ApmSpanID C.ApmSpanID
 type ApmTraceID C.ApmTraceID
-type CustomLabel C.CustomLabel
-type CustomLabelsArray C.CustomLabelsArray
 type Event C.Event
+type GolangLabel C.GolangLabel
 type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
@@ -130,8 +129,10 @@ type ThreadContextProcInfo C.ThreadContextProcInfo
 type V8ProcInfo C.V8ProcInfo
 
 const (
-	Sizeof_StackDelta = C.sizeof_StackDelta
-	Sizeof_Trace      = C.sizeof_Trace
+	Sizeof_StackDelta    = C.sizeof_StackDelta
+	Sizeof_TraceHeader   = C.sizeof_Trace
+	Sizeof_TraceWithData = C.sizeof_Trace + C.sizeof_TraceData
+	Sizeof_GolangLabel   = C.sizeof_GolangLabel
 
 	sizeof_ApmIntProcInfo        = C.sizeof_ApmIntProcInfo
 	sizeof_DotnetProcInfo        = C.sizeof_DotnetProcInfo
@@ -169,6 +170,7 @@ const (
 	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
 	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
 	UnwindCommandGoAsmcgocall int32 = C.UNWIND_COMMAND_GO_ASMCGOCALL
+	UnwindCommandGoMorestack  int32 = C.UNWIND_COMMAND_GO_MORESTACK
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK

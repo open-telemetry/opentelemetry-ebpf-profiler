@@ -6,7 +6,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, u64 tid)
+static EBPF_INLINE void send_sample_traces(void *ctx, u32 pid, u32 tid)
 {
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();
@@ -33,18 +33,21 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, u64 tid)
   if (data) {
     data[0] = 1337;
   }
+  trace->frame_data_end = trace->variable_data_end;
   send_trace(ctx, trace);
 
   // Single native frame, with kernel trace.
-  trace->frame_data_len    = 0;
+  trace->kernel_frame_end  = 0;
+  trace->frame_data_end    = 0;
+  trace->variable_data_end = 0;
   trace->num_frames        = 0;
-  trace->num_kernel_frames = 0;
   trace->comm[3]           = 2;
   push_kernel_frames(ctx, trace);
   data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
   if (data) {
     data[0] = 1337;
   }
+  trace->frame_data_end = trace->variable_data_end;
   send_trace(ctx, trace);
 }
 

@@ -1378,14 +1378,20 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 		return &peInfo{err: e.err}
 	}
 
-	file, err := pr.OpenMappingFile(mapping)
+	f, err := pr.OpenMappingFile(mapping)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
 		}
 		return &peInfo{err: err}
 	}
-	defer file.Close()
+	defer f.Close()
+	file, ok := f.(io.ReaderAt)
+	if !ok {
+		err = errors.New("mapping file does not support io.ReaderAt")
+		pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
+		return &peInfo{err: err}
+	}
 
 	// Hash the first 4 KiB of the file to derive a content-stable key.
 	// Dotnet requires all PE headers to fit in this prefix, so it captures

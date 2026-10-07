@@ -9,10 +9,36 @@
 // go_procs stores Go runtime-specific offsets per Go process.
 struct go_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, GoRuntimeOffsets);
   __uint(max_entries, 1024);
 } go_procs SEC(".maps");
+
+static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct GoString *v)
+{
+  const u64 num_elems = sizeof(GolangLabel) / sizeof(trace->variable_data[0]);
+  GolangLabel *l      = reserve_variable_data(trace, num_elems, 0);
+  if (!l) {
+    return false;
+  }
+
+  u64 klen = MIN(k->len, sizeof l->key - 1);
+  if (bpf_probe_read_user(l->key, (u32)klen, k->str)) {
+    DEBUG_PRINT("cl: failed to read label key (%lx)", (unsigned long)k->str);
+    return false;
+  }
+  l->key[klen] = 0;
+
+  u64 vlen = MIN(v->len, sizeof l->val - 1);
+  if (bpf_probe_read_user(l->val, (u32)vlen, v->str)) {
+    DEBUG_PRINT("cl: failed to read label value (%lx)", (unsigned long)v->str);
+    return false;
+  }
+  l->val[vlen] = 0;
+  commit_variable_data(trace, num_elems);
+
+  return true;
+}
 
 static EBPF_INLINE bool
 get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
@@ -24,45 +50,27 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
     return false;
   }
 
-  CustomLabelsArray *out = &record->trace.custom_labels;
   // len is number of pairs, ie its a vector of key/val structs.
-  u8 num_to_read         = MIN(labels_slice.len, MAX_CUSTOM_LABELS);
+  u64 num = 2 * (u64)MIN(labels_slice.len, MAX_GO_LABELS);
   if (bpf_probe_read_user(
-        &record->labels, sizeof(struct GoString) * 2 * num_to_read, labels_slice.array)) {
+        &record->goLabels, sizeof(struct GoString) * (u32)num, labels_slice.array)) {
     DEBUG_PRINT(
       "cl: failed to read strings from labels slice (%lx)", (unsigned long)labels_slice.array);
     return false;
   }
 
-  for (u8 i = 0; i < MAX_CUSTOM_LABELS; i++) {
-    if (i >= labels_slice.len)
+  // Convert the data from the scratch array to event label data payload
+  bool ret = false;
+  for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
+    if (i >= num)
       break;
-    CustomLabel *lbl = &out->labels[i];
-
-    u8 klen = MIN(record->labels[i * 2].len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
-    if (bpf_probe_read_user(lbl->key, klen, record->labels[i * 2].str)) {
-      DEBUG_PRINT(
-        "cl: failed to read key for custom label (%lx)", (unsigned long)record->labels[i * 2].str);
-      return false;
-    }
-    lbl->key[klen] = 0;
-
-    u8 vlen = MIN(record->labels[i * 2 + 1].len, CUSTOM_LABEL_MAX_VAL_LEN - 1);
-    if (bpf_probe_read_user(lbl->val, vlen, record->labels[i * 2 + 1].str)) {
-      DEBUG_PRINT(
-        "cl: failed to read key for custom label (%lx)",
-        (unsigned long)record->labels[i * 2 + 1].str);
-      return false;
-    }
-    lbl->val[vlen] = 0;
+    if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
+      goto done;
   }
-  out->len = num_to_read;
-
-  return true;
+  ret = true;
+done:
+  return ret;
 }
-
-// https://github.com/golang/go/blob/6885bad7dd86880be6929c02085/src/internal/abi/map.go#L12
-#define GO_MAP_BUCKET_SIZE 8
 
 static EBPF_INLINE bool
 get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
@@ -82,7 +90,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   }
   if (labels_count == 0) {
     DEBUG_PRINT("cl: no labels");
-    return false;
+    return true;
   }
 
   unsigned char log_2_bucket_count;
@@ -93,53 +101,49 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
     DEBUG_PRINT("cl: failed to read value for bucket_count");
     return false;
   }
-  void *label_buckets;
+  GoMapBucket *label_buckets;
   if (bpf_probe_read_user(
         &label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets)) {
     DEBUG_PRINT("cl: failed to read value for label_buckets");
     return false;
   }
 
-  CustomLabelsArray *out = &record->trace.custom_labels;
+  // Limit extracted labels to MAX_GO_LABELS
+  const u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]) / 8;
+
   // If the map has more than 16 buckets we just don't support it, pprof maps are typically
   // small and if its a problem upgrading to Go 1.24+ is a potential solution.
-  u8 bucket_count        = 1 << log_2_bucket_count;
-  for (u8 b = 0; b < 16; b++) {
+  u64 bucket_count = 1UL << log_2_bucket_count;
+  bool ret         = false;
+  for (u64 b = 0; b < 16; b++) {
     if (b >= bucket_count)
       break;
-    GoMapBucket *map_value = &record->goMapBucket;
-    if (bpf_probe_read_user(
-          map_value, sizeof(GoMapBucket), label_buckets + (b * sizeof(GoMapBucket)))) {
-      return false;
+
+    GoMapBucket *bucket = &record->goMapBucket;
+    if (bpf_probe_read_user(bucket, sizeof(GoMapBucket), &label_buckets[b])) {
+      goto done;
     }
 
-    for (u8 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
-      if (out->len >= MAX_CUSTOM_LABELS)
-        return true;
-      CustomLabel *lbl = &out->labels[out->len];
-      char tophash     = map_value->tophash[i];
-      char *kstr       = map_value->keys[i].str;
-      if (tophash != 0 && kstr != NULL) {
-        unsigned klen = MIN(map_value->keys[i].len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
-        if (bpf_probe_read_user(lbl->key, klen, kstr)) {
-          DEBUG_PRINT("cl: failed to read key for custom label (%lx)", (unsigned long)kstr);
-          return false;
-        }
-        lbl->key[klen] = 0;
+    for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
+      // map tophash values for Go 1.12 (first supported) to 1.23 (last used in pprof)
+      // https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L82-L87
+      const u8 emptyRest = 0, minTopHash = 5;
 
-        char *vstr    = map_value->values[i].str;
-        unsigned vlen = MIN(map_value->values[i].len, CUSTOM_LABEL_MAX_VAL_LEN - 1);
-        if (bpf_probe_read_user(lbl->val, vlen, vstr)) {
-          DEBUG_PRINT("cl: failed to read value for custom label");
-          return false;
-        }
-        lbl->val[vlen] = 0;
-        out->len++;
-      }
+      u8 tophash = bucket->tophash[i];
+      if (tophash == emptyRest)
+        break;
+      if (tophash < minTopHash)
+        continue;
+      if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
+        goto done;
+      if (record->trace.variable_data_end >= max_end)
+        goto success;
     }
   }
-
-  return true;
+success:
+  ret = true;
+done:
+  return ret;
 }
 
 // Go processes store the current goroutine in thread local store. From there
@@ -157,7 +161,7 @@ static EBPF_INLINE bool get_go_custom_labels(PerCPURecord *record)
   if (bpf_probe_read_user(
         &curg_ptr_addr,
         sizeof(void *),
-        (void *)(record->customLabelsState.go_m_ptr + offs->curg))) {
+        (void *)(record->golangLabelsState.go_m_ptr + offs->curg))) {
     DEBUG_PRINT("cl: failed to read value for m_ptr->curg");
     return false;
   }
@@ -175,7 +179,6 @@ static EBPF_INLINE bool get_go_custom_labels(PerCPURecord *record)
     // go 1.24+ labels is a slice
     return get_go_custom_labels_from_slice(record, labels_ptr);
   }
-
   // go 1.23- labels is a map
   return get_go_custom_labels_from_map(record, labels_ptr);
 }
@@ -195,11 +198,12 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
   DEBUG_PRINT(
     "cl: go offsets found, %d recognized as a go binary: m_ptr: %lx",
     pid,
-    (unsigned long)record->customLabelsState.go_m_ptr);
+    (unsigned long)record->golangLabelsState.go_m_ptr);
   bool success = get_go_custom_labels(record);
   if (!success) {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
+  record->trace.golang_label_end = record->trace.variable_data_end;
 
   send_trace(ctx, &record->trace);
   return 0;

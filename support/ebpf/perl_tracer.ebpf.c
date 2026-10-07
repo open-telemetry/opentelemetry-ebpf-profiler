@@ -69,7 +69,7 @@
 // we require in order to build the stack trace
 struct perl_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, PerlProcInfo);
   __uint(max_entries, 1024);
 } perl_procs SEC(".maps");
@@ -298,7 +298,7 @@ static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo 
 
   int unwinder       = PROG_UNWIND_PERL;
   const void *cxbase = record->perlUnwindState.cxbase;
-  for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
+  for (u64 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
     // Test first the stack 'cxcur' validity. Some stacks can have 'cxix=-1'
     // when they are being constructed or ran.
     if (record->perlUnwindState.cxcur < cxbase) {
@@ -397,7 +397,7 @@ static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
         goto err_tsd;
       }
 
-      int tsd_key;
+      u32 tsd_key;
       if (bpf_probe_read_user(&tsd_key, sizeof(tsd_key), (void *)perlinfo->stateAddr)) {
         DEBUG_PRINT("Failed to read tsdKey from 0x%lx", (unsigned long)perlinfo->stateAddr);
         goto err_tsd;

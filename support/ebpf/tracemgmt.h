@@ -286,7 +286,7 @@ static inline EBPF_INLINE bool process_is_too_new(u64 ts, u64 group_leader)
 // Notifications for GENERIC_PID will be automatically inhibited until HA resets the type.
 static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
-  int inhibit_key    = event_type;
+  u32 inhibit_key    = event_type;
   bool inhibit_value = true;
 
   // This is a global notification mechanism that may trigger eBPF map
@@ -325,18 +325,18 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
 struct bpf_perf_event_data;
 
 // pid_information looks up the per-PID marker in pid_page_to_mapping_info.
-static inline EBPF_INLINE PIDPageMappingInfo *pid_information(int pid)
+static inline EBPF_INLINE PIDPageMappingInfo *pid_information(u32 pid)
 {
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.pid       = __constant_cpu_to_be32(pid);
   key.page      = 0;
 
   return bpf_map_lookup_elem(&pid_page_to_mapping_info, &key);
 }
 
 // pid_information_exists checks if the given pid exists in pid_page_to_mapping_info or not.
-static inline EBPF_INLINE bool pid_information_exists(int pid)
+static inline EBPF_INLINE bool pid_information_exists(u32 pid)
 {
   return pid_information(pid) != NULL;
 }
@@ -517,21 +517,20 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->tailCalls                         = 0;
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
-  record->customLabelsState.go_m_ptr        = NULL;
   record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
-  trace->frame_data_len    = 0;
+  trace->kernel_frame_end  = 0;
+  trace->frame_data_end    = 0;
+  trace->golang_label_end  = 0;
+  trace->variable_data_end = 0;
   trace->num_frames        = 0;
-  trace->num_kernel_frames = 0;
   trace->pid               = 0;
   trace->tid               = 0;
 
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
-
-  trace->custom_labels.len = 0;
 
   return record;
 }
@@ -630,6 +629,28 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
   return unwinder_unwind_frame_pointer_regs(state, regs);
 }
 
+// reserve_variable_data reserves 'alloc_len' 64-bit slots of variable_data from
+// a trace. The 'reserve_len' is the number of additional slots reserve for potential
+// other portions.
+static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u64 alloc_len, u64 reserve_len)
+{
+  const u64 data_elems = sizeof(trace->variable_data) / sizeof(trace->variable_data[0]);
+
+  u64 index = trace->variable_data_end;
+  if (index > data_elems - alloc_len - reserve_len) {
+    return NULL;
+  }
+  u64 *ptr = &trace->variable_data[index];
+  return ptr;
+}
+
+// commit_variable_data advances the write pointer for variable data. The 'commit_len'
+// should not exceed the matching 'alloc_len' in the preceding reserve_variable_data call.
+static inline EBPF_INLINE void commit_variable_data(Trace *trace, u64 commit_len)
+{
+  trace->variable_data_end += commit_len;
+}
+
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
 {
   // frame header format (fixed size):
@@ -652,20 +673,32 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
-  const int error_frame_size = 1;
+  const u64 error_frame_len = 1;
+  u64 frame_len             = 1 + frame_varlen;
 
-  // Check that there is enough space for this frame and at least one error frame.
-  u64 *pos      = &trace->frame_data[trace->frame_data_len];
-  u8 frame_size = frame_varlen + 1;
-  if (pos >= &trace->frame_data[max_frame_size - error_frame_size - frame_size]) {
+  u64 *pos = reserve_variable_data(trace, frame_len, error_frame_len + MAX_FRAME_TRAILER_DATA_LEN);
+  if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->num_frames++;
-  trace->frame_data_len += frame_size;
-  pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
+  commit_variable_data(trace, frame_len);
+  pos[0] = frame_header(frame_type, frame_flags, frame_len, frame_data);
   return &pos[1];
+}
+
+// Record a native frame
+static inline EBPF_INLINE ErrorCode
+push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
+{
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = file;
+  return ERR_OK;
 }
 
 // Push an interpreter specific error frame.
@@ -682,45 +715,43 @@ push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 // Push a critical error frame.
 static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 {
-  const int max_frame_size = sizeof trace->frame_data / sizeof trace->frame_data[0];
-
-  // Check that there is enough space for this frame and at least one error frame.
-  if (trace->frame_data_len < max_frame_size) {
+  u64 *pos = reserve_variable_data(trace, 1, MAX_FRAME_TRAILER_DATA_LEN);
+  if (pos) {
+    pos[0] = frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
+    commit_variable_data(trace, 1);
     trace->num_frames++;
-    trace->frame_data[trace->frame_data_len++] =
-      frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
   }
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses at the beginning of frame_data. Must be called before any
-// userspace frames are pushed. The num_kernel_frames field tells userspace how
-// many leading frame_data entries are kernel addresses.
+// the raw addresses in the variable data. Must be called before any
+// userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
+  const u32 max_bytes = PERF_MAX_STACK_DEPTH * sizeof(u64);
   _Static_assert(
-    sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
-  long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
+    MAX_FRAME_DATA_LEN * sizeof(trace->variable_data[0]) > max_bytes, "frame data too small");
+
+  void *data = reserve_variable_data(trace, PERF_MAX_STACK_DEPTH, MAX_FRAME_TRAILER_DATA_LEN);
+  if (!data) {
+    return;
+  }
+  long bytes = bpf_get_stack(ctx, data, max_bytes, 0);
   if (bytes > 0) {
-    int nframes              = bytes / sizeof(u64);
-    trace->num_kernel_frames = nframes;
-    trace->frame_data_len    = nframes;
+    u16 nframes = (unsigned long)bytes / sizeof(u64);
+    commit_variable_data(trace, nframes);
+    trace->kernel_frame_end = trace->variable_data_end;
   }
 }
 
 // Send a trace to userspace via the `trace_events` ringbuffer.
 static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 {
-  // Explicitly clamp frame_data_len for the verifier. In production the value
-  // is always within bounds, but when send_trace is inlined into the same
-  // program as push_frame (e.g. the integration test), the verifier cannot
-  // track frame_data_len through memory stores and reloads.
-  u16 len = trace->frame_data_len;
-  if (len > sizeof(trace->frame_data) / sizeof(trace->frame_data[0])) {
-    len = sizeof(trace->frame_data) / sizeof(trace->frame_data[0]);
-  }
-  const u64 send_size =
-    sizeof(Trace) - sizeof(trace->frame_data) + sizeof(trace->frame_data[0]) * len;
+  u64 send_size = __builtin_offsetof(struct Trace, variable_data) +
+                  trace->variable_data_end * sizeof(trace->variable_data[0]);
+
+  // Explicitly clamp the send size to satisfy verifier.
+  send_size = MIN(send_size, sizeof(Trace));
 
   trace->cpu_id = bpf_get_smp_processor_id();
 
@@ -812,7 +843,7 @@ static inline EBPF_INLINE VMAInfo find_vma_info_for_pc(u64 pc)
 static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
 {
   UnwindState *state = &record->state;
-  pid_t pid          = record->trace.pid;
+  u32 pid            = record->trace.pid;
   u64 pc             = state->pc;
 
   if (is_kernel_address(pc)) {
@@ -835,7 +866,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
 
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.pid       = __constant_cpu_to_be32(pid);
   key.page      = __constant_cpu_to_be64(pc);
 
   // Check if we have the data for this virtual address
@@ -1015,7 +1046,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // Check if the process is running in 32-bit mode on the x86_64 system.
   // This check follows the Linux kernel implementation of user_64bit_mode() in
   // arch/x86/include/asm/ptrace.h.
-  if (regs->cs == __USER32_CS) {
+  if ((u16)regs->cs == __USER32_CS) {
     return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
   }
   state->pc  = regs->ip;
@@ -1032,7 +1063,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
-  state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
+  state->return_address = interrupted_kernelmode && regs->orig_ax != -1UL;
 #elif defined(__aarch64__)
   // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
@@ -1084,7 +1115,7 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 {
   #if defined(__x86_64__)
   // On x86_64 the user mode SS should always be __USER_DS.
-  if (regs->ss != __USER_DS) {
+  if ((u16)regs->ss != __USER_DS) {
     return false;
   }
   return true;

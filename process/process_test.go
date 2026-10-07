@@ -292,3 +292,21 @@ func TestNewEnvVarsEnricher(t *testing.T) {
 		})
 	}
 }
+
+// A mapping that disappears between reading /proc/PID/maps and opening its
+// map_files entry (e.g. ld.so splitting a library's initial mapping during
+// dlopen) must report os.ErrNotExist: the process manager caches every other
+// ELF info error, which would hide the library until the cache entry expires.
+func TestCalculateMappingFileIDNotExist(t *testing.T) {
+	pid := libpf.PID(os.Getpid())
+	sp := New(pid, pid).(*systemProcess)
+	sp.procBase = t.TempDir() + "/"
+
+	_, err := sp.CalculateMappingFileID(&RawMapping{
+		Vaddr:  0x10000,
+		Length: 0x42000,
+		Inode:  47,
+		Path:   "/usr/lib/libfoo.so",
+	})
+	require.ErrorIs(t, err, os.ErrNotExist)
+}

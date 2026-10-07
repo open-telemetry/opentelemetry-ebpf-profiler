@@ -12,7 +12,7 @@
         "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
         "runtime.newstack+0 in /usr/local/go/src/runtime/stack.go:1130",
         "runtime.morestack+0 in /usr/local/go/src/runtime/asm_arm64.s:396",
-        "<unwinding aborted due to error native_pc_read>"
+        "<unwinding aborted due to error native_zero_pc>"
       ]
     },
     {
@@ -39,7 +39,7 @@
         "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
         "runtime.newstack+0 in /usr/local/go/src/runtime/stack.go:1130",
         "runtime.morestack+0 in /usr/local/go/src/runtime/asm_arm64.s:396",
-        "<unwinding aborted due to error native_pc_read>"
+        "<unwinding aborted due to error native_zero_pc>"
       ]
     },
     {

@@ -44,43 +44,35 @@ It should be noted that certain distributions incorporate eBPF features from new
 
 ## Building
 
-We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
-and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
+The profiler is integrated into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver.
+The [supported distribution](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) is the recommended way to deploy it.
 
-To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
-and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
-supported in any way, can be dropped in the future and should not be deployed in production.
+For development, testing and debugging, a local `otelcol-ebpf-profiler` binary can be built from this repository. This binary is not supported for production use.
 
 ### Platform Requirements
-The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
+The profiler can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
- For **Linux**, the following steps apply:
- 1. Build the agent for your current machine's architecture:
-     ```sh
-     make agent
-     ```
- 2. To cross-compile for a different architecture (e.g. arm64):
-     ```sh
-     make agent TARGET_ARCH=arm64
-     ```
-The resulting binary will be named `ebpf-profiler` in the current directory.
+For **Linux**, the following steps apply:
+1. Build for your current machine's architecture:
+    ```sh
+    make agent
+    ```
+2. To cross-compile for a different architecture (e.g. arm64):
+    ```sh
+    make agent TARGET_ARCH=arm64
+    ```
+
+The resulting binary will be named `otelcol-ebpf-profiler` in the current directory.
 
 ### Other OSes
-Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run it. Use the same make targets above after the Linux environment is configured in the VM.
 
-### Alternative Build (Without Docker)
-You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
+### Building without Docker
+You can build without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, run:
 ```sh
 make
 ```
-This will build the profiler natively on your machine.
-
-### Building `otelcol-ebpf-profiler` locally (Without Docker)
-You can build the local `otelcol-ebpf-profiler` binary by running:
-```sh
-make otelcol-ebpf-profiler
-```
-or to cross-compile for a different architecture (e.g. arm64):
+or to build for a specific architecture (e.g. arm64):
 ```sh
 make otelcol-ebpf-profiler TARGET_ARCH=arm64
 ```
@@ -89,13 +81,6 @@ See [local.example.yaml](https://github.com/open-telemetry/opentelemetry-ebpf-pr
 
 ## Running
 
-You can start the agent with the following command:
-
-```sh
-sudo ./ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
-```
-
-To start the OTel Collector profiling receiver, run:
 ```sh
 sudo ./otelcol-ebpf-profiler --feature-gates=+service.profilesSupport --config cmd/otelcol-ebpf-profiler/local.example.yaml
 ```
@@ -153,7 +138,7 @@ For more information about the maintainer role, see the
 ### Approvers
 
 - [Roger Coll](https://github.com/rogercoll), Elastic
-- [Florian Lehner](https://github.com/florianl), Elastic
+- [Florian Lehner](https://github.com/florianl), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
 
 For more information about the approver role, see the

@@ -142,14 +142,14 @@ struct traces_ctx_v1_t {
 
 struct apm_int_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, ApmIntProcInfo);
   __uint(max_entries, 128);
 } apm_int_procs SEC(".maps");
 
 struct thread_context_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
+  __type(key, u32);
   __type(value, ThreadContextProcInfo);
   __uint(max_entries, 1024);
 } thread_context_procs SEC(".maps");
@@ -178,7 +178,7 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   if (!m_ptr_addr) {
     return;
   }
-  record->customLabelsState.go_m_ptr = m_ptr_addr;
+  record->golangLabelsState.go_m_ptr = m_ptr_addr;
 
   DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
   increment_metric(metricID_UnwindGoLabelsAttempts);
@@ -287,7 +287,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.
-  if (trace->frame_data_len == 0) {
+  if (trace->variable_data_end == 0) {
     DEBUG_PRINT("unwind_stop called but the stack is empty");
     increment_metric(metricID_ErrEmptyStack);
     if (!state->unwind_error) {
@@ -313,7 +313,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
       increment_metric(metricID_NumUnknownPC);
     }
     // fallthrough
-  default: increment_metric(state->error_metric);
+  default: increment_metric((u32)state->error_metric);
   }
 
   // TEMPORARY HACK
@@ -326,12 +326,14 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // through different data structures, we'd have to keep a list of known empty traces to
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
-  if (trace->frame_data_len == 1 && state->unwind_error) {
-    if (filter_error_frames) {
+  if (filter_error_frames) {
+    if (trace->num_frames == 1 && trace->kernel_frame_end == 0 && state->unwind_error) {
       return 0;
     }
   }
   // TEMPORARY HACK END
+
+  trace->frame_data_end = trace->variable_data_end;
 
   // Does not return once it dispatches, so anything below runs only when the
   // Go path did not fill custom labels.
