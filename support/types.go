@@ -432,7 +432,7 @@ const (
 )
 
 const (
-	LJFileId = 0x2a
+	LJJitMarker = 0x2a
 )
 
 var MetricsTranslation = []metrics.MetricID{

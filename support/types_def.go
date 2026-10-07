@@ -217,7 +217,7 @@ const (
 )
 
 const (
-	LJFileId = C.LUAJIT_JIT_FILE_ID
+	LJJitMarker = C.LUAJIT_JIT_MARKER
 )
 
 var MetricsTranslation = []metrics.MetricID{

@@ -140,7 +140,7 @@ func (l *luajitInstance) addJITRegion(ebpf interpreter.EbpfHandler, pid libpf.PI
 	}
 	logf("lj: add JIT region pid(%v) %#x:%#x", pid, start, end)
 	for _, prefix := range prefixes {
-		fileID := support.LJFileId << 32
+		fileID := support.LJJitMarker << 32
 		if err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindLuaJIT,
 			host.FileID(fileID), 0); err != nil {
 			return err

@@ -1,7 +1,8 @@
 #pragma once
 
-// Assigned in HA to anonymous executable virtual memory ranges in the nginx process.
-#define LUAJIT_JIT_FILE_ID 42
+// The host agent sets the upper 32 bits of the text_section_id
+// to this value to indicate that it contains JITted code.
+#define LUAJIT_JIT_MARKER 42
 
 // This is CFRAME_SIZE in src/lj_frame.h
 // We could dynamically get this from lj_vm_ffi_callback disassembly and look for:
