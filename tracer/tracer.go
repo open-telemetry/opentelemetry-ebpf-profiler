@@ -13,7 +13,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -708,10 +707,14 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
-	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case)
-	// TODO: Base this on present CPUs instead, as runtime.NumCPU is fixed for the lifetime
-	// of the process?
-	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_TraceWithData)
+	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case).
+	// Use the number of possible CPUs rather than runtime.NumCPU(), which only reflects
+	// the CPUs this process may be scheduled on at startup (affinity/cpuset-limited).
+	numCPUs, err := cebpf.PossibleCPU()
+	if err != nil {
+		return fmt.Errorf("failed to determine possible CPUs: %v", err)
+	}
+	ringbufSize := uint64(cfg.SamplesPerSecond * numCPUs * support.Sizeof_TraceWithData)
 	adaption["trace_events"] = uint32(min(util.NextPowerOfTwo(ringbufSize), 1<<31))
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
