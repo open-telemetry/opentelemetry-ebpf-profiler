@@ -654,6 +654,9 @@ typedef struct GolangLabel {
 // a reasonable set of labels even if all of frame data is used.
 #define MAX_FRAME_TRAILER_DATA_SZ MAX_GO_LABEL_DATA_SZ
 
+// Maximum number of origin-specific context values per trace.
+#define MAX_CONTEXT_VALUES 4
+
 // The variable data portion of trace layout as:
 //   u64          context_value[];
 //   u64          kernel_frame[];
@@ -688,10 +691,10 @@ typedef struct Trace {
 
   // Variable data offsets
   // context_value_end marks the end of the origin-specific context values.
-  // They are written first, before unwinding, so they lead variable_data. The
-  // first entry is the primary profile value (e.g. off-CPU time in nanoseconds);
-  // an origin may append further values after it. Userspace exposes them as
-  // libpf.EbpfTrace.ContextValues.
+  // They are reserved by prepare_trace, before unwinding, so they lead
+  // variable_data. The first entry, if any, is the primary profile value (e.g.
+  // off-CPU time in nanoseconds); origins without a value (e.g. sampling)
+  // reserve none. Userspace exposes them as libpf.EbpfTrace.ContextValues.
   u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;

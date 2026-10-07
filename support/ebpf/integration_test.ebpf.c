@@ -27,15 +27,17 @@ send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel
   trace->pid     = pid;
   trace->tid     = tid;
   // Context values lead variable_data ahead of any kernel and user frames.
-  // Sampling has no weighted value, so use zero here, while the kernel-frame
-  // case uses sentinels to verify the values survive stack capture and
-  // userspace decoding.
-  push_context_value(trace, capture_kernel_frames ? 0x123456789abcdef0 : 0);
-
+  // Without kernel frames, reserve none, like sampling. With kernel frames,
+  // reserve sentinels to verify they survive stack capture and userspace
+  // decoding.
   if (capture_kernel_frames) {
-    // Verify that kernel-stack capture preserves a variable context-value prefix.
-    push_context_value(trace, 0x2222222222222222);
-    push_context_value(trace, 0x3333333333333333);
+    if (!reserve_context_values(trace, 3)) {
+      return;
+    }
+    u64 *values = trace_context_values(trace);
+    values[0]   = 0x123456789abcdef0;
+    values[1]   = 0x2222222222222222;
+    values[2]   = 0x3333333333333333;
     push_kernel_frames(ctx, trace);
   }
 

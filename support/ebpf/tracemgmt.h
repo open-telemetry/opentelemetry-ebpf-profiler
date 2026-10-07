@@ -663,26 +663,41 @@ static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
   return end;
 }
 
-// push_context_value appends an origin-specific context value to the trace.
-// Context values lead variable_data, so this must be called before any kernel
-// or user frames are pushed. Returns false if that ordering is violated or the
-// value does not fit.
-static inline EBPF_INLINE bool push_context_value(Trace *trace, u64 value)
+// CHECK_CONTEXT_VALUES rejects, at build time, calls whose constant context
+// value count exceeds MAX_CONTEXT_VALUES. Non-constant counts are left to the
+// runtime check in reserve_context_values. diagnose_if is a clang extension;
+// other compilers (e.g. gcc in the coredump cgo build) get no check.
+#if __has_attribute(diagnose_if)
+  #define CHECK_CONTEXT_VALUES(n)                                                                  \
+    __attribute__((diagnose_if((n) > MAX_CONTEXT_VALUES, "too many context values", "error")))
+#else
+  #define CHECK_CONTEXT_VALUES(n)
+#endif
+
+// reserve_context_values reserves and zeroes the first 'n' slots of
+// variable_data for origin-specific context values. It must only be called on
+// a pristine record, before anything else is pushed. Returns false if 'n'
+// exceeds MAX_CONTEXT_VALUES, which is a caller bug.
+// prepare_trace calls it; use it directly only for records not set up there.
+static inline EBPF_INLINE bool reserve_context_values(Trace *trace, u8 n) CHECK_CONTEXT_VALUES(n)
 {
-  // Detect ordering violations without comparing variable_data_end against
-  // context_value_end: that equality lets clang bounds-check one register but
-  // index with the other, which the verifier rejects.
-  if (trace->num_frames != 0 || trace->kernel_frame_end != 0) {
+  if (n > MAX_CONTEXT_VALUES) {
     return false;
   }
-  u64 *pos = reserve_variable_data(trace, sizeof(u64), MAX_FRAME_TRAILER_DATA_SZ);
-  if (!pos) {
-    return false;
+  u64 *values = (u64 *)trace->variable_data;
+  for (u32 i = 0; i < MAX_CONTEXT_VALUES; i++) {
+    values[i] = 0;
   }
-  pos[0] = value;
-  commit_variable_data(trace, sizeof(u64));
-  trace->context_value_end = end_variable_data(trace, sizeof(u64));
+  trace->variable_data_end = (u16)(n * sizeof(u64));
+  trace->context_value_end = trace->variable_data_end;
   return true;
+}
+
+// trace_context_values returns the context values reserved for the trace, for
+// the caller to fill in before unwinding.
+static inline EBPF_INLINE u64 *trace_context_values(Trace *trace)
+{
+  return (u64 *)trace->variable_data;
 }
 
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
@@ -1196,22 +1211,21 @@ static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, Unwin
 
 #endif // TESTING_COREDUMP
 
-static inline EBPF_INLINE int collect_trace(
-  struct pt_regs *ctx,
-  u16 origin,
-  u32 pid,
-  u32 tid,
-  u64 group_leader,
-  u64 trace_timestamp,
-  u64 value)
+// prepare_trace resets the per-CPU record, fills in the trace header and
+// reserves 'num_context_values' context values. It returns NULL if the trace
+// should be dropped. Callers fill in the values via trace_context_values before
+// handing the record to unwind_trace.
+static inline EBPF_INLINE PerCPURecord *prepare_trace(
+  u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp, u8 num_context_values)
+  CHECK_CONTEXT_VALUES(num_context_values)
 {
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
-    return -1;
+    return NULL;
   }
 
   if (process_is_too_new(trace_timestamp, group_leader)) {
-    return 0;
+    return NULL;
   }
 
   // The trace is reused on each call to this function so we have to reset the
@@ -1219,7 +1233,7 @@ static inline EBPF_INLINE int collect_trace(
   DEBUG_PRINT("Resetting CPU record");
   PerCPURecord *record = get_pristine_per_cpu_record();
   if (!record) {
-    return -1;
+    return NULL;
   }
 
   Trace *trace  = &record->trace;
@@ -1227,15 +1241,27 @@ static inline EBPF_INLINE int collect_trace(
   trace->pid    = pid;
   trace->tid    = tid;
   trace->ktime  = trace_timestamp;
-  // The primary profile value is the first context value. It always fits in
-  // the pristine trace.
-  push_context_value(trace, value);
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }
+  if (!reserve_context_values(trace, num_context_values)) {
+    return NULL;
+  }
+  return record;
+}
 
-  // Capture kernel stack and push each frame into frame_data.
-  push_kernel_frames(ctx, trace);
+// unwind_trace optionally captures kernel frames, then tail-calls into the
+// unwinder for a record set up by prepare_trace.
+static inline EBPF_INLINE int
+unwind_trace(struct pt_regs *ctx, PerCPURecord *record, bool kernel_frames)
+{
+  Trace *trace = &record->trace;
+  u32 pid      = trace->pid;
+
+  if (kernel_frames) {
+    // Capture kernel stack and push each frame into frame_data.
+    push_kernel_frames(ctx, trace);
+  }
 
   ErrorCode error = ERR_OK;
   int unwinder    = PROG_UNWIND_STOP;
@@ -1260,7 +1286,7 @@ static inline EBPF_INLINE int collect_trace(
 
   PIDPageMappingInfo *pidInfo = pid_information(pid);
   if (!pidInfo) {
-    u64 pid_tgid = (u64)pid << 32 | tid;
+    u64 pid_tgid = (u64)pid << 32 | trace->tid;
     if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
     }
@@ -1276,6 +1302,18 @@ static inline EBPF_INLINE int collect_trace(
 exit:
   record->state.unwind_error = error;
   return tail_call(ctx, record, unwinder);
+}
+
+// collect_trace captures a trace without context values, including kernel
+// frames, and tail-calls into the unwinder.
+static inline EBPF_INLINE int collect_trace(
+  struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp)
+{
+  PerCPURecord *record = prepare_trace(origin, pid, tid, group_leader, trace_timestamp, 0);
+  if (!record) {
+    return 0;
+  }
+  return unwind_trace(ctx, record, true);
 }
 
 #endif

@@ -1148,7 +1148,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
 
 	// Context values are the first variable data region, written ahead of any
-	// kernel/user frames; the first one, if any, is the primary profile value.
+	// kernel/user frames; the region is empty for origins without a value.
 	var err error
 	trace.ContextValues, err = vd.copyUint64(ptr.Context_value_end, "context value")
 	if err != nil {
@@ -1408,6 +1408,13 @@ type originRegistry struct {
 // Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
+	if len(metadata.SampleTypes) == 0 {
+		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
+	}
+	if len(metadata.SampleTypes) > 1 && metadata.DeriveValues == nil {
+		return 0, fmt.Errorf("origin registry entry with %d sample types needs DeriveValues",
+			len(metadata.SampleTypes))
+	}
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}

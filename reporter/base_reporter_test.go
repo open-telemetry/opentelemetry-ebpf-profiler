@@ -129,7 +129,6 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            1001,
 		CPU:            0,
 		ProfileType:    profileTypeSampling,
-		ContextValues:  []uint64{0},
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -248,6 +247,29 @@ func TestReportTraceEventRejectsWrongValueCount(t *testing.T) {
 	require.ErrorContains(t, err, "appended 1 values, expected 2")
 }
 
+func TestReportTraceEventWithoutContextValues(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+	meta := &samples.TraceEventMeta{
+		Timestamp:   libpf.UnixTime64(time.Now().UnixNano()),
+		PID:         1000,
+		TID:         1001,
+		ProfileType: profileTypeSampling,
+	}
+
+	require.NoError(t, reporter.ReportTraceEvent(singleNativeFrameTrace(), meta))
+
+	treePtr := reporter.traceEvents.RLock()
+	defer reporter.traceEvents.RUnlock(&treePtr)
+	for _, rtp := range *treePtr {
+		for _, events := range rtp.Events {
+			for _, traceEvents := range events {
+				assert.Equal(t, []int64{0}, traceEvents.Values)
+				assert.Len(t, traceEvents.Timestamps, 1)
+			}
+		}
+	}
+}
+
 func serviceAttrs(name string) attribute.Set {
 	return attribute.NewSet(semconv.ServiceName(name))
 }
@@ -273,7 +295,6 @@ func baseMetaWithResourceAttrs(resourceAttrs attribute.Set) *samples.TraceEventM
 		PID:            1234,
 		TID:            1235,
 		ProfileType:    profileTypeSampling,
-		ContextValues:  []uint64{0},
 		ResourceAttrs:  resourceAttrs,
 	}
 }
@@ -379,7 +400,6 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 		CPU:            0,
 		ExtraMeta:      map[libpf.String]string{libpf.Intern("process.name"): "myapp"},
 		ProfileType:    profileTypeSampling,
-		ContextValues:  []uint64{0},
 	}
 
 	err := reporter.ReportTraceEvent(trace, meta)

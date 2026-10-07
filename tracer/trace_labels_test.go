@@ -36,7 +36,9 @@ func TestLoadBpfTraceLabelSections(t *testing.T) {
 				origins:        &originRegistry{},
 				processManager: &pm.ProcessManager{},
 			}
-			origin, err := tr.origins.Register(&samples.TypeMetadata{})
+			origin, err := tr.origins.Register(&samples.TypeMetadata{
+				SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
+			})
 			require.NoError(t, err)
 			header := support.Trace{
 				Pid:              123,
