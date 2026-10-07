@@ -14,6 +14,39 @@
 #   - mounting kernel-related filesystems (e.g. /sys, /proc) as needed
 receivers:
   profiling:
+    # Uncomment to override the defaults. Each option is equivalent to the
+    # deprecated ebpf-profiler cli flag noted next to it
+    # (https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/1925).
+    # samples_per_second: 20          # -samples-per-second
+    # reporter_interval: 5s           # -reporter-interval
+    # reporter_jitter: 0.2            # -reporter-jitter
+    # monitor_interval: 5s            # -monitor-interval
+    # clock_sync_interval: 3m         # -clock-sync-interval
+    # probabilistic_interval: 1m      # -probabilistic-interval
+    # probabilistic_threshold: 100    # -probabilistic-threshold
+    # frame_cache_size: 16384         # -frame-cache-size
+    # map_scale_factor: 0             # -map-scale-factor
+    # bpf_verifier_log_level: 0       # -bpf-log-level
+    # bpf_fs_root: /sys/fs/bpf/       # -bpffs-root
+    # no_kernel_version_check: false  # -no-kernel-version-check
+    # send_error_frames: false        # -send-error-frames
+    # send_idle_frames: false         # -send-idle-frames
+    # filter_min_process_age: 0s      # -filter-min-process-age
+    # include_env_vars: ""            # -env-vars
+    # pin_cpu_ids: ""                 # -pin-cpu-ids
+    # obi_process_ctx: false          # -obi-process-ctx
+    # verbose_mode: false             # -verbose
+    # interpreters:                   # -tracers
+    #   python:
+    #     disabled: true
+
+# Uncomment to enable the pprof extension for Go profiling of the collector itself.
+# extensions:
+#   pprof:
+#     endpoint: localhost:1777
+#
+# service:
+#   extensions: [pprof]
 
 exporters:
   otlp/local:
