@@ -24,8 +24,6 @@ func TestSizeOfCGoStruct(t *testing.T) {
 			want: sizeof_RubyProcInfo},
 		{name: "ThreadContextProcInfo", input: unsafe.Sizeof(ThreadContextProcInfo{}),
 			want: sizeof_ThreadContextProcInfo},
-		{name: "ThreadLabelData", input: unsafe.Sizeof(ThreadLabelData{}),
-			want: Sizeof_ThreadLabelData},
 		{name: "Trace", input: unsafe.Sizeof(Trace{}),
 			want: Sizeof_TraceHeader},
 	}

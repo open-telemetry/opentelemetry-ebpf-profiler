@@ -109,7 +109,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   }
 
   // Limit extracted labels to MAX_GO_LABELS
-  const u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]) / 8;
+  const u16 max_end = record->trace.variable_data_end + MAX_GO_LABEL_DATA_LEN;
 
   // If the map has more than 16 buckets we just don't support it, pprof maps are typically
   // small and if its a problem upgrading to Go 1.24+ is a potential solution.

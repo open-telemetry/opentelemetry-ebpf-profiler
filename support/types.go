@@ -175,8 +175,8 @@ type Trace struct {
 	Cpu_id             uint32
 	Kernel_frame_end   uint16
 	Frame_data_end     uint16
-	Golang_label_end   uint16
 	Thread_label_end   uint16
+	Golang_label_end   uint16
 	Variable_data_end  uint16
 	Num_frames         uint16
 	Origin             uint16

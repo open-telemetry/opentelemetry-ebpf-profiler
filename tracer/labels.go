@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -103,11 +104,13 @@ func (r *threadLabelResolver) getAndResetMetrics() []metrics.Metric {
 }
 
 // threadLabelPayload extracts the attribute bytes from a ThreadLabelData section,
-// excluding its header and alignment padding.
-func threadLabelPayload(data []byte) ([]byte, error) {
+// excluding its header and alignment padding. Taking u64 entries keeps the
+// header read aligned, which checkptr enforces under -race.
+func threadLabelPayload(section []uint64) ([]byte, error) {
+	data := pfunsafe.FromSlice(section)
 	if len(data) < support.Sizeof_ThreadLabelData {
-		return nil, fmt.Errorf("thread label section is smaller than its header: %w",
-			errRecordUnexpectedSize)
+		return nil, fmt.Errorf("thread label section %d is smaller than its %d byte header: %w",
+			len(data), support.Sizeof_ThreadLabelData, errRecordUnexpectedSize)
 	}
 	header := (*support.ThreadLabelData)(unsafe.Pointer(unsafe.SliceData(data)))
 	payload := data[support.Sizeof_ThreadLabelData:]
