@@ -8,6 +8,17 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// The coredump harness exercises stack unwinding, not scheduler or BPF map
+// behavior. Define placeholders for deferred trace delivery so that the
+// production routing code remains compiled in tests.
+struct deferred_traces_t {
+  u8 unused;
+};
+
+struct deferred_traces_t deferred_traces;
+bool defer_traces       = false;
+u16 deferred_origin_id  = UINT16_MAX - 1;
+
 struct cgo_ctx {
   jmp_buf jmpbuf;
   u64 id, tp_base;

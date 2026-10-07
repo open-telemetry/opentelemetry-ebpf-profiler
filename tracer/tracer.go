@@ -206,6 +206,10 @@ type Tracer struct {
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
 
+	// unwinders describes the enabled interpreter tail-call chain. Probes that
+	// use a different BPF program type build a compatible copy of this chain.
+	unwinders []ProgLoaderHelper
+
 	// origins is the tracer-wide registry origin IDs are assigned from and
 	// profile type metadata is looked up by.
 	origins *originRegistry
@@ -311,6 +315,25 @@ type ProgLoaderHelper struct {
 	NoTailCallTarget bool
 }
 
+func enabledUnwinders(cfg interpreterconfig.Config) []ProgLoaderHelper {
+	progs := []ProgLoaderHelper{
+		{ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop", Enable: true},
+		{ProgID: uint32(support.ProgUnwindNative), Name: "unwind_native", Enable: true},
+	}
+	for _, l := range cfg.Loaders() {
+		for _, r := range l.Resources() {
+			if r.ProgName != "" {
+				progs = append(progs, ProgLoaderHelper{
+					ProgID: r.ProgID,
+					Name:   r.ProgName,
+					Enable: true,
+				})
+			}
+		}
+	}
+	return progs
+}
+
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
 // This function requires that only one of (schedProcessFreeV1, schedProcessFreeV2)
 // be present in progNames.
@@ -395,6 +418,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
+		unwinders:              enabledUnwinders(cfg.InterpretersConfig),
 		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
 		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
@@ -517,21 +541,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		}
 	}
 
-	tailCallProgs := []ProgLoaderHelper{
-		{ProgID: uint32(support.ProgUnwindStop), Name: "unwind_stop", Enable: true},
-		{ProgID: uint32(support.ProgUnwindNative), Name: "unwind_native", Enable: true},
-	}
-	for _, l := range cfg.InterpretersConfig.Loaders() {
-		for _, r := range l.Resources() {
-			if r.ProgName != "" {
-				tailCallProgs = append(tailCallProgs, ProgLoaderHelper{
-					ProgID: r.ProgID,
-					Name:   r.ProgName,
-					Enable: true,
-				})
-			}
-		}
-	}
+	tailCallProgs := enabledUnwinders(cfg.InterpretersConfig)
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
 		cfg.BPFVerifierLogLevel); err != nil {
@@ -722,8 +732,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" {
-			// sched_times is owned by the off-CPU probe and created there on demand.
+		if strings.HasPrefix(mapName, "probe_") {
+			// Probe-owned maps are created on demand by their probe.
 			continue
 		}
 		if mapName == obiSpanTracesMap {
@@ -917,6 +927,67 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 	}
 
 	return nil
+}
+
+// loadCompatibleProbeUnwinders reuses the existing unwinder instructions with
+// the entry program's type and attachment metadata. Tail calls require the
+// entry point and every destination in its program array to be compatible.
+func loadCompatibleProbeUnwinders(coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
+	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
+	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
+	entrySpec *cebpf.ProgramSpec,
+) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	for _, unwinder := range progs {
+		if !unwinder.Enable {
+			continue
+		}
+
+		progName := probeProgramName(unwinder)
+		progSpec, ok := coll.Programs[progName]
+		if !ok {
+			return fmt.Errorf("program %s does not exist", progName)
+		}
+		if !unwinder.NoTailCallTarget {
+			progSpec = compatibleProbeProgram(progSpec, entrySpec, unwinder.Name)
+		}
+
+		for _, ins := range progArrayReferences(perfTailCallMapFD, progSpec.Instructions) {
+			if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
+				return fmt.Errorf("failed to rewrite map ptr: %v", err)
+			}
+		}
+
+		for _, ins := range progArrayReferences(perCPURecordsFD, progSpec.Instructions) {
+			if err := progSpec.Instructions[ins].AssociateMap(perCPURecordsKprobeMap); err != nil {
+				return fmt.Errorf("failed to rewrite per_cpu_records ptr: %v", err)
+			}
+		}
+
+		if err := loadProgram(ebpfProgs, tailcallMap, unwinder.ProgID, progSpec,
+			programOptions, unwinder.NoTailCallTarget); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func compatibleProbeProgram(progSpec, entrySpec *cebpf.ProgramSpec,
+	name string,
+) *cebpf.ProgramSpec {
+	compatible := progSpec.Copy()
+	compatible.Name = "probe_" + name
+	compatible.Type = entrySpec.Type
+	compatible.AttachType = entrySpec.AttachType
+	compatible.AttachTo = entrySpec.AttachTo
+	compatible.SectionName = entrySpec.SectionName
+	return compatible
 }
 
 // loadProgram loads an eBPF program from progSpec and populates the related maps.
