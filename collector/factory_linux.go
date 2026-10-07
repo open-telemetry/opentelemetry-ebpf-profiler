@@ -37,6 +37,7 @@ func NewFactory() receiver.Factory {
 }
 
 func defaultConfig() component.Config {
+	//nolint:staticcheck // defaults for the deprecated MaxGRPCRetries and MaxRPCMsgSize.
 	return &config.Config{
 		ReporterInterval:       5 * time.Second,
 		ReporterJitter:         0.2,

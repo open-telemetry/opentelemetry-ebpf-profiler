@@ -43,6 +43,10 @@ type OTLPReporter struct {
 }
 
 // NewOTLP returns a new instance of OTLPReporter
+//
+// Deprecated: run the profiler as a collector receiver and export profiles
+// with the collector's otlpexporter instead. See ExampleWithReporterFactory
+// in collector/controller_options_otlp_test.go for a setup equivalent to this reporter.
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	data, err := pdata.New(
 		cfg.SamplesPerSecond,
