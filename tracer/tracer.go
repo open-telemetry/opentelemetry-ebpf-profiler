@@ -1128,15 +1128,16 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	vd := variableDataDecoder{raw: variableData}
 
 	// Context values are the first variable data region, written ahead of any
-	// kernel/user frames; the first one is the primary profile value. Copy the
-	// context values and frames once, then expose non-overlapping slices of the
-	// pooled buffer for each.
-	if ptr.Context_value_end == 0 {
-		return nil, fmt.Errorf("trace without context values: %w", errRecordUnexpectedSize)
-	}
+	// kernel/user frames; the region is empty for origins without a value. Copy
+	// the context values and frames once, then expose non-overlapping slices of
+	// the pooled buffer for each.
 	if int(ptr.Frame_data_end) > len(trace.FrameDataBuf) {
 		return nil, fmt.Errorf("frame_data_end %d > capacity %d: %w",
 			ptr.Frame_data_end, len(trace.FrameDataBuf), errRecordUnexpectedSize)
+	}
+	if int(ptr.Context_value_end) > len(trace.FrameDataBuf) {
+		return nil, fmt.Errorf("context_value_end %d > capacity %d: %w",
+			ptr.Context_value_end, len(trace.FrameDataBuf), errRecordUnexpectedSize)
 	}
 	contextValues, err := vd.decode(ptr.Context_value_end)
 	if err != nil {
@@ -1419,6 +1420,13 @@ type originRegistry struct {
 // Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
+	if len(metadata.SampleTypes) == 0 {
+		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
+	}
+	if len(metadata.SampleTypes) > 1 && metadata.DeriveValues == nil {
+		return 0, fmt.Errorf("origin registry entry with %d sample types needs DeriveValues",
+			len(metadata.SampleTypes))
+	}
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}

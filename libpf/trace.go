@@ -200,9 +200,10 @@ type EbpfTrace struct {
 	CustomLabels map[String]String
 	Comm         Comm
 	// ContextValues contains the raw origin-specific values carried with the
-	// stack. The first entry is the primary profile value; later entries may hold
-	// data such as pointers or allocation sizes. It aliases the leading portion
-	// of FrameDataBuf and is valid for the lifetime of this pooled trace.
+	// stack. It may be empty. The first entry, if any, is the primary profile
+	// value; later entries may hold data such as pointers or allocation sizes.
+	// It aliases the leading portion of FrameDataBuf and is valid for the
+	// lifetime of this pooled trace.
 	ContextValues    []uint64
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64

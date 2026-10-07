@@ -128,8 +128,9 @@ type TypeMetadata struct {
 	ReportValues bool
 
 	// DeriveValues appends one reportable value per SampleTypes entry for a
-	// single event. Nil appends int64(meta.ContextValues[0]). The function must
-	// consume ContextValues synchronously because they alias a pooled trace.
+	// single event. Nil appends int64(meta.ContextValues[0]), or 0 if there are
+	// no context values. The function must consume ContextValues synchronously
+	// because they alias a pooled trace.
 	DeriveValues func(dst []int64, meta *TraceEventMeta) []int64
 }
 
@@ -139,7 +140,8 @@ func (m *TypeMetadata) AppendValues(dst []int64, meta *TraceEventMeta) []int64 {
 		return m.DeriveValues(dst, meta)
 	}
 	if len(meta.ContextValues) == 0 {
-		return dst
+		// Keep Values aligned with Timestamps for origins without a value.
+		return append(dst, 0)
 	}
 	return append(dst, int64(meta.ContextValues[0]))
 }

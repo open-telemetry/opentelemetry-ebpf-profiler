@@ -274,7 +274,7 @@ Loop:
 	}{
 		"Single Native Frame": {
 			id:             1,
-			contextValues:  []uint64{0},
+			contextValues:  []uint64{},
 			userSpaceTrace: nativeFrame,
 		},
 		"Single Native Frame with Kernel Frames": {
