@@ -74,6 +74,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		}
 	}
 
+	//nolint:staticcheck // gRPC fields kept for factories wrapping the deprecated reporter.NewOTLP.
 	rep, err := cfg.ReporterFactory(&reporter.Config{
 		Name:                   metadata.ScopeName,
 		Version:                version,
