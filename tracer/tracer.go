@@ -13,7 +13,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -713,8 +712,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	// the CPUs this process may be scheduled on at startup (affinity/cpuset-limited).
 	numCPUs, err := cebpf.PossibleCPU()
 	if err != nil {
-		log.Warnf("Failed to determine possible CPUs, falling back to runtime.NumCPU: %v", err)
-		numCPUs = runtime.NumCPU()
+		return fmt.Errorf("failed to determine possible CPUs: %v", err)
 	}
 	ringbufSize := uint64(cfg.SamplesPerSecond * numCPUs * support.Sizeof_TraceWithData)
 	adaption["trace_events"] = uint32(min(util.NextPowerOfTwo(ringbufSize), 1<<31))
