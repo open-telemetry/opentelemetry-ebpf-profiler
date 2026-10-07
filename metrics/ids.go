@@ -716,8 +716,8 @@ const (
 	// Number of thread context attribute payloads truncated to fit the buffer
 	IDUnwindThreadContextAttrsTruncated = 309
 
-	// Number of thread-context samples whose labels were dropped because the process published no usable label schema
-	IDThreadContextDroppedSamplesNoSchema = 310
+	// Number of samples whose thread-context labels were discarded because no decoder was available for the process
+	IDThreadContextLabelsNoDecoder = 310
 
 	// Number of thread-context label entries dropped as undecodable
 	IDThreadContextDroppedEntriesUndecodable = 311

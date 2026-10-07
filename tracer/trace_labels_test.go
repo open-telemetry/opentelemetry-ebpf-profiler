@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -82,7 +83,7 @@ func TestLoadBpfTraceLabelSections(t *testing.T) {
 			} else {
 				require.Nil(t, trace.CustomLabels)
 			}
-			require.Equal(t, tc.wantDrop, tr.threadContextLabels.droppedSamplesNoSchema.Load())
+			require.Equal(t, tc.wantDrop, tr.threadLabels.labelsNoDecoder.Load())
 		})
 	}
 }
@@ -124,22 +125,26 @@ func (d testThreadLabelDecoder) DecodeLabels(data []byte) (libpf.ThreadLabels, i
 	return d(data)
 }
 
-func TestThreadContextCustomLabels(t *testing.T) {
-	var tr Tracer
+func TestThreadLabelResolver(t *testing.T) {
+	var r threadLabelResolver
 	payload := []byte{0, 1, 'x', 1, 4, 'y'}
 	want := libpf.ThreadLabels{libpf.Intern("tenant"): libpf.Intern("x")}
 	decoder := testThreadLabelDecoder(func(data []byte) (libpf.ThreadLabels, int) {
 		require.Equal(t, payload, data)
-		return want, 1
+		return want, 2
 	})
-	require.Equal(t, map[libpf.String]libpf.String(want), tr.threadContextCustomLabels(payload, decoder))
-	require.Nil(t, tr.threadContextCustomLabels(payload, nil))
-	require.Equal(t, int64(1), tr.threadContextLabels.droppedEntriesUndecodable.Load())
-	require.Equal(t, int64(1), tr.threadContextLabels.droppedSamplesNoSchema.Load())
-	for _, metric := range tr.threadContextLabels.getAndResetMetrics() {
-		require.EqualValues(t, 1, metric.Value)
+	require.Equal(t, want, r.resolve(payload, decoder))
+	require.Nil(t, r.resolve(payload, nil))
+
+	byID := map[metrics.MetricID]metrics.MetricValue{}
+	for _, m := range r.getAndResetMetrics() {
+		byID[m.ID] = m.Value
 	}
-	for _, metric := range tr.threadContextLabels.getAndResetMetrics() {
-		require.Zero(t, metric.Value)
+	// Distinct values, so swapping the two IDs would fail.
+	require.Equal(t, metrics.MetricValue(1), byID[metrics.IDThreadContextLabelsNoDecoder])
+	require.Equal(t, metrics.MetricValue(2), byID[metrics.IDThreadContextDroppedEntriesUndecodable])
+
+	for _, m := range r.getAndResetMetrics() {
+		require.Zero(t, m.Value, m.ID)
 	}
 }

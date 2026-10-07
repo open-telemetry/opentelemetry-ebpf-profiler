@@ -2260,10 +2260,10 @@
     "id": 309
   },
   {
-    "description": "Number of thread-context samples whose labels were dropped because the process published no usable label schema",
+    "description": "Number of samples whose thread-context labels were discarded because no decoder was available for the process",
     "type": "counter",
-    "name": "ThreadContextDroppedSamplesNoSchema",
-    "field": "agent.threadctx.dropped_samples.no_schema",
+    "name": "ThreadContextLabelsNoDecoder",
+    "field": "agent.threadctx.labels_dropped.no_decoder",
     "id": 310
   },
   {

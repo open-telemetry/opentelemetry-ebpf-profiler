@@ -81,22 +81,23 @@ func (v *customLabelValidator) getAndResetMetrics() []metrics.Metric {
 	}
 }
 
-type threadContextLabelMetrics struct {
-	// Samples dropped whole, for want of a schema to name their key indices.
-	droppedSamplesNoSchema atomic.Int64
-	// Individual entries dropped from an otherwise decodable sample.
+// threadLabelResolver decodes thread-context label payloads and counts what it drops.
+type threadLabelResolver struct {
+	// Samples whose thread-context labels were discarded for want of a decoder.
+	labelsNoDecoder atomic.Int64
+	// Entries the schema could not resolve, plus a truncated tail.
 	droppedEntriesUndecodable atomic.Int64
 }
 
-func (m *threadContextLabelMetrics) getAndResetMetrics() []metrics.Metric {
+func (r *threadLabelResolver) getAndResetMetrics() []metrics.Metric {
 	return []metrics.Metric{
 		{
-			ID:    metrics.IDThreadContextDroppedSamplesNoSchema,
-			Value: metrics.MetricValue(m.droppedSamplesNoSchema.Swap(0)),
+			ID:    metrics.IDThreadContextLabelsNoDecoder,
+			Value: metrics.MetricValue(r.labelsNoDecoder.Swap(0)),
 		},
 		{
 			ID:    metrics.IDThreadContextDroppedEntriesUndecodable,
-			Value: metrics.MetricValue(m.droppedEntriesUndecodable.Swap(0)),
+			Value: metrics.MetricValue(r.droppedEntriesUndecodable.Swap(0)),
 		},
 	}
 }
@@ -117,20 +118,15 @@ func threadLabelPayload(data []byte) ([]byte, error) {
 	return payload[:header.Size], nil
 }
 
-// threadContextCustomLabels decodes a thread-context attribute section against
-// the schema published by the process. The payload excludes alignment padding.
-func (t *Tracer) threadContextCustomLabels(payload []byte,
-	dec libpf.ThreadLabelDecoder) map[libpf.String]libpf.String {
-	// Key indices mean nothing without the published schema. A PID with none
-	// can be permanent (no publisher, or an unsupported schema version) rather
-	// than a startup race, so count instead of logging.
-	if dec == nil {
-		t.threadContextLabels.droppedSamplesNoSchema.Add(1)
+// resolve decodes an attribute payload against the schema its process published.
+func (r *threadLabelResolver) resolve(payload []byte,
+	decoder libpf.ThreadLabelDecoder) libpf.ThreadLabels {
+	// Key indices mean nothing without the published schema.
+	if decoder == nil {
+		r.labelsNoDecoder.Add(1)
 		return nil
 	}
-	labels, dropped := dec.DecodeLabels(payload)
-	if dropped > 0 {
-		t.threadContextLabels.droppedEntriesUndecodable.Add(int64(dropped))
-	}
+	labels, dropped := decoder.DecodeLabels(payload)
+	r.droppedEntriesUndecodable.Add(int64(dropped))
 	return labels
 }

@@ -203,8 +203,7 @@ type Tracer struct {
 	// tracks how many were dropped due to invalid UTF-8.
 	customLabels customLabelValidator
 
-	// threadContextLabels counts the thread-context labels dropped undecoded.
-	threadContextLabels threadContextLabelMetrics
+	threadLabels threadLabelResolver
 
 	// sysConfigVars holds kernel struct offsets determined at startup, passed
 	// to custom probes via Enable so they can reference the same layout.
@@ -1177,8 +1176,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			return nil, err
 		}
 		if len(payload) > 0 {
-			decoder := t.processManager.LabelDecoderForPID(trace.PID)
-			if labels := t.threadContextCustomLabels(payload, decoder); labels != nil {
+			decoder := t.processManager.ThreadLabelDecoderForPID(trace.PID)
+			if labels := t.threadLabels.resolve(payload, decoder); labels != nil {
 				// Keep Go labels on duplicate keys if both sections are present.
 				maps.Copy(labels, trace.CustomLabels)
 				trace.CustomLabels = labels
@@ -1243,7 +1242,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 			metrics.AddSlice(t.customLabels.getAndResetMetrics())
-			metrics.AddSlice(t.threadContextLabels.getAndResetMetrics())
+			metrics.AddSlice(t.threadLabels.getAndResetMetrics())
 		})
 	}
 
