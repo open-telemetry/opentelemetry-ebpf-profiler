@@ -37,8 +37,7 @@ func retrieveZendVMKindX86(code []byte) (uint, error) {
 // for all JIT code.
 func retrieveExecuteExJumpLabelAddressX86(code []byte, addrBase libpf.SymbolValue) (
 	libpf.SymbolValue, error) {
-	it := amd.NewInterpreterWithCode(code)
-	it.CodeAddress = e.Imm(uint64(addrBase))
+	it := amd.NewInterpreterWithCodeAt(code, e.Imm(uint64(addrBase)))
 	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
 		return op.Op == x86asm.JMP
 	})
@@ -57,8 +56,7 @@ func retrieveExecuteExJumpLabelAddressX86(code []byte, addrBase libpf.SymbolValu
 // to the JIT buffer used by PHP (called "dasm_buf" in the PHP source).
 func retrieveJITBufferPtrx86(code []byte, addrBase libpf.SymbolValue) (
 	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
-	it := amd.NewInterpreterWithCode(code)
-	it.CodeAddress = e.Imm(uint64(addrBase))
+	it := amd.NewInterpreterWithCodeAt(code, e.Imm(uint64(addrBase)))
 	_, err = it.LoopWithBreak(func(op x86asm.Inst) bool {
 		return op.Op == x86asm.CALL
 	})
