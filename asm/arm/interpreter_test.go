@@ -88,10 +88,20 @@ func TestLuaOffsets(t *testing.T) {
 }
 
 func TestPCRelative(t *testing.T) {
-	i := NewInterpreterWithCodeAt(
-		[]byte{0x40, 0x0a, 0x00, 0x90}, // adrp   x0, #0x148000
-		expression.Imm(0))
-	_, err := i.Loop()
-	require.ErrorIs(t, err, io.EOF)
-	require.Equal(t, expression.Imm(0x148000), i.Regs.Get(X0))
+	t.Run("page aligned", func(t *testing.T) {
+		i := NewInterpreterWithCodeAt(
+			[]byte{0x40, 0x0a, 0x00, 0x90}, //  0  40 0a 00 90  adrp   x0, #0x148000
+			expression.Imm(0))
+		_, err := i.Loop()
+		require.ErrorIs(t, err, io.EOF)
+		require.Equal(t, expression.Imm(0x148000), i.Regs.Get(X0))
+	})
+	t.Run("page unaligned", func(t *testing.T) {
+		i := NewInterpreterWithCodeAt(
+			[]byte{0x40, 0x0a, 0x00, 0x90}, // 64dc4  40 0a 00 90  adrp        x0, #0x1ac000
+			expression.Imm(0x64dc4))
+		_, err := i.Loop()
+		require.ErrorIs(t, err, io.EOF)
+		require.Equal(t, expression.Imm(0x1ac000), i.Regs.Get(X0))
+	})
 }
