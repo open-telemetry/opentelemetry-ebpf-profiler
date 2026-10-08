@@ -1075,25 +1075,33 @@ var (
 )
 
 type variableDataDecoder struct {
-	raw []uint64
+	raw []uint8
 	pos uint16
 }
 
-func (vd *variableDataDecoder) decode(end uint16) ([]uint64, error) {
+func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, error) {
 	if end == 0 {
 		return nil, nil
 	}
-	if end < vd.pos {
-		return nil, fmt.Errorf("invalid variable data end pointer %d < %d: %w",
-			end, vd.pos, errRecordUnexpectedSize)
-	}
-	if int(end) > len(vd.raw) {
-		return nil, fmt.Errorf("invalid variable data end pointer %d > %d: %w",
-			end, len(vd.raw), errRecordUnexpectedSize)
+	if vd.pos > end || int(end) > len(vd.raw) {
+		return nil, fmt.Errorf("%s end pointer %d < %d < %d: %w",
+			field, vd.pos, end, len(vd.raw), errRecordUnexpectedSize)
 	}
 	data := vd.raw[vd.pos:end]
-	vd.pos = end
+	vd.pos = (end + 7) &^ 7
 	return data, nil
+}
+
+func (vd *variableDataDecoder) decode(end uint16, field string) ([]uint64, error) {
+	val, err := vd.decodeBytes(end, field)
+	if err != nil {
+		return nil, err
+	}
+	if len(val)%8 != 0 {
+		return nil, fmt.Errorf("%s unaligned length %d: %w",
+			field, len(val), errRecordUnexpectedSize)
+	}
+	return unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), len(val)/8), nil
 }
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1106,11 +1114,11 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < traceHeaderSize+8*int(ptr.Variable_data_end) {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+8*int(ptr.Variable_data_end),
+	if len(raw) < traceHeaderSize+int(ptr.Variable_data_end) {
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+int(ptr.Variable_data_end),
 			errRecordUnexpectedSize)
 	}
-	variableData := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(raw[traceHeaderSize:]))), ptr.Variable_data_end)
+	variableData := raw[traceHeaderSize : traceHeaderSize+int(ptr.Variable_data_end)]
 
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
@@ -1136,28 +1144,27 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		// Validate and use Kernel_frame_end only to calculate number of kernel frames.
 		// The kernel frames are copied together with the regular frames in the next step.
 		if vd.pos > ptr.Kernel_frame_end || ptr.Kernel_frame_end > ptr.Frame_data_end {
-			return nil, fmt.Errorf("invalid kernel_frame_end %d < %d < %d: %w",
+			return nil, fmt.Errorf("kernel frame end %d < %d < %d: %w",
 				vd.pos, ptr.Kernel_frame_end, ptr.Frame_data_end,
 				errRecordUnexpectedSize)
 		}
-		trace.NumKernelFrames = ptr.Kernel_frame_end - vd.pos
+		trace.NumKernelFrames = (ptr.Kernel_frame_end - vd.pos) / 8
 	}
-	if frameData, err := vd.decode(ptr.Frame_data_end); err != nil {
+	if frameData, err := vd.decode(ptr.Frame_data_end, "frame"); err != nil {
 		return nil, err
 	} else if len(frameData) > 0 {
 		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
 		copy(trace.FrameData, frameData)
 	}
 
-	if labelData, err := vd.decode(ptr.Golang_label_end); err != nil {
+	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
 		return nil, err
 	} else if len(labelData) > 0 {
-		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
-		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/itemsPerGolangLabel)
+		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/support.Sizeof_GolangLabel)
 
-		for len(labelData) >= itemsPerGolangLabel {
+		for len(labelData) >= support.Sizeof_GolangLabel {
 			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
-			labelData = labelData[itemsPerGolangLabel:]
+			labelData = labelData[support.Sizeof_GolangLabel:]
 			keyBytes, ok := t.customLabels.validateKey(label.Key[:])
 			if !ok {
 				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
