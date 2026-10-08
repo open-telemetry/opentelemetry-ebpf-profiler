@@ -43,7 +43,7 @@ require (
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.1
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.31.0
-	golang.org/x/exp v0.0.0-20261005173118-76772065c9b0
+	golang.org/x/exp v0.0.0-20261007192929-f45ad48fbe92
 	golang.org/x/mod v0.41.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
