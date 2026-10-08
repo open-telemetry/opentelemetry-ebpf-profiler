@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"slices"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // Discover returns the USDT attachment points for an ELF file identified by
@@ -19,7 +19,7 @@ import (
 // backing-file identity, including empty and partial results.
 func (d *Discoverer) Discover(
 	ref *pfelf.Reference,
-	fileID util.OnDiskFileIdentifier,
+	fileID libpf.FileID,
 ) ([]AttachmentPoint, error) {
 	if cached, ok := d.parseCache.Get(fileID); ok {
 		return slices.Clone(cached), nil

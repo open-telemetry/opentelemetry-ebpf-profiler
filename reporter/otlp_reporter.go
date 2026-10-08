@@ -44,10 +44,7 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +118,10 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	collectionStartTime := r.collectionStartTime
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
+
+	// Snapshot samples from probes join the event tree before generation so
+	// they travel the same export path as event-driven samples.
+	r.mergeSnapshots(reportedEvents, collectionEndTime)
 
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
 		collectionStartTime, collectionEndTime)

@@ -4,7 +4,9 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"maps"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -94,17 +96,43 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
 		for profileType, events := range toEvents.Events {
-			if len(events) == 0 {
+			if len(events) == 0 || len(profileType.SampleTypes) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
 
+			// Every emitted profile shares the same event and sample structure.
+			// Materialize one key order so cloned samples stay aligned while each
+			// profile selects its column from the flat event-major Values array.
+			keys := slices.Collect(maps.Keys(events))
+			valueWidth := len(profileType.SampleTypes)
+
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				profileType, events, prof,
-				collectionStartTime, collectionEndTime); err != nil {
+				profileType, profileType.SampleTypes[0], 0, valueWidth,
+				events, keys, prof, collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
+			}
+
+			// CopyTo deep-copies the sample into the additional profile because pdata
+			// samples cannot be shared between profiles. This reuses the resolved stack,
+			// links, timestamps, and attributes without repeating frame processing; the
+			// copied value slice's capacity is reused below for the selected value column.
+			for i := 1; i < valueWidth; i++ {
+				sampleType := profileType.SampleTypes[i]
+				dp := sp.Profiles().AppendEmpty()
+				p.initProfileMeta(stringSet, dp,
+					sampleType,
+					collectionStartTime, collectionEndTime)
+				src := prof.Samples()
+				for j, k := range keys {
+					s := dp.Samples().AppendEmpty()
+					src.At(j).CopyTo(s)
+					if profileType.ReportValues {
+						setSampleValues(s, events[k].Values, i, valueWidth)
+					}
+				}
 			}
 		}
 	}
@@ -130,6 +158,27 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	return profiles, nil
 }
 
+// initProfileMeta sets a profile's metadata: the period and sample type from
+// sampleType, and the collection window.
+func (p *Pdata) initProfileMeta(
+	stringSet orderedset.OrderedSet[string],
+	profile pprofile.Profile,
+	sampleType samples.SampleType,
+	collectionStartTime, collectionEndTime time.Time,
+) {
+	if period := sampleType.Period; period != nil {
+		profile.SetPeriod(period.Value)
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(stringSet.Add(period.Type))
+		pt.SetUnitStrindex(stringSet.Add(period.Unit))
+	}
+	st := profile.SampleType()
+	st.SetTypeStrindex(stringSet.Add(sampleType.Type))
+	st.SetUnitStrindex(stringSet.Add(sampleType.Unit))
+	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
+	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
+}
+
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
@@ -142,27 +191,27 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
+	sampleType samples.SampleType,
+	valueIndex, valueWidth int,
 	events samples.SampleToEvents,
+	// keys fixes the iteration order over events so all emitted profiles have
+	// index-aligned samples.
+	keys []samples.SampleKey,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
-	if profileType.PeriodType != "" {
-		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
-		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add(profileType.PeriodType))
-		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
-	}
+	p.initProfileMeta(stringSet, profile,
+		sampleType,
+		collectionStartTime, collectionEndTime)
 
-	st := profile.SampleType()
-	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
-	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
-
-	for sampleKey, traceInfo := range events {
+	for _, sampleKey := range keys {
+		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
+
 		if profileType.ReportValues {
-			sample.Values().Append(traceInfo.Values...)
+			setSampleValues(sample, traceInfo.Values, valueIndex, valueWidth)
 		}
 
 		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
@@ -264,10 +313,12 @@ func (p *Pdata) setProfile(
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, sampleKey.Comm.String())
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, sampleKey.TID)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		if !profileType.OmitThreadContext {
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.ThreadIDKey, sampleKey.TID)
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)
@@ -277,10 +328,17 @@ func (p *Pdata) setProfile(
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
-	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
-	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
-
 	return nil
+}
+
+// setSampleValues replaces a sample's values with the value at index from
+// each width-sized event group.
+func setSampleValues(sample pprofile.Sample, values []int64, index, width int) {
+	dst := sample.Values()
+	dst.FromRaw(nil)
+	for i := index; i < len(values); i += width {
+		dst.Append(values[i])
+	}
 }
 
 func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,

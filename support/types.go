@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x79
+	MetricIDBeginCumulative = 0x7b
 )
 
 const (
@@ -170,13 +170,14 @@ type Trace struct {
 	Apm_transaction_id [8]byte
 	Apm_trace_id       [16]byte
 	Cpu_id             uint32
+	Context_value_end  uint16
 	Kernel_frame_end   uint16
 	Frame_data_end     uint16
 	Golang_label_end   uint16
 	Variable_data_end  uint16
 	Num_frames         uint16
 	Origin             uint16
-	Value              uint64
+	Pad_cgo_0          [6]byte
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -540,4 +541,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
 	0x77: metrics.IDUnwindThreadContextReadSuccesses,
 	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
+	0x79: metrics.IDHeapPerPIDLimitHit,
+	0x7a: metrics.IDHeapLiveMapFull,
 }
