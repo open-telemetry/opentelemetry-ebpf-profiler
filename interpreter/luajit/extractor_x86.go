@@ -413,7 +413,7 @@ func (x *x86Extractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 			continue
 		}
 		// Each LEA $disp(%rip), %rsi the interpreter has executed sets RSI to
-		// a concrete absolute address (CodeAddress + pc_after_lea + disp).
+		// a concrete absolute address (baseAddr + pc_after_lea + disp).
 		// Read whatever RSI currently holds; if the immediate-preceding LEA
 		// canonicalized to an Imm it will match.
 		rsiCap := expression.NewImmediateCapture("rsi")
