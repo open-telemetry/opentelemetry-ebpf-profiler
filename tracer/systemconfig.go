@@ -476,10 +476,12 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	maps := make(map[string]*cebpf.Map)
 
 	if err := loadAllMaps(new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
+		closeEBPFResources(maps, nil)
 		return nil, nil, err
 	}
 
 	if err := rewriteMaps(new, maps); err != nil {
+		closeEBPFResources(maps, nil)
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
@@ -785,6 +787,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if err != nil {
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
+	// The analysis maps are only used to probe the running kernel below. Nothing
+	// refers to them afterwards, so release them rather than leaving them to the
+	// garbage collector.
+	defer closeEBPFResources(maps, nil)
 
 	if err := determineSysConfig(
 		systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
