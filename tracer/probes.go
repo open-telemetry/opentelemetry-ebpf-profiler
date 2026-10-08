@@ -5,6 +5,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
@@ -240,10 +241,23 @@ type CollectTrampolineRef struct {
 	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
 	// can bpf_tail_call into it.
 	TailCallDestinationID uint32
+
+	// Retaining the trampoline program prevents the program fd from
+	// being closed by the garbage collector.
+	trampoline *cebpf.Program
+}
+
+// Close releases the trampoline program and its context map.
+func (r *CollectTrampolineRef) Close() error {
+	return errors.Join(r.trampoline.Close(), r.CtxMap.Close())
 }
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
+//
+// The caller owns the returned CollectTrampolineRef and must call its Close
+// method once the external probe no longer uses the trampoline, e.g. after it
+// has been detached.
 func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
 	const (
 		trampolineProgName = "kprobe__external"
@@ -332,11 +346,13 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 
 	info, err := prog.Info()
 	if err != nil {
+		prog.Close()
 		ctxMap.Close()
 		return nil, fmt.Errorf("querying trampoline program info: %w", err)
 	}
 	progID, ok := info.ID()
 	if !ok {
+		prog.Close()
 		ctxMap.Close()
 		return nil, fmt.Errorf("trampoline program ID not available")
 	}
@@ -344,6 +360,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 	return &CollectTrampolineRef{
 		CtxMap:                ctxMap,
 		TailCallDestinationID: uint32(progID),
+		trampoline:            prog,
 	}, nil
 }
 
