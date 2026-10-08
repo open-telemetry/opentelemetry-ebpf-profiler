@@ -111,7 +111,8 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 	case unsafe.Pointer(&C.dotnet_procs), unsafe.Pointer(&C.perl_procs),
 		unsafe.Pointer(&C.php_procs), unsafe.Pointer(&C.py_procs),
 		unsafe.Pointer(&C.hotspot_procs), unsafe.Pointer(&C.ruby_procs),
-		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_procs):
+		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_procs),
+		unsafe.Pointer(&C.beam_procs):
 		if innerMap, ok := ctx.maps[mapdef]; ok {
 			if val, ok := innerMap[*(*C.u32)(keyptr)]; ok {
 				return val
@@ -144,12 +145,12 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 //export __bpf_copy_frame
 func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 	ctx := ebpfContextMap[id]
-	if trace.num_kernel_frames != 0 {
+	if trace.kernel_frame_end != 0 {
 		panic(fmt.Sprintf("coredump trace unexpectedly contains %d kernel frames",
-			uint16(trace.num_kernel_frames)))
+			trace.kernel_frame_end))
 	}
-	sz := trace.frame_data_len
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.frame_data[:sz]))
+	sz := trace.frame_data_end
+	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.variable_data[:sz]))
 	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
 	ctx.trace.NumKernelFrames = 0

@@ -143,6 +143,7 @@ func (store *Store) OpenReadAt(id ID) (*ModuleReader, error) {
 	reader := &ModuleReader{
 		ReaderAt:          file,
 		Closer:            file,
+		name:              id.String(),
 		preferredReadSize: uint(file.ChunkSize()),
 		size:              uint(file.UncompressedSize()),
 	}
