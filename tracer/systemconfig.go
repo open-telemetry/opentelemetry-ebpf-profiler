@@ -834,10 +834,15 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 // RODATA variable.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
 	sampling, err := origins.Register(&samples.TypeMetadata{
-		PeriodType: "cpu",
-		PeriodUnit: "nanoseconds",
-		SampleType: "samples",
-		SampleUnit: "count",
+		SampleTypes: []samples.SampleType{{
+			Type: "samples",
+			Unit: "count",
+			Period: &samples.Period{
+				Type:  "cpu",
+				Unit:  "nanoseconds",
+				Value: 1e9 / int64(cfg.SamplesPerSecond),
+			},
+		}},
 	})
 	if err != nil {
 		return err

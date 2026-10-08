@@ -9,12 +9,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
 type recordingProbeAttacher struct {
 	matchedMapping  *process.RawMapping
 	attachedMapping *process.RawMapping
+	attachedFileID  libpf.FileID
+	attachedELFRef  *pfelf.Reference
 }
 
 func (a *recordingProbeAttacher) Match(_ process.Process, mapping *process.RawMapping) bool {
@@ -22,8 +25,12 @@ func (a *recordingProbeAttacher) Match(_ process.Process, mapping *process.RawMa
 	return true
 }
 
-func (a *recordingProbeAttacher) Attach(_ process.Process, mapping *process.RawMapping) error {
+func (a *recordingProbeAttacher) Attach(_ process.Process, mapping *process.RawMapping,
+	fileID libpf.FileID, elfRef *pfelf.Reference,
+) error {
 	a.attachedMapping = mapping
+	a.attachedFileID = fileID
+	a.attachedELFRef = elfRef
 	return nil
 }
 
@@ -45,8 +52,12 @@ func TestAttachProbesForMappingForwardsMatchedMapping(t *testing.T) {
 		Path:   "/usr/lib/libc.so.6",
 	}
 
-	pm.attachProbesForMapping(pr, mapping)
+	fileID := libpf.NewFileID(1, 2)
+	elfRef := pfelf.NewReference(mapping.Path, pr)
+	pm.attachProbesForMapping(pr, mapping, fileID, elfRef)
 
 	require.Same(t, attacher.matchedMapping, attacher.attachedMapping)
+	require.Equal(t, fileID, attacher.attachedFileID)
+	require.Same(t, elfRef, attacher.attachedELFRef)
 	require.Contains(t, pm.attachedProbes[pr.pid], attacher)
 }
