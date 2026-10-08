@@ -123,8 +123,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 				sampleType := profileType.SampleTypes[i]
 				dp := sp.Profiles().AppendEmpty()
 				p.initProfileMeta(stringSet, dp,
-					profileType.PeriodType, profileType.PeriodUnit,
-					sampleType.Type, sampleType.Unit,
+					sampleType,
 					collectionStartTime, collectionEndTime)
 				src := prof.Samples()
 				for j, k := range keys {
@@ -159,23 +158,23 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	return profiles, nil
 }
 
-// initProfileMeta sets the profile-level metadata (period, sample type, and
-// collection window) shared by profiles emitted from the same event type.
+// initProfileMeta sets a profile's metadata: the period and sample type from
+// sampleType, and the collection window.
 func (p *Pdata) initProfileMeta(
 	stringSet orderedset.OrderedSet[string],
 	profile pprofile.Profile,
-	periodType, periodUnit, sampleType, sampleUnit string,
+	sampleType samples.SampleType,
 	collectionStartTime, collectionEndTime time.Time,
 ) {
-	if periodType != "" {
-		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+	if period := sampleType.Period; period != nil {
+		profile.SetPeriod(period.Value)
 		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add(periodType))
-		pt.SetUnitStrindex(stringSet.Add(periodUnit))
+		pt.SetTypeStrindex(stringSet.Add(period.Type))
+		pt.SetUnitStrindex(stringSet.Add(period.Unit))
 	}
 	st := profile.SampleType()
-	st.SetTypeStrindex(stringSet.Add(sampleType))
-	st.SetUnitStrindex(stringSet.Add(sampleUnit))
+	st.SetTypeStrindex(stringSet.Add(sampleType.Type))
+	st.SetUnitStrindex(stringSet.Add(sampleType.Unit))
 	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
 	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
 }
@@ -192,7 +191,7 @@ func (p *Pdata) setProfile(
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
 	profileType *samples.TypeMetadata,
-	sampleType samples.ValueType,
+	sampleType samples.SampleType,
 	valueIndex, valueWidth int,
 	events samples.SampleToEvents,
 	// keys fixes the iteration order over events so all emitted profiles have
@@ -202,8 +201,7 @@ func (p *Pdata) setProfile(
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
 	p.initProfileMeta(stringSet, profile,
-		profileType.PeriodType, profileType.PeriodUnit,
-		sampleType.Type, sampleType.Unit,
+		sampleType,
 		collectionStartTime, collectionEndTime)
 
 	for _, sampleKey := range keys {

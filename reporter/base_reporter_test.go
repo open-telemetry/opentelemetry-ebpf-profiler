@@ -21,19 +21,25 @@ import (
 
 var (
 	profileTypeSampling = &samples.TypeMetadata{
-		PeriodType:  "cpu",
-		PeriodUnit:  "nanoseconds",
-		SampleTypes: []samples.ValueType{{Type: "samples", Unit: "count"}},
+		SampleTypes: []samples.SampleType{{
+			Type: "samples",
+			Unit: "count",
+			Period: &samples.Period{
+				Type:  "cpu",
+				Unit:  "nanoseconds",
+				Value: 1e9 / 100,
+			},
+		}},
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
-		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
+		SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
 	}
 	profileTypeProbe = &samples.TypeMetadata{
-		SampleTypes: []samples.ValueType{{Type: "events", Unit: "count"}},
+		SampleTypes: []samples.SampleType{{Type: "events", Unit: "count"}},
 	}
 	profileTypeDerived = &samples.TypeMetadata{
-		SampleTypes: []samples.ValueType{
+		SampleTypes: []samples.SampleType{
 			{Type: "alloc_space", Unit: "bytes"},
 			{Type: "alloc_objects", Unit: "count"},
 		},
@@ -56,13 +62,12 @@ func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 
 	if cfg == nil {
 		cfg = &Config{
-			Name:             "test-agent",
-			Version:          "v1.0.0",
-			SamplesPerSecond: 100,
+			Name:    "test-agent",
+			Version: "v1.0.0",
 		}
 	}
 
-	pdataInstance, err := pdata.New(cfg.SamplesPerSecond, cfg.ExtraSampleAttrProd)
+	pdataInstance, err := pdata.New(cfg.ExtraSampleAttrProd)
 	require.NoError(t, err)
 
 	return &baseReporter{
@@ -230,7 +235,7 @@ func TestReportTraceEventDerivesValuesEagerly(t *testing.T) {
 func TestReportTraceEventRejectsWrongValueCount(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
 	profileType := &samples.TypeMetadata{
-		SampleTypes: []samples.ValueType{
+		SampleTypes: []samples.SampleType{
 			{Type: "space", Unit: "bytes"},
 			{Type: "objects", Unit: "count"},
 		},
@@ -380,7 +385,6 @@ func TestProcessMetaEnricherPipeline(t *testing.T) {
 	cfg := &Config{
 		Name:                "test-agent",
 		Version:             "v1.0.0",
-		SamplesPerSecond:    100,
 		ExtraSampleAttrProd: &processNameAttrProducer{},
 	}
 	reporter := createTestBaseReporter(t, cfg)

@@ -103,25 +103,37 @@ type SampleKey struct {
 	TraceID libpf.APMTraceID
 }
 
-// ValueType describes what a profile's sample values measure and the unit
-// those values use.
-type ValueType struct {
+// SampleType describes one profile emitted from an event type: what its
+// sample values measure, their unit, and how the profile was sampled.
+type SampleType struct {
+	// Type describes what the sample values measure (e.g. "samples").
 	Type string
+
+	// Unit is the unit of the sample values (e.g. "count").
 	Unit string
+
+	// Period is the profile's sampling period. Nil means the profile has no
+	// period (e.g. event-driven kinds).
+	Period *Period
+}
+
+// Period describes how a profile was sampled.
+type Period struct {
+	// Type describes what is measured per period (e.g. "cpu").
+	Type string
+
+	// Unit is the unit of Type and Value (e.g. "nanoseconds").
+	Unit string
+
+	// Value is the sampling period, in Unit.
+	Value int64
 }
 
 // TypeMetadata describes how profiling events of a particular kind should be
 // interpreted and exported as OTel profiles.
 type TypeMetadata struct {
-	// PeriodType describes what is measured per period (e.g. "cpu").
-	// Empty means this profile type has no period (e.g. event-driven kinds).
-	PeriodType string
-
-	// PeriodUnit is the unit for PeriodType (e.g. "nanoseconds").
-	PeriodUnit string
-
 	// SampleTypes has one entry per profile emitted from this event type.
-	SampleTypes []ValueType
+	SampleTypes []SampleType
 
 	// ReportValues indicates whether sample values should be included in the
 	// exported profiles (e.g. off-CPU durations).

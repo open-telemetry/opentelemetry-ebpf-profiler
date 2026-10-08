@@ -83,7 +83,7 @@ func New(cfg Config) (tracer.Probe, error) {
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleTypes: []samples.ValueType{{Type: "events", Unit: "count"}},
+		SampleTypes: []samples.SampleType{{Type: "events", Unit: "count"}},
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)

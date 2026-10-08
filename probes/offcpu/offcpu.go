@@ -44,7 +44,7 @@ type probe struct {
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleTypes:  []samples.ValueType{{Type: "off_cpu", Unit: "nanoseconds"}},
+		SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
 	})
 	if err != nil {
