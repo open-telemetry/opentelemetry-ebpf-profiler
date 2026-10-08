@@ -44,10 +44,7 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}

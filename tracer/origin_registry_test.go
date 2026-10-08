@@ -14,7 +14,7 @@ import (
 
 func TestOriginRegistryRegisterValidates(t *testing.T) {
 	derive := func(dst []int64, _ *samples.TraceEventMeta) []int64 { return append(dst, 0, 0) }
-	two := []samples.ValueType{{Type: "a", Unit: "count"}, {Type: "b", Unit: "count"}}
+	two := []samples.SampleType{{Type: "a", Unit: "count"}, {Type: "b", Unit: "count"}}
 
 	tests := map[string]struct {
 		metadata *samples.TypeMetadata
