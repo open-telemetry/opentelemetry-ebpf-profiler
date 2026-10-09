@@ -1076,6 +1076,7 @@ var (
 
 type variableDataDecoder struct {
 	raw []uint8
+	dst []uint64
 	pos uint16
 }
 
@@ -1092,21 +1093,22 @@ func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, e
 	return data, nil
 }
 
-func (vd *variableDataDecoder) copyUint64(end uint16, buf []uint64, field string) (used, left []uint64, err error) {
+func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, error) {
 	val, err := vd.decodeBytes(end, field)
 	if val == nil {
-		return nil, buf, err
+		return nil, err
 	}
 	n := len(val) / 8
-	if len(val)%8 != 0 || n > len(buf) {
-		return nil, buf, fmt.Errorf("%s copy fail (size %d, max %d): %w",
-			field, len(val), 8*len(buf), errRecordUnexpectedSize)
+	if len(val)%8 != 0 || n > len(vd.dst) {
+		return nil, fmt.Errorf("%s copy fail (size %d, max %d): %w",
+			field, len(val), 8*len(vd.dst), errRecordUnexpectedSize)
 	}
 
 	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
-	dst := buf[:n]
+	dst := vd.dst[:n]
 	copy(dst, src)
-	return dst, buf[n:], nil
+	vd.dst = vd.dst[n:]
+	return dst, nil
 }
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1143,16 +1145,15 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	vd := variableDataDecoder{raw: variableData}
-	buf := trace.FrameDataBuf[:]
+	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
 
 	var err error
-	trace.KernelFrames, buf, err = vd.copyUint64(ptr.Kernel_frame_end, buf, "kernel_frame")
+	trace.KernelFrames, err = vd.copyUint64(ptr.Kernel_frame_end, "kernel_frame")
 	if err != nil {
 		return nil, err
 	}
 
-	trace.FrameData, buf, err = vd.copyUint64(ptr.Frame_data_end, buf, "frame")
+	trace.FrameData, err = vd.copyUint64(ptr.Frame_data_end, "frame")
 	if err != nil {
 		return nil, err
 	}
@@ -1180,7 +1181,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 				libpf.Intern(pfunsafe.ToString(valBytes))
 		}
 	}
-	_ = buf // Prevent SA4006 of last buf assignment not used
 	return trace, nil
 }
 
