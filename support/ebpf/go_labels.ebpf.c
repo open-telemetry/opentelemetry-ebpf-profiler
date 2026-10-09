@@ -202,7 +202,7 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
   if (!success) {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
-  record->trace.golang_label_end = record->trace.variable_data_end;
+  record->trace.golang_label_end = end_variable_data(&record->trace, sizeof(GolangLabel));
 
   send_trace(ctx, &record->trace);
   return 0;
