@@ -13,7 +13,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -710,10 +709,15 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
-	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case)
-	// TODO: Base this on present CPUs instead, as runtime.NumCPU is fixed for the lifetime
-	// of the process?
-	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_TraceWithData)
+	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case).
+	// As CPU hot-plugging during runtime is currently not supported use the number of online CPUs
+	// rather than runtime.NumCPU(), which only reflects the CPUs this process may be scheduled on
+	// at startup (affinity/cpuset-limited).
+	onlineCPUs, err := onlineCPUsOnce()
+	if err != nil {
+		return fmt.Errorf("failed to determine online CPUs: %v", err)
+	}
+	ringbufSize := uint64(cfg.SamplesPerSecond * len(onlineCPUs) * support.Sizeof_TraceWithData)
 	adaption["trace_events"] = uint32(min(util.NextPowerOfTwo(ringbufSize), 1<<31))
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
@@ -871,7 +875,7 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 
 // loadProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
 // are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
-// specification of these programs to xProbe eBPF programs and adjusts tail call maps.
+// specification of these programs to xProbe eBPF programs and adjusts tail call maps if needed.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
@@ -896,25 +900,28 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 			return fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
-		// Replace the prog array for the tail calls.
-		insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
-		for _, ins := range insns {
-			if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
-				return fmt.Errorf("failed to rewrite map ptr: %v", err)
+		// Skip rewriting tail call maps for external perf_event based probes.
+		if unwindProgName != "perf_event__external" {
+			// Replace the prog array for the tail calls.
+			insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
+			for _, ins := range insns {
+				if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
+					return fmt.Errorf("failed to rewrite map ptr: %v", err)
+				}
 			}
-		}
 
-		// Repoint per_cpu_records to the probe unwinder's own record map.
-		recInsns := progArrayReferences(perCPURecordsFD, progSpec.Instructions)
-		for _, ins := range recInsns {
-			if err := progSpec.Instructions[ins].AssociateMap(perCPURecordsKprobeMap); err != nil {
-				return fmt.Errorf("failed to rewrite per_cpu_records ptr: %v", err)
+			// Repoint per_cpu_records to the probe unwinder's own record map.
+			recInsns := progArrayReferences(perCPURecordsFD, progSpec.Instructions)
+			for _, ins := range recInsns {
+				if err := progSpec.Instructions[ins].AssociateMap(perCPURecordsKprobeMap); err != nil {
+					return fmt.Errorf("failed to rewrite per_cpu_records ptr: %v", err)
+				}
 			}
 		}
 
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.ProgID, progSpec,
 			programOptions, unwindProg.NoTailCallTarget); err != nil {
-			return err
+			return fmt.Errorf("failed to load %s: %v", unwindProgName, err)
 		}
 	}
 
@@ -940,15 +947,15 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 		// so we print each line individually.
 		if ve, ok := err.(*cebpf.VerifierError); ok {
 			for _, line := range ve.Log {
-				log.Errorf("%s", line)
+				log.Infof("%s", line)
 			}
 		} else {
 			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
 			for scanner.Scan() {
-				log.Errorf("%s", scanner.Text())
+				log.Infof("%s", scanner.Text())
 			}
 		}
-		return fmt.Errorf("failed to load %s", progSpec.Name)
+		return fmt.Errorf("failed to load %s: %w", progSpec.Name, err)
 	}
 	ebpfProgs[progSpec.Name] = unwinder
 

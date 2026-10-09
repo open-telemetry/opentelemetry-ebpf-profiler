@@ -624,7 +624,7 @@ func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, er
 	}
 	f, err := sp.getMappingFile(m)
 	if err != nil {
-		return libpf.FileID{}, fmt.Errorf("failed to get mapping file: %v", err)
+		return libpf.FileID{}, fmt.Errorf("failed to get mapping file: %w", err)
 	}
 	defer f.Close()
 	return libpf.FileIDFromExecutableReader(f)

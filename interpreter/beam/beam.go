@@ -296,7 +296,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	data := support.BEAMProcInfo{
 		R:                     uint64(bias + d.r),
 		The_active_code_index: uint64(bias + d.theActiveCodeIndex),
-		Beam_normal_exit:      uint64(bias + d.beamNormalExit),
+		Beam_normal_exit:      rm.Uint64(bias + d.beamNormalExit),
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.sizeOf),
 	}
 
