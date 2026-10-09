@@ -237,11 +237,6 @@ type CollectTrampolineRef struct {
 	// which the external entry program writes its payload (slot 0) before tail-calling.
 	CtxMap *cebpf.Map
 
-	// TailCallDestinationID is the kernel program ID of the loaded trampoline.
-	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
-	// can bpf_tail_call into it.
-	TailCallDestinationID uint32
-
 	// Retaining the trampoline program prevents the program fd from
 	// being closed by the garbage collector.
 	trampoline *cebpf.Program
@@ -250,6 +245,13 @@ type CollectTrampolineRef struct {
 // Close releases the trampoline program and its context map.
 func (r *CollectTrampolineRef) Close() error {
 	return errors.Join(r.trampoline.Close(), r.CtxMap.Close())
+}
+
+// InsertInto writes the trampoline program into progArray at key. The eBPF program
+// of the external probe must tail-call into progArray at key to trigger stack
+// trace collection.
+func (r *CollectTrampolineRef) InsertInto(progArray *cebpf.Map, key uint32) error {
+	return progArray.Put(key, r.trampoline)
 }
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
@@ -344,23 +346,9 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 		return nil, fmt.Errorf("program %q not found after loading", trampolineProgName)
 	}
 
-	info, err := prog.Info()
-	if err != nil {
-		prog.Close()
-		ctxMap.Close()
-		return nil, fmt.Errorf("querying trampoline program info: %w", err)
-	}
-	progID, ok := info.ID()
-	if !ok {
-		prog.Close()
-		ctxMap.Close()
-		return nil, fmt.Errorf("trampoline program ID not available")
-	}
-
 	return &CollectTrampolineRef{
-		CtxMap:                ctxMap,
-		TailCallDestinationID: uint32(progID),
-		trampoline:            prog,
+		CtxMap:     ctxMap,
+		trampoline: prog,
 	}, nil
 }
 
