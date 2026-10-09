@@ -254,18 +254,36 @@ func (r *CollectTrampolineRef) InsertInto(progArray *cebpf.Map, key uint32) erro
 	return progArray.Put(key, r.trampoline)
 }
 
+// ProbeKind specifies the eBPF program type used to trigger the stack collection.
+type ProbeKind uint8
+
+const (
+	probeUnspec ProbeKind = iota
+	ProbeKProbe
+	ProbePerfEvent
+)
+
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
 //
 // The caller owns the returned CollectTrampolineRef and must call its Close
 // method once the external probe no longer uses the trampoline, e.g. after it
 // has been detached.
-func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kind ProbeKind) (*CollectTrampolineRef, error) {
 	const (
-		trampolineProgName = "kprobe__external"
-		ctxMapName         = "ext_probe_value"
-		originVarName      = "origin_id_probe"
+		ctxMapName    = "ext_probe_value"
+		originVarName = "origin_id_probe"
 	)
+
+	var trampolineProgName string
+	switch kind {
+	case ProbeKProbe:
+		trampolineProgName = "kprobe__external"
+	case ProbePerfEvent:
+		trampolineProgName = "perf_event__external"
+	default:
+		return nil, fmt.Errorf("invalid probe kind: %d", kind)
+	}
 
 	originID, err := c.reg.Register(meta)
 	if err != nil {
