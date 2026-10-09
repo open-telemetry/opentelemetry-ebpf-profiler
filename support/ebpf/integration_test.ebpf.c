@@ -9,31 +9,24 @@
 static EBPF_INLINE void
 send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel_frames)
 {
-  // Use the per CPU record for trace storage: it's too big for stack.
-  PerCPURecord *record = get_pristine_per_cpu_record();
+  // Context values lead variable_data ahead of any kernel and user frames.
+  // Without kernel frames, reserve none, like sampling. With kernel frames,
+  // reserve sentinels to verify they survive stack capture and userspace
+  // decoding.
+  PerCPURecord *record = prepare_trace(
+    origin_id_sampling, pid, tid, 0, bpf_ktime_get_ns(), capture_kernel_frames ? 3 : 0);
   if (!record) {
-    return; // unreachable
+    return;
   }
 
   Trace *trace = &record->trace;
 
   // Use COMM as a marker for our test traces. COMM[3] serves as test case ID.
-  bpf_get_current_comm(trace->comm, sizeof(trace->comm));
   trace->comm[0] = 0xAA;
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
   trace->comm[3] = test_case;
-  trace->origin  = origin_id_sampling;
-  trace->pid     = pid;
-  trace->tid     = tid;
-  // Context values lead variable_data ahead of any kernel and user frames.
-  // Without kernel frames, reserve none, like sampling. With kernel frames,
-  // reserve sentinels to verify they survive stack capture and userspace
-  // decoding.
   if (capture_kernel_frames) {
-    if (!reserve_context_values(trace, 3)) {
-      return;
-    }
     u64 *values = trace_context_values(trace);
     values[0]   = 0x123456789abcdef0;
     values[1]   = 0x2222222222222222;

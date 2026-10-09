@@ -247,6 +247,10 @@ Loop:
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
 		case ebpfTrace := <-traceChan:
+			if ebpfTrace == nil {
+				// Flush marker sent before ProcessedUntil.
+				continue
+			}
 			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
@@ -413,6 +417,10 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
 		case trace := <-traceChan:
+			if trace == nil {
+				// Flush marker sent before ProcessedUntil.
+				continue
+			}
 			comm := trace.Comm.String()
 			if len(comm) < 4 || comm[:3] != "\xAA\xBB\xCC" {
 				continue
