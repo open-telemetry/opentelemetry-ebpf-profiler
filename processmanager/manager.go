@@ -200,9 +200,6 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 
 		summary[metrics.IDHashmapPidPageToMappingInfo] = metrics.MetricValue(pm.pidPageToMappingInfoSize)
 
-		summary[metrics.IDThreadContextSchemaRejected] =
-			metrics.MetricValue(processcontext.TakeSchemaRejectedCount())
-
 		summary[metrics.IDELFInfoCacheHit] = metrics.MetricValue(pm.elfInfoCacheHit.Swap(0))
 		summary[metrics.IDELFInfoCacheMiss] = metrics.MetricValue(pm.elfInfoCacheMiss.Swap(0))
 
@@ -218,6 +215,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		summary.Add(dotnet.GetAndResetMetrics())
+		summary.Add(processcontext.GetAndResetMetrics())
 		summary.Add(pm.ebpf.CollectMetrics())
 
 		pm.eim.UpdateMetricSummary(summary)
