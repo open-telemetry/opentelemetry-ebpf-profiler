@@ -25,8 +25,7 @@ import (
 // If file is nil, RIP-relative memory dereferencing will be skipped.
 func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32, error) {
 	offset := e.NewImmediateCapture("offset")
-	it := NewInterpreterWithCode(code)
-	it.CodeAddress = e.Imm(codeAddress)
+	it := NewInterpreterWithCodeAt(code, e.Imm(codeAddress))
 
 	for {
 		op, err := it.Step()
