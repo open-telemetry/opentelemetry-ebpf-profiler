@@ -682,8 +682,8 @@ typedef struct ThreadLabelData {
 #define MAX_GO_LABEL_DATA_LEN (MAX_GO_LABELS * sizeof(GolangLabel) / 8)
 
 // Number of u64 entries reserved for data after frames, currently the thread
-// label and Go label sections. Sized to fit one full set of Go labels, so a
-// trace carrying both gets fewer of whichever is written second.
+// label and Go label sections. Sized to fit one full set of Go labels, to guarantee
+// a reasonable set of labels even if all of frame data is used.
 #define MAX_FRAME_TRAILER_DATA_LEN MAX_GO_LABEL_DATA_LEN
 
 // The variable data portion of trace layout as:
