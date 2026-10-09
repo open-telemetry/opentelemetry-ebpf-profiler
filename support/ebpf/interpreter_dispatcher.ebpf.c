@@ -184,7 +184,7 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   increment_metric(metricID_UnwindGoLabelsAttempts);
   // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
   // it is tail_call'd.
-  tail_call(ctx, PROG_GO_LABELS);
+  tail_call(ctx, record, PROG_GO_LABELS);
 }
 
 // Implements the specification to share span/trace IDs according to:

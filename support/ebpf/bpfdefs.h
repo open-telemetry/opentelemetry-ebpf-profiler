@@ -140,10 +140,9 @@ static unsigned long long (*bpf_ktime_get_ns)(void)         = (void *)BPF_FUNC_k
 static unsigned long long (*bpf_get_current_pid_tgid)(void) = (void *)BPF_FUNC_get_current_pid_tgid;
 static long (*bpf_get_ns_current_pid_tgid)(u64 dev, u64 ino, void *info, u32 size) = (void *)
   BPF_FUNC_get_ns_current_pid_tgid;
-static int (*bpf_get_current_comm)(void *buf, int buf_size)   = (void *)BPF_FUNC_get_current_comm;
-static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
-static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC_get_current_task;
-static struct task_struct *(*bpf_get_current_task_btf)(void)  = (void *)
+static int (*bpf_get_current_comm)(void *buf, int buf_size)  = (void *)BPF_FUNC_get_current_comm;
+static unsigned long long (*bpf_get_current_task)(void)      = (void *)BPF_FUNC_get_current_task;
+static struct task_struct *(*bpf_get_current_task_btf)(void) = (void *)
   BPF_FUNC_get_current_task_btf;
 static long (*bpf_find_vma)(
   struct task_struct *task, u64 addr, void *callback_fn, void *callback_ctx, u64 flags) = (void *)
@@ -166,6 +165,15 @@ static long (*bpf_probe_read_user)(void *dst, u32 size, const void *unsafe_ptr) 
 static long (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_kernel;
 static long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;
+
+// Contrary documentation, 'bpf_tail_call' is does not return a value. But we need it
+// for coredump test suite to work. So override it here.
+static inline int bpf_tail_call(void *ctx, void *map, int index)
+{
+  void (*__bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
+  __bpf_tail_call(ctx, map, index);
+  return -1;
+}
 
   #define bpf_probe_read_user_with_test_fault bpf_probe_read_user
 

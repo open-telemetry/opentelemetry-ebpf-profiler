@@ -949,8 +949,6 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("jvm: tail call for next frame unwinder (%d) failed", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_hotspot)

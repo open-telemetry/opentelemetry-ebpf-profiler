@@ -629,7 +629,6 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   error = walk_ruby_stack(record, rubyinfo, current_ctx_addr, &unwinder);
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_ruby)

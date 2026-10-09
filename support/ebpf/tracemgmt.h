@@ -1005,16 +1005,8 @@ static inline EBPF_INLINE int get_next_unwinder_after_interpreter()
 
 // tail_call is a wrapper around bpf_tail_call() and ensures that the number of tail calls is not
 // reached while unwinding the stack.
-static inline EBPF_INLINE void tail_call(void *ctx, int next)
+static inline EBPF_INLINE int tail_call(void *ctx, PerCPURecord *record, int next)
 {
-  PerCPURecord *record = get_per_cpu_record();
-  if (!record) {
-    bpf_tail_call(ctx, &perf_progs, PROG_UNWIND_STOP);
-    // In theory bpf_tail_call() should never return. But due to instruction reordering by the
-    // compiler we have to place return here to bribe the verifier to accept this.
-    return;
-  }
-
   if (record->tailCalls >= 29) {
     // The maximum tail call count we need to support on older kernels is 32. At this point
     // there is a chance that continuing unwinding the stack would further increase the number of
@@ -1026,8 +1018,7 @@ static inline EBPF_INLINE void tail_call(void *ctx, int next)
     increment_metric(metricID_MaxTailCalls);
   }
   record->tailCalls += 1;
-
-  bpf_tail_call(ctx, &perf_progs, next);
+  return bpf_tail_call(ctx, &perf_progs, next);
 }
 
 #ifndef __USER32_CS
@@ -1223,7 +1214,7 @@ static inline EBPF_INLINE int collect_trace(
   push_kernel_frames(ctx, trace);
 
   if (pid == 0) {
-    tail_call(ctx, PROG_UNWIND_STOP);
+    tail_call(ctx, record, PROG_UNWIND_STOP);
     return 0;
   }
 
@@ -1258,9 +1249,7 @@ static inline EBPF_INLINE int collect_trace(
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 
 #endif

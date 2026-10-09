@@ -204,7 +204,6 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 		}
 
 		// Get traces by calling ebpf code via CGO
-		ebpfCtx.resetTrace()
 		if rc := C.unwind_traces(ebpfCtx.PIDandTGID, debugFlag, C.u64(thread.TPBase),
 			unsafe.Pointer(&thread.GPRegs[0])); rc != 0 {
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)

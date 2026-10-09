@@ -437,7 +437,6 @@ static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
   unwinder = walk_perl_stack(record, perlinfo);
 
 exit:
-  tail_call(ctx, unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_perl)
