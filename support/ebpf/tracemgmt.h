@@ -1125,11 +1125,10 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 // if it is usermode regs, or resolve it via struct task_struct.
 //
 // State registers are not touched (get_pristine_per_cpu_record already reset it)
-// if something fails. has_usermode_regs is set to true if a user-mode register
-// context was found: not every thread that we interrupt will actually have
-// a user-mode context (e.g. kernel worker threads won't).
+// if something fails. ERR_EMPTY_STACK indicates that the user-mode stack is
+// is not available (e.g. kernel worker thread).
 static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   ErrorCode error;
 
@@ -1146,15 +1145,12 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
     if (!ptregs_is_usermode(&regs)) {
       // No usermode registers context found.
-      return ERR_OK;
+      return ERR_EMPTY_STACK;
     }
     error = copy_state_regs(state, &regs, true);
   } else {
     // User mode code interrupted, registers are available via the ebpf context.
     error = copy_state_regs(state, ctx, false);
-  }
-  if (error == ERR_OK) {
-    *has_usermode_regs = true;
   }
   return error;
 }
@@ -1162,14 +1158,10 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 #else // TESTING_COREDUMP
 
 static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   // Coredumps provide always usermode pt_regs directly.
-  ErrorCode error = copy_state_regs(state, ctx, false);
-  if (error == ERR_OK) {
-    *has_usermode_regs = true;
-  }
-  return error;
+  return copy_state_regs(state, ctx, false);
 }
 
 #endif // TESTING_COREDUMP
@@ -1213,9 +1205,10 @@ static inline EBPF_INLINE int collect_trace(
   // Capture kernel stack and push each frame into frame_data.
   push_kernel_frames(ctx, trace);
 
+  ErrorCode error = ERR_OK;
+  int unwinder    = PROG_UNWIND_STOP;
   if (pid == 0) {
-    tail_call(ctx, record, PROG_UNWIND_STOP);
-    return 0;
+    goto exit;
   }
 
   // Preload this trace's go_procs entry into record->goOffsets.
@@ -1225,10 +1218,11 @@ static inline EBPF_INLINE int collect_trace(
   }
 
   // Recursive unwind frames
-  int unwinder           = PROG_UNWIND_STOP;
-  bool has_usermode_regs = false;
-  ErrorCode error        = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
-  if (error || !has_usermode_regs) {
+  error = get_usermode_regs(ctx, &record->state);
+  if (error) {
+    if (error == ERR_EMPTY_STACK) {
+      error = ERR_OK;
+    }
     goto exit;
   }
 
