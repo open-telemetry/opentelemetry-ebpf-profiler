@@ -1139,21 +1139,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	}
 
 	vd := variableDataDecoder{raw: variableData}
+	buf := trace.FrameDataBuf[:]
 
-	if ptr.Kernel_frame_end > 0 {
-		// Validate and use Kernel_frame_end only to calculate number of kernel frames.
-		// The kernel frames are copied together with the regular frames in the next step.
-		if vd.pos > ptr.Kernel_frame_end || ptr.Kernel_frame_end > ptr.Frame_data_end {
-			return nil, fmt.Errorf("kernel frame end %d: not in range [%d, %d]: %w",
-				ptr.Kernel_frame_end, vd.pos, ptr.Frame_data_end,
-				errRecordUnexpectedSize)
-		}
-		trace.NumKernelFrames = (ptr.Kernel_frame_end - vd.pos) / 8
+	if kernelFrames, err := vd.decode(ptr.Kernel_frame_end, "kernel_frame"); err != nil {
+		return nil, err
+	} else if elems := len(kernelFrames); elems > 0 {
+		trace.KernelFrames, buf = buf[:elems], buf[elems:]
+		copy(trace.KernelFrames, kernelFrames)
 	}
+
 	if frameData, err := vd.decode(ptr.Frame_data_end, "frame"); err != nil {
 		return nil, err
-	} else if len(frameData) > 0 {
-		trace.FrameData = trace.FrameDataBuf[:len(frameData)]
+	} else if elems := len(frameData); elems > 0 {
+		trace.FrameData, buf = buf[:elems], buf[elems:]
 		copy(trace.FrameData, frameData)
 	}
 
@@ -1180,6 +1178,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 				libpf.Intern(pfunsafe.ToString(valBytes))
 		}
 	}
+	_ = buf // Prevent SA4006 of last buf assignment not used
 	return trace, nil
 }
 

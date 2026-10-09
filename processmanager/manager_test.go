@@ -136,8 +136,7 @@ func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {
 
 	for range 2 {
 		pm.HandleTrace(&libpf.EbpfTrace{
-			NumKernelFrames: 1,
-			FrameData:       []uint64{uint64(address)},
+			KernelFrames: []uint64{uint64(address)},
 		}, nil)
 	}
 
@@ -173,8 +172,7 @@ func TestKernelFrameCacheIgnoresInvalidEntries(t *testing.T) {
 	}
 
 	pm.HandleTrace(&libpf.EbpfTrace{
-		NumKernelFrames: 1,
-		FrameData:       []uint64{uint64(address)},
+		KernelFrames: []uint64{uint64(address)},
 	}, nil)
 
 	require.Len(t, capture.traces, 1)

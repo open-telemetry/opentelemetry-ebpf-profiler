@@ -199,6 +199,7 @@ func putUint64(b []byte, v uint64) int {
 type EbpfTrace struct {
 	CustomLabels     map[String]String
 	Comm             Comm
+	KernelFrames     []uint64
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64
 	Value            int64
@@ -207,7 +208,6 @@ type EbpfTrace struct {
 	TID              PID
 	PID              PID
 	NumFrames        uint16
-	NumKernelFrames  uint16
 	Origin           uint16
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID

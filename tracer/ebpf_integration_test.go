@@ -240,8 +240,8 @@ Loop:
 			require.GreaterOrEqual(t, len(comm), 4)
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
-				numKernelFrames: int(ebpfTrace.NumKernelFrames),
-				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData[int(ebpfTrace.NumKernelFrames):])),
+				numKernelFrames: len(ebpfTrace.KernelFrames),
+				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData)),
 			}
 		}
 	}
