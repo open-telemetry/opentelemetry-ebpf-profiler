@@ -650,12 +650,12 @@ static inline EBPF_INLINE void commit_variable_data(Trace *trace, u16 commit_sz)
 }
 
 // end_variable_data finalizes a variable data section, and returns the end pointer.
-// The 'alignment' should contain the integral data size used for commit_variable_data,
-// to potentially optimize away the alignment code.
-static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 alignment)
+// 'item_sz' is the unit data size used for commit_variable_data, to optimize
+// away the alignment code when possible.
+static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
 {
   u16 end = trace->variable_data_end;
-  if (alignment & 7U) {
+  if (item_sz & 7U) {
     trace->variable_data_end = (end + 7U) & ~7U;
   }
   return end;
@@ -748,6 +748,7 @@ static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
   long bytes = bpf_get_stack(ctx, data, max_bytes, 0);
   if (bytes > 0) {
     commit_variable_data(trace, bytes);
+    // bpf_get_stack returns a multiple of sizeof(u64).
     trace->kernel_frame_end = end_variable_data(trace, sizeof(u64));
   }
 }
