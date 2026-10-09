@@ -1,0 +1,79 @@
+{
+  "coredump-ref": "1de4a380ee78d86da5bda4ed4b9f0338f0811992bde93f219ab0d2e019f03a67",
+  "threads": [
+    {
+      "lwp": 6,
+      "frames": [
+        "libpython3.6m.so.1.0+0xb3724",
+        "libpython3.6m.so.1.0+0x112613",
+        "libpython3.6m.so.1.0+0x112313",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "<module>+7 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:10"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "f1168894d171d19a2c5d615f8d0f2f7eefd819f112dada34f37a35c3ba158fd7",
+      "local-path": "/usr/local/bin/python3.6"
+    },
+    {
+      "ref": "e7df604d36b489af20d2e22c7924d6d855646780301de7fff647353cb14a6282",
+      "local-path": "/lib/aarch64-linux-gnu/libm-2.31.so"
+    },
+    {
+      "ref": "c3dbc50bb97f827e5dca8cc4026fb6959ddbd657c9c379f402a8cee2460d8e76",
+      "local-path": "/lib/aarch64-linux-gnu/libutil-2.31.so"
+    },
+    {
+      "ref": "fc77f71dc2ac00b70fbefd7b7038a55c891d01a43cba1373f7cd5eaa15b1e561",
+      "local-path": "/lib/aarch64-linux-gnu/libdl-2.31.so"
+    },
+    {
+      "ref": "a3bd917cef0e018fd6b91a55b1467d72ed53879c886d64a52e4bdd22874a7dc9",
+      "local-path": "/usr/local/lib/libpython3.6m.so.1.0"
+    },
+    {
+      "ref": "7bb4770caf30f9b69ad13dd44ef36a12b87c574162acf52f9ddd487715faa0c8",
+      "local-path": "/lib/aarch64-linux-gnu/libpthread-2.31.so"
+    },
+    {
+      "ref": "e651767dc41e949ff64d32c9ce10e78f9cad510a3e84c14e5069f9900578d44a",
+      "local-path": "/lib/aarch64-linux-gnu/libc-2.31.so"
+    },
+    {
+      "ref": "5ef7a5fc86d7110aad7be60ac7a3a89669eefdafbaed239ca400d190faec6402",
+      "local-path": "/lib/aarch64-linux-gnu/ld-2.31.so"
+    }
+  ]
+}
