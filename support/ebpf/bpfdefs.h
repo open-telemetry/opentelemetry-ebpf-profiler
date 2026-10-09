@@ -166,12 +166,14 @@ static long (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr
   BPF_FUNC_probe_read_kernel;
 static long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;
 
-// Contrary documentation, 'bpf_tail_call' is does not return a value. But we need it
-// for coredump test suite to work. So override it here.
 static inline int bpf_tail_call(void *ctx, void *map, int index)
 {
   void (*__bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
   __bpf_tail_call(ctx, map, index);
+  // Contrary to man bpf-helpers(7), the 'bpf_tail_call' does not return a value.
+  // For coredump test suite to work without setjmp etc, the call sites need to pass down
+  // the return value to the caller. The only reason that execution continues here
+  // is failure, so return an error unconditionally.
   return -1;
 }
 

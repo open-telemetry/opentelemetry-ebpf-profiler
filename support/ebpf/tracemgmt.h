@@ -1127,8 +1127,7 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 // State registers are not touched (get_pristine_per_cpu_record already reset it)
 // if something fails. ERR_EMPTY_STACK indicates that the user-mode stack is
 // is not available (e.g. kernel worker thread).
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
+static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   ErrorCode error;
 
