@@ -118,7 +118,7 @@ func threadLabelPayload(section []uint64) ([]byte, error) {
 		return nil, fmt.Errorf("thread label size %d exceeds payload size %d: %w",
 			header.Size, len(payload), errRecordUnexpectedSize)
 	}
-	return payload[:header.Size], nil
+	return payload[:header.Size:header.Size], nil
 }
 
 // resolve decodes an attribute payload against the schema its process published.
