@@ -4,6 +4,7 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"iter"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -102,16 +103,22 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 
 			// Every emitted profile shares the same event and sample structure.
-			// Materialize one key order so cloned samples stay aligned while each
-			// profile selects its column from the flat event-major Values array.
-			keys := slices.Collect(maps.Keys(events))
+			// With more than one sample type, materialize one key order so cloned
+			// samples stay aligned while each profile selects its column from the
+			// flat event-major Values array. A single profile can iterate directly.
 			valueWidth := len(profileType.SampleTypes)
+			var keys []samples.SampleKey
+			order := maps.Keys(events)
+			if valueWidth > 1 {
+				keys = slices.Collect(order)
+				order = slices.Values(keys)
+			}
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
 				profileType, profileType.SampleTypes[0], 0, valueWidth,
-				events, keys, prof, collectionStartTime, collectionEndTime); err != nil {
+				events, order, prof, collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 
@@ -194,9 +201,9 @@ func (p *Pdata) setProfile(
 	sampleType samples.SampleType,
 	valueIndex, valueWidth int,
 	events samples.SampleToEvents,
-	// keys fixes the iteration order over events so all emitted profiles have
-	// index-aligned samples.
-	keys []samples.SampleKey,
+	// order is the iteration order over events; callers emitting more than one
+	// profile pass a fixed order so their samples stay index-aligned.
+	order iter.Seq[samples.SampleKey],
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -204,7 +211,7 @@ func (p *Pdata) setProfile(
 		sampleType,
 		collectionStartTime, collectionEndTime)
 
-	for _, sampleKey := range keys {
+	for sampleKey := range order {
 		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
 
