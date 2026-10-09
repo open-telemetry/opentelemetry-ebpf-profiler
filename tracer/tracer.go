@@ -1092,16 +1092,21 @@ func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, e
 	return data, nil
 }
 
-func (vd *variableDataDecoder) decode(end uint16, field string) ([]uint64, error) {
+func (vd *variableDataDecoder) copyUint64(end uint16, buf []uint64, field string) (used, left []uint64, err error) {
 	val, err := vd.decodeBytes(end, field)
-	if err != nil {
-		return nil, err
+	if val == nil {
+		return nil, buf, err
 	}
-	if len(val)%8 != 0 {
-		return nil, fmt.Errorf("%s unaligned length %d: %w",
-			field, len(val), errRecordUnexpectedSize)
+	n := len(val) / 8
+	if len(val)%8 != 0 || n > len(buf) {
+		return nil, buf, fmt.Errorf("%s copy fail (size %d, max %d): %w",
+			field, len(val), 8*len(buf), errRecordUnexpectedSize)
 	}
-	return unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), len(val)/8), nil
+
+	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
+	dst := buf[:n]
+	copy(dst, src)
+	return dst, buf[n:], nil
 }
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1141,18 +1146,15 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	vd := variableDataDecoder{raw: variableData}
 	buf := trace.FrameDataBuf[:]
 
-	if kernelFrames, err := vd.decode(ptr.Kernel_frame_end, "kernel_frame"); err != nil {
+	var err error
+	trace.KernelFrames, buf, err = vd.copyUint64(ptr.Kernel_frame_end, buf, "kernel_frame")
+	if err != nil {
 		return nil, err
-	} else if elems := len(kernelFrames); elems > 0 {
-		trace.KernelFrames, buf = buf[:elems], buf[elems:]
-		copy(trace.KernelFrames, kernelFrames)
 	}
 
-	if frameData, err := vd.decode(ptr.Frame_data_end, "frame"); err != nil {
+	trace.FrameData, buf, err = vd.copyUint64(ptr.Frame_data_end, buf, "frame")
+	if err != nil {
 		return nil, err
-	} else if elems := len(frameData); elems > 0 {
-		trace.FrameData, buf = buf[:elems], buf[elems:]
-		copy(trace.FrameData, frameData)
 	}
 
 	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
