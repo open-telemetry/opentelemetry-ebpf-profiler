@@ -665,17 +665,17 @@ typedef struct GolangLabel {
 // Maximum Golang labels to recover
 #define MAX_GO_LABELS 10
 
-// Maximum number of u64 frame data entries. This limits the number
+// Maximum size used for frame data entries. This limits the number
 // of frames we can unwind, but also increases the memory needed for
 // buffering everything. The 3kB entries here is chosen to allow
 // about 1024 frames in a trace to be sent.
-#define MAX_FRAME_DATA_LEN sizeof(u64[3072])
+#define MAX_FRAME_DATA_SZ sizeof(u64[3072])
 
-// Maximum number of u64 frame data entries for Go labels.
-#define MAX_GO_LABEL_DATA_LEN sizeof(GolangLabel[MAX_GO_LABELS])
+// Maximum size used for Go labels.
+#define MAX_GO_LABEL_DATA_SZ sizeof(GolangLabel[MAX_GO_LABELS])
 
-// Number of u64 entries reserved for data after frames.
-#define MAX_FRAME_TRAILER_DATA_LEN MAX_GO_LABEL_DATA_LEN
+// Number of bytes reserved for data after frames.
+#define MAX_FRAME_TRAILER_DATA_SZ MAX_GO_LABEL_DATA_SZ
 
 // The variable data portion of trace layout as:
 //   u64          kernel_frame[];
@@ -684,7 +684,8 @@ typedef struct GolangLabel {
 // The length of each dynamic portion is determined by the subsequent
 // Trace.*_end pointers. The _end pointers are byte aligned for accurate
 // length, but subsequent section start is aligned to 64-bits.
-typedef u8 __attribute__((aligned(8))) TraceData[MAX_FRAME_DATA_LEN + MAX_FRAME_TRAILER_DATA_LEN];
+typedef u8 __attribute__((aligned(8))) TraceData[MAX_FRAME_DATA_SZ + MAX_FRAME_TRAILER_DATA_SZ];
+_Static_assert(sizeof(TraceData) % 8 == 0, "wrong size for TraceData");
 
 // Container for a stack trace
 typedef struct Trace {

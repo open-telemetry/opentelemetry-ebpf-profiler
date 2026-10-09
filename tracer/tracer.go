@@ -1084,8 +1084,8 @@ func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, e
 		return nil, nil
 	}
 	if vd.pos > end || int(end) > len(vd.raw) {
-		return nil, fmt.Errorf("%s end pointer %d < %d < %d: %w",
-			field, vd.pos, end, len(vd.raw), errRecordUnexpectedSize)
+		return nil, fmt.Errorf("%s end %d: not in range [%d, %d]: %w",
+			field, end, vd.pos, len(vd.raw), errRecordUnexpectedSize)
 	}
 	data := vd.raw[vd.pos:end]
 	vd.pos = (end + 7) &^ 7
@@ -1144,8 +1144,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		// Validate and use Kernel_frame_end only to calculate number of kernel frames.
 		// The kernel frames are copied together with the regular frames in the next step.
 		if vd.pos > ptr.Kernel_frame_end || ptr.Kernel_frame_end > ptr.Frame_data_end {
-			return nil, fmt.Errorf("kernel frame end %d < %d < %d: %w",
-				vd.pos, ptr.Kernel_frame_end, ptr.Frame_data_end,
+			return nil, fmt.Errorf("kernel frame end %d: not in range [%d, %d]: %w",
+				ptr.Kernel_frame_end, vd.pos, ptr.Frame_data_end,
 				errRecordUnexpectedSize)
 		}
 		trace.NumKernelFrames = (ptr.Kernel_frame_end - vd.pos) / 8
@@ -1160,17 +1160,18 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
 		return nil, err
 	} else if len(labelData) > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/support.Sizeof_GolangLabel)
+		labels := unsafe.Slice(
+			(*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData))),
+			len(labelData)/support.Sizeof_GolangLabel)
+		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labels))
 
-		for len(labelData) >= support.Sizeof_GolangLabel {
-			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
-			labelData = labelData[support.Sizeof_GolangLabel:]
-			keyBytes, ok := t.customLabels.validateKey(label.Key[:])
+		for i := range labels {
+			keyBytes, ok := t.customLabels.validateKey(labels[i].Key[:])
 			if !ok {
 				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
 				continue
 			}
-			valBytes, ok := t.customLabels.validateValue(label.Val[:])
+			valBytes, ok := t.customLabels.validateValue(labels[i].Val[:])
 			if !ok {
 				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", pfunsafe.ToString(keyBytes))
 				continue

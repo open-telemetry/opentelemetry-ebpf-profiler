@@ -676,7 +676,7 @@ static inline EBPF_INLINE u64 *push_frame(
   const u16 error_sz = sizeof(u64);
   const u16 frame_sz = sizeof(u64[1 + frame_varlen]);
 
-  u64 *pos = reserve_variable_data(trace, frame_sz, error_sz + MAX_FRAME_TRAILER_DATA_LEN);
+  u64 *pos = reserve_variable_data(trace, frame_sz, error_sz + MAX_FRAME_TRAILER_DATA_SZ);
   if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
@@ -715,7 +715,7 @@ push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 // Push a critical error frame.
 static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 {
-  u64 *pos = reserve_variable_data(trace, sizeof(u64), MAX_FRAME_TRAILER_DATA_LEN);
+  u64 *pos = reserve_variable_data(trace, sizeof(u64), MAX_FRAME_TRAILER_DATA_SZ);
   if (pos) {
     pos[0] = frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
     commit_variable_data(trace, sizeof(u64));
@@ -728,16 +728,17 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 // userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
-  const u32 max_bytes = PERF_MAX_STACK_DEPTH * sizeof(u64);
-  _Static_assert(MAX_FRAME_DATA_LEN > max_bytes, "frame data too small");
+  const u32 max_bytes = sizeof(u64[PERF_MAX_STACK_DEPTH]);
+  _Static_assert(MAX_FRAME_DATA_SZ > max_bytes, "frame data too small");
 
-  void *data = reserve_variable_data(trace, max_bytes, MAX_FRAME_TRAILER_DATA_LEN);
+  void *data = reserve_variable_data(trace, max_bytes, MAX_FRAME_TRAILER_DATA_SZ);
   if (!data) {
     return;
   }
   long bytes = bpf_get_stack(ctx, data, max_bytes, 0);
   if (bytes > 0) {
-    // Mask the low bits of 'bytes' to generate smaller code.
+    // Lossless: bpf_get_stack returns a multiple of 8.
+    // Folds the align up in commit and generate smaller code.
     trace->kernel_frame_end = commit_variable_data(trace, (u16)bytes & ~7U);
   }
 }
