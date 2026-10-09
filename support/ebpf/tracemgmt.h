@@ -1156,8 +1156,7 @@ static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, Unwin
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
+static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   // Coredumps provide always usermode pt_regs directly.
   return copy_state_regs(state, ctx, false);
