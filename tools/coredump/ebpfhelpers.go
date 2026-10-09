@@ -12,11 +12,9 @@ package main
 // this, definitions must be placed in preambles in other files, or in C source files.
 
 import (
-	"fmt"
 	"math/bits"
 	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 
@@ -145,12 +143,8 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 //export __bpf_copy_frame
 func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 	ctx := ebpfContextMap[id]
-	if trace.kernel_frame_end != 0 {
-		panic(fmt.Sprintf("coredump trace unexpectedly has kernel_frame_end %d",
-			trace.kernel_frame_end))
+	variableData := unsafe.Slice((*byte)(unsafe.SliceData(trace.variable_data[:])), trace.variable_data_end)
+	if err := ctx.trace.Decode((*support.Trace)(unsafe.Pointer(trace)), variableData, nil); err != nil {
+		panic(err)
 	}
-	sz := trace.frame_data_end
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz/8]), pfunsafe.FromSlice(trace.variable_data[:sz]))
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz/8]
-	ctx.trace.NumFrames = uint16(trace.num_frames)
 }

@@ -5,14 +5,19 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/fnv"
 	"hash/maphash"
 	"strconv"
 	"unique"
+	"unsafe"
 
 	"github.com/zeebo/xxh3"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const commLen = 16
@@ -224,6 +229,100 @@ type EbpfTrace struct {
 	APMTransactionID APMTransactionID
 }
 
+type variableDataDecoder struct {
+	raw []uint8
+	dst []uint64
+	pos uint16
+}
+
+func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, error) {
+	if end == 0 {
+		return nil, nil
+	}
+	if vd.pos > end || int(end) > len(vd.raw) {
+		return nil, fmt.Errorf("%s end %d: not in range [%d, %d]",
+			field, end, vd.pos, len(vd.raw))
+	}
+	data := vd.raw[vd.pos:end]
+	vd.pos = (end + 7) &^ 7
+	return data, nil
+}
+
+func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, error) {
+	val, err := vd.decodeBytes(end, field)
+	if val == nil {
+		return nil, err
+	}
+	n := len(val) / 8
+	if len(val)%8 != 0 || n > len(vd.dst) {
+		return nil, fmt.Errorf("%s copy fail (size %d, max %d)",
+			field, len(val), 8*len(vd.dst))
+	}
+
+	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
+	dst := vd.dst[:n]
+	copy(dst, src)
+	vd.dst = vd.dst[n:]
+	return dst, nil
+}
+
+type LabelValidator interface {
+	ValidateKey(buf []byte) ([]byte, bool)
+	ValidateValue(buf []byte) ([]byte, bool)
+}
+
+func (et *EbpfTrace) Decode(hdr *support.Trace, variableData []byte, validator LabelValidator) error {
+	*et = EbpfTrace{
+		Comm:             NewComm(hdr.Comm),
+		APMTraceID:       *(*APMTraceID)(unsafe.Pointer(&hdr.Apm_trace_id)),
+		APMTransactionID: *(*APMTransactionID)(unsafe.Pointer(&hdr.Apm_transaction_id)),
+		PID:              PID(hdr.Pid),
+		TID:              PID(hdr.Tid),
+		Origin:           hdr.Origin,
+		Value:            int64(hdr.Value),
+		KTime:            int64(hdr.Ktime),
+		CpuID:            hdr.Cpu_id,
+		NumFrames:        hdr.Num_frames,
+	}
+	vd := variableDataDecoder{raw: variableData, dst: et.FrameDataBuf[:]}
+
+	var err error
+	et.KernelFrames, err = vd.copyUint64(hdr.Kernel_frame_end, "kernel_frame")
+	if err != nil {
+		return err
+	}
+	et.FrameData, err = vd.copyUint64(hdr.Frame_data_end, "frame")
+	if err != nil {
+		return err
+	}
+
+	if labelData, err := vd.decodeBytes(hdr.Golang_label_end, "golang label"); err != nil {
+		return err
+	} else if len(labelData) > 0 && validator != nil {
+		labels := unsafe.Slice(
+			(*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData))),
+			len(labelData)/support.Sizeof_GolangLabel)
+		et.CustomLabels = make(map[String]String, len(labels))
+
+		for i := range labels {
+			keyBytes, ok := validator.ValidateKey(labels[i].Key[:])
+			if !ok {
+				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+				continue
+			}
+			valBytes, ok := validator.ValidateValue(labels[i].Val[:])
+			if !ok {
+				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", pfunsafe.ToString(keyBytes))
+				continue
+			}
+			et.CustomLabels[Intern(pfunsafe.ToString(keyBytes))] =
+				Intern(pfunsafe.ToString(valBytes))
+		}
+	}
+	return nil
+}
+
+// Variable length frames received from Ebpf
 type EbpfFrame []uint64
 
 // The below code must match ebpf tracemgmt.h frame_header() layout.

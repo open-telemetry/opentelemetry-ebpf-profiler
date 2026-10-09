@@ -25,7 +25,7 @@ type customLabelValidator struct {
 // the caller to drop the label. A corrupted key would silently group unrelated
 // samples under a garbage name, so strictness is intentional here. The returned
 // slice aliases buf; copy or intern before the buffer is reused.
-func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
+func (v *customLabelValidator) ValidateKey(buf []byte) ([]byte, bool) {
 	b := stringutil.CString(buf)
 	if len(b) == 0 || !utf8.Valid(b) {
 		v.droppedInvalidName.Add(1)
@@ -40,7 +40,7 @@ func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
 // (and bumping the drop counter) fires only when the salvage is empty, i.e.
 // the input was non-empty garbage rather than mid-rune truncation. The returned
 // slice aliases buf; copy or intern before the buffer is reused.
-func (v *customLabelValidator) validateValue(buf []byte) ([]byte, bool) {
+func (v *customLabelValidator) ValidateValue(buf []byte) ([]byte, bool) {
 	b := stringutil.CString(buf)
 	pos := len(b)
 	if !utf8.Valid(b) {

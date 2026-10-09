@@ -30,7 +30,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
@@ -1074,43 +1073,6 @@ var (
 	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
-type variableDataDecoder struct {
-	raw []uint8
-	dst []uint64
-	pos uint16
-}
-
-func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, error) {
-	if end == 0 {
-		return nil, nil
-	}
-	if vd.pos > end || int(end) > len(vd.raw) {
-		return nil, fmt.Errorf("%s end %d: not in range [%d, %d]: %w",
-			field, end, vd.pos, len(vd.raw), errRecordUnexpectedSize)
-	}
-	data := vd.raw[vd.pos:end]
-	vd.pos = (end + 7) &^ 7
-	return data, nil
-}
-
-func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, error) {
-	val, err := vd.decodeBytes(end, field)
-	if val == nil {
-		return nil, err
-	}
-	n := len(val) / 8
-	if len(val)%8 != 0 || n > len(vd.dst) {
-		return nil, fmt.Errorf("%s copy fail (size %d, max %d): %w",
-			field, len(val), 8*len(vd.dst), errRecordUnexpectedSize)
-	}
-
-	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
-	dst := vd.dst[:n]
-	copy(dst, src)
-	vd.dst = vd.dst[n:]
-	return dst, nil
-}
-
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	traceHeaderSize := int(support.Sizeof_TraceHeader)
@@ -1128,58 +1090,11 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	variableData := raw[traceHeaderSize : traceHeaderSize+int(ptr.Variable_data_end)]
 
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
-	*trace = libpf.EbpfTrace{
-		Comm:             libpf.NewComm(ptr.Comm),
-		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
-		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
-		PID:              libpf.PID(ptr.Pid),
-		TID:              libpf.PID(ptr.Tid),
-		Origin:           ptr.Origin,
-		Value:            int64(ptr.Value),
-		KTime:            int64(ptr.Ktime),
-		CpuID:            ptr.Cpu_id,
-		NumFrames:        ptr.Num_frames,
+	if err := trace.Decode(ptr, variableData, &t.customLabels); err != nil {
+		return nil, fmt.Errorf("decode failed: %w: %w", err, errRecordUnexpectedSize)
 	}
-
 	if t.origins.lookup(trace.Origin) == nil {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
-	}
-
-	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
-
-	var err error
-	trace.KernelFrames, err = vd.copyUint64(ptr.Kernel_frame_end, "kernel_frame")
-	if err != nil {
-		return nil, err
-	}
-
-	trace.FrameData, err = vd.copyUint64(ptr.Frame_data_end, "frame")
-	if err != nil {
-		return nil, err
-	}
-
-	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
-		return nil, err
-	} else if len(labelData) > 0 {
-		labels := unsafe.Slice(
-			(*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData))),
-			len(labelData)/support.Sizeof_GolangLabel)
-		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labels))
-
-		for i := range labels {
-			keyBytes, ok := t.customLabels.validateKey(labels[i].Key[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
-				continue
-			}
-			valBytes, ok := t.customLabels.validateValue(labels[i].Val[:])
-			if !ok {
-				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", pfunsafe.ToString(keyBytes))
-				continue
-			}
-			trace.CustomLabels[libpf.Intern(pfunsafe.ToString(keyBytes))] =
-				libpf.Intern(pfunsafe.ToString(valBytes))
-		}
 	}
 	return trace, nil
 }

@@ -62,7 +62,7 @@ func TestCustomLabelValidatorValidateKey(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var v customLabelValidator
-			got, ok := v.validateKey(tc.input)
+			got, ok := v.ValidateKey(tc.input)
 			require.Equal(t, tc.wantOK, ok)
 			require.Equal(t, tc.wantValue, string(got))
 			require.Equal(t, tc.wantDropped, v.droppedInvalidName.Load())
@@ -124,7 +124,7 @@ func TestCustomLabelValidatorValidateValue(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var v customLabelValidator
-			got, ok := v.validateValue(tc.input)
+			got, ok := v.ValidateValue(tc.input)
 			require.Equal(t, tc.wantOK, ok)
 			require.Equal(t, tc.wantValue, string(got))
 			require.Equal(t, tc.wantDropped, v.droppedInvalidValue.Load())
@@ -136,9 +136,9 @@ func TestCustomLabelValidatorGetAndResetMetrics(t *testing.T) {
 	var v customLabelValidator
 
 	// Trigger two name drops and one value drop.
-	v.validateKey([]byte{0xC0, 0})
-	v.validateKey([]byte{0})
-	v.validateValue([]byte{0xC0, 0})
+	v.ValidateKey([]byte{0xC0, 0})
+	v.ValidateKey([]byte{0})
+	v.ValidateValue([]byte{0xC0, 0})
 
 	m := v.getAndResetMetrics()
 	byID := map[metrics.MetricID]metrics.MetricValue{}
