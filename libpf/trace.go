@@ -4,7 +4,9 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"encoding/binary"
 	"hash/fnv"
+	"hash/maphash"
 	"strconv"
 	"unique"
 
@@ -158,10 +160,10 @@ func (t *Trace) APMHash() TraceHash {
 	return traceHash
 }
 
-// Hash returns the trace's hash for agent internal use only,
-// computing and caching it on the first call.
-// The result is memoized: mutating Frames after the first call is not
-// reflected in subsequent calls.
+var customLabelHashSeed = maphash.MakeSeed()
+
+// Hash returns a cached hash of the frames and custom labels for internal use.
+// Mutations after the first call are not reflected.
 func (t *Trace) Hash() TraceHash {
 	if t.cachedHash != InvalidTraceHash {
 		return t.cachedHash
@@ -177,6 +179,15 @@ func (t *Trace) Hash() TraceHash {
 		_, _ = h.Write(fileID.Bytes())
 		n := putUint64(buf[:], uint64(frame.AddressOrLineno))
 		_, _ = h.Write(buf[:n])
+	}
+	if len(t.CustomLabels) > 0 {
+		var labelsHash uint64
+		// XOR makes label order irrelevant; map keys are unique.
+		for key, value := range t.CustomLabels {
+			labelsHash ^= maphash.Comparable(customLabelHashSeed, [2]String{key, value})
+		}
+		binary.LittleEndian.PutUint64(buf[:8], labelsHash)
+		_, _ = h.Write(buf[:8])
 	}
 	// Avoid a heap allocation by reusing the stack-allocated buffer.
 	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
