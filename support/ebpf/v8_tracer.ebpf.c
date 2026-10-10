@@ -191,19 +191,13 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     // holds a 32-bit JSDispatchHandle (at the same offset the Code pointer used to
     // occupy) that indexes the per-IsolateGroup JSDispatchTable, whose entry encodes
     // the current Code pointer.
-    DEBUG_PRINT(
-      "v8: leaptiering: default isolate group = %llx, js dispatch table offset = %x",
-      vi->default_isolate_group,
-      vi->js_dispatch_table_offset);
-
     u32 dispatch_handle = 0;
     if (bpf_probe_read_user(
           &dispatch_handle, sizeof(dispatch_handle), (void *)(jsfunc + vi->off_JSFunction_code))) {
-      DEBUG_PRINT("v8: leaptiering: failed to read dispatch handle");
+      DEBUG_PRINT("v8: leaptiering: failed to read dispatch handle, jsfunc = %lx", jsfunc);
       increment_metric(metricID_UnwindV8ErrBadCode);
       goto frame_done;
     }
-    DEBUG_PRINT("v8: leaptiering: dispatch_handle = %x", dispatch_handle);
 
     // The JSDispatchTable base pointer (SegmentedTable::base_) is the first field of
     // the js_dispatch_table_ member embedded in the IsolateGroup.
@@ -212,22 +206,27 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
           &table_base,
           sizeof(table_base),
           (void *)(vi->default_isolate_group + vi->js_dispatch_table_offset))) {
-      DEBUG_PRINT("v8: leaptiering: failed to read dispatch table base");
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch table base, isolate group = %llx, offset = %x",
+        vi->default_isolate_group,
+        vi->js_dispatch_table_offset);
       increment_metric(metricID_UnwindV8ErrBadCode);
       goto frame_done;
     }
-    DEBUG_PRINT("v8: leaptiering: dispatch table base = %lx", table_base);
 
     u32 index       = dispatch_handle >> V8_JSDISPATCH_HANDLE_SHIFT;
     uintptr_t entry = table_base + (uintptr_t)index * V8_JSDISPATCH_ENTRY_SIZE;
-    DEBUG_PRINT("v8: leaptiering: index = %x, entry = %lx", index, entry);
 
     uintptr_t encoded_word = 0;
     if (bpf_probe_read_user(
           &encoded_word,
           sizeof(encoded_word),
           (void *)(entry + V8_JSDISPATCH_ENCODED_WORD_OFFSET))) {
-      DEBUG_PRINT("v8: leaptiering: failed to read dispatch entry");
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch entry, handle = %x, table base = %lx, entry = %lx",
+        dispatch_handle,
+        table_base,
+        entry);
       increment_metric(metricID_UnwindV8ErrBadCode);
       goto frame_done;
     }
@@ -238,10 +237,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     uintptr_t tagged_code = (encoded_word >> V8_JSDISPATCH_OBJECT_POINTER_SHIFT) | V8_HeapObjectTag;
     code                  = v8_verify_pointer(tagged_code);
     DEBUG_PRINT(
-      "v8: leaptiering: encoded_word = %lx, tagged_code = %lx, code = %lx",
-      encoded_word,
-      tagged_code,
-      code);
+      "v8: leaptiering: handle = %x, entry = %lx, code = %lx", dispatch_handle, entry, code);
   } else {
     // Try to determine the Code object from JSFunction.
     code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
@@ -253,19 +249,16 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     // number information. This allows to get a complete trace even if this one
     // frame will have some missing information.
     DEBUG_PRINT("v8: jsfunc = %lx, code = %lx, code_type = %x", jsfunc, code, code_type);
-    DEBUG_PRINT("v8: code off: 0x%x", vi->off_JSFunction_code);
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
-  DEBUG_PRINT("v8: good code");
 
   // Read the Code blob type and size
   if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void *)code)) {
-    DEBUG_PRINT("v8: failed to read code");
+    DEBUG_PRINT("v8: failed to read code at %lx", code);
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
-  DEBUG_PRINT("successfully read code");
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
   if (
     vi->off_Code_instruction_size > sizeof(scratch->code) - sizeof(u32) ||
