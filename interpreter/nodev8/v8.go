@@ -1372,47 +1372,27 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 }
 
 // getCode reads and caches needed V8 Code object data from a Code pointer.
-func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
+// Baseline Code has no backpointer to its SFI, so for it sfiTaggedPtr must
+// be the SFI that eBPF sent with the frame. Otherwise it is zero and the SFI
+// is read from the Code's deoptimization data.
+func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
+	sfiTaggedPtr libpf.Address,
+) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
 		if code.cookie == cookie {
 			return code, nil
 		}
 		i.addrToCode.Remove(taggedPtr)
 	}
-	return i.readCode(taggedPtr, cookie, nil)
-}
-
-// getCodeFromJSFunction reads and caches needed V8 Code object data using
-// the SFI from a JSFunction pointer. Finding the Code from a JSFunction pointer
-// is complicated in Node >= v24, (search "leaptiering" in v8_tracer.ebpf.c), so
-// unlike in previous revisions of this function, we just expect it to be passed in
-// from eBPF, and don't do the work of finding it again.
-func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32, codeTaggedPtr libpf.Address) (*v8Code, error) {
-	if code, ok := i.addrToCode.Get(taggedPtr); ok {
-		if code.cookie == cookie {
-			return code, nil
+	var sfi *v8SFI
+	if sfiTaggedPtr != 0 {
+		var err error
+		sfi, err = i.getSFI(sfiTaggedPtr)
+		if err != nil {
+			return nil, fmt.Errorf("getSFI: %w", err)
 		}
-		i.addrToCode.Remove(taggedPtr)
 	}
-
-	vms := &i.d.vmStructs
-	jsfuncAddr := taggedPtr &^ HeapObjectTagMask
-
-	// Read needed JSFunction object data
-	jsfuncSize := max(vms.JSFunction.SharedFunctionInfo, vms.JSFunction.Code) + pointerSize
-	jsfunc := make([]byte, jsfuncSize)
-	err := i.rm.Read(jsfuncAddr, jsfunc)
-	if err != nil {
-		return nil, fmt.Errorf("jsfunc object read: %v", err)
-	}
-
-	sfi, err := i.getSFI(npsr.Ptr(jsfunc, uint(vms.JSFunction.SharedFunctionInfo)))
-	if err != nil {
-		return nil, fmt.Errorf("getSFI: %w", err)
-	}
-
-	// Read the Code object
-	return i.readCode(codeTaggedPtr, cookie, sfi)
+	return i.readCode(taggedPtr, cookie, sfi)
 }
 
 // decodeUVLQ reads and decodes one unsigned Variable Length Quantity
@@ -1803,18 +1783,15 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		err = i.symbolizeMarkerFrame(deltaOrMarker, frames)
 	case support.V8FileTypeByteCode, support.V8FileTypeNativeSFI:
 		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
-	case support.V8FileTypeNativeCode, support.V8FileTypeNativeJSFunc:
+	case support.V8FileTypeNativeCode, support.V8FileTypeNativeBaseline:
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
-		if subframeType == support.V8FileTypeNativeCode {
-			log.Debugf("calling getCode with pointer %#x", pointer)
-			code, err = i.getCode(pointer, codeCookie)
-		} else {
-			codePointerAndType := libpf.Address(ef.Variable(2))
-			codePointer := codePointerAndType&^support.V8FileTypeMask | HeapObjectTag
-			log.Debugf("calling getCodeFromJSFunc with pointer %#x; codePointer: %#x", pointer, codePointer)
-			code, err = i.getCodeFromJSFunc(pointer, codeCookie, codePointer)
+		codePointer := libpf.Address(ef.Variable(2)) | HeapObjectTag
+		var sfiPointer libpf.Address
+		if subframeType == support.V8FileTypeNativeBaseline {
+			sfiPointer = pointer
 		}
+		code, err = i.getCode(codePointer, codeCookie, sfiPointer)
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
 		}

@@ -37,31 +37,21 @@ static EBPF_INLINE ErrorCode push_v8(
   bool return_address,
   u64 code)
 {
-  bool should_push_code = (pointer_and_type & V8_FILE_TYPE_MASK) == V8_FILE_TYPE_NATIVE_JSFUNC;
-  if (should_push_code) {
-    DEBUG_PRINT(
-      "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx, code=%llx",
-      delta_or_marker,
-      pointer_and_type,
-      code);
-  } else {
-    DEBUG_PRINT(
-      "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx",
-      delta_or_marker,
-      pointer_and_type);
-  }
+  DEBUG_PRINT(
+    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx, code=%llx",
+    delta_or_marker,
+    pointer_and_type,
+    code);
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(
-    state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2 + (int)should_push_code);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 3);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
   data[0] = pointer_and_type;
   data[1] = delta_or_marker;
-  if (should_push_code)
-    data[2] = code;
+  data[2] = code;
   return ERR_OK;
 }
 
@@ -354,10 +344,11 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Code matches RIP, report it.
   if (code_kind == vi->codekind_baseline) {
-    // Baseline Code does not have backpointer to SFI, so give the JSFunc.
-    pointer_and_type = V8_FILE_TYPE_NATIVE_JSFUNC | jsfunc;
+    // Baseline Code does not have a backpointer to the SFI, so the agent
+    // needs the SFI sent here.
+    pointer_and_type = V8_FILE_TYPE_NATIVE_BASELINE | sfi;
   } else {
-    pointer_and_type = V8_FILE_TYPE_NATIVE_CODE | code;
+    pointer_and_type = V8_FILE_TYPE_NATIVE_CODE | sfi;
   }
 
   // Use cookie that differentiates different types of Code objects
