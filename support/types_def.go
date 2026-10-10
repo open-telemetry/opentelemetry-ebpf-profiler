@@ -194,12 +194,12 @@ const (
 
 	V8FpContextSize = C.V8_FP_CONTEXT_SIZE
 
-	V8FileTypeMarker       = C.V8_FILE_TYPE_MARKER
-	V8FileTypeByteCode     = C.V8_FILE_TYPE_BYTECODE
-	V8FileTypeNativeSFI    = C.V8_FILE_TYPE_NATIVE_SFI
-	V8FileTypeNativeCode   = C.V8_FILE_TYPE_NATIVE_CODE
-	V8FileTypeNativeJSFunc = C.V8_FILE_TYPE_NATIVE_JSFUNC
-	V8FileTypeMask         = C.V8_FILE_TYPE_MASK
+	V8FileTypeMarker         = C.V8_FILE_TYPE_MARKER
+	V8FileTypeByteCode       = C.V8_FILE_TYPE_BYTECODE
+	V8FileTypeNativeSFI      = C.V8_FILE_TYPE_NATIVE_SFI
+	V8FileTypeNativeCode     = C.V8_FILE_TYPE_NATIVE_CODE
+	V8FileTypeNativeBaseline = C.V8_FILE_TYPE_NATIVE_BASELINE
+	V8FileTypeMask           = C.V8_FILE_TYPE_MASK
 
 	V8LineCookieShift = C.V8_LINE_COOKIE_SHIFT
 	V8LineCookieMask  = C.V8_LINE_COOKIE_MASK

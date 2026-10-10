@@ -30,21 +30,28 @@ struct v8_procs_t {
 
 // Record a V8 frame
 static EBPF_INLINE ErrorCode push_v8(
-  UnwindState *state, Trace *trace, u64 pointer_and_type, u64 delta_or_marker, bool return_address)
+  UnwindState *state,
+  Trace *trace,
+  u64 pointer_and_type,
+  u64 delta_or_marker,
+  bool return_address,
+  u64 code)
 {
   DEBUG_PRINT(
-    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx",
+    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx, code=%llx",
     delta_or_marker,
-    pointer_and_type);
+    pointer_and_type,
+    code);
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 3);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
   data[0] = pointer_and_type;
   data[1] = delta_or_marker;
+  data[2] = code;
   return ERR_OK;
 }
 
@@ -132,7 +139,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
-  uintptr_t pointer_and_type = 0, delta_or_marker = 0;
+  uintptr_t pointer_and_type = 0, delta_or_marker = 0, code = 0;
 
   // Frames can be either be "standard", in which case they have a pointer to a context
   // in `fp_marker` here, or non-standard, in which case they have a "marker" indicating their type.
@@ -179,9 +186,63 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   // At this point we can at least report the SFI if other things fail.
   pointer_and_type = V8_FILE_TYPE_NATIVE_SFI | sfi;
 
-  // Try to determine the Code object from JSFunction.
-  uintptr_t code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
-  u16 code_type  = v8_read_object_type(vi, code);
+  if (vi->leaptiering) {
+    // Under leaptiering the JSFunction no longer stores a Code pointer. Instead it
+    // holds a 32-bit JSDispatchHandle (at the same offset the Code pointer used to
+    // occupy) that indexes the per-IsolateGroup JSDispatchTable, whose entry encodes
+    // the current Code pointer.
+    u32 dispatch_handle = 0;
+    if (bpf_probe_read_user(
+          &dispatch_handle, sizeof(dispatch_handle), (void *)(jsfunc + vi->off_JSFunction_code))) {
+      DEBUG_PRINT("v8: leaptiering: failed to read dispatch handle, jsfunc = %lx", jsfunc);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The JSDispatchTable base pointer (SegmentedTable::base_) is the first field of
+    // the js_dispatch_table_ member embedded in the IsolateGroup.
+    uintptr_t table_base = 0;
+    if (bpf_probe_read_user(
+          &table_base,
+          sizeof(table_base),
+          (void *)(vi->default_isolate_group + vi->js_dispatch_table_offset))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch table base, isolate group = %llx, offset = %x",
+        vi->default_isolate_group,
+        vi->js_dispatch_table_offset);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    u32 index       = dispatch_handle >> V8_JSDISPATCH_HANDLE_SHIFT;
+    uintptr_t entry = table_base + (uintptr_t)index * V8_JSDISPATCH_ENTRY_SIZE;
+
+    uintptr_t encoded_word = 0;
+    if (bpf_probe_read_user(
+          &encoded_word,
+          sizeof(encoded_word),
+          (void *)(entry + V8_JSDISPATCH_ENCODED_WORD_OFFSET))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch entry, handle = %x, table base = %lx, entry = %lx",
+        dispatch_handle,
+        table_base,
+        entry);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The Code pointer occupies the high bits of the encoded word; shifting it down
+    // yields the (tagged) heap object pointer. v8_verify_pointer strips and validates
+    // the tag, matching the convention used by the non-leaptiering path.
+    uintptr_t tagged_code = (encoded_word >> V8_JSDISPATCH_OBJECT_POINTER_SHIFT) | V8_HeapObjectTag;
+    code                  = v8_verify_pointer(tagged_code);
+    DEBUG_PRINT(
+      "v8: leaptiering: handle = %x, entry = %lx, code = %lx", dispatch_handle, entry, code);
+  } else {
+    // Try to determine the Code object from JSFunction.
+    code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
+  }
+  u16 code_type = v8_read_object_type(vi, code);
   if (code_type != vi->type_Code) {
     // If the object type tag does not match, it might be some new functionality
     // in the VM. Report the JSFunction for function name, but report no line
@@ -194,6 +255,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Read the Code blob type and size
   if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void *)code)) {
+    DEBUG_PRINT("v8: failed to read code at %lx", code);
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
@@ -275,10 +337,11 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Code matches RIP, report it.
   if (code_kind == vi->codekind_baseline) {
-    // Baseline Code does not have backpointer to SFI, so give the JSFunc.
-    pointer_and_type = V8_FILE_TYPE_NATIVE_JSFUNC | jsfunc;
+    // Baseline Code does not have a backpointer to the SFI, so the agent
+    // needs the SFI sent here.
+    pointer_and_type = V8_FILE_TYPE_NATIVE_BASELINE | sfi;
   } else {
-    pointer_and_type = V8_FILE_TYPE_NATIVE_CODE | code;
+    pointer_and_type = V8_FILE_TYPE_NATIVE_CODE | sfi;
   }
 
   // Use cookie that differentiates different types of Code objects
@@ -286,7 +349,8 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   delta_or_marker = (pc - code_start) | ((uintptr_t)cookie << V8_LINE_COOKIE_SHIFT);
 
 frame_done:;
-  ErrorCode error = push_v8(state, trace, pointer_and_type, delta_or_marker, state->return_address);
+  ErrorCode error =
+    push_v8(state, trace, pointer_and_type, delta_or_marker, state->return_address, code);
   if (error) {
     return error;
   }

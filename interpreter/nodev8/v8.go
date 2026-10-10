@@ -508,6 +508,17 @@ type v8Data struct {
 
 	// frametypeToName caches frametype's name
 	frametypeToName [MaxFrameType]libpf.String
+
+	// leaptiering is true if V8 was built with V8_ENABLE_LEAPTIERING.
+	leaptiering bool
+
+	// jsDispatchTableOffset is the offset of js_dispatch_table_ in IsolateGroup.
+	// Only valid if leaptiering = true.
+	jsDispatchTableOffset uint32
+
+	// defaultIsolateGroupAddr is the address of the
+	// IsolateGroup::default_isolate_group_ pointer variable.
+	defaultIsolateGroupAddr libpf.Address
 }
 
 type v8Instance struct {
@@ -1355,44 +1366,27 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 }
 
 // getCode reads and caches needed V8 Code object data from a Code pointer.
-func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
+// Baseline Code has no backpointer to its SFI, so for it sfiTaggedPtr must
+// be the SFI that eBPF sent with the frame. Otherwise it is zero and the SFI
+// is read from the Code's deoptimization data.
+func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
+	sfiTaggedPtr libpf.Address,
+) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
 		if code.cookie == cookie {
 			return code, nil
 		}
 		i.addrToCode.Remove(taggedPtr)
 	}
-	return i.readCode(taggedPtr, cookie, nil)
-}
-
-// getCodeFromJSFunction reads and caches needed V8 Code object data from a JSFunction pointer.
-func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
-	if code, ok := i.addrToCode.Get(taggedPtr); ok {
-		if code.cookie == cookie {
-			return code, nil
+	var sfi *v8SFI
+	if sfiTaggedPtr != 0 {
+		var err error
+		sfi, err = i.getSFI(sfiTaggedPtr)
+		if err != nil {
+			return nil, fmt.Errorf("getSFI: %w", err)
 		}
-		i.addrToCode.Remove(taggedPtr)
 	}
-
-	vms := &i.d.vmStructs
-	jsfuncAddr := taggedPtr &^ HeapObjectTagMask
-
-	// Read needed JSFunction object data
-	jsfuncSize := max(vms.JSFunction.SharedFunctionInfo, vms.JSFunction.Code) + pointerSize
-	jsfunc := make([]byte, jsfuncSize)
-	err := i.rm.Read(jsfuncAddr, jsfunc)
-	if err != nil {
-		return nil, fmt.Errorf("jsfunc object read: %v", err)
-	}
-
-	sfi, err := i.getSFI(npsr.Ptr(jsfunc, uint(vms.JSFunction.SharedFunctionInfo)))
-	if err != nil {
-		return nil, fmt.Errorf("getSFI: %w", err)
-	}
-
-	// Chase and read the Code object
-	codeTaggedPtr := npsr.Ptr(jsfunc, uint(vms.JSFunction.Code))
-	return i.readCode(codeTaggedPtr, cookie, sfi)
+	return i.readCode(taggedPtr, cookie, sfi)
 }
 
 // decodeUVLQ reads and decodes one unsigned Variable Length Quantity
@@ -1783,14 +1777,15 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		err = i.symbolizeMarkerFrame(deltaOrMarker, frames)
 	case support.V8FileTypeByteCode, support.V8FileTypeNativeSFI:
 		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
-	case support.V8FileTypeNativeCode, support.V8FileTypeNativeJSFunc:
+	case support.V8FileTypeNativeCode, support.V8FileTypeNativeBaseline:
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
-		if subframeType == support.V8FileTypeNativeCode {
-			code, err = i.getCode(pointer, codeCookie)
-		} else {
-			code, err = i.getCodeFromJSFunc(pointer, codeCookie)
+		codePointer := libpf.Address(ef.Variable(2)) | HeapObjectTag
+		var sfiPointer libpf.Address
+		if subframeType == support.V8FileTypeNativeBaseline {
+			sfiPointer = pointer
 		}
+		code, err = i.getCode(codePointer, codeCookie, sfiPointer)
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
 		}
@@ -1821,7 +1816,7 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 	return uint8(slotOffset)
 }
 
-func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
+func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	vms := &d.vmStructs
@@ -1858,6 +1853,11 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		Codekind_shift:    vms.CodeKind.FieldShift,
 		Codekind_mask:     uint8(vms.CodeKind.FieldMask),
 		Codekind_baseline: vms.CodeKind.Baseline,
+	}
+	if d.leaptiering {
+		data.Leaptiering = 1
+		data.Default_isolate_group = uint64(rm.Ptr(d.defaultIsolateGroupAddr + bias))
+		data.Js_dispatch_table_offset = d.jsDispatchTableOffset
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -2268,32 +2268,37 @@ func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util
 }
 
 type relevantSymbols struct {
-	DefaultSnapshotBlob *libpf.Symbol
-	BytecodeSizes       *libpf.Symbol
+	DefaultSnapshotBlob *libpf.Symbol `sym:"_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"`
+	BytecodeSizes       *libpf.Symbol `sym:"_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"`
+
+	JSDispatchTableAddress *libpf.Symbol `sym:"_ZN2v88internal17ExternalReference25js_dispatch_table_addressEv"`
+	DefaultIsolateGroup    *libpf.Symbol `sym:"_ZN2v88internal12IsolateGroup22default_isolate_group_E"`
 }
 
-const (
-	defaultSnapshotBlobSymbol libpf.SymbolName = "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"
-	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"
-)
-
-// scanForRelevantSymbols gets the symbols needed for Node unwinding
+// scan gets the symbols needed for Node unwinding
 // by scanning the symtab.
-func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
-	rv := relevantSymbols{}
-	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
-		if sym.Name == defaultSnapshotBlobSymbol {
-			rv.DefaultSnapshotBlob = &sym
+func (rv *relevantSymbols) scan(ef *pfelf.File) error {
+	remaining := make(map[libpf.SymbolName]int)
+	val := reflect.ValueOf(rv).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		fval := val.Field(i)
+		if fval.IsNil() {
+			tag := val.Type().Field(i).Tag.Get("sym")
+			remaining[libpf.SymbolName(tag)] = i
 		}
-		if sym.Name == bytecodeSizesSymbol {
-			rv.BytecodeSizes = &sym
-		}
-		return rv.DefaultSnapshotBlob == nil || rv.BytecodeSizes == nil
-	})
-	if err != nil {
-		return relevantSymbols{}, err
 	}
-	return rv, nil
+	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if field, ok := remaining[sym.Name]; ok {
+			val.Field(field).Set(reflect.ValueOf(&sym))
+			delete(remaining, sym.Name)
+		}
+		return len(remaining) > 0
+	})
+	if errors.Is(err, pfelf.ErrSectionNotPresent) {
+		log.Info("Couldn't find node symtab")
+		err = nil
+	}
+	return err
 }
 
 // lookupRelevantSymbols tries to get the symbols needed for Node unwinding.
@@ -2304,29 +2309,30 @@ func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 // then fall back to scanning for them in the symtab.
 func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
-	sym, err := ef.LookupSymbol(defaultSnapshotBlobSymbol)
-	if errors.Is(err, libpf.ErrSymbolNotFound) {
-		// If the first one failed, they are probably all going to fail.
-		// Scan instead.
-		return scanForRelevantSymbols(ef)
+	val := reflect.ValueOf(&rv).Elem()
+	typ := val.Type()
+	anyFailed := false
+	for i := 0; i < val.NumField(); i++ {
+		ftyp := typ.Field(i)
+		fval := val.Field(i)
+		tag := ftyp.Tag.Get("sym")
+
+		sym, err := ef.LookupSymbol(libpf.SymbolName(tag))
+		if err != nil {
+			if !errors.Is(err, libpf.ErrSymbolNotFound) {
+				log.Warnf("Couldn't get V8 symbol %s: %v", ftyp.Name, err)
+			}
+			anyFailed = true
+		} else {
+			fval.Set(reflect.ValueOf(sym))
+		}
 	}
-	// Match historic behavior: keep going, even if we can't get the snapshot blob.
-	// (TODO: Figure out when/why this can happen)
-	if err != nil {
-		log.Debugf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
+	if anyFailed {
+		err := rv.scan(ef)
+		return rv, err
 	} else {
-		rv.DefaultSnapshotBlob = sym
+		return rv, nil
 	}
-	// If the first one succeeded, they should all succeed, so keep
-	// using `ef.LookupSymbol`.
-	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
-	if err != nil {
-		// As above, keep going to match historic behavior (why?)
-		log.Debugf("Couldn't get V8 BytecodeSizes: %v", err)
-	} else {
-		rv.BytecodeSizes = sym
-	}
-	return rv, nil
 }
 
 func GetLoader(_ Config) interpreter.Loader {
@@ -2371,6 +2377,18 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	d := &v8Data{
 		version:       version,
 		snapshotRange: locateSnapshotArea(info, syms),
+		leaptiering:   syms.JSDispatchTableAddress != nil,
+	}
+	if d.leaptiering {
+		offset, err := findJsDispatchTableOffset(ef, syms)
+		if err != nil {
+			log.Warnf("leaptiering on, but failed to find js_dispatch_table_ offset: %v. Proceeding as though leaptiering were off; line numbers will likely be wrong.", err)
+			d.leaptiering = false
+		}
+		d.jsDispatchTableOffset = uint32(offset)
+	}
+	if syms.DefaultIsolateGroup != nil {
+		d.defaultIsolateGroupAddr = libpf.Address(syms.DefaultIsolateGroup.Address)
 	}
 
 	sym := syms.BytecodeSizes
