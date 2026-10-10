@@ -54,10 +54,11 @@ func Infof(msg string, keysAndValues ...any) {
 }
 
 // Info logs informational messages about the general state of the profiler.
-// This is a wrapper around Infof for convenience.
-func Info(msg string) {
+// The optional args are structured key-value pairs, and are the preferred
+// alternative to the string-formatted Infof.
+func Info(msg string, args ...any) {
 	if getLogger().Enabled(context.Background(), slog.LevelInfo) {
-		getLogger().Info(msg)
+		getLogger().Info(msg, args...)
 	}
 }
 
@@ -88,10 +89,11 @@ func Debugf(msg string, keysAndValues ...any) {
 }
 
 // Debug logs detailed debugging information about internal profiler behavior.
-// This is a wrapper around Debugf for convenience.
-func Debug(msg string) {
+// The optional args are structured key-value pairs, and are the preferred
+// alternative to the string-formatted Debugf.
+func Debug(msg string, args ...any) {
 	if getLogger().Enabled(context.Background(), slog.LevelDebug) {
-		getLogger().Debug(msg)
+		getLogger().Debug(msg, args...)
 	}
 }
 
@@ -105,9 +107,10 @@ func Warnf(msg string, keysAndValues ...any) {
 }
 
 // Warn logs warnings in the profiler — not errors, but likely more important
-// than informational messages. This is a wrapper around Warnf for convenience.
-func Warn(msg string) {
+// than informational messages. The optional args are structured key-value
+// pairs, and are the preferred alternative to the string-formatted Warnf.
+func Warn(msg string, args ...any) {
 	if getLogger().Enabled(context.Background(), slog.LevelWarn) {
-		getLogger().Warn(msg)
+		getLogger().Warn(msg, args...)
 	}
 }
