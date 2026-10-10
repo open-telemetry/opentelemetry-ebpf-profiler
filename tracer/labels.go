@@ -4,11 +4,16 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"fmt"
 	"sync/atomic"
 	"unicode/utf8"
+	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // customLabelValidator validates custom label keys and values extracted from
@@ -75,4 +80,56 @@ func (v *customLabelValidator) getAndResetMetrics() []metrics.Metric {
 			Value: metrics.MetricValue(v.droppedInvalidValue.Swap(0)),
 		},
 	}
+}
+
+// threadLabelResolver decodes thread-context label payloads and counts what it drops.
+type threadLabelResolver struct {
+	// Samples whose thread-context labels were discarded for want of a decoder.
+	labelsNoDecoder atomic.Int64
+	// Entries the schema could not resolve, plus a truncated tail.
+	droppedEntriesUndecodable atomic.Int64
+}
+
+func (r *threadLabelResolver) getAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextLabelsNoDecoder,
+			Value: metrics.MetricValue(r.labelsNoDecoder.Swap(0)),
+		},
+		{
+			ID:    metrics.IDThreadContextDroppedEntriesUndecodable,
+			Value: metrics.MetricValue(r.droppedEntriesUndecodable.Swap(0)),
+		},
+	}
+}
+
+// threadLabelPayload extracts the attribute bytes from a ThreadLabelData section,
+// excluding its header and alignment padding. Taking u64 entries keeps the
+// header read aligned, which checkptr enforces under -race.
+func threadLabelPayload(section []uint64) ([]byte, error) {
+	data := pfunsafe.FromSlice(section)
+	if len(data) < support.Sizeof_ThreadLabelData {
+		return nil, fmt.Errorf("thread label section %d is smaller than its %d byte header: %w",
+			len(data), support.Sizeof_ThreadLabelData, errRecordUnexpectedSize)
+	}
+	header := (*support.ThreadLabelData)(unsafe.Pointer(unsafe.SliceData(data)))
+	payload := data[support.Sizeof_ThreadLabelData:]
+	if int(header.Size) > len(payload) {
+		return nil, fmt.Errorf("thread label size %d exceeds payload size %d: %w",
+			header.Size, len(payload), errRecordUnexpectedSize)
+	}
+	return payload[:header.Size:header.Size], nil
+}
+
+// resolve decodes an attribute payload against the schema its process published.
+func (r *threadLabelResolver) resolve(payload []byte,
+	decoder libpf.ThreadLabelDecoder) libpf.ThreadLabels {
+	// Key indices mean nothing without the published schema.
+	if decoder == nil {
+		r.labelsNoDecoder.Add(1)
+		return nil
+	}
+	labels, dropped := decoder.DecodeLabels(payload)
+	r.droppedEntriesUndecodable.Add(int64(dropped))
+	return labels
 }

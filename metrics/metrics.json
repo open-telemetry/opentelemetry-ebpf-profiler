@@ -2258,5 +2258,26 @@
     "name": "UnwindThreadContextAttrsTruncated",
     "field": "bpf.threadctx.attrs_truncated",
     "id": 309
+  },
+  {
+    "description": "Number of samples whose thread-context labels were discarded because no decoder was available for the process",
+    "type": "counter",
+    "name": "ThreadContextLabelsNoDecoder",
+    "field": "agent.threadctx.labels_dropped.no_decoder",
+    "id": 310
+  },
+  {
+    "description": "Number of thread-context label entries dropped as undecodable",
+    "type": "counter",
+    "name": "ThreadContextDroppedEntriesUndecodable",
+    "field": "agent.threadctx.dropped_entries.undecodable",
+    "id": 311
+  },
+  {
+    "description": "Number of processes whose published thread-context label schema was rejected",
+    "type": "counter",
+    "name": "ThreadContextSchemaRejected",
+    "field": "agent.threadctx.schema_rejected",
+    "id": 312
   }
 ]

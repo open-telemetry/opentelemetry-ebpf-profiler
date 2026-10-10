@@ -97,6 +97,9 @@ type GolangLabel struct {
 	Key [16]uint8
 	Val [48]uint8
 }
+type ThreadLabelData struct {
+	Size uint16
+}
 type OffsetRange struct {
 	Lower_offset1 uint64
 	Upper_offset1 uint64
@@ -172,6 +175,7 @@ type Trace struct {
 	Cpu_id             uint32
 	Kernel_frame_end   uint16
 	Frame_data_end     uint16
+	Thread_label_end   uint16
 	Golang_label_end   uint16
 	Variable_data_end  uint16
 	Num_frames         uint16
@@ -347,10 +351,11 @@ type V8ProcInfo struct {
 }
 
 const (
-	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x50
-	Sizeof_TraceWithData = 0x50 + 0x6280
-	Sizeof_GolangLabel   = 0x40
+	Sizeof_StackDelta      = 0x4
+	Sizeof_TraceHeader     = 0x58
+	Sizeof_TraceWithData   = 0x58 + 0x6280
+	Sizeof_GolangLabel     = 0x40
+	Sizeof_ThreadLabelData = 0x2
 
 	sizeof_ApmIntProcInfo        = 0x8
 	sizeof_DotnetProcInfo        = 0x4

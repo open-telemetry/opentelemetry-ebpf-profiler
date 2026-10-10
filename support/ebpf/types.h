@@ -662,6 +662,13 @@ typedef struct GolangLabel {
   u8 val[48];
 } GolangLabel;
 
+// Thread-context attributes stored in TraceData. The section is u64 granular, so
+// size gives the attribute byte count without the trailing padding.
+typedef struct ThreadLabelData {
+  u16 size;
+  u8 data[];
+} ThreadLabelData;
+
 // Maximum Golang labels to recover
 #define MAX_GO_LABELS 10
 
@@ -671,16 +678,21 @@ typedef struct GolangLabel {
 // about 1024 frames in a trace to be sent.
 #define MAX_FRAME_DATA_LEN 3072
 
-// Maximum number of u64 frame data entries for Go labels.
+// Maximum u64 entries a full set of Go labels occupies.
 #define MAX_GO_LABEL_DATA_LEN (MAX_GO_LABELS * sizeof(GolangLabel) / 8)
 
-// Number of u64 entries reserved for data after frames.
+// Number of u64 entries reserved for data after frames, currently the thread
+// label and Go label sections. Sized to fit one full set of Go labels, to guarantee
+// a reasonable set of labels even if all of frame data is used.
 #define MAX_FRAME_TRAILER_DATA_LEN MAX_GO_LABEL_DATA_LEN
 
 // The variable data portion of trace layout as:
-//   u64          kernel_frame[kernel_frame_end];
-//   u64          frame_data[(frame_data_end-kernel_frame_end)];
-//   GolangLabel  golang_labels[(golang_label_end-frame_data_end)*8/sizeof(GolangLabel)];
+//   u64             kernel_frame[kernel_frame_end];
+//   u64             frame_data[(frame_data_end-kernel_frame_end)];
+//   ThreadLabelData thread_labels;
+//   GolangLabel     golang_labels[];
+// Each end offset is exclusive, in u64 entries, and a section begins where the
+// previous present one ended. Zero means absent.
 typedef u64 TraceData[MAX_FRAME_DATA_LEN + MAX_FRAME_TRAILER_DATA_LEN];
 
 // Container for a stack trace
@@ -706,6 +718,7 @@ typedef struct Trace {
   // Variable data offsets
   u16 kernel_frame_end;
   u16 frame_data_end;
+  u16 thread_label_end;
   u16 golang_label_end;
   u16 variable_data_end;
 

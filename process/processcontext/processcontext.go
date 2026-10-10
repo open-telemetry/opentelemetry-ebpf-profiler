@@ -164,6 +164,8 @@ func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMe
 	// torn read.
 	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
 	if err != nil {
+		// A publisher fault an operator can fix, unlike the absence of a schema.
+		schemaRejected.Add(1)
 		log.Debugf("PID %d: failed to read thread context: %v", pid, err)
 	}
 

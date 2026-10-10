@@ -215,6 +215,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		summary.Add(dotnet.GetAndResetMetrics())
+		summary.Add(processcontext.GetAndResetMetrics())
 		summary.Add(pm.ebpf.CollectMetrics())
 
 		pm.eim.UpdateMetricSummary(summary)

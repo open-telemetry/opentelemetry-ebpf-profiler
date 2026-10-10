@@ -201,6 +201,8 @@ type Tracer struct {
 	// tracks how many were dropped due to invalid UTF-8.
 	customLabels customLabelValidator
 
+	threadLabels threadLabelResolver
+
 	// sysConfigVars holds kernel struct offsets determined at startup, passed
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
@@ -1149,11 +1151,27 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		copy(trace.FrameData, frameData)
 	}
 
+	if labelData, err := vd.decode(ptr.Thread_label_end); err != nil {
+		return nil, err
+	} else if len(labelData) > 0 {
+		payload, err := threadLabelPayload(labelData)
+		if err != nil {
+			return nil, err
+		}
+		if len(payload) > 0 {
+			decoder := t.processManager.ThreadLabelDecoderForPID(trace.PID)
+			trace.CustomLabels = t.threadLabels.resolve(payload, decoder)
+		}
+	}
 	if labelData, err := vd.decode(ptr.Golang_label_end); err != nil {
 		return nil, err
 	} else if len(labelData) > 0 {
 		const itemsPerGolangLabel = support.Sizeof_GolangLabel / 8
-		trace.CustomLabels = make(map[libpf.String]libpf.String, len(labelData)/itemsPerGolangLabel)
+		// Thread labels, decoded above, may already have allocated the map.
+		if trace.CustomLabels == nil {
+			trace.CustomLabels = make(map[libpf.String]libpf.String,
+				len(labelData)/itemsPerGolangLabel)
+		}
 
 		for len(labelData) >= itemsPerGolangLabel {
 			label := (*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(labelData)))
@@ -1230,6 +1248,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 			metrics.AddSlice(t.customLabels.getAndResetMetrics())
+			metrics.AddSlice(t.threadLabels.getAndResetMetrics())
 		})
 	}
 
