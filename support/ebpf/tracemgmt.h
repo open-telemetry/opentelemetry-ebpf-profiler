@@ -1005,16 +1005,8 @@ static inline EBPF_INLINE int get_next_unwinder_after_interpreter()
 
 // tail_call is a wrapper around bpf_tail_call() and ensures that the number of tail calls is not
 // reached while unwinding the stack.
-static inline EBPF_INLINE void tail_call(void *ctx, int next)
+static inline EBPF_INLINE int tail_call(void *ctx, PerCPURecord *record, int next)
 {
-  PerCPURecord *record = get_per_cpu_record();
-  if (!record) {
-    bpf_tail_call(ctx, &perf_progs, PROG_UNWIND_STOP);
-    // In theory bpf_tail_call() should never return. But due to instruction reordering by the
-    // compiler we have to place return here to bribe the verifier to accept this.
-    return;
-  }
-
   if (record->tailCalls >= 29) {
     // The maximum tail call count we need to support on older kernels is 32. At this point
     // there is a chance that continuing unwinding the stack would further increase the number of
@@ -1026,8 +1018,7 @@ static inline EBPF_INLINE void tail_call(void *ctx, int next)
     increment_metric(metricID_MaxTailCalls);
   }
   record->tailCalls += 1;
-
-  bpf_tail_call(ctx, &perf_progs, next);
+  return bpf_tail_call(ctx, &perf_progs, next);
 }
 
 #ifndef __USER32_CS
@@ -1134,11 +1125,9 @@ static inline EBPF_INLINE bool ptregs_is_usermode(struct pt_regs *regs)
 // if it is usermode regs, or resolve it via struct task_struct.
 //
 // State registers are not touched (get_pristine_per_cpu_record already reset it)
-// if something fails. has_usermode_regs is set to true if a user-mode register
-// context was found: not every thread that we interrupt will actually have
-// a user-mode context (e.g. kernel worker threads won't).
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+// if something fails. ERR_EMPTY_STACK indicates that the user-mode stack is
+// is not available (e.g. kernel worker thread).
+static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   ErrorCode error;
 
@@ -1155,30 +1144,22 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
     if (!ptregs_is_usermode(&regs)) {
       // No usermode registers context found.
-      return ERR_OK;
+      return ERR_EMPTY_STACK;
     }
     error = copy_state_regs(state, &regs, true);
   } else {
     // User mode code interrupted, registers are available via the ebpf context.
     error = copy_state_regs(state, ctx, false);
   }
-  if (error == ERR_OK) {
-    *has_usermode_regs = true;
-  }
   return error;
 }
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state)
 {
   // Coredumps provide always usermode pt_regs directly.
-  ErrorCode error = copy_state_regs(state, ctx, false);
-  if (error == ERR_OK) {
-    *has_usermode_regs = true;
-  }
-  return error;
+  return copy_state_regs(state, ctx, false);
 }
 
 #endif // TESTING_COREDUMP
@@ -1222,9 +1203,10 @@ static inline EBPF_INLINE int collect_trace(
   // Capture kernel stack and push each frame into frame_data.
   push_kernel_frames(ctx, trace);
 
+  ErrorCode error = ERR_OK;
+  int unwinder    = PROG_UNWIND_STOP;
   if (pid == 0) {
-    tail_call(ctx, PROG_UNWIND_STOP);
-    return 0;
+    goto exit;
   }
 
   // Preload this trace's go_procs entry into record->goOffsets.
@@ -1234,10 +1216,11 @@ static inline EBPF_INLINE int collect_trace(
   }
 
   // Recursive unwind frames
-  int unwinder           = PROG_UNWIND_STOP;
-  bool has_usermode_regs = false;
-  ErrorCode error        = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
-  if (error || !has_usermode_regs) {
+  error = get_usermode_regs(ctx, &record->state);
+  if (error) {
+    if (error == ERR_EMPTY_STACK) {
+      error = ERR_OK;
+    }
     goto exit;
   }
 
@@ -1258,9 +1241,7 @@ static inline EBPF_INLINE int collect_trace(
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 
 #endif

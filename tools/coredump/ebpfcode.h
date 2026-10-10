@@ -3,16 +3,13 @@
 
 #define TESTING_COREDUMP
 #include "../../support/ebpf/types.h"
-#include <setjmp.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 
 struct cgo_ctx {
-  jmp_buf jmpbuf;
   u64 id, tp_base;
-  int ret;
-  int debug;
+  int ret, debug;
 };
 
 __thread struct cgo_ctx *__cgo_ctx;
@@ -59,54 +56,47 @@ void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
 {
-  struct cgo_ctx cgoctx;
-
-  cgoctx.id      = id;
-  cgoctx.ret     = 0;
-  cgoctx.debug   = debug;
-  cgoctx.tp_base = tp_base;
-  __cgo_ctx      = &cgoctx;
-  if (setjmp(cgoctx.jmpbuf) == 0) {
-    cgoctx.ret = native_tracer_entry(ctx);
-  }
+  struct cgo_ctx cgoctx = {
+    .id      = id,
+    .debug   = debug,
+    .tp_base = tp_base,
+    .ret     = -2, // default to an error, trace data sending resets this
+  };
+  __cgo_ctx = &cgoctx;
+  int ret   = native_tracer_entry(ctx);
   __cgo_ctx = 0;
-  return cgoctx.ret;
+  return ret ? ret : cgoctx.ret;
 }
+
+int __bpf_copy_frame(u64, void *);
 
 int bpf_perf_event_output(
   UNUSED void *ctx, UNUSED void *map, UNUSED unsigned long long flags, void *data, UNUSED int size)
 {
-  void __bpf_copy_frame(u64, void *);
-  __bpf_copy_frame(__cgo_ctx->id, data);
-  return 0;
+  return __cgo_ctx->ret = __bpf_copy_frame(__cgo_ctx->id, data);
 }
 
 long bpf_ringbuf_output(UNUSED void *ringbuf, void *data, UNUSED u64 size, UNUSED u64 flags)
 {
-  void __bpf_copy_frame(u64, void *);
-  __bpf_copy_frame(__cgo_ctx->id, data);
-  return 0;
+  return __cgo_ctx->ret = __bpf_copy_frame(__cgo_ctx->id, data);
 }
 
 int bpf_tail_call(void *ctx, UNUSED void *map, int index)
 {
-  int rc = 0;
   switch (index) {
-  case PROG_UNWIND_STOP: rc = unwind_stop(ctx); break;
-  case PROG_UNWIND_NATIVE: rc = unwind_native(ctx); break;
-  case PROG_UNWIND_PERL: rc = unwind_perl(ctx); break;
-  case PROG_UNWIND_PHP: rc = unwind_php(ctx); break;
-  case PROG_UNWIND_PYTHON: rc = unwind_python(ctx); break;
-  case PROG_UNWIND_HOTSPOT: rc = unwind_hotspot(ctx); break;
-  case PROG_UNWIND_RUBY: rc = unwind_ruby(ctx); break;
-  case PROG_UNWIND_V8: rc = unwind_v8(ctx); break;
-  case PROG_UNWIND_DOTNET: rc = unwind_dotnet(ctx); break;
-  case PROG_UNWIND_DOTNET10: rc = unwind_dotnet10(ctx); break;
-  case PROG_UNWIND_BEAM: rc = unwind_beam(ctx); break;
-  case PROG_UNWIND_LUAJIT: rc = unwind_luajit(ctx); break;
-  case PROG_GO_LABELS: rc = go_labels(ctx); break;
+  case PROG_UNWIND_STOP: return unwind_stop(ctx);
+  case PROG_UNWIND_NATIVE: return unwind_native(ctx);
+  case PROG_UNWIND_PERL: return unwind_perl(ctx);
+  case PROG_UNWIND_PHP: return unwind_php(ctx);
+  case PROG_UNWIND_PYTHON: return unwind_python(ctx);
+  case PROG_UNWIND_HOTSPOT: return unwind_hotspot(ctx);
+  case PROG_UNWIND_RUBY: return unwind_ruby(ctx);
+  case PROG_UNWIND_V8: return unwind_v8(ctx);
+  case PROG_UNWIND_DOTNET: return unwind_dotnet(ctx);
+  case PROG_UNWIND_DOTNET10: return unwind_dotnet10(ctx);
+  case PROG_UNWIND_BEAM: return unwind_beam(ctx);
+  case PROG_UNWIND_LUAJIT: return unwind_luajit(ctx);
+  case PROG_GO_LABELS: return go_labels(ctx);
   default: return -1;
   }
-  __cgo_ctx->ret = rc;
-  longjmp(__cgo_ctx->jmpbuf, 1);
 }
