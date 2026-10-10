@@ -1,5 +1,9 @@
 #pragma once
 
+// The host agent sets the upper 32 bits of the text_section_id
+// to this value to indicate that it contains JITted code.
+#define LUAJIT_JIT_MARKER 42
+
 // This is CFRAME_SIZE in src/lj_frame.h
 // We could dynamically get this from lj_vm_ffi_callback disassembly and look for:
 // lea rax, [rsp+CFRAME_SIZE]
