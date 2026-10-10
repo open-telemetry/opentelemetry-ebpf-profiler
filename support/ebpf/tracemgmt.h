@@ -629,26 +629,36 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
   return unwinder_unwind_frame_pointer_regs(state, regs);
 }
 
-// reserve_variable_data reserves 'alloc_len' 64-bit slots of variable_data from
-// a trace. The 'reserve_len' is the number of additional slots reserve for potential
+// reserve_variable_data reserves 'alloc_sz' bytes of variable_data from a trace.
+// The 'reserve_sz' is the number of additional bytes to reserve for potential
 // other portions.
-static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u64 alloc_len, u64 reserve_len)
+static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u16 alloc_sz, u16 reserve_sz)
 {
-  const u64 data_elems = sizeof(trace->variable_data) / sizeof(trace->variable_data[0]);
-
-  u64 index = trace->variable_data_end;
-  if (index > data_elems - alloc_len - reserve_len) {
+  u16 index = trace->variable_data_end;
+  if (index > sizeof(trace->variable_data) - alloc_sz - reserve_sz) {
     return NULL;
   }
-  u64 *ptr = &trace->variable_data[index];
-  return ptr;
+  return &trace->variable_data[index];
 }
 
-// commit_variable_data advances the write pointer for variable data. The 'commit_len'
-// should not exceed the matching 'alloc_len' in the preceding reserve_variable_data call.
-static inline EBPF_INLINE void commit_variable_data(Trace *trace, u64 commit_len)
+// commit_variable_data advances the write pointer for variable data. The total
+// sum commit_variable_data 'commit_sz' should not exceed the matching 'alloc_sz'
+// in the preceding reserve_variable_data call.
+static inline EBPF_INLINE void commit_variable_data(Trace *trace, u16 commit_sz)
 {
-  trace->variable_data_end += commit_len;
+  trace->variable_data_end += commit_sz;
+}
+
+// end_variable_data finalizes a variable data section, and returns the end pointer.
+// 'item_sz' is the unit data size used for commit_variable_data, to optimize
+// away the alignment code when possible.
+static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
+{
+  u16 end = trace->variable_data_end;
+  if (item_sz & 7U) {
+    trace->variable_data_end = (end + 7U) & ~7U;
+  }
+  return end;
 }
 
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
@@ -673,17 +683,17 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
-  const u64 error_frame_len = 1;
-  u64 frame_len             = 1 + frame_varlen;
+  const u16 error_sz = sizeof(u64);
+  const u16 frame_sz = sizeof(u64[1 + frame_varlen]);
 
-  u64 *pos = reserve_variable_data(trace, frame_len, error_frame_len + MAX_FRAME_TRAILER_DATA_LEN);
+  u64 *pos = reserve_variable_data(trace, frame_sz, error_sz + MAX_FRAME_TRAILER_DATA_SZ);
   if (!pos) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->num_frames++;
-  commit_variable_data(trace, frame_len);
-  pos[0] = frame_header(frame_type, frame_flags, frame_len, frame_data);
+  commit_variable_data(trace, frame_sz);
+  pos[0] = frame_header(frame_type, frame_flags, 1 + frame_varlen, frame_data);
   return &pos[1];
 }
 
@@ -715,10 +725,10 @@ push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 // Push a critical error frame.
 static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 {
-  u64 *pos = reserve_variable_data(trace, 1, MAX_FRAME_TRAILER_DATA_LEN);
+  u64 *pos = reserve_variable_data(trace, sizeof(u64), MAX_FRAME_TRAILER_DATA_SZ);
   if (pos) {
     pos[0] = frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
-    commit_variable_data(trace, 1);
+    commit_variable_data(trace, sizeof(u64));
     trace->num_frames++;
   }
 }
@@ -728,27 +738,25 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 // userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
-  const u32 max_bytes = PERF_MAX_STACK_DEPTH * sizeof(u64);
-  _Static_assert(
-    MAX_FRAME_DATA_LEN * sizeof(trace->variable_data[0]) > max_bytes, "frame data too small");
+  const u32 max_bytes = sizeof(u64[PERF_MAX_STACK_DEPTH]);
+  _Static_assert(MAX_FRAME_DATA_SZ > max_bytes, "frame data too small");
 
-  void *data = reserve_variable_data(trace, PERF_MAX_STACK_DEPTH, MAX_FRAME_TRAILER_DATA_LEN);
+  void *data = reserve_variable_data(trace, max_bytes, MAX_FRAME_TRAILER_DATA_SZ);
   if (!data) {
     return;
   }
   long bytes = bpf_get_stack(ctx, data, max_bytes, 0);
   if (bytes > 0) {
-    u16 nframes = (unsigned long)bytes / sizeof(u64);
-    commit_variable_data(trace, nframes);
-    trace->kernel_frame_end = trace->variable_data_end;
+    commit_variable_data(trace, bytes);
+    // bpf_get_stack returns a multiple of sizeof(u64).
+    trace->kernel_frame_end = end_variable_data(trace, sizeof(u64));
   }
 }
 
 // Send a trace to userspace via the `trace_events` ringbuffer.
 static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 {
-  u64 send_size = __builtin_offsetof(struct Trace, variable_data) +
-                  trace->variable_data_end * sizeof(trace->variable_data[0]);
+  u64 send_size = __builtin_offsetof(struct Trace, variable_data) + trace->variable_data_end;
 
   // Explicitly clamp the send size to satisfy verifier.
   send_size = MIN(send_size, sizeof(Trace));
