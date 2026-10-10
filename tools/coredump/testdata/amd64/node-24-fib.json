@@ -1,0 +1,158 @@
+{
+  "coredump-ref": "91180328dfb0a4e77f114cd8ba5e321e25a8b709014f22844f7cbcbb4369b99a",
+  "threads": [
+    {
+      "lwp": 561164,
+      "frames": [
+        "fib+1 in file:///tmp/app.mjs:2:8",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+5 in file:///tmp/app.mjs:6:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "fib+4 in file:///tmp/app.mjs:5:10",
+        "cpuBurn+12 in file:///tmp/app.mjs:13:12",
+        "listOnTimeout+0 in node:internal/timers:0",
+        "processTimers+0 in node:internal/timers:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xe04d60",
+        "node+0xe05c0e",
+        "node+0xc687d6",
+        "node+0x882ad5",
+        "node+0x19defe3",
+        "node+0x19e3789",
+        "node+0x7fd734",
+        "node+0x982f89",
+        "node+0x8c12c4",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "node+0x7e5f4d"
+      ]
+    },
+    {
+      "lwp": 561170,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0xa5097",
+        "node+0x19f29a1",
+        "node+0xb28c04",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    },
+    {
+      "lwp": 561169,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "node+0x19f2b58",
+        "node+0x9cc72a",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    },
+    {
+      "lwp": 561168,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "node+0x19f2b58",
+        "node+0x9cc72a",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    },
+    {
+      "lwp": 561167,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "node+0x19f2b58",
+        "node+0x9cc72a",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    },
+    {
+      "lwp": 561166,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "node+0x19f2b58",
+        "node+0x9cc72a",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    },
+    {
+      "lwp": 561165,
+      "frames": [
+        "libc.so.6+0x12a170",
+        "node+0x19f8e73",
+        "node+0x19e34b6",
+        "node+0x9d14c4",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129ecb"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "90491a21ce44efcf3bd4b65ec82501c091d7ebe7f8d9b341dd01d721001d9ecd",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "c2994527172cc23b7fb0f7d611b71e00a37da27af12c2e5e9e0dc1a742886c96",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+      "local-path": "/home/tpr/.nvm/versions/node/v24.19.0/bin/node"
+    },
+    {
+      "ref": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    }
+  ]
+}
