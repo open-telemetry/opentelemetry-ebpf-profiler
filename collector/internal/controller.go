@@ -74,6 +74,12 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		}
 	}
 
+	// Report receiver health metrics for every profile pushed into the pipeline.
+	obsConsumer, err := newObsProfiles(rs, nextConsumer)
+	if err != nil {
+		return nil, err
+	}
+
 	rep, err := cfg.ReporterFactory(&reporter.Config{
 		Name:                   metadata.ScopeName,
 		Version:                version,
@@ -85,7 +91,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		ReportInterval:         intervals.ReportInterval(),
 		ReportJitter:           cfg.ReporterJitter,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
-	}, nextConsumer)
+	}, obsConsumer)
 	if err != nil {
 		return nil, err
 	}
