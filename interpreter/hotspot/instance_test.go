@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -141,4 +142,55 @@ func TestVMStructsFieldKinds(t *testing.T) {
 		}
 	}
 	checkType(reflect.TypeOf(hotspotVMData{}.vmStructs), "")
+}
+
+// TestUpdateStubMappingsSkipsKnownStubs verifies that a repeated sync does not
+// redo the expensive per-stub boundary sweep and does not change tracked stubs.
+func TestUpdateStubMappingsSkipsKnownStubs(t *testing.T) {
+	const (
+		numStubs    = 20
+		slotsBase   = 16
+		codeBase    = 1024
+		stubSpacing = 128
+		bufSize     = codeBase + numStubs*stubSpacing + 8*1024
+	)
+
+	buf := make([]byte, bufSize)
+	catchAll := make(map[string]libpf.Address, numStubs)
+	for i := range numStubs {
+		slot := libpf.Address(slotsBase + i*8)
+		binary.LittleEndian.PutUint64(buf[slot:], uint64(codeBase+i*stubSpacing))
+		catchAll[fmt.Sprintf("_stub_%d", i)] = slot
+	}
+
+	cr := &countingReaderAt{r: bytes.NewReader(buf)}
+	rm := remotememory.RemoteMemory{ReaderAt: cr}
+
+	id := hotspotData{}
+	vmd, _ := id.GetOrInit(func() (hotspotVMData, error) {
+		vmd := hotspotVMData{}
+		vmd.vmStructs.StubRoutines.CatchAll = catchAll
+		return vmd, nil
+	})
+	instance, err := id.Attach(nil, 0, 0, rm)
+	require.NoError(t, err)
+	ii := instance.(*hotspotInstance)
+
+	ii.updateStubMappings(vmd, nil, 0)
+	firstReads := cr.reads
+	stubs := ii.stubs.RLock()
+	first := maps.Clone(*stubs)
+	ii.stubs.RUnlock(&stubs)
+	require.Len(t, first, numStubs)
+
+	cr.reads = 0
+	ii.updateStubMappings(vmd, nil, 0)
+	stubs = ii.stubs.RLock()
+	second := maps.Clone(*stubs)
+	ii.stubs.RUnlock(&stubs)
+
+	assert.Equal(t, first, second)
+	// Second pass only re-reads the stub entry pointers, no boundary sweeps.
+	assert.LessOrEqual(t, cr.reads, numStubs)
+	assert.Greater(t, firstReads, cr.reads)
 }

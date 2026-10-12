@@ -59,8 +59,12 @@ func compareStubRoutine(a, b StubRoutine) int {
 // previous stub function might have the perfect length for the next one to
 // not need alignment. Also in some cases the JVM devs omitted/forgot to insert
 // the padding. The two heuristics combined, however, yield reliable results.
+//
+// Stubs for which known(start) returns true are skipped: the NOP sweep issues up to
+// MaxStubLen/CodeAlign remote reads per stub, which is far too costly to repeat on
+// every process sync for stubs we already track.
 func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
-	rm remotememory.RemoteMemory,
+	rm remotememory.RemoteMemory, known func(libpf.Address) bool,
 ) []StubRoutine {
 	const CodeAlign = 64
 	const MaxStubLen = 8 * 1024
@@ -109,6 +113,10 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 			} else {
 				break
 			}
+		}
+
+		if known != nil && known(cur.start) {
+			continue
 		}
 
 		// Sweep for stub function boundary.
