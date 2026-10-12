@@ -313,8 +313,10 @@ nonzero.
 The TLS access-model requirements of OTEP 4947's "Thread-Local Variable
 Resolution" apply unchanged: writers SHOULD use the TLSDESC dialect, and readers
 MUST support Global Dynamic/TLSDESC, Global Dynamic/legacy GNU, and
-linker-relaxed initial-exec or local-exec access. This is exactly what
-`interpreter/threadcontext` already implements.
+linker-relaxed initial-exec or local-exec access. In practice the profiler will
+encounter TLSDESC as Node.js writers are native shared libraries and the linker
+does not relax them to static models. The reference writers also compile with
+the TLSDESC dialect.
 
 Because Node.js pins each isolate to a thread and creates a fresh isolate per
 worker thread, a thread-local struct is the natural home for this data: each
