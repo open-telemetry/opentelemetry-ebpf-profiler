@@ -462,12 +462,17 @@ The proposal is additive at three points, in increasing order of new code:
    has a single 8-byte pointer. The TLS access-model resolution, the symbol and
    relocation matching, and the `TLSVarInfo` plumbing shared with `apmint` are
    reused unchanged: locating a thread-local is the same problem regardless of
-   what it holds.
+   what it holds. As for OTEP 4947, this user-space side only resolves where the
+   thread-local is and hands that and the selected schema to the eBPF side.
 3. **The walk itself** — new code, reading V8 heap objects out of target memory.
-   `interpreter/nodev8` establishes the primitives (tagged word handling,
-   bounded remote reads of V8 objects) but this walk is independent of stack
-   unwinding and should not be entangled with the unwinder's state. Prior art
-   for a similar walk is found in
+   It runs entirely in eBPF, in the sample path next to the OTEP 4947 record
+   read (`maybe_add_thread_context_info` in
+   `support/ebpf/interpreter_dispatcher.ebpf.c`), since the context must be
+   captured while the thread is interrupted. The V8 unwinder's eBPF code in
+   `support/ebpf/v8_tracer.ebpf.c` establishes the primitives (tagged word
+   handling, bounded remote reads of V8 objects), but this walk is independent
+   of stack unwinding and should not be entangled with the unwinder's state.
+   Prior art for a similar walk is found in
    [Polar Signals' eBPF profiler](https://github.com/parca-dev/opentelemetry-ebpf-profiler/blob/main/support/ebpf/native_custom_labels.h).
 
 ### 1. Process initialization
@@ -583,7 +588,8 @@ uintptr_t find_value(void* table, uintptr_t key, int hash) {
   int entry = is_smi(head) ? smi(head) : kNotFound;
 
   // Bounding the walk by `used` keeps a corrupt or cyclic chain from looping
-  // forever; a well-formed chain ends at kNotFound well before that.
+  // forever; a well-formed chain ends at kNotFound well before that. An eBPF
+  // reader additionally needs a constant cap, as the verifier requires.
   for (int steps = used; steps > 0 && entry >= 0 && entry < used; steps--) {
     int i = 3 + buckets + entry * kEntrySize;
     if (word(i) == key) return word(i + 1);
