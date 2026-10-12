@@ -640,7 +640,7 @@ The writer publishes it in the thread-local struct rather than the schema fixing
 it, because the writer can compute it from the V8 headers of the Node.js it is
 compiled for: `kJSAPIObjectWithEmbedderSlotsHeaderSize` from Node.js 23,
 `kJSObjectHeaderSize` for Node.js 22, plus
-`kEmbedderDataSlotExternalPointerOffset` in either case. 
+`kEmbedderDataSlotExternalPointerOffset` in either case.
 
 ### Interaction with existing functionality
 
