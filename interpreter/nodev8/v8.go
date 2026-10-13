@@ -1723,19 +1723,19 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 
 	pointerAndType := libpf.Address(ef.Variable(0))
 	deltaOrMarker := uint64(ef.Variable(1))
-	subframeType := pointerAndType & support.V8FileTypeMask
-	pointer := pointerAndType&^support.V8FileTypeMask | HeapObjectTag
+	subframeType := pointerAndType & support.V8FrameTypeMask
+	pointer := pointerAndType&^support.V8FrameTypeMask | HeapObjectTag
 
 	var err error
 	switch subframeType {
-	case support.V8FileTypeMarker:
+	case support.V8FrameTypeMarker:
 		// This is a stub V8 frame, with deltaOrMarker containing the marker.
 		// Convert the V8 build specific marker ID to a static ID and symbolize
 		// that if needed.
 		err = i.symbolizeMarkerFrame(deltaOrMarker, frames)
-	case support.V8FileTypeByteCode, support.V8FileTypeNativeSFI:
+	case support.V8FrameTypeByteCode, support.V8FrameTypeNativeSFI:
 		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
-	case support.V8FileTypeNativeCode:
+	case support.V8FrameTypeNativeCode:
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
 		codePointer := libpf.Address(ef.Variable(2)) | HeapObjectTag

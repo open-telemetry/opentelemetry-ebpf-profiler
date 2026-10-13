@@ -141,7 +141,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
-  u8 frame_type = V8_FILE_TYPE_MARKER;
+  u8 frame_type = V8_FRAME_TYPE_MARKER;
   uintptr_t sfi = 0, delta_or_marker = 0, code = 0;
 
   // Frames can be either be "standard", in which case they have a pointer to a context
@@ -186,7 +186,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   // At this point we can at least report the SFI if other things fail.
-  frame_type = V8_FILE_TYPE_NATIVE_SFI;
+  frame_type = V8_FRAME_TYPE_NATIVE_SFI;
 
   if (vi->leaptiering) {
     // Under leaptiering the JSFunction no longer stores a Code pointer. Instead it
@@ -280,7 +280,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
     if (delta_or_marker != 0) {
       DEBUG_PRINT("v8:  -> interpreted, bytecode_delta %lx", delta_or_marker);
-      frame_type = V8_FILE_TYPE_BYTECODE;
+      frame_type = V8_FRAME_TYPE_BYTECODE;
       goto frame_done;
     }
   }
@@ -337,7 +337,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   // Code matches RIP, report it.
-  frame_type = V8_FILE_TYPE_NATIVE_CODE;
+  frame_type = V8_FRAME_TYPE_NATIVE_CODE;
 
   // Use cookie that differentiates different types of Code objects
   u32 cookie      = (code_size << 4) | code_kind;
@@ -363,7 +363,7 @@ frame_done:;
   // Recover it for Entry frames which return to native code and
   // for which the stack size is known.
   // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
-  if (frame_type == V8_FILE_TYPE_MARKER && delta_or_marker == 1)
+  if (frame_type == V8_FRAME_TYPE_MARKER && delta_or_marker == 1)
     state->sp = fp + 20 * sizeof(u64);
 #endif
 

@@ -409,11 +409,11 @@ const (
 
 	V8FpContextSize = 0x40
 
-	V8FileTypeMarker     = 0x0
-	V8FileTypeByteCode   = 0x1
-	V8FileTypeNativeSFI  = 0x2
-	V8FileTypeNativeCode = 0x3
-	V8FileTypeMask       = 0x7
+	V8FrameTypeMarker     = 0x0
+	V8FrameTypeByteCode   = 0x1
+	V8FrameTypeNativeSFI  = 0x2
+	V8FrameTypeNativeCode = 0x3
+	V8FrameTypeMask       = 0x7
 
 	V8LineCookieShift = 0x20
 	V8LineCookieMask  = 0xffffffff00000000
