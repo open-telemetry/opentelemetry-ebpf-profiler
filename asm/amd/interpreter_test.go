@@ -43,8 +43,7 @@ func testPythonInterpreter(tb testing.TB) {
 		0x10, 0x45, 0x0f, 0xb6, 0x5a, 0x01, 0x41, 0x0f, 0xb6, 0xc6, 0x48, 0x8b, 0x04,
 		0xc1, 0xff, 0xe0,
 	}
-	it := NewInterpreterWithCode(code)
-	it.CodeAddress = expression.Imm(0x8AF05)
+	it := NewInterpreterWithCodeAt(code, expression.Imm(0x8AF05))
 	r14 := it.Regs.Get(R14)
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
@@ -108,15 +107,17 @@ func TestRecoverSwitchCase(t *testing.T) {
 			},
 		},
 	}
-	it := NewInterpreter()
+	it := NewInterpreterWithCodeAt(blocks[0].Code, blocks[0].Address)
 	initR12 := it.Regs.Get(R12)
-	it.ResetCode(blocks[0].Code, blocks[0].Address)
 	_, err := it.Loop()
 	require.ErrorIs(t, err, io.EOF)
 
 	expected := expression.ZeroExtend(initR12, 2)
 	assertEval(t, it.Regs.Get(RAX), expected)
-	it.ResetCode(blocks[1].Code, blocks[1].Address)
+	regs := it.Regs
+	it = NewInterpreterWithCodeAt(blocks[1].Code, blocks[1].Address)
+	it.Regs = regs
+	it.Regs.setX86asm(x86asm.RIP, blocks[1].Address)
 	_, err = it.Loop()
 	require.ErrorIs(t, err, io.EOF)
 	table := expression.NewImmediateCapture("table")
@@ -259,9 +260,8 @@ func TestRIPRelativeAddressing(t *testing.T) {
 		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
 	}
 
-	interp := NewInterpreter()
 	baseAddr := expression.Imm(0x604fe80)
-	interp.ResetCode(code, baseAddr)
+	interp := NewInterpreterWithCodeAt(code, baseAddr)
 
 	// Execute the first instruction (mov 0x10512121(%rip),%rcx)
 	inst, err := interp.Step()
@@ -332,8 +332,7 @@ func TestDisplacementSignExtension(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			it := NewInterpreterWithCode(tc.code)
-			it.CodeAddress = expression.Imm(tc.base)
+			it := NewInterpreterWithCodeAt(tc.code, expression.Imm(tc.base))
 			_, err := it.Step()
 			require.NoError(t, err)
 			assertEval(t, it.Regs.GetX86(tc.reg), tc.want)

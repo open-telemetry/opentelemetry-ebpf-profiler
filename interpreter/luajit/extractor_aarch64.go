@@ -24,8 +24,7 @@ var _ extractor = &armExtractor{}
 
 // Return true if the code in b calls targetCall.
 func (a *armExtractor) callExists(b []byte, baseAddr, targetCall libpf.Address) (bool, error) {
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
 			if a0, ok := i.Args[0].(arm64asm.PCRel); ok {
@@ -146,8 +145,7 @@ func (a *armExtractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (libpf
 }
 
 func (a *armExtractor) findLjDispatchUpdateAddr(b []byte, addr libpf.Address) (libpf.Address, error) {
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(addr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(addr)))
 
 	var result libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
@@ -227,8 +225,7 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 	var seenFirst bool
 	var retval libpf.Address
 
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(baseAddr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(baseAddr)))
 	var err error
 
 	_, err2 := it.LoopWithBreak(func(i arm64asm.Inst) bool {
@@ -301,8 +298,7 @@ func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, target
 // [0x64dc4] <+228>: adrp   x2, -1           --> x2 becomes 0x63000
 // [0x64dcc] <+236>: add    x2, x2, #0x310   --> x2 becomes 0x63310
 func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr libpf.Address) (libpf.Address, error) {
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(addr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(addr)))
 	var prevCall libpf.Address
 	var retval libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
@@ -348,8 +344,7 @@ func (a *armExtractor) find3rdArgToLibPreregCall(b []byte, addr libpf.Address) (
 // libluajit-5.1.so[0x63330] <+32>: ldr    x30, [sp], #0x10
 // libluajit-5.1.so[0x63334] <+36>: ret
 func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr libpf.Address) (libpf.Address, error) {
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(addr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(addr)))
 	var retval libpf.Address
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {
 		if i.Op == arm64asm.BL {
@@ -367,8 +362,7 @@ func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr libpf.Address) (lib
 }
 
 func (a *armExtractor) findFirstCall(b []byte, addr libpf.Address) (libpf.Address, error) {
-	it := arm.NewInterpreterWithCode(b)
-	it.CodeAddress = expression.Imm(uint64(addr))
+	it := arm.NewInterpreterWithCodeAt(b, expression.Imm(uint64(addr)))
 	var retval libpf.Address
 
 	_, err := it.LoopWithBreak(func(i arm64asm.Inst) bool {

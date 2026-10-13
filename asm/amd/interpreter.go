@@ -21,30 +21,26 @@ type CodeBlock struct {
 type Interpreter struct {
 	Regs        Registers
 	code        []byte
-	CodeAddress expression.Expression
+	codeAddress expression.Expression
 	pc          uint64
 }
 
-func NewInterpreter() *Interpreter {
-	it := &Interpreter{}
+func NewInterpreterWithCode(code []byte) *Interpreter {
+	it := &Interpreter{code: code}
 	it.initRegs()
+	it.codeAddress = it.Regs.Get(RIP)
 	return it
 }
 
-func NewInterpreterWithCode(code []byte) *Interpreter {
-	it := &Interpreter{code: code, CodeAddress: expression.Named("code address")}
+func NewInterpreterWithCodeAt(code []byte, address expression.Expression) *Interpreter {
+	it := &Interpreter{code: code, codeAddress: address}
 	it.initRegs()
+	it.Regs.setX86asm(x86asm.RIP, address)
 	return it
 }
 
 func (i *Interpreter) PC() uint64 {
 	return i.pc
-}
-
-func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
-	i.code = code
-	i.CodeAddress = address
-	i.pc = 0
 }
 
 func (i *Interpreter) Loop() (x86asm.Inst, error) {
@@ -81,7 +77,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	}
 	i.pc += uint64(inst.Len)
 	i.code = i.code[inst.Len:]
-	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
+	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.codeAddress, expression.Imm(uint64(i.pc))))
 	switch inst.Op {
 	case x86asm.ADD, x86asm.SUB:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
