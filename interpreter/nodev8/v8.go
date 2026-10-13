@@ -341,29 +341,23 @@ type v8Data struct {
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/tools/gen-postmortem-metadata.py#709
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#75
 		Type struct {
-			BaselineData              uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
-			ByteArray                 uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
-			BytecodeArray             uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
-			Code                      uint16 `name:"Code__CODE_TYPE"`
-			CodeWrapper               uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
-			FixedArray                uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
-			WeakFixedArray            uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
-			TrustedByteArray          uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
-			TrustedFixedArray         uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
-			TrustedWeakFixedArray     uint16 `name:"TrustedFixedArray__TRUSTED_WEAK_FIXED_ARRAY_TYPE" zero:""`
-			ProtectedFixedArray       uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
-			JSFunction                uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
-			Map                       uint16 `name:"Map__MAP_TYPE"`
-			Script                    uint16 `name:"Script__SCRIPT_TYPE"`
-			ScopeInfo                 uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
-			SharedFunctionInfo        uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
-			SharedFunctionInfoWrapper uint16 `name:"SharedFunctionInfoWrapper__SHARED_FUNCTION_INFO_WRAPPER_TYPE" zero:""`
+			BaselineData          uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
+			ByteArray             uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
+			BytecodeArray         uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
+			Code                  uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper           uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
+			FixedArray            uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
+			WeakFixedArray        uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedByteArray      uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
+			TrustedFixedArray     uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+			TrustedWeakFixedArray uint16 `name:"TrustedFixedArray__TRUSTED_WEAK_FIXED_ARRAY_TYPE" zero:""`
+			ProtectedFixedArray   uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+			JSFunction            uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
+			Map                   uint16 `name:"Map__MAP_TYPE"`
+			Script                uint16 `name:"Script__SCRIPT_TYPE"`
+			ScopeInfo             uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
+			SharedFunctionInfo    uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
 		} `name:"type"`
-
-		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/shared-function-info.h#835
-		SharedFunctionInfoWrapper struct {
-			SharedFunctionInfo uint16 `name:"shared_info__Tagged_SharedFunctionInfo_" zero:""`
-		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/heap-object.tq#7
 		HeapObject struct {
@@ -1215,7 +1209,8 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	return sfi, nil
 }
 
-// readCode reads and caches needed V8 Code object data.
+// readCode reads and caches needed V8 Code object data. sfi is the
+// SharedFunctionInfo of the JSFunction the Code belongs to.
 func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI) (*v8Code, error) {
 	vms := &i.d.vmStructs
 	types := &i.d.expectedTypes
@@ -1252,10 +1247,6 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Baseline Code does not have deoptimization data
 	if codeKind == vms.CodeKind.Baseline {
-		if sfi == nil {
-			return nil, errors.New("baseline function without SFI")
-		}
-
 		log.Debugf("Baseline Code %#x read: posSize: %v, cookie: %x",
 			codeAddr, len(codePositionTable), cookie)
 
@@ -1287,33 +1278,6 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	if len(deoptimizationData) < pointerSize*int(numItemsNeeded) {
 		return nil, fmt.Errorf("DeoptimizationData array length too small: %d",
 			len(deoptimizationData))
-	}
-
-	if sfi == nil {
-		// Read the Code's SFI
-		var sfiPtr libpf.Address
-		if vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper != 0 {
-			sfiWrapperPtr := npsr.Ptr(deoptimizationData,
-				uint(vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper*pointerSize))
-			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr, vms.Type.SharedFunctionInfoWrapper)
-			if err != nil {
-				return nil, fmt.Errorf("sfi wrapper pointer read: %w", err)
-			}
-
-			sfiWrapperSize := vms.SharedFunctionInfoWrapper.SharedFunctionInfo + pointerSize
-			sfiWrapper := make([]byte, sfiWrapperSize)
-			if err = i.rm.Read(sfiWrapperPtr, sfiWrapper); err != nil {
-				return nil, fmt.Errorf("sfi wrapper read: %w", err)
-			}
-			sfiPtr = npsr.Ptr(sfiWrapper, uint(vms.SharedFunctionInfoWrapper.SharedFunctionInfo))
-		} else {
-			sfiPtr = npsr.Ptr(deoptimizationData,
-				uint(vms.DeoptimizationDataIndex.SharedFunctionInfo*pointerSize))
-		}
-		sfi, err = i.getSFI(sfiPtr)
-		if err != nil {
-			return nil, fmt.Errorf("getSFI: %w", err)
-		}
 	}
 
 	// Read the Code's deoptimization data
@@ -1366,9 +1330,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 }
 
 // getCode reads and caches needed V8 Code object data from a Code pointer.
-// Baseline Code has no backpointer to its SFI, so for it sfiTaggedPtr must
-// be the SFI that eBPF sent with the frame. Otherwise it is zero and the SFI
-// is read from the Code's deoptimization data.
+// sfiTaggedPtr is the SFI that eBPF sent with the frame.
 func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
 	sfiTaggedPtr libpf.Address,
 ) (*v8Code, error) {
@@ -1378,13 +1340,9 @@ func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
 		}
 		i.addrToCode.Remove(taggedPtr)
 	}
-	var sfi *v8SFI
-	if sfiTaggedPtr != 0 {
-		var err error
-		sfi, err = i.getSFI(sfiTaggedPtr)
-		if err != nil {
-			return nil, fmt.Errorf("getSFI: %w", err)
-		}
+	sfi, err := i.getSFI(sfiTaggedPtr)
+	if err != nil {
+		return nil, fmt.Errorf("getSFI: %w", err)
 	}
 	return i.readCode(taggedPtr, cookie, sfi)
 }
@@ -1777,15 +1735,11 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		err = i.symbolizeMarkerFrame(deltaOrMarker, frames)
 	case support.V8FileTypeByteCode, support.V8FileTypeNativeSFI:
 		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
-	case support.V8FileTypeNativeCode, support.V8FileTypeNativeBaseline:
+	case support.V8FileTypeNativeCode:
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
 		codePointer := libpf.Address(ef.Variable(2)) | HeapObjectTag
-		var sfiPointer libpf.Address
-		if subframeType == support.V8FileTypeNativeBaseline {
-			sfiPointer = pointer
-		}
-		code, err = i.getCode(codePointer, codeCookie, sfiPointer)
+		code, err = i.getCode(codePointer, codeCookie, pointer)
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
 		}

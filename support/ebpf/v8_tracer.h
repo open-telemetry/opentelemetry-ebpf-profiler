@@ -20,13 +20,12 @@
 // and the zero bits due to alignment are reused as the following flags. For
 // all types except MARKER the object pointer is the SharedFunctionInfo. The
 // Code pointer is always sent as the third frame variable, and is valid for
-// the NATIVE_CODE and NATIVE_BASELINE types.
-#define V8_FILE_TYPE_MARKER          0x0
-#define V8_FILE_TYPE_BYTECODE        0x1
-#define V8_FILE_TYPE_NATIVE_SFI      0x2
-#define V8_FILE_TYPE_NATIVE_CODE     0x3
-#define V8_FILE_TYPE_NATIVE_BASELINE 0x4
-#define V8_FILE_TYPE_MASK            0x7
+// the NATIVE_CODE type.
+#define V8_FILE_TYPE_MARKER      0x0
+#define V8_FILE_TYPE_BYTECODE    0x1
+#define V8_FILE_TYPE_NATIVE_SFI  0x2
+#define V8_FILE_TYPE_NATIVE_CODE 0x3
+#define V8_FILE_TYPE_MASK        0x7
 
 // The Trace 'line' field is split to two 32-bit fields: cookie and PC-delta
 #define V8_LINE_COOKIE_SHIFT 32
