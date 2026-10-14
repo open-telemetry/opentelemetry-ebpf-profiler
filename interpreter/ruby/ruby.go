@@ -309,15 +309,9 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	// Leaving these unset falls back to the ractor and global branches, which
 	// still yield frames, unlike a failed attach.
 	if r.tlsEC != nil {
-		if loc, err := r.tlsEC.Locate(rm, bias); err != nil {
+		var err error
+		if tlsEC, pendingEC, err = r.tlsEC.Locate(rm, bias); err != nil {
 			log.Debugf("Ruby PID %d: ruby_current_ec not located: %v", pid, err)
-		} else if info, err := loc.VarInfo(libc.DTVInfo{}); err == nil {
-			tlsEC = info
-		} else if errors.Is(err, tls.ErrNeedDTV) {
-			// Dynamic TLS, so UpdateLibcInfo completes it once the DTV arrives.
-			pendingEC = &loc
-		} else {
-			log.Debugf("Ruby PID %d: unusable ruby_current_ec location %v: %v", pid, loc, err)
 		}
 	}
 

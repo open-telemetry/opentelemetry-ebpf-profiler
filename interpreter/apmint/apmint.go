@@ -120,16 +120,8 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 	var procInfo support.ApmIntProcInfo
 	var pendingTLS *tls.VarLocation
-	if loc, err := d.tlsVar.Locate(rm, bias); err != nil {
+	if procInfo.Tls, pendingTLS, err = d.tlsVar.Locate(rm, bias); err != nil {
 		return nil, fmt.Errorf("failed to locate APM correlation TLS variable: %w", err)
-	} else if tlsInfo, err := loc.VarInfo(libc.DTVInfo{}); err == nil {
-		procInfo.Tls = tlsInfo
-	} else if errors.Is(err, tls.ErrNeedDTV) {
-		// Dynamic TLS, so UpdateLibcInfo completes it once the DTV arrives and
-		// eBPF skips the correlation read until then.
-		pendingTLS = &loc
-	} else {
-		return nil, fmt.Errorf("unusable APM correlation TLS variable %v: %w", loc, err)
 	}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err

@@ -3,7 +3,8 @@
 
 // Package tls locates a thread-local variable of a running process, given the
 // ELF that defines it. Resolve classifies how the variable is accessed, once per
-// file, and Locate turns that into a VarLocation, once per process.
+// file, and Locate produces an eBPF descriptor or a pending VarLocation, once
+// per process.
 package tls // import "go.opentelemetry.io/ebpf-profiler/tls"
 
 import (
@@ -13,8 +14,10 @@ import (
 	"fmt"
 	"math"
 
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 var (
@@ -46,7 +49,7 @@ type Var struct {
 	addend uint64
 	// variant is the TLS layout the target architecture prescribes, which is
 	// what tells a genuinely unresolved GOT slot from a legitimately zero
-	// TP-relative offset (see the accessInitialExec case in Locate).
+	// TP-relative offset (see the accessInitialExec case in locate).
 	variant tlsVariant
 }
 
@@ -89,9 +92,29 @@ func (v Var) String() string {
 
 // Locate resolves the variable in the process rm reads, mapped at bias.
 //
-// Turning the location into a descriptor eBPF can follow additionally needs the
-// process libc's DTV layout when the variable is in dynamic TLS (VarInfo).
-func (v Var) Locate(rm remotememory.RemoteMemory, bias libpf.Address) (VarLocation, error) {
+// Static TLS returns a valid descriptor and a nil pending location. Dynamic TLS
+// returns a zero descriptor and a pending location, whose VarInfo method builds
+// the descriptor once the process libc's DTV layout is available. Neither case
+// is an error. On error, the descriptor is zero and the pending location is nil.
+func (v Var) Locate(rm remotememory.RemoteMemory, bias libpf.Address,
+) (support.TLSVarInfo, *VarLocation, error) {
+	loc, err := v.locate(rm, bias)
+	if err != nil {
+		return support.TLSVarInfo{}, nil, err
+	}
+	info, err := loc.VarInfo(libc.DTVInfo{})
+	if errors.Is(err, ErrNeedDTV) {
+		pending := loc
+		return support.TLSVarInfo{}, &pending, nil
+	}
+	if err != nil {
+		return support.TLSVarInfo{}, nil, err
+	}
+	return info, nil, nil
+}
+
+// locate resolves the process-specific location without building a descriptor.
+func (v Var) locate(rm remotememory.RemoteMemory, bias libpf.Address) (VarLocation, error) {
 	switch v.access {
 	case accessLocalExec:
 		return staticLoc(v.addend)

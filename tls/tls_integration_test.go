@@ -286,17 +286,18 @@ func TestLocateInProcess(t *testing.T) {
 				require.NoError(t, err)
 				t.Logf("%s: %v", varName, v)
 
-				loc, err := v.Locate(rm, bias)
+				info, pending, err := v.Locate(rm, bias)
 				require.NoError(t, err)
 
-				require.Equal(t, tc.wantDynamic, loc.ModuleID != 0,
+				require.Equal(t, tc.wantDynamic, pending != nil,
 					"%s resolved to the wrong kind of TLS", varName)
-				if loc.ModuleID != 0 {
+				if pending != nil {
+					assert.Zero(t, info)
 					require.NotZero(t, dtv.Multiplier, "no DTV layout extracted from libc")
+					info, err = pending.VarInfo(dtv)
+					require.NoError(t, err)
 				}
-
-				info, err := loc.VarInfo(dtv)
-				require.NoError(t, err)
+				require.True(t, info.Valid)
 
 				addr, err := varAddress(rm, info, rep.tpBase)
 				require.NoError(t, err)
