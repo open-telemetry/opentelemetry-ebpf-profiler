@@ -351,7 +351,6 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
   if (!record->pythonUnwindState.py_frame) {
     increment_metric(metricID_UnwindPythonAttempts);
     error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);

@@ -106,9 +106,7 @@ import (
 	"sync"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -145,10 +143,7 @@ var dotnetGlobalInit = sync.OnceValue(func() error {
 })
 
 func GetLoader(_ Config) interpreter.Loader {
-	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
-		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindDotnet), ProgName: "unwind_dotnet"},
-		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindDotnet10), ProgName: "unwind_dotnet10"},
-	})
+	return interpreter.NewLoader(loader, nil)
 }
 
 func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {

@@ -20,6 +20,10 @@ func (is *InstanceStubs) UsesAnonymousMappings() bool {
 	return false
 }
 
+func (i *InstanceStubs) Detach(ebpf EbpfHandler, pid libpf.PID) error {
+	return nil
+}
+
 func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
 	process.Process, []process.RawMapping) error {
 	return nil
