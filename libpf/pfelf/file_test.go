@@ -6,6 +6,7 @@ package pfelf
 import (
 	"bytes"
 	"debug/buildinfo"
+	"debug/elf"
 	"go/version"
 	"os"
 	"os/exec"
@@ -50,14 +51,43 @@ func TestPFELFSymbols(t *testing.T) {
 	require.NoError(t, err)
 	defer ef.Close()
 
+	stdELF, err := elf.Open(exePath)
+	require.NoError(t, err)
+	defer stdELF.Close()
+	dynSyms, err := stdELF.DynamicSymbols()
+	require.NoError(t, err)
+	sections := make(map[libpf.SymbolName]uint16, len(dynSyms))
+	for _, sym := range dynSyms {
+		sections[libpf.SymbolName(sym.Name)] = uint16(sym.Section)
+	}
+	checkSection := func() {
+		sym, err := ef.LookupSymbol("func")
+		require.NoError(t, err)
+		require.Contains(t, sections, sym.Name)
+		assert.Equal(t, sections[sym.Name], sym.Shndx)
+	}
+
 	// Test GNU hash lookup
+	checkSection()
 	assert.Equal(t, libpf.SymbolValue(0x1000), lookupSymbolAddress(ef, "func"))
 	assert.Equal(t, libpf.SymbolValueInvalid, lookupSymbolAddress(ef, "not_existent"))
 
 	// Test SYSV lookup
 	ef.gnuHash.addr = 0
+	checkSection()
 	assert.Equal(t, libpf.SymbolValue(0x1000), lookupSymbolAddress(ef, "func"))
 	assert.Equal(t, libpf.SymbolValueInvalid, lookupSymbolAddress(ef, "not_existent"))
+
+	visited := 0
+	require.NoError(t, ef.VisitDynamicSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name != "" {
+			require.Contains(t, sections, sym.Name)
+			assert.Equal(t, sections[sym.Name], sym.Shndx)
+			visited++
+		}
+		return true
+	}))
+	require.Positive(t, visited)
 }
 
 func TestPFELFSections(t *testing.T) {
