@@ -525,8 +525,9 @@ typedef struct RubyProcInfo {
   // version of the Ruby interpreter.
   u32 version;
 
-  // Locates ruby_current_ec. Invalid for Ruby that resolves it through neither
-  // TLS path, which falls through to the ractor and global branches below.
+  // Locates ruby_current_ec. Invalid when it was not resolved, and for dynamic
+  // TLS until UpdateLibcInfo supplies the DTV layout; unwind_ruby then falls
+  // back to the ractor and global lookups.
   TLSVarInfo tls_ec;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
