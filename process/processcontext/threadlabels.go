@@ -6,7 +6,6 @@ package processcontext // import "go.opentelemetry.io/ebpf-profiler/process/proc
 import (
 	"errors"
 	"fmt"
-	"sync/atomic"
 	"unicode/utf8"
 
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
@@ -14,7 +13,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 )
 
 // Per-thread label schema, published as attributes per [OTEP 4947].
@@ -28,21 +26,6 @@ const (
 	// since it reads the key index as a single byte.
 	maxThreadCtxAttributeKeys = 256
 )
-
-// schemaRejected counts processes that published a thread-context schema the
-// agent refused. Swapped into the process manager's periodic metric summary.
-var schemaRejected atomic.Int64
-
-// GetAndResetMetrics returns the process-context counters and resets them to zero.
-// It is intended to be called once per metrics collection interval by the process manager.
-func GetAndResetMetrics() []metrics.Metric {
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDThreadContextSchemaRejected,
-			Value: metrics.MetricValue(schemaRejected.Swap(0)),
-		},
-	}
-}
 
 // threadContextInfo is one process's published per-thread label schema.
 type threadContextInfo struct {

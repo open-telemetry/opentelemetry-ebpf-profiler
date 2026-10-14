@@ -684,9 +684,9 @@ typedef struct GolangLabel {
 //   u64          frame_data[];
 //   u8           thread_labels[];
 //   GolangLabel  golang_labels[];
-// Each Trace.*_end is an exclusive byte offset excluding alignment padding.
-// The next section starts at the previous present section's end rounded up
-// to 8 bytes. Zero means absent.
+// The length of each dynamic portion is determined by the subsequent
+// Trace.*_end pointers. The _end pointers are byte aligned for accurate
+// length, but subsequent section start is aligned to 64-bits. Zero means absent.
 typedef u8 __attribute__((aligned(8))) TraceData[MAX_FRAME_DATA_SZ + MAX_FRAME_TRAILER_DATA_SZ];
 _Static_assert(sizeof(TraceData) % 8 == 0, "wrong size for TraceData");
 
