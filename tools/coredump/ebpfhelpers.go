@@ -146,12 +146,11 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 func __bpf_copy_frame(id C.u64, trace *C.Trace) {
 	ctx := ebpfContextMap[id]
 	if trace.kernel_frame_end != 0 {
-		panic(fmt.Sprintf("coredump trace unexpectedly contains %d kernel frames",
+		panic(fmt.Sprintf("coredump trace unexpectedly has kernel_frame_end %d",
 			trace.kernel_frame_end))
 	}
 	sz := trace.frame_data_end
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.variable_data[:sz]))
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
+	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz/8]), pfunsafe.FromSlice(trace.variable_data[:sz]))
+	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz/8]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
-	ctx.trace.NumKernelFrames = 0
 }

@@ -16,8 +16,7 @@ struct go_procs_t {
 
 static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct GoString *v)
 {
-  const u64 num_elems = sizeof(GolangLabel) / sizeof(trace->variable_data[0]);
-  GolangLabel *l      = reserve_variable_data(trace, num_elems, 0);
+  GolangLabel *l = reserve_variable_data(trace, sizeof(GolangLabel), 0);
   if (!l) {
     return false;
   }
@@ -35,7 +34,7 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
     return false;
   }
   l->val[vlen] = 0;
-  commit_variable_data(trace, num_elems);
+  commit_variable_data(trace, sizeof(GolangLabel));
 
   return true;
 }
@@ -109,7 +108,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   }
 
   // Limit extracted labels to MAX_GO_LABELS
-  const u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]) / 8;
+  const u16 max_end = record->trace.variable_data_end + sizeof(GolangLabel[MAX_GO_LABELS]);
 
   // If the map has more than 16 buckets we just don't support it, pprof maps are typically
   // small and if its a problem upgrading to Go 1.24+ is a potential solution.
@@ -203,7 +202,7 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
   if (!success) {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
-  record->trace.golang_label_end = record->trace.variable_data_end;
+  record->trace.golang_label_end = end_variable_data(&record->trace, sizeof(GolangLabel));
 
   send_trace(ctx, &record->trace);
   return 0;

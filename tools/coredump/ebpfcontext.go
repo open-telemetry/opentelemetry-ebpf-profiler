@@ -116,7 +116,6 @@ func (ec *ebpfContext) delMap(mapPtr unsafe.Pointer, key any) {
 func (ec *ebpfContext) resetTrace() {
 	ec.trace.FrameData = nil
 	ec.trace.NumFrames = 0
-	ec.trace.NumKernelFrames = 0
 }
 
 func (ec *ebpfContext) release() {
