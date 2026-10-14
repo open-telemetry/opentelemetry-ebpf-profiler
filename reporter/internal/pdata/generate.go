@@ -340,6 +340,10 @@ func (p *Pdata) setProfile(
 // each width-sized event group.
 func setSampleValues(sample pprofile.Sample, values []int64, index, width int) {
 	dst := sample.Values()
+	if width == 1 {
+		dst.FromRaw(values)
+		return
+	}
 	dst.FromRaw(nil)
 	for i := index; i < len(values); i += width {
 		dst.Append(values[i])

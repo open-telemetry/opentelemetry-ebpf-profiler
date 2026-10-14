@@ -77,7 +77,8 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	}
 
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleTypes: []samples.SampleType{{Type: "events", Unit: "count"}},
+		SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)

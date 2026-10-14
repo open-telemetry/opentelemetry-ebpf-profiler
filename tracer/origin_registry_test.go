@@ -13,7 +13,7 @@ import (
 )
 
 func TestOriginRegistryRegisterValidates(t *testing.T) {
-	derive := func(dst []int64, _ *samples.TraceEventMeta) []int64 { return append(dst, 0, 0) }
+	appendTwo := func(dst []int64, _ *samples.TraceEventMeta) []int64 { return append(dst, 0, 0) }
 	two := []samples.SampleType{{Type: "a", Unit: "count"}, {Type: "b", Unit: "count"}}
 
 	tests := map[string]struct {
@@ -21,18 +21,21 @@ func TestOriginRegistryRegisterValidates(t *testing.T) {
 		wantErr  string
 	}{
 		"no sample types": {
-			metadata: &samples.TypeMetadata{},
+			metadata: &samples.TypeMetadata{AppendValues: samples.AppendFirstContextValue},
 			wantErr:  "at least one sample type",
 		},
-		"several sample types without DeriveValues": {
-			metadata: &samples.TypeMetadata{SampleTypes: two},
-			wantErr:  "needs DeriveValues",
+		"without AppendValues": {
+			metadata: &samples.TypeMetadata{SampleTypes: two[:1]},
+			wantErr:  "needs AppendValues",
 		},
 		"one sample type": {
-			metadata: &samples.TypeMetadata{SampleTypes: two[:1]},
+			metadata: &samples.TypeMetadata{
+				SampleTypes:  two[:1],
+				AppendValues: samples.AppendFirstContextValue,
+			},
 		},
-		"several sample types with DeriveValues": {
-			metadata: &samples.TypeMetadata{SampleTypes: two, DeriveValues: derive},
+		"several sample types": {
+			metadata: &samples.TypeMetadata{SampleTypes: two, AppendValues: appendTwo},
 		},
 	}
 

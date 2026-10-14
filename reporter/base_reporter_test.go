@@ -30,13 +30,16 @@ var (
 				Value: 1e9 / 100,
 			},
 		}},
+		AppendValues: samples.AppendFirstContextValue,
 	}
 	profileTypeOffCPU = &samples.TypeMetadata{
 		SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
+		AppendValues: samples.AppendFirstContextValue,
 	}
 	profileTypeProbe = &samples.TypeMetadata{
-		SampleTypes: []samples.SampleType{{Type: "events", Unit: "count"}},
+		SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
 	}
 	profileTypeDerived = &samples.TypeMetadata{
 		SampleTypes: []samples.SampleType{
@@ -44,7 +47,7 @@ var (
 			{Type: "alloc_objects", Unit: "count"},
 		},
 		ReportValues: true,
-		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+		AppendValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
 			value := int64(meta.ContextValues[0])
 			size := int64(meta.ContextValues[2])
 			objects := int64(1)
@@ -239,7 +242,7 @@ func TestReportTraceEventRejectsWrongValueCount(t *testing.T) {
 			{Type: "space", Unit: "bytes"},
 			{Type: "objects", Unit: "count"},
 		},
-		DeriveValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+		AppendValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
 			return append(dst, int64(meta.ContextValues[0]))
 		},
 	}

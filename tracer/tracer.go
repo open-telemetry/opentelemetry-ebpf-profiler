@@ -1411,9 +1411,8 @@ func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error
 	if len(metadata.SampleTypes) == 0 {
 		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
 	}
-	if len(metadata.SampleTypes) > 1 && metadata.DeriveValues == nil {
-		return 0, fmt.Errorf("origin registry entry with %d sample types needs DeriveValues",
-			len(metadata.SampleTypes))
+	if metadata.AppendValues == nil {
+		return 0, fmt.Errorf("origin registry entry needs AppendValues")
 	}
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")

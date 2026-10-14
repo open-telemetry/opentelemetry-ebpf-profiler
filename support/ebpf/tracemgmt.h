@@ -663,41 +663,21 @@ static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
   return end;
 }
 
-// CHECK_CONTEXT_VALUES rejects, at build time, calls whose constant context
-// value count exceeds MAX_CONTEXT_VALUES. Non-constant counts are left to the
-// runtime check in reserve_context_values. diagnose_if is a clang extension;
-// other compilers (e.g. gcc in the coredump cgo build) get no check.
-#if __has_attribute(diagnose_if)
-  #define CHECK_CONTEXT_VALUES(n)                                                                  \
-    __attribute__((diagnose_if((n) > MAX_CONTEXT_VALUES, "too many context values", "error")))
-#else
-  #define CHECK_CONTEXT_VALUES(n)
-#endif
-
-// reserve_context_values reserves and zeroes the first 'n' slots of
-// variable_data for origin-specific context values. It must only be called on
-// a pristine record, before anything else is pushed. Returns false if 'n'
-// exceeds MAX_CONTEXT_VALUES, which is a caller bug.
-// prepare_trace calls it; use it directly only for records not set up there.
-static inline EBPF_INLINE bool reserve_context_values(Trace *trace, u8 n) CHECK_CONTEXT_VALUES(n)
+// push_context_values appends 'n' origin-specific context values to the trace
+// and returns them for the caller to fill in, like push_frame. Context values
+// must be pushed before unwind_trace; userspace rejects traces where they
+// follow kernel frames. Returns NULL if the values do not fit.
+static inline EBPF_INLINE u64 *push_context_values(Trace *trace, u8 n)
 {
-  if (n > MAX_CONTEXT_VALUES) {
-    return false;
-  }
-  u64 *values = (u64 *)trace->variable_data;
-  for (u32 i = 0; i < MAX_CONTEXT_VALUES; i++) {
-    values[i] = 0;
-  }
-  trace->variable_data_end = (u16)(n * sizeof(u64));
-  trace->context_value_end = trace->variable_data_end;
-  return true;
-}
+  const u16 values_sz = sizeof(u64[n]);
 
-// trace_context_values returns the context values reserved for the trace, for
-// the caller to fill in before unwinding.
-static inline EBPF_INLINE u64 *trace_context_values(Trace *trace)
-{
-  return (u64 *)trace->variable_data;
+  u64 *pos = reserve_variable_data(trace, values_sz, MAX_FRAME_TRAILER_DATA_SZ);
+  if (!pos) {
+    return NULL;
+  }
+  commit_variable_data(trace, values_sz);
+  trace->context_value_end = end_variable_data(trace, sizeof(u64));
+  return pos;
 }
 
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
@@ -1211,13 +1191,11 @@ static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, Unwin
 
 #endif // TESTING_COREDUMP
 
-// prepare_trace resets the per-CPU record, fills in the trace header and
-// reserves 'num_context_values' context values. It returns NULL if the trace
-// should be dropped. Callers fill in the values via trace_context_values before
-// handing the record to unwind_trace.
-static inline EBPF_INLINE PerCPURecord *prepare_trace(
-  u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp, u8 num_context_values)
-  CHECK_CONTEXT_VALUES(num_context_values)
+// prepare_trace resets the per-CPU record and fills in the trace header. It
+// returns NULL if the trace should be dropped. Callers may push context values
+// before handing the record to unwind_trace.
+static inline EBPF_INLINE PerCPURecord *
+prepare_trace(u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp)
 {
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
@@ -1243,9 +1221,6 @@ static inline EBPF_INLINE PerCPURecord *prepare_trace(
   trace->ktime  = trace_timestamp;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
-  }
-  if (!reserve_context_values(trace, num_context_values)) {
-    return NULL;
   }
   return record;
 }
@@ -1309,7 +1284,7 @@ exit:
 static inline EBPF_INLINE int collect_trace(
   struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp)
 {
-  PerCPURecord *record = prepare_trace(origin, pid, tid, group_leader, trace_timestamp, 0);
+  PerCPURecord *record = prepare_trace(origin, pid, tid, group_leader, trace_timestamp);
   if (!record) {
     return 0;
   }

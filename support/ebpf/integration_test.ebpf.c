@@ -9,12 +9,7 @@
 static EBPF_INLINE void
 send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel_frames)
 {
-  // Context values lead variable_data ahead of any kernel and user frames.
-  // Without kernel frames, reserve none, like sampling. With kernel frames,
-  // reserve sentinels to verify they survive stack capture and userspace
-  // decoding.
-  PerCPURecord *record = prepare_trace(
-    origin_id_sampling, pid, tid, 0, bpf_ktime_get_ns(), capture_kernel_frames ? 3 : 0);
+  PerCPURecord *record = prepare_trace(origin_id_sampling, pid, tid, 0, bpf_ktime_get_ns());
   if (!record) {
     return;
   }
@@ -26,11 +21,17 @@ send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
   trace->comm[3] = test_case;
+  // Context values lead variable_data ahead of any kernel and user frames.
+  // Without kernel frames, push none, like sampling. With kernel frames, push
+  // sentinels to verify they survive stack capture and userspace decoding.
   if (capture_kernel_frames) {
-    u64 *values = trace_context_values(trace);
-    values[0]   = 0x123456789abcdef0;
-    values[1]   = 0x2222222222222222;
-    values[2]   = 0x3333333333333333;
+    u64 *values = push_context_values(trace, 3);
+    if (!values) {
+      return;
+    }
+    values[0] = 0x123456789abcdef0;
+    values[1] = 0x2222222222222222;
+    values[2] = 0x3333333333333333;
     push_kernel_frames(ctx, trace);
   }
 

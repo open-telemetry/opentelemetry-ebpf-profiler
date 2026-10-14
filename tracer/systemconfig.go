@@ -843,6 +843,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 				Value: 1e9 / int64(cfg.SamplesPerSecond),
 			},
 		}},
+		AppendValues: samples.AppendFirstContextValue,
 	})
 	if err != nil {
 		return err

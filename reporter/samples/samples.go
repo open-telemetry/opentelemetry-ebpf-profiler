@@ -139,18 +139,17 @@ type TypeMetadata struct {
 	// exported profiles (e.g. off-CPU durations).
 	ReportValues bool
 
-	// DeriveValues appends one reportable value per SampleTypes entry for a
-	// single event. Nil appends int64(meta.ContextValues[0]), or 0 if there are
-	// no context values. The function must consume ContextValues synchronously
-	// because they alias a pooled trace.
-	DeriveValues func(dst []int64, meta *TraceEventMeta) []int64
+	// AppendValues appends one reportable value per SampleTypes entry for a
+	// single event. It is required; AppendFirstContextValue suits origins with
+	// a single sample type. The function must consume ContextValues
+	// synchronously because they alias a pooled trace.
+	AppendValues func(dst []int64, meta *TraceEventMeta) []int64
 }
 
-// AppendValues appends the reportable values for one event.
-func (m *TypeMetadata) AppendValues(dst []int64, meta *TraceEventMeta) []int64 {
-	if m.DeriveValues != nil {
-		return m.DeriveValues(dst, meta)
-	}
+// AppendFirstContextValue is the AppendValues for origins with a single sample
+// type. It appends int64(meta.ContextValues[0]), or 0 if there are no context
+// values.
+func AppendFirstContextValue(dst []int64, meta *TraceEventMeta) []int64 {
 	if len(meta.ContextValues) == 0 {
 		// Keep Values aligned with Timestamps for origins without a value.
 		return append(dst, 0)

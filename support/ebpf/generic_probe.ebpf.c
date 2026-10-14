@@ -22,12 +22,16 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx, const u64 *value)
 
   u64 ts = bpf_ktime_get_ns();
 
-  PerCPURecord *record = prepare_trace(origin_id_probe, pid, tid, group_leader, ts, value ? 1 : 0);
+  PerCPURecord *record = prepare_trace(origin_id_probe, pid, tid, group_leader, ts);
   if (!record) {
     return 0;
   }
   if (value) {
-    trace_context_values(&record->trace)[0] = *value;
+    u64 *values = push_context_values(&record->trace, 1);
+    if (!values) {
+      return 0;
+    }
+    values[0] = *value;
   }
   return unwind_trace(ctx, record, true);
 }
