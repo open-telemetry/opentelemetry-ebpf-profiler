@@ -147,12 +147,15 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	log.Debugf("PID %d apm.service.name: %s, trace socket: %s",
 		pid, procStorage.ServiceName, procStorage.TraceSocketPath)
 
-	return &Instance{
+	instance := &Instance{
 		serviceName: procStorage.ServiceName,
 		socket:      socket,
-		procInfo:    &procInfo,
 		pendingTLS:  pendingTLS,
-	}, nil
+	}
+	if pendingTLS != nil {
+		instance.procInfo = &procInfo
+	}
+	return instance, nil
 }
 
 func (d data) Unload(_ interpreter.EbpfHandler) {
@@ -195,6 +198,7 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		return err
 	}
 	i.pendingTLS = nil
+	i.procInfo = nil
 	log.Debugf("PID %d: located the APM correlation variable via the DTV", pid)
 	return nil
 }
