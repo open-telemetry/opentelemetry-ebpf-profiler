@@ -544,7 +544,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   // Pointer for an address to a rb_execution_context_struct struct.
   void *current_ctx_addr = NULL;
 
-  if (rubyinfo->tls_ec.valid) {
+  if (tls_var_valid(&rubyinfo->tls_ec)) {
     // With Ruby 3.x and its internal change of the execution model, we can no longer
     // access rb_execution_context_struct directly. We will look up the
     // ruby_current_ec from thread local storage, analogous to how it is done

@@ -57,9 +57,16 @@ typedef enum TLSReadResult {
   TLS_READ_ABSENT = -2,
 } TLSReadResult;
 
+// tls_var_valid reports whether the descriptor is ready for a TLS lookup.
+static inline EBPF_INLINE bool tls_var_valid(const TLSVarInfo *var)
+{
+  return var->valid;
+}
+
 // tls_read_var reads the pointer-sized value of the thread-local variable var
 // locates, in static or dynamic TLS. tsd_base comes from tsd_get_base, whose
 // failure each caller reports its own way.
+// The caller must verify tls_var_valid(var) before calling this function.
 static inline EBPF_INLINE TLSReadResult
 tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
 {

@@ -218,7 +218,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
   DEBUG_PRINT("Trace is within a process with APM integration enabled");
 
   // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
-  if (!proc->tls.valid) {
+  if (!tls_var_valid(&proc->tls)) {
     DEBUG_PRINT("APM correlation TLS variable not located yet");
     return;
   }
