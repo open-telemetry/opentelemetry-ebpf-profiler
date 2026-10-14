@@ -299,7 +299,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindApmIntReadSuccesses:                  metrics.IDUnwindApmIntReadSuccesses,
 	C.metricID_UnwindDotnetAttempts:                       metrics.IDUnwindDotnetAttempts,
 	C.metricID_UnwindDotnetFrames:                         metrics.IDUnwindDotnetFrames,
-	C.metricID_UnwindDotnetErrNoProcInfo:                  metrics.IDUnwindDotnetErrNoProcInfo,
 	C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 	C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 	C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,

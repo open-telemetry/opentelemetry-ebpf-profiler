@@ -136,14 +136,16 @@
     "description": "Ruby: Unable to read instruction sequence body"
   },
   {
+    "obsolete": true,
     "id": 3006,
     "name": "ruby_read_iseq_encoded",
-    "description": "Ruby: Unable to read the instruction sequence encoded size (deprecated)"
+    "description": "Ruby: Unable to read the instruction sequence encoded size"
   },
   {
+    "obsolete": true,
     "id": 3007,
     "name": "ruby_read_iseq_size",
-    "description": "Ruby: Unable to read the instruction sequence size (deprecated)"
+    "description": "Ruby: Unable to read the instruction sequence size"
   },
   {
     "id": 3008,
@@ -331,6 +333,7 @@
     "description": "V8: No entry for this process exists in the V8 process info array"
   },
   {
+    "obsolete": true,
     "id": 6000,
     "name": "dotnet_no_proc_info",
     "description": "Dotnet: No entry for this process exists in the dotnet process info array"

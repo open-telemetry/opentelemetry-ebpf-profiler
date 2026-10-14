@@ -1930,6 +1930,7 @@
     "id": 262
   },
   {
+    "obsolete": true,
     "description": "Number of times we didn't find an entry for this process in the dotnet process info array",
     "type": "counter",
     "name": "UnwindDotnetErrNoProcInfo",

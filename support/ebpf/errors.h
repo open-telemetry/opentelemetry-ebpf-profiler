@@ -16,9 +16,6 @@ typedef enum ErrorCode {
   // The trace stack was empty after unwinding completed
   ERR_EMPTY_STACK = 3,
 
-  // Deprecated: Failed to lookup entry in the per-CPU frame list
-  ERR_LOOKUP_PER_CPU_FRAME_LIST = 4,
-
   // Maximum number of tail calls was reached
   ERR_MAX_TAIL_CALLS = 5,
 
@@ -84,12 +81,6 @@ typedef enum ErrorCode {
 
   // Ruby: Unable to read instruction sequence body
   ERR_RUBY_READ_ISEQ_BODY = 3005,
-
-  // Ruby: Unable to read the instruction sequence encoded size (deprecated)
-  ERR_RUBY_READ_ISEQ_ENCODED = 3006,
-
-  // Ruby: Unable to read the instruction sequence size (deprecated)
-  ERR_RUBY_READ_ISEQ_SIZE = 3007,
 
   // Ruby: Unable to determine the base address for thread-specific data
   ERR_RUBY_READ_TSD_BASE = 3008,
@@ -203,9 +194,6 @@ typedef enum ErrorCode {
 
   // V8: No entry for this process exists in the V8 process info array
   ERR_V8_NO_PROC_INFO = 5002,
-
-  // Dotnet: No entry for this process exists in the dotnet process info array
-  ERR_DOTNET_NO_PROC_INFO = 6000,
 
   // Dotnet: Encountered a bad frame pointer during dotnet unwinding
   ERR_DOTNET_BAD_FP = 6001,

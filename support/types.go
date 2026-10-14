@@ -505,7 +505,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x59: metrics.IDUnwindApmIntReadSuccesses,
 	0x5a: metrics.IDUnwindDotnetAttempts,
 	0x5b: metrics.IDUnwindDotnetFrames,
-	0x5c: metrics.IDUnwindDotnetErrNoProcInfo,
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,

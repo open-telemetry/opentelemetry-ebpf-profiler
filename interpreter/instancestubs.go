@@ -20,7 +20,7 @@ func (is *InstanceStubs) UsesAnonymousMappings() bool {
 	return false
 }
 
-func (i *InstanceStubs) Detach(ebpf EbpfHandler, pid libpf.PID) error {
+func (is *InstanceStubs) Detach(EbpfHandler, libpf.PID) error {
 	return nil
 }
 
