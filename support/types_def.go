@@ -214,10 +214,7 @@ const (
 
 	LJCframeSpaceX86 = C.LUAJIT_CFRAME_SPACE_X86_64
 	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
-)
-
-const (
-	LJJitMarker = C.LUAJIT_JIT_MARKER
+	LJJitMarker      = C.LUAJIT_JIT_MARKER
 )
 
 var MetricsTranslation = []metrics.MetricID{

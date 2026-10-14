@@ -25,13 +25,20 @@ import (
 // Records all the "global" pointers we've seen.
 type vmMap map[libpf.Address]struct{}
 
-// Records all the JIT regions we've seen, value is SynchronizeMappings
-// generation.
-type regionMap map[process.RawMapping]int
-
 type regionKey struct {
 	start, end uint64
 }
+
+func keyForMapping(m *process.RawMapping) regionKey {
+	return regionKey{
+		start: m.Vaddr,
+		end:   m.Vaddr + m.Length,
+	}
+}
+
+// Records all the JIT regions we've seen, value is SynchronizeMappings
+// generation.
+type regionMap map[regionKey]uint32
 
 type luajitData struct {
 	// The distance from the "g" pointer in the GG_State struct to the start of the dispatch table.
@@ -50,7 +57,7 @@ type luajitInstance struct {
 	// Currently mapped prefixes for entire memory regions
 	prefixes map[regionKey][]lpm.Prefix
 
-	cycle int
+	cycle uint32
 }
 
 var (
@@ -165,29 +172,34 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 		if !m.IsAnonymous() || !m.IsExecutable() {
 			continue
 		}
-		l.jitRegions[*m] = cycle
+		l.jitRegions[keyForMapping(m)] = cycle
 	}
 
+	// NB: We can't use the approach of the v8 unwinder, which
+	// removes all the regions that don't appear in the latest
+	// generation, because regions can grow (and, in fact, they
+	// can grow _downward_). Rethink this approach and use a
+	// smarter algorithm if churn in pid interpreter mappings is a
+	// bottelneck.
+	//
 	// Remove old ones
-	for m, c := range l.jitRegions {
-		k := regionKey{start: m.Vaddr, end: m.Vaddr + m.Length}
+	for k, c := range l.jitRegions {
 		if c != cycle {
 			for _, prefix := range l.prefixes[k] {
 				if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
 					return errors.Join(err, fmt.Errorf("failed to delete prefix %v", prefix))
 				}
 			}
-			delete(l.jitRegions, m)
+			delete(l.jitRegions, k)
 			delete(l.prefixes, k)
 		}
 	}
 
 	// Add new ones
-	for m := range l.jitRegions {
-		k := regionKey{start: m.Vaddr, end: m.Vaddr + m.Length}
+	for k := range l.jitRegions {
 		if _, ok := l.prefixes[k]; !ok {
-			if err := l.addJITRegion(ebpf, pid, m.Vaddr, m.Vaddr+m.Length); err != nil {
-				return errors.Join(err, fmt.Errorf("failed to add JIT region %v", m))
+			if err := l.addJITRegion(ebpf, pid, k.start, k.end); err != nil {
+				return errors.Join(err, fmt.Errorf("failed to add JIT region %v", k))
 			}
 		}
 	}
