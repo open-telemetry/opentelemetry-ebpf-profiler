@@ -53,3 +53,72 @@ func TestTraceHash(t *testing.T) {
 		})
 	}
 }
+
+func TestTraceHashCustomLabels(t *testing.T) {
+	labels := map[String]String{
+		Intern("first"):  Intern("one"),
+		Intern("second"): Intern("two"),
+	}
+	trace := newHashTestTrace()
+	trace.CustomLabels = labels
+	hash := trace.Hash()
+	apmHash := newHashTestTrace().APMHash()
+	assert.Equal(t, apmHash, trace.APMHash())
+
+	reordered := make(map[String]String)
+	reordered[Intern("second")] = Intern("two")
+	reordered[Intern("first")] = Intern("one")
+
+	tests := map[string]struct {
+		labels map[String]String
+		equal  bool
+	}{
+		"same labels in reverse order": {labels: reordered, equal: true},
+		"different value": {labels: map[String]String{
+			Intern("first"):  Intern("different"),
+			Intern("second"): Intern("two"),
+		}},
+		"different key": {labels: map[String]String{
+			Intern("other"):  Intern("one"),
+			Intern("second"): Intern("two"),
+		}},
+		"swapped values": {labels: map[String]String{
+			Intern("first"):  Intern("two"),
+			Intern("second"): Intern("one"),
+		}},
+		"missing label": {labels: map[String]String{
+			Intern("first"): Intern("one"),
+		}},
+		"nil labels":   {},
+		"empty labels": {labels: map[String]String{}},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			other := newHashTestTrace()
+			other.CustomLabels = test.labels
+			otherHash := other.Hash()
+			assert.Equal(t, apmHash, other.APMHash())
+			if test.equal {
+				assert.Equal(t, hash, otherHash)
+			} else {
+				assert.NotEqual(t, hash, otherHash)
+			}
+			assert.Equal(t, otherHash, other.Hash())
+		})
+	}
+
+	empty := newHashTestTrace()
+	empty.CustomLabels = map[String]String{}
+	assert.Equal(t, newHashTestTrace().Hash(), empty.Hash())
+
+	emptyPair := newHashTestTrace()
+	emptyPair.CustomLabels = map[String]String{Intern(""): Intern("")}
+	assert.NotEqual(t, empty.Hash(), emptyPair.Hash())
+
+	differentFrames := &Trace{CustomLabels: labels}
+	assert.NotEqual(t, hash, differentFrames.Hash())
+
+	trace.CustomLabels[Intern("first")] = Intern("changed")
+	trace.Frames = nil
+	assert.Equal(t, hash, trace.Hash())
+}
