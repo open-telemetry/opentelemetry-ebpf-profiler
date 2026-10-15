@@ -162,7 +162,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->num_frames, state->pc);
+  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%lx ====", trace->num_frames, state->pc);
 
   unwinder_analyze_frame_pointer(&record->state);
 
@@ -181,7 +181,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
   u64 active_ranges = info->r + (the_active_code_index * info->ranges_sizeof);
 
   DEBUG_PRINT(
-    "beam: r: %llx, the_active_code_index: %d, active_ranges: %llx",
+    "beam: r: %lx, the_active_code_index: %d, active_ranges: %lx",
     info->r,
     the_active_code_index,
     active_ranges);
@@ -194,7 +194,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("beam: modules: %llx, n: %llu", ranges.info.modules, ranges.info.n);
+  DEBUG_PRINT("beam: modules: %lx, n: %lu", ranges.info.modules, ranges.info.n);
 
   u64 entry_ptr = ranges.info.modules;
   if (bpf_probe_read_user(&ranges.first, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
@@ -217,7 +217,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
+  DEBUG_PRINT("beam: valid addresses 0x%lx - 0x%lx", ranges.first.start, ranges.last.end);
 
   for (u64 i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++) {
     if (record->state.pc == info->beam_normal_exit) {

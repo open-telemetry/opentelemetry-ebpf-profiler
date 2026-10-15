@@ -1,8 +1,6 @@
 // Provides type definitions shared by the eBPF and Go components
 
-#ifndef OPTI_TYPES_H
-#define OPTI_TYPES_H
-
+#pragma once
 #include "errors.h"
 #include "kernel.h"
 
@@ -1195,5 +1193,3 @@ typedef struct ApmIntProcInfo {
 typedef struct ThreadContextProcInfo {
   TLSVarInfo tls;
 } ThreadContextProcInfo;
-
-#endif // OPTI_TYPES_H

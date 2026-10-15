@@ -33,7 +33,7 @@ static EBPF_INLINE ErrorCode push_v8(
   UnwindState *state, Trace *trace, u64 pointer_and_type, u64 delta_or_marker, bool return_address)
 {
   DEBUG_PRINT(
-    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx",
+    "Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
     delta_or_marker,
     pointer_and_type);
 
@@ -98,7 +98,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
-  unsigned long sp = state->sp, fp = state->fp, pc = state->pc;
+  u64 sp = state->sp, fp = state->fp, pc = state->pc;
   V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
 
   // All V8 frames have frame pointer. Check that the FP looks valid.
@@ -117,14 +117,14 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
   if (
-    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
+    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(u64)) {
     return ERR_UNREACHABLE;
   }
-  unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
-  unsigned long fp_function        = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
-  unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  u64 fp_marker          = *(u64 *)(scratch->fp_ctx + vi->fp_marker);
+  u64 fp_function        = *(u64 *)(scratch->fp_ctx + vi->fp_function);
+  u64 fp_bytecode_offset = *(u64 *)(scratch->fp_ctx + vi->fp_bytecode_offset);
   DEBUG_PRINT(
     "v8 VALUES: marker: %lx, func: %lx, bytecode offset: %lx",
     fp_marker,
@@ -244,7 +244,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     //   or other deoptimization reasons. This case is currently not handled.
 
     if (top && !state->return_address) {
-      unsigned long stk[3];
+      u64 stk[3];
       if (bpf_probe_read_user(stk, sizeof(stk), (void *)(sp - sizeof(stk)))) {
         DEBUG_PRINT("v8:  --> bad stack pointer");
         increment_metric(metricID_UnwindV8ErrBadFP);

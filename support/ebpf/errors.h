@@ -1,7 +1,6 @@
 /* WARNING: this file is auto-generated, DO NOT CHANGE MANUALLY */
 
-#ifndef OPTI_ERRORS_H
-#define OPTI_ERRORS_H
+#pragma once
 
 typedef enum ErrorCode {
   // Sentinel value for success: not actually an error
@@ -225,5 +224,3 @@ typedef enum ErrorCode {
   // Go: failed to read g and runtime.m prefix
   ERR_GO_RUNTIME_LOAD_FAILURE = 9002
 } ErrorCode;
-
-#endif // OPTI_ERRORS_H

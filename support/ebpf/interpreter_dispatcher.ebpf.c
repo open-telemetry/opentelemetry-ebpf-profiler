@@ -224,7 +224,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     return;
   }
 
-  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
+  DEBUG_PRINT("APM corr ptr should be at 0x%lx", tsd_base + proc->tls_offset);
 
   void *apm_corr_buf_ptr;
   if (bpf_probe_read_user(
@@ -251,7 +251,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 
   // WARN: we print this as little endian
   DEBUG_PRINT(
-    "APM transaction ID: %016llX, flags: 0x%02X",
+    "APM transaction ID: %016lx, flags: 0x%02x",
     trace->apm_transaction_id.as_int,
     corr_buf.trace_flags);
 }

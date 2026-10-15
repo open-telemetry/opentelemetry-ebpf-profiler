@@ -159,7 +159,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Push frame first. The PC is valid because a text section mapping was found.
     DEBUG_PRINT(
-      "Pushing %llx %llx to position %u on stack",
+      "Pushing %lx %lx to position %u on stack",
       record->state.text_section_id,
       record->state.text_section_offset,
       trace->num_frames);

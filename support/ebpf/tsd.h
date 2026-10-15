@@ -1,6 +1,4 @@
-#ifndef OPTI_TSD_H
-#define OPTI_TSD_H
-
+#pragma once
 #include "bpfdefs.h"
 
 // tpbase_offset is declared in native_stack_trace.ebpf.c
@@ -37,14 +35,14 @@ tsd_read(const TSDInfo *tsi, const void *tsd_base, u32 key, void **out)
 
   tsd_addr += index * tsi->multiplier;
 
-  DEBUG_PRINT("readTSD key %u from address 0x%lx", key, (unsigned long)tsd_addr);
+  DEBUG_PRINT("readTSD key %u from address 0x%lx", key, (u64)tsd_addr);
   if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
     goto err;
   }
   return 0;
 
 err:
-  DEBUG_PRINT("Failed to read TSD from 0x%lx", (unsigned long)tsd_addr);
+  DEBUG_PRINT("Failed to read TSD from 0x%lx", (u64)tsd_addr);
   increment_metric(metricID_UnwindErrBadTSDAddr);
   return -1;
 }
@@ -87,15 +85,14 @@ dtv_read(const DTVInfo *dtvi, const void *tsd_base, u32 module_id, u64 tls_offse
   }
 
   DEBUG_PRINT(
-    "readDTV module %d, entry_offset 0x%llx, tls_offset 0x%llx",
+    "readDTV module %d, entry_offset 0x%lx, tls_offset 0x%lx",
     module_id,
-    (unsigned long long)dtv_entry_offset,
-    (unsigned long long)tls_offset);
+    dtv_entry_offset,
+    tls_offset);
   return 0;
 
 err:
-  DEBUG_PRINT(
-    "Failed to read TLS via DTV from 0x%lx for module %d", (unsigned long)dtv_ptr, module_id);
+  DEBUG_PRINT("Failed to read TLS via DTV from 0x%lx for module %d", (u64)dtv_ptr, module_id);
   increment_metric(metricID_UnwindErrBadDTVRead);
   return -1;
 }
@@ -116,7 +113,7 @@ tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
 {
   if (var->dtv_pos == 0) {
     const void *tls_addr = tsd_base + var->tls_offset;
-    DEBUG_PRINT("readTLS static at 0x%lx", (unsigned long)tls_addr);
+    DEBUG_PRINT("readTLS static at 0x%lx", (u64)tls_addr);
     if (bpf_probe_read_user(out, sizeof(*out), tls_addr)) {
       return TLS_READ_ERR;
     }
@@ -184,5 +181,3 @@ static inline EBPF_INLINE int tsd_get_base(void **tsd_base)
   return 0;
 #endif
 }
-
-#endif // OPTI_TSD_H

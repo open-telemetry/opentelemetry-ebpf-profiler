@@ -1,8 +1,6 @@
 // Provides functionality for adding frames to traces and updating trace counts
 
-#ifndef OPTI_TRACEMGMT_H
-#define OPTI_TRACEMGMT_H
-
+#pragma once
 #include "bpfdefs.h"
 #include "errors.h"
 #include "extmaps.h"
@@ -33,7 +31,7 @@
 #endif // TESTING_COREDUMP
 
 #define DEBUG_UNWIND_STATE(state)                                                                  \
-  DEBUG_PRINT("pc: %llx sp: %llx fp: %llx", (state)->pc, (state)->sp, (state)->fp)
+  DEBUG_PRINT("pc: %lx sp: %lx fp: %lx", (state)->pc, (state)->sp, (state)->fp)
 
 // inverse_pac_mask is declared in native_stack_trace.ebpf.c
 extern u64 inverse_pac_mask;
@@ -586,7 +584,7 @@ static inline EBPF_INLINE bool unwinder_check_frame_size(UnwindState *state, siz
 {
   u64 fp = state->fp, fp_bound = state->fp_bound;
   if (fp < fp_bound || fp >= fp_bound + sz) {
-    DEBUG_PRINT("frame size too large: %llx / %llx", fp, fp_bound);
+    DEBUG_PRINT("frame size too large: %lx / %lx", fp, fp_bound);
     return false;
   }
   return true;
@@ -857,7 +855,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   if (is_kernel_address(pc)) {
     // This should not happen as we should only be unwinding usermode stacks.
     // Seeing PC point to a kernel address indicates a bad unwind.
-    DEBUG_PRINT("PC value %lx is a kernel address", (unsigned long)pc);
+    DEBUG_PRINT("PC value %lx is a kernel address", pc);
     state->error_metric = metricID_UnwindNativeErrKernelAddress;
     return ERR_NATIVE_UNEXPECTED_KERNEL_ADDRESS;
   }
@@ -867,7 +865,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
     // above the value defined in /proc/sys/vm/mmap_min_addr.
     // As such small PC values happens regularly (e.g. by handling or extracting the
     // PC value incorrectly) we track them but don't proceed with unwinding.
-    DEBUG_PRINT("small pc value %lx, ignoring", (unsigned long)pc);
+    DEBUG_PRINT("small pc value %lx, ignoring", pc);
     state->error_metric = metricID_UnwindNativeSmallPC;
     return ERR_NATIVE_SMALL_PC;
   }
@@ -880,7 +878,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   // Check if we have the data for this virtual address
   PIDPageMappingInfo *val = bpf_map_lookup_elem(&pid_page_to_mapping_info, &key);
   if (!val) {
-    DEBUG_PRINT("Failure to look up interval memory mapping for PC 0x%lx", (unsigned long)pc);
+    DEBUG_PRINT("Failure to look up interval memory mapping for PC 0x%lx", pc);
     state->error_metric = metricID_UnwindNativeErrWrongTextSection;
     return ERR_NATIVE_NO_PID_PAGE_MAPPING;
   }
@@ -889,12 +887,9 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   state->text_section_id     = val->file_id;
   state->text_section_offset = pc - state->text_section_bias;
   DEBUG_PRINT(
-    "Text section id for PC %lx is %llx (unwinder %d)",
-    (unsigned long)pc,
-    state->text_section_id,
-    *unwinder);
+    "Text section id for PC %lx is %lx (unwinder %d)", pc, state->text_section_id, *unwinder);
   DEBUG_PRINT(
-    "Text section bias is %llx, and offset is %llx",
+    "Text section bias is %lx, and offset is %lx",
     state->text_section_bias,
     state->text_section_offset);
 
@@ -1106,10 +1101,9 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
 // to bpf_task_pt_regs which is emulated to support older kernels.
 // Once kernel requirement is increased to 5.15 this can be replaced with
 // the bpf_task_pt_regs() helper.
-static inline EBPF_INLINE long get_task_pt_regs(struct task_struct *task)
+static inline EBPF_INLINE u64 get_task_pt_regs(struct task_struct *task)
 {
-  u64 stack_ptr = (u64)task + task_stack_offset;
-  long stack_base;
+  u64 stack_base, stack_ptr = (u64)task + task_stack_offset;
   if (bpf_probe_read_kernel(&stack_base, sizeof(stack_base), (void *)stack_ptr)) {
     return 0;
   }
@@ -1153,7 +1147,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
   if (!ptregs_is_usermode(ctx)) {
     // Use the current task's entry pt_regs
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    long ptregs_addr         = get_task_pt_regs(task);
+    u64 ptregs_addr          = get_task_pt_regs(task);
 
     struct pt_regs regs;
     if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void *)ptregs_addr)) {
@@ -1270,5 +1264,3 @@ exit:
   DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
   return -1;
 }
-
-#endif

@@ -61,7 +61,7 @@ static EBPF_INLINE int process_php_frame(
         &zend_function, sizeof(void *), execute_data + phpinfo->zend_execute_data_function)) {
     DEBUG_PRINT(
       "Failed to read current_execute_data->func (0x%lx)",
-      (unsigned long)(execute_data + phpinfo->zend_execute_data_function));
+      (u64)execute_data + phpinfo->zend_execute_data_function);
     return metricID_UnwindPHPErrBadZendExecuteData;
   }
 
@@ -78,7 +78,7 @@ static EBPF_INLINE int process_php_frame(
   u8 func_type;
   if (bpf_probe_read_user(
         &func_type, sizeof(func_type), zend_function + phpinfo->zend_function_type)) {
-    DEBUG_PRINT("Failed to read execute_data->func->type (0x%lx)", (unsigned long)zend_function);
+    DEBUG_PRINT("Failed to read execute_data->func->type (0x%lx)", (u64)zend_function);
     return metricID_UnwindPHPErrBadZendFunction;
   }
 
@@ -90,7 +90,7 @@ static EBPF_INLINE int process_php_frame(
           &zend_op, sizeof(void *), execute_data + phpinfo->zend_execute_data_opline)) {
       DEBUG_PRINT(
         "Failed to read execute_data->opline (0x%lx)",
-        (unsigned long)(execute_data + phpinfo->zend_execute_data_opline));
+        (u64)execute_data + phpinfo->zend_execute_data_opline);
       return metricID_UnwindPHPErrBadZendExecuteData;
     }
 
@@ -98,7 +98,7 @@ static EBPF_INLINE int process_php_frame(
     if (bpf_probe_read_user(&lineno, sizeof(u32), zend_op + phpinfo->zend_op_lineno)) {
       DEBUG_PRINT(
         "Failed to read executor_globals->opline->lineno (0x%lx)",
-        (unsigned long)(zend_op + phpinfo->zend_op_lineno));
+        (u64)zend_op + phpinfo->zend_op_lineno);
       return metricID_UnwindPHPErrBadZendOpline;
     }
 
@@ -106,8 +106,7 @@ static EBPF_INLINE int process_php_frame(
     // so we can reuse it in walk_php_stack
     if (bpf_probe_read_user(
           type_info, sizeof(u32), execute_data + phpinfo->zend_execute_data_this_type_info)) {
-      DEBUG_PRINT(
-        "Failed to read execute_data->This.type_info (0x%lx)", (unsigned long)execute_data);
+      DEBUG_PRINT("Failed to read execute_data->This.type_info (0x%lx)", (u64)execute_data);
       return metricID_UnwindPHPErrBadZendExecuteData;
     }
   }
@@ -116,7 +115,7 @@ static EBPF_INLINE int process_php_frame(
   // because lineno is 32-bits too.
   u64 lineno_and_type_info = ((u64)*type_info) << 32 | lineno;
 
-  DEBUG_PRINT("Pushing PHP 0x%lx %u", (unsigned long)zend_function, lineno);
+  DEBUG_PRINT("Pushing PHP 0x%lx %u", (u64)zend_function, lineno);
   if (
     push_php(&record->state, trace, (u64)zend_function, lineno_and_type_info, is_jitted) !=
     ERR_OK) {
@@ -155,15 +154,14 @@ static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo
           sizeof(void *),
           execute_data + phpinfo->zend_execute_data_prev_execute_data)) {
       DEBUG_PRINT(
-        "Failed to read current_execute_data->prev_execute_data (0x%lx)",
-        (unsigned long)execute_data);
+        "Failed to read current_execute_data->prev_execute_data (0x%lx)", (u64)execute_data);
       increment_metric(metricID_UnwindPHPErrBadZendExecuteData);
       goto err;
     }
 
     // Check end-of-stack and end of current interpreter loop stack conditions
     if (!execute_data || (mixed_traces && (type_info & ZEND_CALL_TOP))) {
-      DEBUG_PRINT("Top-of-stack, with next execute_data=0x%lx", (unsigned long)execute_data);
+      DEBUG_PRINT("Top-of-stack, with next execute_data=0x%lx", (u64)execute_data);
       // JIT'd PHP code needs special support for recovering the return address on both amd64
       // and arm.
       // Essentially we have two cases here:
@@ -231,7 +229,7 @@ static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
           (void *)phpinfo->current_execute_data)) {
       DEBUG_PRINT(
         "Failed to read executor_globals.current_execute data (0x%lx)",
-        (unsigned long)phpinfo->current_execute_data);
+        phpinfo->current_execute_data);
       increment_metric(metricID_UnwindPHPErrBadCurrentExecuteData);
       goto exit;
     }
@@ -253,8 +251,7 @@ static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
 #endif
 
   DEBUG_PRINT(
-    "Building PHP stack (execute_data = 0x%lx)",
-    (unsigned long)record->phpUnwindState.zend_execute_data);
+    "Building PHP stack (execute_data = 0x%lx)", (u64)record->phpUnwindState.zend_execute_data);
 
   // Unwind one call stack or unrolled length, and continue
   unwinder = walk_php_stack(record, phpinfo, is_jitted);
