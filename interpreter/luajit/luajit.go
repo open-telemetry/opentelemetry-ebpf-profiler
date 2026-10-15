@@ -180,7 +180,7 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 	// generation, because regions can grow (and, in fact, they
 	// can grow _downward_). Rethink this approach and use a
 	// smarter algorithm if churn in pid interpreter mappings is a
-	// bottelneck.
+	// bottleneck.
 	//
 	// Remove old ones
 	for k, c := range l.jitRegions {
