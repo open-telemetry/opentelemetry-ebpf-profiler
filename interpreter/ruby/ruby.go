@@ -318,8 +318,7 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	cdata := support.RubyProcInfo{
 		Version: r.version,
 
-		Current_ctx_ptr: uint64(r.currentCtxPtr + bias),
-		Tls_ec:          tlsEC,
+		Tls_ec: tlsEC,
 
 		Vm_stack:      r.vmStructs.execution_context_struct.vm_stack,
 		Vm_stack_size: r.vmStructs.execution_context_struct.vm_stack_size,
@@ -344,6 +343,9 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Size_of_value: r.vmStructs.size_of_value,
 
 		Running_ec: r.vmStructs.rb_ractor_struct.running_ec,
+	}
+	if r.currentCtxPtr != 0 {
+		cdata.Current_ctx_ptr = uint64(r.currentCtxPtr + bias)
 	}
 
 	if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(&cdata)); err != nil {
@@ -1439,13 +1441,19 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 	return rubyVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
 
-func GetLoader(_ Config) interpreter.Loader {
-	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
-		{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindRuby), ProgName: "unwind_ruby"},
-	})
+func GetLoader(cfg Config) interpreter.Loader {
+	return interpreter.NewLoader(
+		func(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+			return loader(ebpf, info, cfg)
+		},
+		[]interpreter.InterpreterResource{
+			{MapName: BPFMapName, ProgID: uint32(support.ProgUnwindRuby), ProgName: "unwind_ruby"},
+		})
 }
 
-func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
+	cfg Config,
+) (interpreter.Data, error) {
 	isBinRuby := binRubyRegex.MatchString(info.FileName())
 	if !libRubyRegex.MatchString(info.FileName()) && !isBinRuby {
 		return nil, nil
@@ -1567,13 +1575,16 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// keeps it local does not: its offset within the TLS block then lives
 	// nowhere but .symtab, and the relocations reaching it carry no symbol.
 	var tlsEC *tls.Var
-	if currentEcSym != nil {
+	if currentEcSym != nil && !cfg.DisableTLS {
 		v, resolveErr := tls.Resolve(ef, currentEcSym)
 		if resolveErr != nil {
 			log.Debugf("failed to resolve %v: %v", currentEcSymbolName, resolveErr)
 		} else {
 			tlsEC = &v
 		}
+	}
+	if cfg.DisableECFallback {
+		currentCtxPtr = 0
 	}
 
 	log.Debugf("Discovered EC %v, fallback ctx %x, interp ranges: %v, global symbols: %x",

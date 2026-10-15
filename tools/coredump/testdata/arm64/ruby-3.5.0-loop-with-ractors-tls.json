@@ -1,5 +1,10 @@
 {
   "coredump-ref": "7ff73caaa1444e177b0377aa4ebbe79a427aea61113ef5ea6844e4d3aa1fd7bb",
+  "interpreters": {
+    "ruby": {
+      "disable_ec_fallback": true
+    }
+  },
   "threads": [
     {
       "lwp": 910976,
