@@ -333,7 +333,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
-  trace->frame_data_end = trace->variable_data_end;
+  trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
   // Does not return once it dispatches, so anything below runs only when the
   // Go path did not fill custom labels.
