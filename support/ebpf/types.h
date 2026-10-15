@@ -589,8 +589,11 @@ typedef struct RubyProcInfo {
 } RubyProcInfo;
 
 // V8ProcInfo is a container for the data needed to build a stack trace for a V8 process.
+// Fields are ordered by size so that there is no padding between them.
 typedef struct V8ProcInfo {
+  u64 default_isolate_group;
   u32 version;
+  u32 js_dispatch_table_offset;
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
   u8 off_HeapObject_map, off_Map_instancetype, off_JSFunction_code, off_JSFunction_shared;
@@ -598,6 +601,7 @@ typedef struct V8ProcInfo {
   u8 off_Code_instruction_start, off_Code_instruction_size, off_Code_flags;
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;
+  u8 leaptiering;
 } V8ProcInfo;
 
 // BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.
