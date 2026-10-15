@@ -423,3 +423,31 @@ func TestEntryDetection(t *testing.T) {
 		})
 	}
 }
+
+func TestDefCFAOffsetRebasesLostState(t *testing.T) {
+	// The CFA offsets a CoreCLR DelayLoad_Helper stub encodes. The prologue
+	// establishes a 240 byte frame, the first epilogue releases it down to 56
+	// and returns, and the second epilogue then subtracts its own 136 byte
+	// release from that leftover 56 instead of from 240, so everything it
+	// encodes lands below the stack pointer.
+	encoded := []sleb128{8, 24, 32, 240, 104, 96, 88, 80, 72, 64, 56,
+		-80, -88, -96, -104, -112, -120, -128, -136, -144, -152, -160, -168, -176}
+	// Rebased onto the established frame the same descent describes real
+	// frames again, and ends with the return address alone on the stack.
+	expected := []sleb128{8, 24, 32, 240, 104, 96, 88, 80, 72, 64, 56,
+		104, 96, 88, 80, 72, 64, 56, 48, 40, 32, 24, 16, 8}
+
+	st := state{cur: newVMRegs(elf.EM_X86_64)}
+	for i, off := range encoded {
+		st.defCFAOffset(off)
+		assert.Equal(t, expected[i], st.cur.cfa.off, "offset index %d", i)
+	}
+
+	// An FDE that does save its state encodes the offsets it meant to, so the
+	// same descent is left alone and stays for getUnwindInfoX86 to reject.
+	st = state{cur: newVMRegs(elf.EM_X86_64), cfaSaved: true}
+	for i, off := range encoded {
+		st.defCFAOffset(off)
+		assert.Equal(t, off, st.cur.cfa.off, "saved state, offset index %d", i)
+	}
+}
