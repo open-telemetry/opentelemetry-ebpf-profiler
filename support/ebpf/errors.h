@@ -37,9 +37,6 @@ typedef enum ErrorCode {
   // Hotspot: No entry for this process exists in the Hotspot process info array
   ERR_HOTSPOT_NO_PROC_INFO = 1005,
 
-  // Python: Unable to read current PyCodeObject
-  ERR_PYTHON_BAD_CODE_OBJECT_ADDR = 2000,
-
   // Python: No entry for this process exists in the Python process info array
   ERR_PYTHON_NO_PROC_INFO = 2001,
 
@@ -103,9 +100,6 @@ typedef enum ErrorCode {
   // Ruby: Exceeded maximum EP checks while locating CME
   ERR_RUBY_READ_CME_MAX_EP = 3020,
 
-  // Ruby: Failed to pack additional into spare bytes of Frame field
-  ERR_RUBY_PACK_FRAME = 3021,
-
   // Ruby: Unable to read current thread
   ERR_RUBY_READ_CURRENT_THREAD = 3030,
 
@@ -140,9 +134,6 @@ typedef enum ErrorCode {
   // Native: The stack delta read from the delta map is marked as invalid
   ERR_NATIVE_STACK_DELTA_INVALID = 4005,
 
-  // Native: The stack delta read from the delta map is a stop record
-  ERR_NATIVE_STACK_DELTA_STOP = 4006,
-
   // Native: Unable to read the next instruction pointer from memory
   ERR_NATIVE_PC_READ = 4007,
 
@@ -151,9 +142,6 @@ typedef enum ErrorCode {
 
   // Native: Unable to read the kernel-mode registers
   ERR_NATIVE_READ_KERNELMODE_REGS = 4009,
-
-  // Native: Unable to read the IRQ stack link
-  ERR_NATIVE_CHASE_IRQ_STACK_LINK = 4010,
 
   // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode
   // stack
