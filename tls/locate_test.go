@@ -112,9 +112,14 @@ func TestLocate(t *testing.T) {
 			want: VarLocation{ModuleID: 3, Offset: 0x40},
 		},
 		"general-dynamic with an unapplied relocation": {
-			v:          Var{access: accessGeneralDynamic, elfAddr: elfAddr, variant: variantII},
-			mem:        memory{slotAddr: words(0, 0x40)},
-			wantAnyErr: true,
+			v:       Var{access: accessGeneralDynamic, elfAddr: elfAddr, variant: variantII},
+			mem:     memory{slotAddr: words(0, 0x40)},
+			wantErr: ErrUnresolved,
+		},
+		"local-dynamic with an unapplied relocation": {
+			v:       Var{access: accessLocalDynamic, elfAddr: elfAddr, variant: variantII},
+			mem:     memory{slotAddr: words(0)},
+			wantErr: ErrUnresolved,
 		},
 		"local-dynamic": {
 			// The relocation resolves the module only. The offset is static.

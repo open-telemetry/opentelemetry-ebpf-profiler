@@ -22,15 +22,6 @@
 #define DOTNET_CODE_JIT       0x1f
 #define DOTNET_CODE_FLAG_LEAF 0x80
 
-// Map from dotnet process IDs to a structure containing addresses of variables
-// we require in order to build the stack trace
-struct dotnet_procs_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u32);
-  __type(value, DotnetProcInfo);
-  __uint(max_entries, 1024);
-} dotnet_procs SEC(".maps");
-
 typedef ErrorCode (*find_code_start_f)(PerCPURecord *record, u64 pc, u64 *code_start);
 
 // Nibble map tunables
@@ -420,19 +411,10 @@ static EBPF_INLINE int unwind_dotnet_core(
     return -1;
   }
 
-  Trace *trace = &record->trace;
-  u32 pid      = trace->pid;
+  Trace *trace    = &record->trace;
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
   DEBUG_PRINT("==== unwind_dotnet %d ====", trace->num_frames);
-
-  int unwinder       = PROG_UNWIND_STOP;
-  ErrorCode error    = ERR_OK;
-  DotnetProcInfo *vi = bpf_map_lookup_elem(&dotnet_procs, &pid);
-  if (!vi) {
-    DEBUG_PRINT("dotnet: no DotnetProcInfo for this pid");
-    error = ERR_DOTNET_NO_PROC_INFO;
-    increment_metric(metricID_UnwindDotnetErrNoProcInfo);
-    goto exit;
-  }
 
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
