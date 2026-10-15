@@ -5,7 +5,7 @@
     'helpers:pinGitHubActionDigestsToSemver',
   ],
   postUpdateOptions: [
-    'gomodTidy',
+    'gomodTidyAll',
   ],
   ignorePaths: [
     'LICENSES/**',
