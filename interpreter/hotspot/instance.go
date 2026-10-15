@@ -813,15 +813,7 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
-	// Only analyze stubs we do not track yet, the boundary sweep is expensive.
-	// This function is the only writer of d.stubs, so the snapshot cannot go stale.
-	known := func(start libpf.Address) bool {
-		stubs := d.stubs.RLock()
-		defer d.stubs.RUnlock(&stubs)
-		_, exists := (*stubs)[start]
-		return exists
-	}
-	allStubs := findStubBounds(vmd, d.bias, d.rm, known)
+	allStubs := d.findStubBounds(vmd)
 
 	stubs := d.stubs.WLock()
 	defer d.stubs.WUnlock(&stubs)
