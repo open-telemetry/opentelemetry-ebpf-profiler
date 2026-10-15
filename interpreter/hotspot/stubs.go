@@ -91,6 +91,8 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 	slices.SortFunc(stubs, compareStubRoutine)
 
 	filtered := make([]StubRoutine, 0, len(stubs))
+	// Scratch buffer for the NOP sweep, reused for all blocks of all stubs.
+	block := make([]byte, CodeAlign)
 	for i := 0; i < len(stubs); i++ {
 		cur := &stubs[i]
 
@@ -126,7 +128,6 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 			const NopARM4 = 0xD503201F
 			const NopAMD64 = 0x90
 
-			block := make([]byte, CodeAlign)
 			if err := rm.Read(p-CodeAlign, block); err != nil {
 				continue
 			}
