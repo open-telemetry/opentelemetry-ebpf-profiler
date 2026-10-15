@@ -93,6 +93,13 @@ type hotspotInstance struct {
 
 	// stubs stores all known stub routine regions.
 	stubs xsync.RWMutex[map[libpf.Address]StubRoutine]
+
+	// stubPasses is the number of completed stub scans (see SynchronizeMappings).
+	stubPasses int
+
+	// frameSeen is set by Symbolize once the unwinder has delivered a Java frame,
+	// which implies that the JVM has finished booting and generating its stubs.
+	frameSeen atomic.Bool
 }
 
 func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -885,9 +892,36 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return nil
 	}
 
-	d.updateStubMappings(vmd, ebpf, pid)
+	d.syncStubMappings(vmd, ebpf, pid)
 
 	return nil
+}
+
+// syncStubMappings scans for stubs at most twice per instance, as the JVM generates
+// them only during boot and scanning is expensive (remote reads):
+//  1. once after the main attachment is done, and
+//  2. once after the first Java frame was received: that proves boot is complete, so
+//     everything generated since pass 1 is picked up.
+func (d *hotspotInstance) syncStubMappings(vmd *hotspotVMData,
+	ebpf interpreter.EbpfHandler, pid libpf.PID,
+) {
+	const maxStubPasses = 2
+
+	if d.stubPasses >= maxStubPasses {
+		return
+	}
+	// Sample before scanning: a frame seen now implies the scan below is post-boot.
+	seen := d.frameSeen.Load()
+	if d.stubPasses == 1 && !seen {
+		return
+	}
+
+	d.updateStubMappings(vmd, ebpf, pid)
+	d.stubPasses++
+	if seen {
+		// The scan ran after boot completed, nothing more to find.
+		d.stubPasses = maxStubPasses
+	}
 }
 
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
@@ -903,6 +937,10 @@ func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ 
 	subtype := uint32(ef.Variable(1)>>60) & 0xf
 	ripOrBci := uint32(ef.Variable(1)>>32) & 0x0fffffff
 	ptrCheck := uint32(ef.Variable(1))
+
+	if !d.frameSeen.Load() {
+		d.frameSeen.Store(true)
+	}
 
 	var err error
 	sfCounter := successfailurecounter.New(&d.successCount, &d.failCount)
