@@ -333,8 +333,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}
 
 	cdata := support.RubyProcInfo{
-		Version: r.version,
-
 		Current_ctx_ptr:              uint64(r.currentCtxPtr + bias),
 		Current_ec_tpbase_tls_offset: tlsOffset,
 		Current_ec_tls_offset:        uint64(r.currentEcTlsOffset),
@@ -350,9 +348,10 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Size_of_control_frame_struct: r.vmStructs.control_frame_struct.size_of_control_frame_struct,
 		Thread_ptr:                   r.vmStructs.execution_context_struct.thread_ptr,
 
-		Thread_vm:    r.vmStructs.thread_struct.vm,
-		Has_objspace: r.hasObjspace,
-		Vm_objspace:  r.vmStructs.vm_struct.gc_objspace,
+		Thread_vm:        r.vmStructs.thread_struct.vm,
+		Has_objspace:     r.hasObjspace,
+		No_native_resume: r.version < rubyVersion(2, 6, 0),
+		Vm_objspace:      r.vmStructs.vm_struct.gc_objspace,
 
 		Objspace_flags:         r.vmStructs.objspace.flags,
 		Objspace_size_of_flags: r.vmStructs.objspace.size_of_flags,

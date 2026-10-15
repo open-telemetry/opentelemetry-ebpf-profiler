@@ -578,9 +578,6 @@ const (
 	// Number of unwound dotnet frames
 	IDUnwindDotnetFrames = 262
 
-	// Number of times we didn't find an entry for this process in the dotnet process info array
-	IDUnwindDotnetErrNoProcInfo = 263
-
 	// Number of failures to read dotnet frame pointer data
 	IDUnwindDotnetErrBadFP = 264
 
