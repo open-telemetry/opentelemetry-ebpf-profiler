@@ -271,18 +271,6 @@ enum {
   // number of times an unwind_info_array index was invalid
   metricID_UnwindNativeErrBadUnwindInfoIndex,
 
-  // number of failures to get TSD base for APM correlation
-  metricID_UnwindApmIntErrReadTsdBase,
-
-  // number of failures read the APM correlation pointer
-  metricID_UnwindApmIntErrReadCorrBufPtr,
-
-  // number of failures read the APM correlation buffer
-  metricID_UnwindApmIntErrReadCorrBuf,
-
-  // number of successful reads of APM correlation info
-  metricID_UnwindApmIntReadSuccesses,
-
   // number of attempted Dotnet unwinds
   metricID_UnwindDotnetAttempts,
 
@@ -617,20 +605,6 @@ typedef struct __attribute__((packed)) SpanTraceInfo {
   ApmTraceID trace_id;
   ApmSpanID span_id;
 } SpanTraceInfo;
-
-// Defines the format of the APM correlation TLS buffer.
-//
-// Specification:
-// https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#thread-local-storage-layout
-typedef struct __attribute__((packed)) ApmCorrelationBuf {
-  u16 layout_minor_ver;
-  u8 valid;
-  u8 trace_present;
-  u8 trace_flags;
-  ApmTraceID trace_id;
-  ApmSpanID span_id;
-  ApmSpanID transaction_id;
-} ApmCorrelationBuf;
 
 typedef struct GolangLabel {
   u8 key[16];
@@ -1172,12 +1146,6 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE32_BIT 0x00000010
 #define PSR_MODE_MASK  0x0000000f
 #define PSR_MODE_EL0t  0x00000000
-
-typedef struct ApmIntProcInfo {
-  // Invalid until located: an agent library in dynamic TLS stays so until
-  // UpdateLibcInfo supplies the DTV layout.
-  TLSVarInfo tls;
-} ApmIntProcInfo;
 
 // ThreadContextProcInfo is a container for the data needed to locate the
 // thread context TLS variable of a process.

@@ -41,7 +41,6 @@ extern struct unwind_info_array_t unwind_info_array;
 
 // References to maps in alphabetical order that
 // are needed only for testing.
-extern struct apm_int_procs_t apm_int_procs;
 extern struct beam_procs_t beam_procs;
 extern struct hotspot_procs_t hotspot_procs;
 extern struct luajit_procs_t luajit_procs;

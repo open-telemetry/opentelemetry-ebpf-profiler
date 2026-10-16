@@ -140,13 +140,6 @@ struct traces_ctx_v1_t {
   __uint(max_entries, 1 << 14);
 } traces_ctx_v1 SEC(".maps");
 
-struct apm_int_procs_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u32);
-  __type(value, ApmIntProcInfo);
-  __uint(max_entries, 128);
-} apm_int_procs SEC(".maps");
-
 struct thread_context_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, u32);
@@ -205,61 +198,6 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
   trace->apm_transaction_id.as_int = info->span_id.as_int;
 }
 
-static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
-{
-  u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
-  ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
-  if (!proc) {
-    return;
-  }
-
-  DEBUG_PRINT("Trace is within a process with APM integration enabled");
-
-  // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
-  if (!tls_var_valid(&proc->tls)) {
-    DEBUG_PRINT("APM correlation TLS variable not located yet");
-    return;
-  }
-
-  u64 tsd_base;
-  if (tsd_get_base((void **)&tsd_base) != 0) {
-    increment_metric(metricID_UnwindApmIntErrReadTsdBase);
-    DEBUG_PRINT("Failed to get TSD base for APM integration");
-    return;
-  }
-
-  void *apm_corr_buf_ptr;
-  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &apm_corr_buf_ptr);
-  if (rc == TLS_READ_ERR) {
-    increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
-    DEBUG_PRINT("Failed to read APM correlation buffer pointer");
-  }
-  if (rc != TLS_READ_OK) {
-    return;
-  }
-
-  ApmCorrelationBuf corr_buf;
-  if (bpf_probe_read_user(&corr_buf, sizeof(corr_buf), apm_corr_buf_ptr)) {
-    increment_metric(metricID_UnwindApmIntErrReadCorrBuf);
-    DEBUG_PRINT("Failed to read APM correlation buffer");
-    return;
-  }
-
-  if (corr_buf.trace_present && corr_buf.valid) {
-    trace->apm_trace_id.as_int.hi    = corr_buf.trace_id.as_int.hi;
-    trace->apm_trace_id.as_int.lo    = corr_buf.trace_id.as_int.lo;
-    trace->apm_transaction_id.as_int = corr_buf.transaction_id.as_int;
-  }
-
-  increment_metric(metricID_UnwindApmIntReadSuccesses);
-
-  // WARN: we print this as little endian
-  DEBUG_PRINT(
-    "APM transaction ID: %016llX, flags: 0x%02X",
-    trace->apm_transaction_id.as_int,
-    corr_buf.trace_flags);
-}
-
 // Stub: only looks the process up, so thread_context_procs stays loaded
 // regardless of whether the tracer is enabled. Reading and decoding the
 // thread context lands in a later change.
@@ -281,13 +219,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
-  maybe_add_apm_info(trace);
-  if (
-    trace->apm_trace_id.as_int.hi == 0 && trace->apm_trace_id.as_int.lo == 0 &&
-    trace->apm_transaction_id.as_int == 0) {
-    // Populate OTel span/trace ID only if span/trace ID is not yet set.
-    maybe_add_otel_span_trace_id(trace);
-  }
+  maybe_add_otel_span_trace_id(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.
