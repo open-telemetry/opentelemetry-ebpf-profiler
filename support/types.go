@@ -200,9 +200,6 @@ type BEAMProcInfo struct {
 	Ranges_sizeof          uint8
 	Pad_cgo_0              [6]byte
 }
-type DotnetProcInfo struct {
-	Version uint32
-}
 type GoRuntimeOffsets struct {
 	M_offset               uint32
 	M_gsignal              uint32
@@ -250,7 +247,6 @@ type PHPProcInfo struct {
 }
 type PerlProcInfo struct {
 	StateAddr                uint64
-	Version                  uint32
 	TsdInfo                  TSDInfo
 	Interpreter_curcop       uint16
 	Interpreter_curstackinfo uint16
@@ -270,11 +266,11 @@ type PerlProcInfo struct {
 	Xcv_flags                uint8
 	Xcv_gv                   uint8
 	Gp_egv                   uint8
+	Pad_cgo_0                [4]byte
 }
 type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
 	NoneStructAddr                 uint64
-	Version                        uint16
 	Tls_offset                     int16
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
@@ -291,24 +287,22 @@ type PyProcInfo struct {
 	PyCodeObject_sizeof            uint8
 	Lasti_is_codeunit              uint8
 	Frame_is_cframe                uint8
-	Pad_cgo_0                      [6]byte
 }
 type RubyProcInfo struct {
-	Version                      uint32
 	Current_ec_tpbase_tls_offset int64
 	Dtv_info                     DTVInfo
 	Current_ec_tls_offset        uint64
 	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
-	Has_objspace                 bool
 	Jit_start                    uint64
 	Jit_end                      uint64
+	Vm_objspace                  uint16
+	Running_ec                   uint16
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
 	Thread_ptr                   uint8
 	Thread_vm                    uint8
-	Vm_objspace                  uint16
 	Objspace_flags               uint8
 	Objspace_size_of_flags       uint8
 	Pc                           uint8
@@ -318,14 +312,14 @@ type RubyProcInfo struct {
 	Body                         uint8
 	Cme_method_def               uint8
 	Size_of_value                uint8
-	Running_ec                   uint16
+	Has_objspace                 bool
+	No_native_resume             bool
 	Pad_cgo_0                    [4]byte
 }
 type ThreadContextProcInfo struct {
 	Tls TLSVarInfo
 }
 type V8ProcInfo struct {
-	Version                      uint32
 	Type_JSFunction_first        uint16
 	Type_JSFunction_last         uint16
 	Type_Code                    uint16
@@ -344,7 +338,6 @@ type V8ProcInfo struct {
 	Codekind_shift               uint8
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
-	Pad_cgo_0                    [2]byte
 }
 
 const (
@@ -354,9 +347,8 @@ const (
 	Sizeof_GolangLabel   = 0x40
 
 	sizeof_ApmIntProcInfo        = 0x8
-	sizeof_DotnetProcInfo        = 0x4
 	sizeof_PHPProcInfo           = 0x18
-	sizeof_RubyProcInfo          = 0x60
+	sizeof_RubyProcInfo          = 0x50
 	sizeof_ThreadContextProcInfo = 0xc
 )
 
@@ -514,7 +506,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x59: metrics.IDUnwindApmIntReadSuccesses,
 	0x5a: metrics.IDUnwindDotnetAttempts,
 	0x5b: metrics.IDUnwindDotnetFrames,
-	0x5c: metrics.IDUnwindDotnetErrNoProcInfo,
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,

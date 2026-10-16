@@ -383,8 +383,6 @@ static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("Building Perl stack for 0x%x", perlinfo->version);
-
   if (!record->perlUnwindState.stackinfo) {
     // First Perl main loop encountered. Extract first the Interpreter state.
     increment_metric(metricID_UnwindPerlAttempts);
