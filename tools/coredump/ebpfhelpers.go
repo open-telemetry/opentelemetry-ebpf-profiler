@@ -97,7 +97,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 			key.prefixLen--
 			shiftBits := support.BitWidthPID + support.BitWidthPage - key.prefixLen
 			mask := uint64(0xffffffffffffffff) << shiftBits
-			key.page &= C.ulonglong(bits.ReverseBytes64(mask))
+			key.page &= C.u64(bits.ReverseBytes64(mask))
 		}
 	case unsafe.Pointer(&C.per_cpu_records):
 		return ctx.perCPURecord
