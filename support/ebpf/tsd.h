@@ -49,57 +49,6 @@ err:
   return -1;
 }
 
-// dtv_read reads a TLS variable by traversing the Dynamic Thread Vector (DTV).
-// The DTV is an array of pointers to per-module TLS blocks, indexed by TLS module ID.
-// On x86_64 the default TLS dialect uses General Dynamic (GD) relocations
-// (R_X86_64_DTPMOD64) rather than TLSDESC, so the DTV path is the primary
-// mechanism for resolving thread-local variables in shared libraries.
-// This path is also needed on other platforms when TLSDESC is unavailable.
-//
-// Parameters:
-//   dtvi:       DTVInfo extracted from the C-library (offset, multiplier)
-//   tsd_base:   thread pointer base (from tsd_get_base)
-//   module_id:  TLS module ID for the target DSO (from DTPMOD64 relocation)
-//   tls_offset: offset of the variable within its module's TLS block
-//   out:        pointer to store the result
-static inline EBPF_INLINE int
-dtv_read(const DTVInfo *dtvi, const void *tsd_base, u32 module_id, u64 tls_offset, void **out)
-{
-  // DTV access is always indirect: TP+offset yields a pointer to the DTV array,
-  // which must be dereferenced before indexing by module ID.
-  const void *dtv_ptr;
-  if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), tsd_base + dtvi->offset)) {
-    goto err;
-  }
-
-  // Index into the DTV to find this module's TLS block base address.
-  // DTV layout: [generation, module1_block, module2_block, ...]
-  // Entry size varies: 8 bytes (musl) or 16 bytes (glibc).
-  void *tls_block;
-  u64 dtv_entry_offset = (u64)module_id * dtvi->multiplier;
-  if (bpf_probe_read_user(&tls_block, sizeof(tls_block), (void *)(dtv_ptr + dtv_entry_offset))) {
-    goto err;
-  }
-
-  // Read the actual TLS variable at tls_block + tls_offset
-  if (bpf_probe_read_user(out, sizeof(*out), tls_block + tls_offset)) {
-    goto err;
-  }
-
-  DEBUG_PRINT(
-    "readDTV module %d, entry_offset 0x%llx, tls_offset 0x%llx",
-    module_id,
-    (unsigned long long)dtv_entry_offset,
-    (unsigned long long)tls_offset);
-  return 0;
-
-err:
-  DEBUG_PRINT(
-    "Failed to read TLS via DTV from 0x%lx for module %d", (unsigned long)dtv_ptr, module_id);
-  increment_metric(metricID_UnwindErrBadDTVRead);
-  return -1;
-}
-
 // TLSReadResult is the outcome of tls_read_var. TLS_READ_ABSENT is not a
 // failure: the thread has no block for the module yet.
 typedef enum TLSReadResult {
@@ -108,9 +57,16 @@ typedef enum TLSReadResult {
   TLS_READ_ABSENT = -2,
 } TLSReadResult;
 
+// tls_var_valid reports whether the descriptor is ready for a TLS lookup.
+static inline EBPF_INLINE bool tls_var_valid(const TLSVarInfo *var)
+{
+  return var->valid;
+}
+
 // tls_read_var reads the pointer-sized value of the thread-local variable var
 // locates, in static or dynamic TLS. tsd_base comes from tsd_get_base, whose
 // failure each caller reports its own way.
+// The caller must verify tls_var_valid(var) before calling this function.
 static inline EBPF_INLINE TLSReadResult
 tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
 {

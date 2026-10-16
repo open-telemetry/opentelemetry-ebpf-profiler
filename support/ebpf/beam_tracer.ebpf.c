@@ -16,7 +16,7 @@ struct beam_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, u32);
   __type(value, BEAMProcInfo);
-  __uint(max_entries, 256);
+  __uint(max_entries, 1024);
 } beam_procs SEC(".maps");
 
 // We assume this Range struct is stable so we can read it all at once directly.
