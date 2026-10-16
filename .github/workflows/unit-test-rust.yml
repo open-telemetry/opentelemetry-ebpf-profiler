@@ -8,7 +8,6 @@ on:
       - Cargo.toml
       - Cargo.lock
   pull_request:
-    branches: ["**"]
     paths:
       - rust-crates/**
       - Cargo.toml
