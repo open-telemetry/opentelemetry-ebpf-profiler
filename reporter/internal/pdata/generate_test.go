@@ -863,7 +863,9 @@ func TestGenerate_Validate(t *testing.T) {
 
 	err = (profcheck.ConformanceChecker{
 		CheckDictionaryDuplicates: true,
-		CheckSampleTimestampShape: true}).Check(&data)
+		CheckSampleTimestampShape: true,
+		CheckDictionaryOrphans:    true,
+	}).Check(&data)
 	require.NoError(t, err)
 }
 
