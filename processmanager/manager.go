@@ -19,7 +19,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -338,43 +337,6 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 	return false
 }
 
-func (pm *ProcessManager) maybeNotifyAPMAgent(
-	rawTrace *libpf.EbpfTrace, trace *libpf.Trace, count uint16,
-) string {
-	traceHash := libpf.InvalidTraceHash
-
-	pm.mu.RLock()
-	// Keeping the lock until end of the function is needed because inner map can be modified
-	// concurrently (by synchronizeMappings/newFrameMapping).
-	defer pm.mu.RUnlock()
-
-	pidInterp, ok := pm.interpreters[rawTrace.PID]
-	if !ok {
-		return ""
-	}
-
-	var serviceName string
-	for _, mapping := range pidInterp {
-		if apm, ok := mapping.(*apmint.Instance); ok {
-			if traceHash == libpf.InvalidTraceHash {
-				traceHash = trace.APMHash()
-			}
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
-			if serviceName != "" {
-				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
-					serviceName,
-					apm.APMServiceName(),
-					rawTrace.PID)
-			}
-			// It's pretty unusual to have more than one APM agent in a
-			// single process, but in case there is, just pick the last one.
-			serviceName = apm.APMServiceName()
-		}
-	}
-
-	return serviceName
-}
-
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
@@ -393,7 +355,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		Comm:           bpfTrace.Comm,
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
-		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CpuID,
 		ExecutablePath: procMeta.Executable,
 		ContainerID:    procMeta.ContainerID,
@@ -465,8 +426,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		}
 	}
 	pm.mu.RUnlock()
-
-	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)

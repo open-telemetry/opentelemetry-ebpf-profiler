@@ -5,9 +5,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"encoding/binary"
-	"hash/fnv"
 	"hash/maphash"
-	"strconv"
 	"unique"
 
 	"github.com/zeebo/xxh3"
@@ -136,28 +134,6 @@ type Trace struct {
 	// cachedHash memoizes the result of Hash().
 	// invalidTraceHash means the hash has not been computed yet.
 	cachedHash TraceHash
-}
-
-// APMHash returns the trace's hash required by the APM Agent for correlation.
-// The result is not memoized.
-func (t *Trace) APMHash() TraceHash {
-	var buf [24]byte
-	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
-	h := fnv.New128a()
-	for _, uniqueFrame := range t.Frames {
-		frame := uniqueFrame.Value()
-		fileID := FileID{}
-		if frame.Mapping.Valid() {
-			fileID = frame.Mapping.Value().File.Value().FileID
-		}
-		_, _ = h.Write(fileID.Bytes())
-		// Using FormatUint() or putting AppendUint() into a function leads
-		// to escaping to heap (allocation).
-		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
-	}
-	// Avoid a heap allocation by reusing the stack-allocated buffer.
-	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
-	return traceHash
 }
 
 var customLabelHashSeed = maphash.MakeSeed()
