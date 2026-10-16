@@ -6,7 +6,6 @@ on:
     paths:
       - support/ebpf/**
   pull_request:
-    branches: ["**"]
     paths:
       - support/ebpf/**
 
