@@ -238,9 +238,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
 exit:
   state->unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("beam: tail call for next frame unwinder (%d) failed", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 
 MULTI_USE_FUNC(unwind_beam)

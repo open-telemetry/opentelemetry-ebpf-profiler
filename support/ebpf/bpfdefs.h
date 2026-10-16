@@ -138,15 +138,14 @@ static u64 (*bpf_ktime_get_ns)(void)                    = (void *)BPF_FUNC_ktime
 static u64 (*bpf_get_current_pid_tgid)(void)            = (void *)BPF_FUNC_get_current_pid_tgid;
 static long (*bpf_get_ns_current_pid_tgid)(u64 dev, u64 ino, void *info, u32 size) = (void *)
   BPF_FUNC_get_ns_current_pid_tgid;
-static int (*bpf_get_current_comm)(void *buf, int buf_size)   = (void *)BPF_FUNC_get_current_comm;
-static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
-static u64 (*bpf_get_current_task)(void)                      = (void *)BPF_FUNC_get_current_task;
-static struct task_struct *(*bpf_get_current_task_btf)(void)  = (void *)
+static int (*bpf_get_current_comm)(void *buf, int buf_size)  = (void *)BPF_FUNC_get_current_comm;
+static u64 (*bpf_get_current_task)(void)                     = (void *)BPF_FUNC_get_current_task;
+static struct task_struct *(*bpf_get_current_task_btf)(void) = (void *)
   BPF_FUNC_get_current_task_btf;
 static long (*bpf_find_vma)(
   struct task_struct *task, u64 addr, void *callback_fn, void *callback_ctx, u64 flags) = (void *)
   BPF_FUNC_find_vma;
-static int (*bpf_perf_event_output)(void *ctx, void *map, u64 flags, void *data, int size) =
+static int (*bpf_perf_event_output)(void *ctx, void *map, u64 flags, void *data, u64 size) =
   (void *)BPF_FUNC_perf_event_output;
 static long (*bpf_ringbuf_output)(void *ringbuf, void *data, u64 size, u64 flags) = (void *)
   BPF_FUNC_ringbuf_output;
@@ -163,6 +162,17 @@ static long (*bpf_probe_read_user)(void *dst, u32 size, const void *unsafe_ptr) 
 static long (*bpf_probe_read_kernel)(void *dst, u32 size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_kernel;
 static long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;
+
+static inline int bpf_tail_call(void *ctx, void *map, int index)
+{
+  void (*__bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
+  __bpf_tail_call(ctx, map, index);
+  // Contrary to man bpf-helpers(7), the 'bpf_tail_call' does not return a value.
+  // For coredump test suite to work without setjmp etc, the call sites need to pass down
+  // the return value to the caller. The only reason that execution continues here
+  // is failure, so return an error unconditionally.
+  return -1;
+}
 
   #define bpf_probe_read_user_with_test_fault bpf_probe_read_user
 
