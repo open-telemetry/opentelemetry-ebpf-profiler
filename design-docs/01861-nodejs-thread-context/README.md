@@ -519,8 +519,7 @@ auto* table =
 // Find the value keyed by our AsyncLocalStorage instance. A reader uses the
 // published identity hash to walk a single bucket; find_value is sketched
 // separately below.
-uintptr_t als = *ctx->als_handle;
-uintptr_t value = find_value(table, als, ctx->als_identity_hash);
+uintptr_t value = find_value(table, *ctx->als_handle, ctx->als_identity_hash);
 if (value == 0) return NO_CONTEXT;  // not in this frame
 if (value == ctx->undefined_addr) return NO_CONTEXT;  // explicitly detached
 

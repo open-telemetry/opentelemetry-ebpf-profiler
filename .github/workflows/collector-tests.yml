@@ -5,7 +5,6 @@ on:
     # Run every day at 3:15 AM.
     - cron: '15 3 * * *'
   pull_request:
-    branches: ["**"]
     paths:
       - cmd/otelcol-ebpf-profiler/manifest.yaml
       - .github/workflows/collector-tests.yml
@@ -22,7 +21,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repo
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
