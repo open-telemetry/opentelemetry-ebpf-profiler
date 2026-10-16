@@ -75,6 +75,10 @@ var (
 	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
 	ErrNoteNotFound = errors.New("note not found")
 
+	// ErrNoSymbolHash is returned by LookupSymbol for a file without a dynamic
+	// symbol hash table, such as a fully static executable.
+	ErrNoSymbolHash = errors.New("symbol hash not present")
+
 	// errNoGoBuildinfo is returned when the ELF is not a Go executable.
 	errNoGoBuildinfo = errors.New("go buildinfo not found")
 
@@ -1248,7 +1252,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 			}
 		}
 	} else {
-		return nil, errors.New("symbol hash not present")
+		return nil, ErrNoSymbolHash
 	}
 
 	return nil, libpf.ErrSymbolNotFound
