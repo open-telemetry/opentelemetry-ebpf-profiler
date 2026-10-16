@@ -27,12 +27,11 @@ jobs:
           persist-credentials: false
       - name: Hash binary blobs
         run: |
-          sha256sum support/ebpf/tracer.ebpf.* > binary-blobs.hash
+          sha256sum support/ebpf/tracer.ebpf.*.gz > binary-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
           rm support/ebpf/tracer.ebpf.*
-          make amd64 -C support/ebpf
-          make arm64 -C support/ebpf
+          make amd64 arm64 -C support/ebpf
       - name: Check for differences
         run: |
           if ! sha256sum --check binary-blobs.hash; then

@@ -52,7 +52,7 @@ DEPS := $(OBJS:.o=.d)
 
 .DEFAULT_GOAL := all
 
-all: $(TRACER_NAME)
+all: $(TRACER_NAME).gz
 
 amd64:
 	$(MAKE) TARGET_ARCH=amd64
@@ -66,6 +66,9 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.$(TARGET_ARCH).o: %.ebpf.c errors.h
 	$(BPF_CLANG) $(FLAGS) -MMD -MP -o $@
+
+%.gz: %
+	gzip -n9 < $^ > $@
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
