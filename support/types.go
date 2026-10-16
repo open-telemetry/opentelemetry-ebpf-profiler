@@ -167,6 +167,7 @@ type Trace struct {
 	Cpu_id             uint32
 	Kernel_frame_end   uint16
 	Frame_data_end     uint16
+	Thread_label_end   uint16
 	Golang_label_end   uint16
 	Variable_data_end  uint16
 	Num_frames         uint16
@@ -333,8 +334,8 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta    = 0x4
-	Sizeof_TraceHeader   = 0x50
-	Sizeof_TraceWithData = 0x50 + 0x6280
+	Sizeof_TraceHeader   = 0x58
+	Sizeof_TraceWithData = 0x58 + 0x6280
 	Sizeof_GolangLabel   = 0x40
 
 	sizeof_ApmIntProcInfo        = 0xc
