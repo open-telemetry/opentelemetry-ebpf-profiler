@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x79
+	MetricIDBeginCumulative = 0x75
 )
 
 const (
@@ -183,9 +183,6 @@ type UnwindInfo struct {
 	AuxParam    int32
 }
 
-type ApmIntProcInfo struct {
-	Tls TLSVarInfo
-}
 type BEAMProcInfo struct {
 	Bias                   uint64
 	R                      uint64
@@ -338,7 +335,6 @@ const (
 	Sizeof_TraceWithData = 0x58 + 0x6280
 	Sizeof_GolangLabel   = 0x40
 
-	sizeof_ApmIntProcInfo        = 0xc
 	sizeof_PHPProcInfo           = 0x18
 	sizeof_RubyProcInfo          = 0x40
 	sizeof_ThreadContextProcInfo = 0xc
@@ -492,36 +488,32 @@ var MetricsTranslation = []metrics.MetricID{
 	0x53: metrics.IDUnwindNativeErrChaseIrqStackLink,
 	0x54: metrics.IDUnwindV8ErrNoProcInfo,
 	0x55: metrics.IDUnwindNativeErrBadUnwindInfoIndex,
-	0x56: metrics.IDUnwindApmIntErrReadTsdBase,
-	0x57: metrics.IDUnwindApmIntErrReadCorrBufPtr,
-	0x58: metrics.IDUnwindApmIntErrReadCorrBuf,
-	0x59: metrics.IDUnwindApmIntReadSuccesses,
-	0x5a: metrics.IDUnwindDotnetAttempts,
-	0x5b: metrics.IDUnwindDotnetFrames,
-	0x5d: metrics.IDUnwindDotnetErrBadFP,
-	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
-	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x62: metrics.IDUnwindRubyErrInvalidIseq,
-	0x63: metrics.IDUnwindRubyErrReadMethodDef,
-	0x64: metrics.IDUnwindRubyErrReadMethodType,
-	0x65: metrics.IDUnwindRubyErrReadSvar,
-	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x68: metrics.IDUnwindErrBadDTVRead,
-	0x69: metrics.IDBPFRingbufOutputErr,
-	0x6a: metrics.IDUnwindNativeErrNoVMA,
-	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
-	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
-	0x6d: metrics.IDUnwindLuaJITAttempts,
-	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
-	0x6f: metrics.IDSamplesSkippedProcessTooNew,
-	0x70: metrics.IDNumSyncsFromPrctl,
-	0x71: metrics.IDNumPriorityEventDeferred,
-	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
-	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
-	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
-	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
-	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
-	0x77: metrics.IDUnwindThreadContextReadSuccesses,
-	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
+	0x56: metrics.IDUnwindDotnetAttempts,
+	0x57: metrics.IDUnwindDotnetFrames,
+	0x59: metrics.IDUnwindDotnetErrBadFP,
+	0x5a: metrics.IDUnwindDotnetErrCodeHeader,
+	0x5b: metrics.IDUnwindDotnetErrCodeTooLarge,
+	0x5e: metrics.IDUnwindRubyErrInvalidIseq,
+	0x5f: metrics.IDUnwindRubyErrReadMethodDef,
+	0x60: metrics.IDUnwindRubyErrReadMethodType,
+	0x61: metrics.IDUnwindRubyErrReadSvar,
+	0x62: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x63: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x64: metrics.IDUnwindErrBadDTVRead,
+	0x65: metrics.IDBPFRingbufOutputErr,
+	0x66: metrics.IDUnwindNativeErrNoVMA,
+	0x67: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
+	0x68: metrics.IDUnwindNativeErrNonExecutableVMA,
+	0x69: metrics.IDUnwindLuaJITAttempts,
+	0x6a: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x6b: metrics.IDSamplesSkippedProcessTooNew,
+	0x6c: metrics.IDNumSyncsFromPrctl,
+	0x6d: metrics.IDNumPriorityEventDeferred,
+	0x6e: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x6f: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x70: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x71: metrics.IDUnwindThreadContextErrReadTlsPtr,
+	0x72: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x73: metrics.IDUnwindThreadContextReadSuccesses,
+	0x74: metrics.IDUnwindThreadContextAttrsTruncated,
 }

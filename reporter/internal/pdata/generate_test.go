@@ -389,7 +389,6 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	resourceKey := samples.ResourceKey{
 		ExecutablePath: filePath,
 		PID:            123,
-		APMServiceName: "svc",
 		ContainerID:    libpf.Intern("container1"),
 	}
 	events := map[*samples.TypeMetadata]samples.SampleToEvents{
@@ -1003,7 +1002,6 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 	tree := singleEventTree(samples.ResourceKey{
 		ExecutablePath: libpf.Intern("/bin/svc"),
 		PID:            99,
-		APMServiceName: "apm-svc",
 	}, attribute.Set{})
 
 	profiles, err := testGenerate(d, tree, "agent", "v1")
@@ -1012,7 +1010,6 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
 
 	expected := map[string]any{
-		string(semconv.ServiceNameKey):           "apm-svc",
 		string(semconv.ProcessPIDKey):            int64(99),
 		string(semconv.ProcessExecutablePathKey): "/bin/svc",
 		string(semconv.ProcessExecutableNameKey): "svc",
