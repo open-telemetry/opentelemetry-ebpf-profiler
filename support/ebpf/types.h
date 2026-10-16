@@ -649,16 +649,19 @@ typedef struct GolangLabel {
 // Maximum size used for Go labels.
 #define MAX_GO_LABEL_DATA_SZ sizeof(GolangLabel[MAX_GO_LABELS])
 
-// Number of bytes reserved for data after frames.
+// Number of bytes reserved for data after frames, currently the thread
+// label and Go label sections. Sized to fit one full set of Go labels, to guarantee
+// a reasonable set of labels even if all of frame data is used.
 #define MAX_FRAME_TRAILER_DATA_SZ MAX_GO_LABEL_DATA_SZ
 
 // The variable data portion of trace layout as:
 //   u64          kernel_frame[];
 //   u64          frame_data[];
+//   u8           thread_labels[];
 //   GolangLabel  golang_labels[];
 // The length of each dynamic portion is determined by the subsequent
 // Trace.*_end pointers. The _end pointers are byte aligned for accurate
-// length, but subsequent section start is aligned to 64-bits.
+// length, but subsequent section start is aligned to 64-bits. Zero means absent.
 typedef u8 __attribute__((aligned(8))) TraceData[MAX_FRAME_DATA_SZ + MAX_FRAME_TRAILER_DATA_SZ];
 _Static_assert(sizeof(TraceData) % 8 == 0, "wrong size for TraceData");
 
@@ -685,6 +688,7 @@ typedef struct Trace {
   // Variable data offsets
   u16 kernel_frame_end;
   u16 frame_data_end;
+  u16 thread_label_end;
   u16 golang_label_end;
   u16 variable_data_end;
 

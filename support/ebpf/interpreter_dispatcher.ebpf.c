@@ -339,13 +339,14 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
+  maybe_add_thread_context_info(trace);
+
+  // Dispatches without returning, so it must come last.
   if (should_tailcall_go_labels(record)) {
     // The Go label extraction code inlined in its current form causes issues with old
     // kernel verifier. So tail_call the separate program. It duplicates trace sending.
     return tail_call(ctx, record, PROG_GO_LABELS);
   }
-
-  maybe_add_thread_context_info(trace);
 
   send_trace(ctx, trace);
 
