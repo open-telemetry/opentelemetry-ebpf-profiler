@@ -117,7 +117,6 @@ type UnwindInfo C.UnwindInfo
 
 type ApmIntProcInfo C.ApmIntProcInfo
 type BEAMProcInfo C.BEAMProcInfo
-type DotnetProcInfo C.DotnetProcInfo
 type GoRuntimeOffsets C.GoRuntimeOffsets
 type HotspotProcInfo C.HotspotProcInfo
 type PHPProcInfo C.PHPProcInfo
@@ -134,7 +133,6 @@ const (
 	Sizeof_GolangLabel   = C.sizeof_GolangLabel
 
 	sizeof_ApmIntProcInfo        = C.sizeof_ApmIntProcInfo
-	sizeof_DotnetProcInfo        = C.sizeof_DotnetProcInfo
 	sizeof_PHPProcInfo           = C.sizeof_PHPProcInfo
 	sizeof_RubyProcInfo          = C.sizeof_RubyProcInfo
 	sizeof_ThreadContextProcInfo = C.sizeof_ThreadContextProcInfo
@@ -300,7 +298,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindApmIntReadSuccesses:                  metrics.IDUnwindApmIntReadSuccesses,
 	C.metricID_UnwindDotnetAttempts:                       metrics.IDUnwindDotnetAttempts,
 	C.metricID_UnwindDotnetFrames:                         metrics.IDUnwindDotnetFrames,
-	C.metricID_UnwindDotnetErrNoProcInfo:                  metrics.IDUnwindDotnetErrNoProcInfo,
 	C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 	C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 	C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,

@@ -457,15 +457,9 @@ typedef struct TLSVarInfo {
   bool valid;
 } TLSVarInfo;
 
-// DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
-typedef struct DotnetProcInfo {
-  u32 version;
-} DotnetProcInfo;
-
 // PerlProcInfo is a container for the data needed to build a stack trace for a Perl process.
 typedef struct PerlProcInfo {
   u64 stateAddr;
-  u32 version;
   TSDInfo tsdInfo;
   // Introspection data
   u16 interpreter_curcop, interpreter_curstackinfo;
@@ -479,7 +473,6 @@ typedef struct PyProcInfo {
   // The address of the autoTLSkey variable
   u64 autoTLSKeyAddr;
   u64 noneStructAddr;
-  u16 version;
   s16 tls_offset;
   TSDInfo tsdInfo;
   // The Python object member offsets
@@ -522,9 +515,6 @@ typedef struct HotspotProcInfo {
 
 // RubyProcInfo is a container for the data needed to build a stack trace for a Ruby process.
 typedef struct RubyProcInfo {
-  // version of the Ruby interpreter.
-  u32 version;
-
   // Locates ruby_current_ec. Invalid when it was not resolved, and for dynamic
   // TLS until UpdateLibcInfo supplies the DTV layout; unwind_ruby then falls
   // back to the ractor and global lookups.
@@ -533,22 +523,22 @@ typedef struct RubyProcInfo {
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
 
-  // is reading gc state from objspace supported for this version?
-  bool has_objspace;
-
   // JIT regions, for detecting if a native PC was JIT
   u64 jit_start, jit_end;
 
   // Offsets and sizes of Ruby internal structs
+
+  // rb_vm_struct offsets
+  u16 vm_objspace;
+
+  // rb_ractor_struct offset:
+  u16 running_ec;
 
   // rb_execution_context_struct offsets:
   u8 vm_stack, vm_stack_size, cfp, thread_ptr;
 
   // rb_thread_struct offsets
   u8 thread_vm;
-
-  // rb_vm_struct offsets
-  u16 vm_objspace;
 
   // rb_objspace offsets
   u8 objspace_flags, objspace_size_of_flags;
@@ -566,14 +556,16 @@ typedef struct RubyProcInfo {
   // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
   u8 size_of_value;
 
-  // rb_ractor_struct offset:
-  u16 running_ec;
+  // is reading gc state from objspace supported for this version?
+  bool has_objspace;
+
+  // is ruby too old to unwind native stack
+  bool no_native_resume;
 
 } RubyProcInfo;
 
 // V8ProcInfo is a container for the data needed to build a stack trace for a V8 process.
 typedef struct V8ProcInfo {
-  u32 version;
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
   u8 off_HeapObject_map, off_Map_instancetype, off_JSFunction_code, off_JSFunction_shared;

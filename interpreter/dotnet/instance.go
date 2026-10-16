@@ -650,10 +650,6 @@ func (i *dotnetInstance) getMethod(codeHeaderPtr libpf.Address) (*dotnetMethod, 
 	return method, nil
 }
 
-func (i *dotnetInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.Dotnet, pid)
-}
-
 func (i *dotnetInstance) getDacSlot(slot uint) libpf.Address {
 	// dotnet6 records everything as RVAs and starting dotnet7 they are pointers
 	// see: https://github.com/dotnet/runtime/pull/68065

@@ -145,6 +145,9 @@ func (v Var) locate(rm remotememory.RemoteMemory, bias libpf.Address) (VarLocati
 		if err != nil {
 			return VarLocation{}, err
 		}
+		if moduleID == 0 {
+			return VarLocation{}, fmt.Errorf("%w: TLS module ID", ErrUnresolved)
+		}
 		return dynamicLoc(moduleID, offset+v.addend)
 
 	case accessLocalDynamic:
@@ -152,6 +155,9 @@ func (v Var) locate(rm remotememory.RemoteMemory, bias libpf.Address) (VarLocati
 		moduleID, err := rm.ReadUint64(bias + v.elfAddr)
 		if err != nil {
 			return VarLocation{}, err
+		}
+		if moduleID == 0 {
+			return VarLocation{}, fmt.Errorf("%w: TLS module ID", ErrUnresolved)
 		}
 		return dynamicLoc(moduleID, v.addend)
 
