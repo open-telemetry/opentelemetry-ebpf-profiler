@@ -341,11 +341,10 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
-  // Does not return once it dispatches, so anything below runs only when the
-  // Go path did not fill custom labels.
-  maybe_add_go_custom_labels(ctx, record);
-
   maybe_add_thread_context_info(trace);
+
+  // Dispatches without returning, so it must come last.
+  maybe_add_go_custom_labels(ctx, record);
 
   send_trace(ctx, trace);
 
