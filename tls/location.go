@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -32,7 +33,7 @@ func (l VarLocation) String() string {
 // VarInfo builds the descriptor eBPF follows at unwind time. A static location
 // ignores dtv, so an empty one will do. A dynamic location given an empty dtv
 // yields ErrNeedDTV.
-func (l VarLocation) VarInfo(dtv support.DTVInfo) (support.TLSVarInfo, error) {
+func (l VarLocation) VarInfo(dtv libc.DTVInfo) (support.TLSVarInfo, error) {
 	if l.ModuleID == 0 {
 		return support.TLSVarInfo{Tls_offset: l.Offset, Valid: true}, nil
 	}
