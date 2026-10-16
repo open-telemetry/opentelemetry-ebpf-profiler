@@ -137,7 +137,7 @@ For more information about the maintainer role, see the
 
 ### Approvers
 
-- [Roger Coll](https://github.com/rogercoll), Elastic
+- [Roger Coll](https://github.com/rogercoll), Grafana Labs
 - [Florian Lehner](https://github.com/florianl), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
 
