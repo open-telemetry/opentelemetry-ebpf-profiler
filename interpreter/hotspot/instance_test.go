@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"maps"
 	"reflect"
 	"strings"
@@ -261,7 +262,7 @@ func TestSyncStubMappingsTwoPasses(t *testing.T) {
 	assert.Equal(t, initial, stubCount(ii))
 
 	// Pass 2: runs after the first Java frame and picks up the late stubs.
-	ii.frameSeen.Store(true)
+	ii.markFrameSeen()
 	ii.syncStubMappings(vmd, nil, 0)
 	assert.Equal(t, numStubs, stubCount(ii))
 
@@ -277,7 +278,7 @@ func TestSyncStubMappingsTwoPasses(t *testing.T) {
 func TestSyncStubMappingsFrameAlreadySeen(t *testing.T) {
 	const numStubs = 20
 	ii, vmd, cr, _ := newStubSyncInstance(t, numStubs, numStubs)
-	ii.frameSeen.Store(true)
+	ii.markFrameSeen()
 
 	ii.syncStubMappings(vmd, nil, 0)
 	assert.Equal(t, numStubs, stubCount(ii))
@@ -285,4 +286,44 @@ func TestSyncStubMappingsFrameAlreadySeen(t *testing.T) {
 	cr.reads = 0
 	ii.syncStubMappings(vmd, nil, 0)
 	assert.Zero(t, cr.reads, "second pass is redundant after a post-boot scan")
+}
+
+// hookReaderAt calls hook once, before serving the first read at or above minOff.
+type hookReaderAt struct {
+	io.ReaderAt
+	minOff int64
+	hook   func()
+}
+
+func (h *hookReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if h.hook != nil && off >= h.minOff {
+		hook := h.hook
+		h.hook = nil
+		hook()
+	}
+	return h.ReaderAt.ReadAt(p, off)
+}
+
+// TestSyncStubMappingsFrameDuringScan verifies that a Java frame arriving while a
+// scan is running triggers another scan, which picks up stubs generated meanwhile.
+func TestSyncStubMappingsFrameDuringScan(t *testing.T) {
+	const numStubs, initial = 20, 10
+	ii, vmd, cr, populate := newStubSyncInstance(t, numStubs, initial)
+	ii.rm = remotememory.RemoteMemory{ReaderAt: &hookReaderAt{
+		ReaderAt: cr,
+		// Stub pointers are read below this offset, stub code (boundary sweep) above.
+		minOff: 1024,
+		hook: func() {
+			// Boot finishes and the first frame arrives in the middle of the scan,
+			// after the stub pointers were read.
+			populate()
+			ii.markFrameSeen()
+		},
+	}}
+
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, initial, stubCount(ii), "scan started before the stubs were generated")
+
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, numStubs, stubCount(ii))
 }

@@ -94,12 +94,15 @@ type hotspotInstance struct {
 	// stubs stores all known stub routine regions.
 	stubs xsync.RWMutex[map[libpf.Address]StubRoutine]
 
-	// stubPasses is the number of completed stub scans (see SynchronizeMappings).
-	stubPasses int
+	// processStubs is set when stubs need to be (re)scanned: at startup, and once the
+	// first Java frame is seen. It is cleared right before scanning, so that a frame
+	// arriving during a scan triggers another one.
+	processStubs atomic.Bool
 
-	// frameSeen is set by Symbolize once the unwinder has delivered a Java frame,
-	// which implies that the JVM has finished booting and generating its stubs.
-	frameSeen atomic.Bool
+	// frameSeen records that a Java frame was already delivered by the unwinder, which
+	// implies that the JVM has finished booting and generating its stubs. It is only
+	// accessed from Symbolize.
+	frameSeen bool
 }
 
 func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -897,23 +900,19 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 func (d *hotspotInstance) syncStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
-	const maxStubPasses = 2
-
-	if d.stubPasses >= maxStubPasses {
+	if !d.processStubs.CompareAndSwap(true, false) {
 		return
 	}
-	// Sample before scanning: a frame seen now implies the scan below is post-boot.
-	seen := d.frameSeen.Load()
-	if d.stubPasses == 1 && !seen {
-		return
-	}
-
 	d.updateStubMappings(vmd, ebpf, pid)
-	d.stubPasses++
-	if seen {
-		// The scan ran after boot completed, nothing more to find.
-		d.stubPasses = maxStubPasses
+}
+
+// markFrameSeen records the first Java frame and requests a final stub scan.
+func (d *hotspotInstance) markFrameSeen() {
+	if d.frameSeen {
+		return
 	}
+	d.frameSeen = true
+	d.processStubs.Store(true)
 }
 
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
@@ -930,9 +929,7 @@ func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ 
 	ripOrBci := uint32(ef.Variable(1)>>32) & 0x0fffffff
 	ptrCheck := uint32(ef.Variable(1))
 
-	if !d.frameSeen.Load() {
-		d.frameSeen.Store(true)
-	}
+	d.markFrameSeen()
 
 	var err error
 	sfCounter := successfailurecounter.New(&d.successCount, &d.failCount)
