@@ -19,7 +19,7 @@
 // The first V8 frame variable is split to object pointer (aligned to 8 bytes),
 // and the zero bits due to alignment are reused as the following flags. For
 // all types except MARKER the object pointer is the SharedFunctionInfo. The
-// Code pointer is always sent as the third frame variable, and is valid for
+// Code pointer is always sent as the second frame variable, and is valid for
 // the NATIVE_CODE type.
 #define V8_FRAME_TYPE_MARKER      0x0
 #define V8_FRAME_TYPE_BYTECODE    0x1
@@ -27,10 +27,12 @@
 #define V8_FRAME_TYPE_NATIVE_CODE 0x3
 #define V8_FRAME_TYPE_MASK        0x7
 
-// The Trace 'line' field is split to two 32-bit fields: cookie and PC-delta
-#define V8_LINE_COOKIE_SHIFT 32
-#define V8_LINE_COOKIE_MASK  0xffffffff00000000
-#define V8_LINE_DELTA_MASK   0x00000000ffffffff
+// The V8 frame header data holds the marker, or the bytecode or native PC
+// delta, in its low 32 bits. NATIVE_CODE frames also carry the CodeKind above
+// the delta, which the agent uses to validate its cached Code data.
+#define V8_DATA_DELTA_MASK      0xffffffff
+#define V8_DATA_CODE_KIND_SHIFT 32
+#define V8_DATA_CODE_KIND_MASK  0xff
 
 // Leaptiering (V8_ENABLE_LEAPTIERING) JSDispatchTable constants. Under leaptiering
 // the JSFunction holds a 32-bit dispatch handle that indexes a JSDispatchTable;

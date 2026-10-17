@@ -554,7 +554,11 @@ type v8Code struct {
 	codePositionTable   []byte
 	inliningSFIs        []byte
 	inliningPositions   []byte
-	cookie              uint32
+	// sfiPtr and codeKind identify the Code object this data was read from.
+	// They are checked on cache hits as V8 reuses the addresses of freed Code
+	// objects.
+	sfiPtr   libpf.Address
+	codeKind uint8
 }
 
 // v8SFI caches the data we need from V8 class SharedFunctionInfo
@@ -1209,9 +1213,9 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	return sfi, nil
 }
 
-// readCode reads and caches needed V8 Code object data. sfi is the
-// SharedFunctionInfo of the JSFunction the Code belongs to.
-func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI) (*v8Code, error) {
+// readCode reads needed V8 Code object data. sfi is the SharedFunctionInfo of
+// the JSFunction the Code belongs to.
+func (i *v8Instance) readCode(taggedPtr, sfiPtr libpf.Address, sfi *v8SFI) (*v8Code, error) {
 	vms := &i.d.vmStructs
 	types := &i.d.expectedTypes
 
@@ -1247,18 +1251,17 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Baseline Code does not have deoptimization data
 	if codeKind == vms.CodeKind.Baseline {
-		log.Debugf("Baseline Code %#x read: posSize: %v, cookie: %x",
-			codeAddr, len(codePositionTable), cookie)
+		log.Debugf("Baseline Code %#x read: posSize: %v",
+			codeAddr, len(codePositionTable))
 
-		v8code := &v8Code{
+		return &v8Code{
 			codeDeltaToPosition: make(map[uint32]sourcePosition),
 			sfi:                 sfi,
 			isBaseline:          true,
 			codePositionTable:   codePositionTable,
-			cookie:              cookie,
-		}
-		i.addrToCode.Add(taggedPtr, v8code)
-		return v8code, nil
+			sfiPtr:              sfiPtr,
+			codeKind:            codeKind,
+		}, nil
 	}
 
 	// Read the deoptimization data
@@ -1313,29 +1316,30 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		}
 	}
 
-	log.Debugf("Code %#x read: posSize: %v, sfiSize: %v, inlineSize: %v cookie: %x",
+	log.Debugf("Code %#x read: posSize: %v, sfiSize: %v, inlineSize: %v",
 		codeAddr, len(codePositionTable), len(inliningSFIs),
-		len(inliningPositions), cookie)
+		len(inliningPositions))
 
-	v8code := &v8Code{
+	return &v8Code{
 		codeDeltaToPosition: make(map[uint32]sourcePosition),
 		sfi:                 sfi,
 		codePositionTable:   codePositionTable,
 		inliningSFIs:        inliningSFIs,
 		inliningPositions:   inliningPositions,
-		cookie:              cookie,
-	}
-	i.addrToCode.Add(taggedPtr, v8code)
-	return v8code, nil
+		sfiPtr:              sfiPtr,
+		codeKind:            codeKind,
+	}, nil
 }
 
 // getCode reads and caches needed V8 Code object data from a Code pointer.
-// sfiTaggedPtr is the SFI that eBPF sent with the frame.
-func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
-	sfiTaggedPtr libpf.Address,
+// sfiTaggedPtr and codeKind are the SFI and CodeKind that eBPF sent with the
+// frame. They are used to detect when the Code object at taggedPtr is no
+// longer the one eBPF saw.
+func (i *v8Instance) getCode(taggedPtr, sfiTaggedPtr libpf.Address,
+	codeKind uint8,
 ) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
-		if code.cookie == cookie {
+		if code.sfiPtr == sfiTaggedPtr && code.codeKind == codeKind {
 			return code, nil
 		}
 		i.addrToCode.Remove(taggedPtr)
@@ -1344,7 +1348,16 @@ func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32,
 	if err != nil {
 		return nil, fmt.Errorf("getSFI: %w", err)
 	}
-	return i.readCode(taggedPtr, cookie, sfi)
+	code, err := i.readCode(taggedPtr, sfiTaggedPtr, sfi)
+	if err != nil {
+		return nil, err
+	}
+	if code.codeKind != codeKind {
+		return nil, fmt.Errorf("code %#x kind changed from %d to %d",
+			taggedPtr, codeKind, code.codeKind)
+	}
+	i.addrToCode.Add(taggedPtr, code)
+	return code, nil
 }
 
 // decodeUVLQ reads and decodes one unsigned Variable Length Quantity
@@ -1540,7 +1553,7 @@ func (i *v8Instance) symbolizeSFI(pointer libpf.Address, delta uint64, frames *l
 	// Adjust the bytecode pointer as needed
 	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/execution/frames.cc#1793
-	bytecodeDelta := int64(delta & support.V8LineDeltaMask)
+	bytecodeDelta := int64(delta & support.V8DataDeltaMask)
 	bytecodeDelta -= int64(vms.BytecodeArray.Data) - HeapObjectTag
 	if bytecodeDelta < 0 {
 		// Should not be happening
@@ -1656,7 +1669,7 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 ) error {
 	var err error
 	sfi := code.sfi
-	delta &= support.V8LineDeltaMask
+	delta &= support.V8DataDeltaMask
 
 	// This is a native PC delta and points to the instruction after
 	// the call function. Adjust to get the CALL instruction.
@@ -1722,7 +1735,7 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 	defer sfCounter.DefaultToFailure()
 
 	pointerAndType := libpf.Address(ef.Variable(0))
-	deltaOrMarker := uint64(ef.Variable(1))
+	deltaOrMarker := ef.Data()
 	subframeType := pointerAndType & support.V8FrameTypeMask
 	pointer := pointerAndType&^support.V8FrameTypeMask | HeapObjectTag
 
@@ -1737,9 +1750,9 @@ func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf
 		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
 	case support.V8FrameTypeNativeCode:
 		var code *v8Code
-		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
-		codePointer := libpf.Address(ef.Variable(2)) | HeapObjectTag
-		code, err = i.getCode(codePointer, codeCookie, pointer)
+		codeKind := uint8(deltaOrMarker >> support.V8DataCodeKindShift & support.V8DataCodeKindMask)
+		codePointer := libpf.Address(ef.Variable(1)) | HeapObjectTag
+		code, err = i.getCode(codePointer, pointer, codeKind)
 		if err == nil {
 			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
 		}

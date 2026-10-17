@@ -401,9 +401,9 @@ const (
 	V8FrameTypeNativeCode = 0x3
 	V8FrameTypeMask       = 0x7
 
-	V8LineCookieShift = 0x20
-	V8LineCookieMask  = 0xffffffff00000000
-	V8LineDeltaMask   = 0xffffffff
+	V8DataDeltaMask     = 0xffffffff
+	V8DataCodeKindShift = 0x20
+	V8DataCodeKindMask  = 0xff
 
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1

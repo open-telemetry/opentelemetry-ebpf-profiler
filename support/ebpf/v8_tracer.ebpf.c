@@ -47,13 +47,13 @@ static EBPF_INLINE ErrorCode push_v8(
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 3);
+  u64 *data = push_frame(
+    state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, delta_or_marker, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
   data[0] = sfi_and_type;
-  data[1] = delta_or_marker;
-  data[2] = code;
+  data[1] = code;
   return ERR_OK;
 }
 
@@ -339,9 +339,8 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   // Code matches RIP, report it.
   frame_type = V8_FRAME_TYPE_NATIVE_CODE;
 
-  // Use cookie that differentiates different types of Code objects
-  u32 cookie      = (code_size << 4) | code_kind;
-  delta_or_marker = (pc - code_start) | ((uintptr_t)cookie << V8_LINE_COOKIE_SHIFT);
+  // Send the CodeKind with the PC delta so the agent can validate its cached Code data
+  delta_or_marker = (pc - code_start) | ((u64)code_kind << V8_DATA_CODE_KIND_SHIFT);
 
 frame_done:;
   ErrorCode error =

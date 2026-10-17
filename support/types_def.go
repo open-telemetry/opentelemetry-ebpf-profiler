@@ -197,9 +197,9 @@ const (
 	V8FrameTypeNativeCode = C.V8_FRAME_TYPE_NATIVE_CODE
 	V8FrameTypeMask       = C.V8_FRAME_TYPE_MASK
 
-	V8LineCookieShift = C.V8_LINE_COOKIE_SHIFT
-	V8LineCookieMask  = C.V8_LINE_COOKIE_MASK
-	V8LineDeltaMask   = C.V8_LINE_DELTA_MASK
+	V8DataDeltaMask     = C.V8_DATA_DELTA_MASK
+	V8DataCodeKindShift = C.V8_DATA_CODE_KIND_SHIFT
+	V8DataCodeKindMask  = C.V8_DATA_CODE_KIND_MASK
 
 	RubyFrameTypeNone     = C.RUBY_FRAME_TYPE_NONE
 	RubyFrameTypeCmeIseq  = C.RUBY_FRAME_TYPE_CME_ISEQ
