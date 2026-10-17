@@ -900,9 +900,10 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 func (d *hotspotInstance) syncStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
-	if !d.processStubs.CompareAndSwap(true, false) {
+	if !d.processStubs.Load() {
 		return
 	}
+	d.processStubs.Store(false)
 	d.updateStubMappings(vmd, ebpf, pid)
 }
 
