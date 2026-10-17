@@ -162,29 +162,27 @@ BPF_RODATA_VAR(bool, filter_error_frames, false)
 // independently whenever Go support is enabled.
 BPF_RODATA_VAR(bool, go_labels_disabled, true)
 
-static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+static EBPF_INLINE bool should_tailcall_go_labels(PerCPURecord *record)
 {
   if (go_labels_disabled) {
-    return;
+    return false;
   }
 
   if (record->goOffsets.m_offset == 0) {
     DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", record->trace.pid);
-    return;
+    return false;
   }
   GoRuntimeOffsets *offsets = &record->goOffsets;
 
   void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
   if (!m_ptr_addr) {
-    return;
+    return false;
   }
   record->golangLabelsState.go_m_ptr = m_ptr_addr;
 
   DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
   increment_metric(metricID_UnwindGoLabelsAttempts);
-  // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
-  // it is tail_call'd.
-  tail_call(ctx, PROG_GO_LABELS);
+  return true;
 }
 
 // Implements the specification to share span/trace IDs according to:
@@ -217,6 +215,12 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 
   DEBUG_PRINT("Trace is within a process with APM integration enabled");
 
+  // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
+  if (!tls_var_valid(&proc->tls)) {
+    DEBUG_PRINT("APM correlation TLS variable not located yet");
+    return;
+  }
+
   u64 tsd_base;
   if (tsd_get_base((void **)&tsd_base) != 0) {
     increment_metric(metricID_UnwindApmIntErrReadTsdBase);
@@ -224,13 +228,13 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     return;
   }
 
-  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
-
   void *apm_corr_buf_ptr;
-  if (bpf_probe_read_user(
-        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
+  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &apm_corr_buf_ptr);
+  if (rc == TLS_READ_ERR) {
     increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
     DEBUG_PRINT("Failed to read APM correlation buffer pointer");
+  }
+  if (rc != TLS_READ_OK) {
     return;
   }
 
@@ -335,11 +339,14 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
-  // Does not return once it dispatches, so anything below runs only when the
-  // Go path did not fill custom labels.
-  maybe_add_go_custom_labels(ctx, record);
-
   maybe_add_thread_context_info(trace);
+
+  // Dispatches without returning, so it must come last.
+  if (should_tailcall_go_labels(record)) {
+    // The Go label extraction code inlined in its current form causes issues with old
+    // kernel verifier. So tail_call the separate program. It duplicates trace sending.
+    return tail_call(ctx, record, PROG_GO_LABELS);
+  }
 
   send_trace(ctx, trace);
 

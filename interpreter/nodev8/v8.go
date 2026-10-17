@@ -1783,8 +1783,6 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.
 	}
 
 	data := support.V8ProcInfo{
-		Version: d.version,
-
 		Fp_marker:          mapFramePointerOffset(vms.FramePointer.Context),
 		Fp_function:        mapFramePointerOffset(vms.FramePointer.Function),
 		Fp_bytecode_offset: mapFramePointerOffset(vms.FramePointer.BytecodeOffset),

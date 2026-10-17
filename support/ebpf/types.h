@@ -438,19 +438,6 @@ typedef struct TSDInfo {
   u8 dataOffset;
 } TSDInfo;
 
-// DTVInfo contains data needed to read Thread Local Storage (TLS) values, which
-// are located using the Dynamic Thread Vector (DTV).
-// DTV access is always indirect: TP+offset yields a pointer to the DTV array,
-// which must be dereferenced before indexing by module ID. This is true for
-// both glibc and musl (the DTV is a separately-allocated array, not inline
-// in the thread control block).
-typedef struct DTVInfo {
-  // Offset is the offset of the DTV pointer from the thread pointer base.
-  s16 offset;
-  // Multiplier is the size of each DTV entry in bytes.
-  u8 multiplier;
-} DTVInfo;
-
 // TLSVarInfo locates a thread-local variable at unwind time, covering both
 // static and dynamic TLS.
 typedef struct TLSVarInfo {
@@ -461,22 +448,18 @@ typedef struct TLSVarInfo {
   // ID times the entry size. 0 for static TLS, and the only static/dynamic
   // discriminant.
   u32 dtv_pos;
-  // Offset of the DTV pointer from the thread pointer. Unused for static TLS.
+  // Offset of the DTV pointer from the thread pointer. Indirect on both glibc
+  // and musl: TP+dtv_offset holds a pointer to the DTV, which is allocated
+  // apart from the thread control block. Unused for static TLS.
   s16 dtv_offset;
   // Needed because a zeroed TLSVarInfo is otherwise a valid static descriptor:
   // aarch64 musl gives tls_offset 0 to a library whose executable has no PT_TLS.
   bool valid;
 } TLSVarInfo;
 
-// DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
-typedef struct DotnetProcInfo {
-  u32 version;
-} DotnetProcInfo;
-
 // PerlProcInfo is a container for the data needed to build a stack trace for a Perl process.
 typedef struct PerlProcInfo {
   u64 stateAddr;
-  u32 version;
   TSDInfo tsdInfo;
   // Introspection data
   u16 interpreter_curcop, interpreter_curstackinfo;
@@ -490,7 +473,6 @@ typedef struct PyProcInfo {
   // The address of the autoTLSkey variable
   u64 autoTLSKeyAddr;
   u64 noneStructAddr;
-  u16 version;
   s16 tls_offset;
   TSDInfo tsdInfo;
   // The Python object member offsets
@@ -533,39 +515,30 @@ typedef struct HotspotProcInfo {
 
 // RubyProcInfo is a container for the data needed to build a stack trace for a Ruby process.
 typedef struct RubyProcInfo {
-  // version of the Ruby interpreter.
-  u32 version;
-
-  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase.
-  // Signed because static TLS offsets (local exec model) are negative on x86_64.
-  s64 current_ec_tpbase_tls_offset;
-
-  // DTV-based TLS access for ruby_current_ec (fallback when TLSDESC unavailable)
-  DTVInfo dtv_info;
-  // Offset of ruby_current_ec within its module's TLS block
-  u64 current_ec_tls_offset;
-  // Runtime TLS module ID for libruby.so (from DTPMOD64 relocation, written by linker)
-  u32 tls_module_id;
+  // Locates ruby_current_ec. Invalid when it was not resolved, and for dynamic
+  // TLS until UpdateLibcInfo supplies the DTV layout; unwind_ruby then falls
+  // back to the ractor and global lookups.
+  TLSVarInfo tls_ec;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
-
-  // is reading gc state from objspace supported for this version?
-  bool has_objspace;
 
   // JIT regions, for detecting if a native PC was JIT
   u64 jit_start, jit_end;
 
   // Offsets and sizes of Ruby internal structs
 
+  // rb_vm_struct offsets
+  u16 vm_objspace;
+
+  // rb_ractor_struct offset:
+  u16 running_ec;
+
   // rb_execution_context_struct offsets:
   u8 vm_stack, vm_stack_size, cfp, thread_ptr;
 
   // rb_thread_struct offsets
   u8 thread_vm;
-
-  // rb_vm_struct offsets
-  u16 vm_objspace;
 
   // rb_objspace offsets
   u8 objspace_flags, objspace_size_of_flags;
@@ -583,8 +556,11 @@ typedef struct RubyProcInfo {
   // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
   u8 size_of_value;
 
-  // rb_ractor_struct offset:
-  u16 running_ec;
+  // is reading gc state from objspace supported for this version?
+  bool has_objspace;
+
+  // is ruby too old to unwind native stack
+  bool no_native_resume;
 
 } RubyProcInfo;
 
@@ -592,7 +568,6 @@ typedef struct RubyProcInfo {
 // Fields are ordered by size so that there is no padding between them.
 typedef struct V8ProcInfo {
   u64 default_isolate_group;
-  u32 version;
   u32 js_dispatch_table_offset;
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
@@ -678,16 +653,19 @@ typedef struct GolangLabel {
 // Maximum size used for Go labels.
 #define MAX_GO_LABEL_DATA_SZ sizeof(GolangLabel[MAX_GO_LABELS])
 
-// Number of bytes reserved for data after frames.
+// Number of bytes reserved for data after frames, currently the thread
+// label and Go label sections. Sized to fit one full set of Go labels, to guarantee
+// a reasonable set of labels even if all of frame data is used.
 #define MAX_FRAME_TRAILER_DATA_SZ MAX_GO_LABEL_DATA_SZ
 
 // The variable data portion of trace layout as:
 //   u64          kernel_frame[];
 //   u64          frame_data[];
+//   u8           thread_labels[];
 //   GolangLabel  golang_labels[];
 // The length of each dynamic portion is determined by the subsequent
 // Trace.*_end pointers. The _end pointers are byte aligned for accurate
-// length, but subsequent section start is aligned to 64-bits.
+// length, but subsequent section start is aligned to 64-bits. Zero means absent.
 typedef u8 __attribute__((aligned(8))) TraceData[MAX_FRAME_DATA_SZ + MAX_FRAME_TRAILER_DATA_SZ];
 _Static_assert(sizeof(TraceData) % 8 == 0, "wrong size for TraceData");
 
@@ -714,6 +692,7 @@ typedef struct Trace {
   // Variable data offsets
   u16 kernel_frame_end;
   u16 frame_data_end;
+  u16 thread_label_end;
   u16 golang_label_end;
   u16 variable_data_end;
 
@@ -1199,7 +1178,9 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_EL0t  0x00000000
 
 typedef struct ApmIntProcInfo {
-  u64 tls_offset;
+  // Invalid until located: an agent library in dynamic TLS stays so until
+  // UpdateLibcInfo supplies the DTV layout.
+  TLSVarInfo tls;
 } ApmIntProcInfo;
 
 // ThreadContextProcInfo is a container for the data needed to locate the

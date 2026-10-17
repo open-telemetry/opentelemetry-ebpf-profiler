@@ -61,6 +61,7 @@
     "description": "Hotspot: No entry for this process exists in the Hotspot process info array"
   },
   {
+    "obsolete": true,
     "id": 2000,
     "name": "python_bad_code_object_addr",
     "description": "Python: Unable to read current PyCodeObject"
@@ -136,14 +137,16 @@
     "description": "Ruby: Unable to read instruction sequence body"
   },
   {
+    "obsolete": true,
     "id": 3006,
     "name": "ruby_read_iseq_encoded",
-    "description": "Ruby: Unable to read the instruction sequence encoded size (deprecated)"
+    "description": "Ruby: Unable to read the instruction sequence encoded size"
   },
   {
+    "obsolete": true,
     "id": 3007,
     "name": "ruby_read_iseq_size",
-    "description": "Ruby: Unable to read the instruction sequence size (deprecated)"
+    "description": "Ruby: Unable to read the instruction sequence size"
   },
   {
     "id": 3008,
@@ -181,6 +184,7 @@
     "description": "Ruby: Exceeded maximum EP checks while locating CME"
   },
   {
+    "obsolete": true,
     "id": 3021,
     "name": "ruby_pack_frame",
     "description": "Ruby: Failed to pack additional into spare bytes of Frame field"
@@ -241,6 +245,7 @@
     "description": "Native: The stack delta read from the delta map is marked as invalid"
   },
   {
+    "obsolete": true,
     "id": 4006,
     "name": "native_stack_delta_stop",
     "description": "Native: The stack delta read from the delta map is a stop record"
@@ -261,6 +266,7 @@
     "description": "Native: Unable to read the kernel-mode registers"
   },
   {
+    "obsolete": true,
     "id": 4010,
     "name": "native_chase_irq_stack_link",
     "description": "Native: Unable to read the IRQ stack link"
@@ -331,6 +337,7 @@
     "description": "V8: No entry for this process exists in the V8 process info array"
   },
   {
+    "obsolete": true,
     "id": 6000,
     "name": "dotnet_no_proc_info",
     "description": "Dotnet: No entry for this process exists in the dotnet process info array"

@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // memory is a sparse address space: a read not fully inside one region fails
@@ -112,9 +113,14 @@ func TestLocate(t *testing.T) {
 			want: VarLocation{ModuleID: 3, Offset: 0x40},
 		},
 		"general-dynamic with an unapplied relocation": {
-			v:          Var{access: accessGeneralDynamic, elfAddr: elfAddr, variant: variantII},
-			mem:        memory{slotAddr: words(0, 0x40)},
-			wantAnyErr: true,
+			v:       Var{access: accessGeneralDynamic, elfAddr: elfAddr, variant: variantII},
+			mem:     memory{slotAddr: words(0, 0x40)},
+			wantErr: ErrUnresolved,
+		},
+		"local-dynamic with an unapplied relocation": {
+			v:       Var{access: accessLocalDynamic, elfAddr: elfAddr, variant: variantII},
+			mem:     memory{slotAddr: words(0)},
+			wantErr: ErrUnresolved,
 		},
 		"local-dynamic": {
 			// The relocation resolves the module only. The offset is static.
@@ -225,7 +231,7 @@ func TestLocate(t *testing.T) {
 			if mem == nil {
 				mem = memory{}
 			}
-			got, err := tc.v.Locate(remotememory.RemoteMemory{ReaderAt: mem}, bias)
+			info, pending, err := tc.v.Locate(remotememory.RemoteMemory{ReaderAt: mem}, bias)
 			switch {
 			case tc.wantErr != nil:
 				require.ErrorIs(t, err, tc.wantErr)
@@ -233,7 +239,18 @@ func TestLocate(t *testing.T) {
 				require.Error(t, err)
 			default:
 				require.NoError(t, err)
-				assert.Equal(t, tc.want, got)
+			}
+			if err != nil {
+				assert.Zero(t, info)
+				assert.Nil(t, pending)
+				return
+			}
+			if tc.want.ModuleID != 0 {
+				assert.Zero(t, info)
+				assert.Equal(t, &tc.want, pending)
+			} else {
+				assert.Equal(t, support.TLSVarInfo{Tls_offset: tc.want.Offset, Valid: true}, info)
+				assert.Nil(t, pending)
 			}
 		})
 	}

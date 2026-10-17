@@ -56,8 +56,6 @@ func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.PID,
 	ptr unsafe.Pointer) error {
 	switch t {
-	case libpf.Dotnet:
-		emc.ctx.addMap(unsafe.Pointer(&C.dotnet_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_DotnetProcInfo))
 	case libpf.Perl:
 		emc.ctx.addMap(unsafe.Pointer(&C.perl_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_PerlProcInfo))
 	case libpf.PHP:
@@ -85,8 +83,6 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 
 func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.PID) error {
 	switch t {
-	case libpf.Dotnet:
-		emc.ctx.delMap(unsafe.Pointer(&C.dotnet_procs), C.u32(pid))
 	case libpf.Perl:
 		emc.ctx.delMap(unsafe.Pointer(&C.perl_procs), C.u32(pid))
 	case libpf.PHP:

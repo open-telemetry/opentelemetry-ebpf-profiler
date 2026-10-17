@@ -20,6 +20,20 @@ func TestExtractTLSOffset(t *testing.T) {
 		expectedError string
 	}{
 		{
+			// rb_current_ec_noinline from statically linked Ruby 3.4.7.
+			// GCC emits a hi12/lo12 ADD pair for local-exec TLS.
+			name: "Ruby 3.4.7 static ARM64 with hi12/lo12 ADD pair",
+			code: []byte{
+				0x40, 0xd0, 0x3b, 0xd5, // MRS X0, TPIDR_EL0
+				0x00, 0x00, 0x40, 0x91, // ADD X0, X0, #0x0, LSL #12
+				0x00, 0xe0, 0x00, 0x91, // ADD X0, X0, #0x38
+				0x00, 0x00, 0x40, 0xf9, // LDR X0, [X0]
+				0xc0, 0x03, 0x5f, 0xd6, // RET
+			},
+			baseAddr: 0x1000,
+			expected: 56,
+		},
+		{
 			name: "Python 3.13 ARM64 MRS followed by ADD",
 			code: []byte{
 				// MRS X0, TPIDR_EL0  (S3_3_C13_C0_2)
@@ -100,11 +114,11 @@ func TestExtractTLSOffset(t *testing.T) {
 			expectedError: "found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset",
 		},
 		{
-			name: "offset too large (out of valid range)",
+			name: "MRS followed only by zero shifted ADD",
 			code: []byte{
 				// MRS X0, TPIDR_EL0
 				0x40, 0xd0, 0x3b, 0xd5,
-				// ADD X0, X0, #0x1000 (too large, outside valid range < 0x1000)
+				// ADD X0, X0, #0x0, LSL #12 (zero offset is not accepted)
 				0x00, 0x00, 0x40, 0x91,
 				// RET
 				0xc0, 0x03, 0x5f, 0xd6,

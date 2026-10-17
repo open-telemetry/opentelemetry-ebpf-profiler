@@ -96,7 +96,6 @@ func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 	}
 	vms := &d.vmStructs
 	data := support.PerlProcInfo{
-		Version:    d.version,
 		StateAddr:  uint64(d.stateAddr) + uint64(i.bias),
 		StateInTSD: stateInTSD,
 		TsdInfo:    libcInfo.TSDInfo,

@@ -420,7 +420,6 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		Version:        d.version,
 		Tls_offset:     int16(d.staticTLSOffset),
 		TsdInfo:        libcInfo.TSDInfo,
 
@@ -752,7 +751,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	var value libpf.SymbolValue
 	switch ef.Machine {
 	case elf.EM_AARCH64:
-		value, err = decodeStubArgumentARM64(code, memoryBase), nil
+		value, err = decodeStubArgumentARM64(code, uint64(sym.Address), memoryBase), nil
 	case elf.EM_X86_64:
 		value, err = decodeStubArgumentAMD64(code, uint64(sym.Address), uint64(memoryBase))
 	default:
