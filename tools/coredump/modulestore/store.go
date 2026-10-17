@@ -442,10 +442,10 @@ func (store *Store) ListLocalModules() (libpf.Set[ID], error) {
 }
 
 // RemoveLocalTempFiles removes all lingering temporary files that were never fully committed.
+// A dry run logs the files without deleting them.
 //
-// If multiple instances of `Store` exist for the same cache directory, this may with uncommitted
-// writes of the other instance.
-func (store *Store) RemoveLocalTempFiles() error {
+// Concurrent writes to the same cache directory may be removed.
+func (store *Store) RemoveLocalTempFiles(dryRun bool) error {
 	moduleVisitor := func(ID) error {
 		return nil
 	}
@@ -454,8 +454,11 @@ func (store *Store) RemoveLocalTempFiles() error {
 			log.Warnf("`%s` file in local cache is neither a temp file nor a module", unkPath)
 			return nil
 		}
-		if err := os.Remove(unkPath); err != nil {
-			return fmt.Errorf("failed to remove file: %w", err)
+		log.Infof("Removing local temporary file `%s`", unkPath)
+		if !dryRun {
+			if err := os.Remove(unkPath); err != nil {
+				return fmt.Errorf("failed to remove file: %w", err)
+			}
 		}
 		return nil
 	}
