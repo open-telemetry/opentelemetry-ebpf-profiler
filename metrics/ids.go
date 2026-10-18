@@ -578,9 +578,6 @@ const (
 	// Number of unwound dotnet frames
 	IDUnwindDotnetFrames = 262
 
-	// Number of times we didn't find an entry for this process in the dotnet process info array
-	IDUnwindDotnetErrNoProcInfo = 263
-
 	// Number of failures to read dotnet frame pointer data
 	IDUnwindDotnetErrBadFP = 264
 
@@ -716,6 +713,15 @@ const (
 	// Number of thread context attribute payloads truncated to fit the buffer
 	IDUnwindThreadContextAttrsTruncated = 309
 
+	// Number of samples whose thread-context labels were discarded because no decoder was available for the process
+	IDThreadContextLabelsNoDecoder = 310
+
+	// Number of thread-context label entries dropped as undecodable
+	IDThreadContextDroppedEntriesUndecodable = 311
+
+	// Number of processes whose published thread-context label schema was rejected
+	IDThreadContextSchemaRejected = 312
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 310
+	IDMax = 313
 )

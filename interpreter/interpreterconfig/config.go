@@ -113,8 +113,6 @@ func (cfg *Config) IsMapEnabled(mapName string) bool {
 		return !cfg.Ruby.IsDisabled()
 	case nodev8.BPFMapName:
 		return !cfg.V8.IsDisabled()
-	case dotnet.BPFMapName:
-		return !cfg.Dotnet.IsDisabled()
 	case beam.BPFMapName:
 		return !cfg.BEAM.IsDisabled()
 	case luajit.BPFMapName:

@@ -260,7 +260,6 @@ static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
   unwinder = walk_php_stack(record, phpinfo, is_jitted);
 
 exit:
-  tail_call(ctx, unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_php)

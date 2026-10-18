@@ -33,7 +33,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u32 pid, u32 tid)
   if (data) {
     data[0] = 1337;
   }
-  trace->frame_data_end = trace->variable_data_end;
+  trace->frame_data_end = end_variable_data(trace, sizeof(u64));
   send_trace(ctx, trace);
 
   // Single native frame, with kernel trace.
@@ -47,7 +47,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u32 pid, u32 tid)
   if (data) {
     data[0] = 1337;
   }
-  trace->frame_data_end = trace->variable_data_end;
+  trace->frame_data_end = end_variable_data(trace, sizeof(u64));
   send_trace(ctx, trace);
 }
 

@@ -391,8 +391,8 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 	return nil
 }
 
-func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
-	return nil
+func (i *beamInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	return ebpf.DeleteProcData(libpf.BEAM, pid)
 }
 
 func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {

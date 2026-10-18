@@ -24,6 +24,6 @@ func NewFactory() extension.Factory {
 		func(_ context.Context, _ extension.Settings, _ component.Config) (extension.Extension, error) {
 			return nil, errors.New("uprobe extension is only supported on Linux amd64/arm64")
 		},
-		metadata.ExtensionsStability,
+		metadata.ExtensionStability,
 	)
 }
