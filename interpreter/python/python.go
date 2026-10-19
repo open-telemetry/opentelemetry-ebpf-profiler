@@ -831,7 +831,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
-	maxVer := pythonVer(3, 14)
+	maxVer := pythonVer(3, 15)
 	if version < minVer || version > maxVer {
 		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
 			major, minor,
@@ -845,12 +845,16 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 	}
 
-	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
-	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
+	// Python 3.15 removed autoTSSkey: PyGILState_GetThisThreadState reads a
+	// thread-local variable, and only the static TLS offset below is used.
+	if version < pythonVer(3, 15) {
+		// Calls first: PyThread_tss_get(autoTSSKey)
+		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
+		if autoTLSKey == libpf.SymbolValueInvalid {
+			return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
+		}
 	}
-	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
+	if version >= pythonVer(3, 7) && version < pythonVer(3, 15) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
 		// call directly pthread_getspecific. So we might be finding the address
 		// for "Py_tss_t" or "pthread_key_t" depending on call target.
@@ -874,6 +878,9 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		var err error
 		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
 		if err != nil {
+			if version >= pythonVer(3, 15) {
+				return nil, fmt.Errorf("failed to extract TLS offset: %v", err)
+			}
 			log.Warnf("Failed to extract TLS offset: %v", err)
 		}
 	}
@@ -952,7 +959,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// they removed one level of indirection.
 		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
-	case pythonVer(3, 14):
+	case pythonVer(3, 14), pythonVer(3, 15):
 		// Python 3.14 underwent significant structural changes
 		// _PyInterpreterFrame structure:
 		//   - f_executable at offset 0 (instead of f_code)
@@ -964,7 +971,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.LastI = 56       // instr_ptr (changed from prev_instr)
 		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
 		vms.PyFrameObject.EntryMember = 74 // char owner
-		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
+		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_INTERPRETER
 		vms.PyThreadState.Frame = 72       // current_frame in _ts structure
 		// Current frame is not used anymore (removed in 3.13)
 		vms.PyCFrame.CurrentFrame = 0
