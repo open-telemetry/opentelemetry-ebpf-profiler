@@ -61,7 +61,6 @@ func (m *RawMapping) IsFileBacked() bool {
 	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD() && !m.IsPrctlNamed()
 }
 
-
 // IsPrctlNamed returns true if the mapping was named via prctl(PR_SET_VMA),
 // which gives anonymous mappings a path like "[anon:name]". These are still
 // anonymous memory, not file-backed.
