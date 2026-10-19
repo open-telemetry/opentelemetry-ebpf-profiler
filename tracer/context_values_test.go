@@ -50,7 +50,7 @@ func TestLoadBpfTraceContextValueOrder(t *testing.T) {
 				Thread_label_end:  end,
 				Golang_label_end:  end,
 				Variable_data_end: end,
-				Num_frames:        2,
+				Num_frames:        1,
 			}
 			raw := append(pfunsafe.FromPointer(&header), pfunsafe.FromSlice(tc.data)...)
 

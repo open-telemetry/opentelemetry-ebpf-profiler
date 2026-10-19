@@ -21,8 +21,8 @@ send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
   trace->comm[3] = test_case;
-  // Context values lead variable_data ahead of any kernel and user frames.
-  // Without kernel frames, push none, like sampling. With kernel frames, push
+  // Context values precede any kernel and user frames. Without kernel frames,
+  // push none, like sampling. With kernel frames, push
   // sentinels to verify they survive stack capture and userspace decoding.
   if (capture_kernel_frames) {
     u64 *values = push_context_values(trace, 3);
@@ -43,7 +43,8 @@ send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel
   send_trace(ctx, trace);
 }
 
-static EBPF_INLINE int run_sample_trace(void *ctx, u8 test_case, bool capture_kernel_frames)
+SEC("tracepoint/integration/sched_switch")
+int tracepoint_integration__sched_switch(void *ctx)
 {
   u32 pid = 0;
   u32 tid = 0;
@@ -52,18 +53,7 @@ static EBPF_INLINE int run_sample_trace(void *ctx, u8 test_case, bool capture_ke
   }
 
   printt("pid %d in integration test", pid);
-  send_sample_trace(ctx, pid, tid, test_case, capture_kernel_frames);
+  send_sample_trace(ctx, pid, tid, 1, false);
+  send_sample_trace(ctx, pid, tid, 2, true);
   return 0;
-}
-
-SEC("tracepoint/integration/sched_switch_no_kernel")
-int tracepoint_integration__sched_switch_no_kernel(void *ctx)
-{
-  return run_sample_trace(ctx, 1, false);
-}
-
-SEC("tracepoint/integration/sched_switch_with_kernel")
-int tracepoint_integration__sched_switch_with_kernel(void *ctx)
-{
-  return run_sample_trace(ctx, 2, true);
 }

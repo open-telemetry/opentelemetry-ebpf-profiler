@@ -687,11 +687,11 @@ typedef struct Trace {
   u32 cpu_id;
 
   // Variable data offsets
-  // context_value_end marks the end of the origin-specific context values.
-  // They are pushed by push_context_values, before unwinding, so they lead
-  // variable_data. The first entry, if any, is the primary profile value (e.g.
-  // off-CPU time in nanoseconds); origins without a value (e.g. sampling)
-  // push none. Userspace exposes them as libpf.EbpfTrace.ContextValues.
+  // context_value_end marks the end of the origin-specific context values,
+  // pushed by push_context_values before unwinding. The first entry, if any, is
+  // the primary profile value (e.g. off-CPU time in nanoseconds); origins
+  // without a value (e.g. sampling) push none. Userspace exposes them as
+  // libpf.EbpfTrace.ContextValues.
   u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;

@@ -290,10 +290,8 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
 
   // If the stack is otherwise empty, push an error for that: we should
-  // never encounter empty stacks for successful unwinding. Any leading
-  // context values are not frames, so the stack is empty when variable
-  // data has not advanced past them.
-  if (trace->variable_data_end == trace->context_value_end) {
+  // never encounter empty stacks for successful unwinding.
+  if (trace->num_frames == 0 && trace->kernel_frame_end == 0) {
     DEBUG_PRINT("unwind_stop called but the stack is empty");
     increment_metric(metricID_ErrEmptyStack);
     if (!state->unwind_error) {

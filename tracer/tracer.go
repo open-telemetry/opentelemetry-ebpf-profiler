@@ -1106,7 +1106,7 @@ func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, e
 	}
 
 	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
-	dst := vd.dst[:n]
+	dst := vd.dst[:n:n]
 	copy(dst, src)
 	vd.dst = vd.dst[n:]
 	return dst, nil
@@ -1147,8 +1147,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 
 	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
 
-	// Context values are the first variable data region, written ahead of any
-	// kernel/user frames; the region is empty for origins without a value.
+	// Context values precede the kernel/user frames; the region is empty for
+	// origins without a value.
 	var err error
 	trace.ContextValues, err = vd.copyUint64(ptr.Context_value_end, "context value")
 	if err != nil {

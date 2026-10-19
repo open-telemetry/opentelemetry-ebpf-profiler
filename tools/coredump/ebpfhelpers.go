@@ -147,13 +147,13 @@ func __bpf_copy_frame(id C.u64, trace *C.Trace) C.int {
 		log.Errorf("coredump trace unexpectedly has kernel_frame_end %d", trace.kernel_frame_end)
 		return -1
 	}
-	// Context values lead variable_data; frames follow them. Copy both once and
-	// expose non-overlapping slices of the pooled buffer.
+	// Context values precede the frames. Copy both once and expose
+	// non-overlapping slices of the pooled buffer.
 	sz := trace.frame_data_end
 	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz/8]), pfunsafe.FromSlice(trace.variable_data[:sz]))
 	numContextValues := trace.context_value_end / 8
-	ctx.trace.ContextValues = ctx.trace.FrameDataBuf[:numContextValues]
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[numContextValues : sz/8]
+	ctx.trace.ContextValues = ctx.trace.FrameDataBuf[:numContextValues:numContextValues]
+	ctx.trace.FrameData = ctx.trace.FrameDataBuf[numContextValues : sz/8 : sz/8]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
 	return 0
 }

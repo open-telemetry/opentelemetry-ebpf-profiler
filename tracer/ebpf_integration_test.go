@@ -88,7 +88,7 @@ func forceContextSwitch() {
 	wg.Wait()
 }
 
-func attachKernelFrameProbes(t *testing.T, tr *tracer.Tracer) []link.Link {
+func attachKernelFrameProbe(t *testing.T, tr *tracer.Tracer) link.Link {
 	t.Helper()
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
@@ -100,37 +100,27 @@ func attachKernelFrameProbes(t *testing.T, tr *tracer.Tracer) []link.Link {
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	programNames := []string{
-		"tracepoint_integration__sched_switch_no_kernel",
-		"tracepoint_integration__sched_switch_with_kernel",
-	}
-	events := make([]link.Link, 0, len(programNames))
-	for _, name := range programNames {
-		prog, err := cebpf.NewProgram(coll.Programs[name])
-		require.NoError(t, err)
-		defer prog.Close()
+	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
+	require.NoError(t, err)
+	defer prog.Close()
 
-		ev, err := link.Tracepoint("sched", "sched_switch", prog, nil)
-		require.NoError(t, err)
-		events = append(events, ev)
-	}
-	return events
+	event, err := link.Tracepoint("sched", "sched_switch", prog, nil)
+	require.NoError(t, err)
+	return event
 }
 
-// runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
-// that sends a selection of hand-crafted, predictable traces.
+// runKernelFrameProbe triggers sched/sched_switch, which sends a selection of
+// hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	t.Helper()
-	events := attachKernelFrameProbes(t, tr)
-	t.Logf("probes for Kernel frames installed on sched/sched_switch")
+	event := attachKernelFrameProbe(t, tr)
+	t.Logf("probe for Kernel frames installed on sched/sched_switch")
 
 	// Manually trigger the tracepoint on sched/sched_switch.
 	forceContextSwitch()
 
 	t.Logf("tracepoint sched_switch triggered")
-	for _, event := range events {
-		require.NoError(t, event.Close())
-	}
+	require.NoError(t, event.Close())
 }
 
 type trace struct {
@@ -270,7 +260,7 @@ Loop:
 		id uint8
 		// hasKernelFrames indicates if the trace should contain kernel frames.
 		hasKernelFrames bool
-		// contextValues are the values expected before the kernel frames in frame_data.
+		// contextValues are expected before the kernel-frame region in variable_data.
 		contextValues []uint64
 		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
 		// that will be verified against the returned Trace.
@@ -392,12 +382,8 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	traceChan := make(chan *libpf.EbpfTrace, 1024)
 	require.NoError(t, tr.StartMapMonitors(t.Context(), traceChan))
 
-	events := attachKernelFrameProbes(t, tr)
-	defer func() {
-		for _, event := range events {
-			_ = event.Close()
-		}
-	}()
+	event := attachKernelFrameProbe(t, tr)
+	defer event.Close()
 
 	cmd := newPIDNamespaceCommand("-pid-namespace-translation-role=" + pidNamespaceTarget)
 	require.NoError(t, cmd.Start())
