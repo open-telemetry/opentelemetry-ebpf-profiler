@@ -193,9 +193,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   // Tail call needed for recursion, switching to interpreter unwinder, or reporting
   // trace due to end-of-trace or error. The unwinder program index is set accordingly.
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("bpf_tail call failed for %d in unwind_native", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 
 SEC("perf_event/native_tracer_entry")
