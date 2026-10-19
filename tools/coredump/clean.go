@@ -69,7 +69,7 @@ func (cmd *cleanCmd) exec(context.Context, []string) error {
 }
 
 func (cmd *cleanCmd) cleanTemp(libpf.Set[modulestore.ID]) error {
-	if err := cmd.store.RemoveLocalTempFiles(); err != nil {
+	if err := cmd.store.RemoveLocalTempFiles(cmd.dry); err != nil {
 		return fmt.Errorf("failed to delete temp files: %w", err)
 	}
 	return nil

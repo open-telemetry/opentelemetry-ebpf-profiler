@@ -93,11 +93,15 @@ tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
     goto err;
   }
 
-  // glibc allocates a module's block lazily, leaving TLS_DTV_UNALLOCATED until
-  // the thread first accesses it. A thread that never entered the module is not
-  // a failed read, so it takes neither the error path nor its metric. musl needs
-  // no counterpart because it populates every thread's DTV eagerly.
-  if (tls_block == (void *)-1) {
+  // glibc leaves new DTV slots zero until this thread refreshes its DTV, then
+  // TLS_DTV_UNALLOCATED until the module's block is allocated. Neither state
+  // is a read failure.
+  // These unrefreshed-DTV cases affect glibc only; musl populates DTVs eagerly.
+  // This is only a partial fix: the DTV index is not checked against its length,
+  // which glibc stores in dtv[-1].counter.
+  // Stale entries after module ID reuse also remain possible, but are unlikely:
+  // they require dlclose/dlopen while a thread retains its old DTV.
+  if (!tls_block || tls_block == (void *)-1) {
     DEBUG_PRINT("TLS block unallocated for this thread");
     return TLS_READ_ABSENT;
   }
