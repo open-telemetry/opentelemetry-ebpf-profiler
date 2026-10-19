@@ -310,3 +310,29 @@ func TestCalculateMappingFileIDNotExist(t *testing.T) {
 	})
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestRawMappingIsAnonymous(t *testing.T) {
+	rawMaps := `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432 /tmp/app.so
+7f8b929f0000-7f8b92a00000 rw-p 00000000 00:00 0
+7f8b92a00000-7f8b92a10000 rw-p 00000000 00:00 0 [heap]
+7f8b92b00000-7f8b92b10000 r--p 00000000 00:2e 2 /dir/the_void.txt`
+
+	r := strings.NewReader(rawMaps)
+	var mappings []RawMapping
+
+	_, err := iterateMappings(r, func(m RawMapping) bool {
+		mappings = append(mappings, m)
+		return true
+	})
+	require.NoError(t, err)
+	require.Len(t, mappings, 4)
+
+	assert.False(t, mappings[0].IsAnonymous(),
+		"shared library mapping must be file-backed")
+	assert.True(t, mappings[1].IsAnonymous(),
+		"unnamed anonymous mapping must be anonymous")
+	assert.True(t, mappings[2].IsAnonymous(),
+		"heap mapping must be anonymous")
+	assert.False(t, mappings[3].IsAnonymous(),
+		"FUSE-backed file mapping must be file-backed")
+}

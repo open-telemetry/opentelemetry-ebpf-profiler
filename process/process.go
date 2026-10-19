@@ -389,7 +389,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			case fieldValue == "":
+			case fieldValue == "", fieldValue == "[heap]", fieldValue == "[stack]":
 				// This is an anonymous mapping, keep it
 			case strings.HasPrefix(fieldValue, "[anon:"):
 				// This is an anonymous mapping named with prctl(PR_SET_VMA), keep the name
@@ -640,4 +640,47 @@ func (sp *systemProcess) Open(name string) (fs.File, error) {
 	// Open the file using the process-specific root.
 	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
 	return openInProcRoot(sp.pid, name)
+}
+
+// ValidateAnonymousRange verifies that the memory range [addr, addr+length) in pid
+// resides completely within a readable, anonymous (non-file-backed) memory mapping.
+// This prevents reading from unprivileged FUSE or hostile file-backed mappings
+// that could hang the profiler via an uncompleted page fault.
+func ValidateAnonymousRange(pid libpf.PID, addr libpf.Address, length uint64) error {
+	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", pid))
+	if err != nil {
+		return fmt.Errorf("failed to open /proc/%d/maps: %w", pid, err)
+	}
+	defer mapsFile.Close()
+
+	start := uint64(addr)
+	end := start + length
+	found := false
+	var conflict *RawMapping
+
+	_, err = iterateMappings(mapsFile, func(m RawMapping) bool {
+		mEnd := m.Vaddr + m.Length
+		// Check if the requested range starts inside this mapping
+		if start >= m.Vaddr && start < mEnd {
+			if end <= mEnd && m.IsAnonymous() && (m.Flags&elf.PF_R != 0) {
+				found = true
+				return false // Stop iterating; valid anonymous mapping covers the full range
+			}
+			copyM := m
+			conflict = &copyM
+			return false // Stop iterating; range overlaps an invalid or insufficient mapping
+		}
+		return true
+	})
+	if err != nil && !errors.Is(err, ErrCallbackStopped) {
+		return fmt.Errorf("failed to parse /proc/%d/maps: %w", pid, err)
+	}
+	if !found {
+		if conflict != nil {
+			return fmt.Errorf("address 0x%x is in non-anonymous mapping (%s, dev=%d, ino=%d)",
+				addr, conflict.Path, conflict.Device, conflict.Inode)
+		}
+		return fmt.Errorf("address 0x%x is not within any mapped region", addr)
+	}
+	return nil
 }

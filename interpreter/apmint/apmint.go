@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tls"
@@ -32,6 +33,7 @@ const (
 	serviceEnvMaxLength = 128
 	// socketPathMaxLength defines the maximum length of the APM agent socket path.
 	socketPathMaxLength = 1024
+	maxProcStorageSize  = 2048
 
 	// procStorageExport defines the name of the process storage ELF export.
 	procStorageExport = "elastic_apm_profiling_correlation_process_storage_v1"
@@ -113,7 +115,7 @@ func (d data) String() string {
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
+	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA, pid)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
 	}
@@ -270,15 +272,20 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 func readProcStorage(
 	rm remotememory.RemoteMemory,
 	procStorageAddr libpf.Address,
+	pid libpf.PID,
 ) (*apmProcessStorage, error) {
 	readPtr := rm.Ptr(procStorageAddr)
 	if readPtr == 0 {
 		return nil, errors.New("failed to read Java agent process state pointer")
 	}
 
+	// Validate that the storage buffer resides within an anonymous memory mapping.
+	// This prevents hanging the profiler on an unprivileged FUSE mount (GHSA-7jcw-7r7m-wp3p).
+	if err := process.ValidateAnonymousRange(pid, readPtr, maxProcStorageSize); err != nil {
+		return nil, fmt.Errorf("unsafe APM process storage pointer: %w", err)
+	}
+
 	// Skip `layout-minor-version` field: not relevant until values != 1 exist.
-	// The specification guarantees that the struct can only be extended by adding
-	// new fields after the old ones.
 	readPtr += 2
 
 	serviceName, err := nextString(rm, &readPtr, serviceNameMaxLength)
