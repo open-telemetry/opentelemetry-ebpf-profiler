@@ -5,6 +5,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 
 import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
@@ -24,9 +25,10 @@ type ProbeAttacher interface {
 	// Attach is called for each matching mapping seen for a PID.
 	// The implementation is responsible for opening and managing per-PID
 	// kernel resources (e.g. a uprobe link restricted to that PID).
-	// The mapping is valid only for the duration of the call. Implementations
-	// that retain it must copy the value and intern mapping.Path.
-	Attach(pr process.Process, mapping *process.RawMapping) error
+	// The mapping and ELF reference are valid only for the duration of the call.
+	// Implementations that retain the mapping must copy it and intern mapping.Path.
+	Attach(pr process.Process, mapping *process.RawMapping, fileID libpf.FileID,
+		elfRef *pfelf.Reference) error
 
 	// Detach is called when a matched process exits. The implementation must
 	// close all per-process resources opened in Attach.
