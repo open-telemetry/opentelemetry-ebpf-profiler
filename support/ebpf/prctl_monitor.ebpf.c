@@ -38,16 +38,23 @@ int tracepoint__sys_exit_prctl(void *ctx)
 //       unsigned long arg5): we only need option, arg2 and arg5 (the name).
 #if defined(__x86_64__)
   u64 option   = regs.di;
+  u64 ret      = regs.ax;
   u64 arg2     = regs.si;
   u64 name_ptr = regs.r8;
 #elif defined(__aarch64__)
   // At exit x0 (regs[0]) holds the return value, arg1 is preserved in orig_x0.
   u64 option   = regs.orig_x0;
+  u64 ret      = regs.regs[0];
   u64 arg2     = regs.regs[1];
   u64 name_ptr = regs.regs[4];
 #else
   #error unsupported architecture
 #endif
+
+  if (ret != 0) {
+    // The syscall failed. So return early.
+    goto exit;
+  }
 
   if (option != PR_SET_VMA || arg2 != PR_SET_VMA_ANON_NAME) {
     goto exit;
