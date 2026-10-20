@@ -189,10 +189,6 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
     return;
   }
 
-  // The structure of apm_[transaction|trace]_id happens to be the same
-  // as proposed in
-  // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
-
   trace->trace_id = info->trace_id;
   trace->span_id  = info->span_id;
 }
