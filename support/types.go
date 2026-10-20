@@ -411,6 +411,7 @@ const (
 
 	LJCframeSpaceX86 = 0x50
 	LJCframeSpaceArm = 0xd0
+	LJJitMarker      = 0x2a
 )
 
 var MetricsTranslation = []metrics.MetricID{
