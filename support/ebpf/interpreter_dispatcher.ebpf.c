@@ -193,16 +193,103 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
   trace->span_id  = info->span_id;
 }
 
-// Stub: only looks the process up, so thread_context_procs stays loaded
-// regardless of whether the tracer is enabled. Reading and decoding the
-// thread context lands in a later change.
+// maybe_add_thread_context_info copies the interrupted thread's trace context
+// and attribute payload, published through otel_thread_ctx_v1, into trace.
 static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 {
-  u32 pid                     = trace->pid;
-  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &pid);
+  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &trace->pid);
   if (!proc) {
     return;
   }
+
+  // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
+  if (!tls_var_valid(&proc->tls)) {
+    DEBUG_PRINT("Thread context pointer not located yet");
+    return;
+  }
+
+  u64 tsd_base;
+  // tsd_get_base counts metricID_UnwindErrBadTPBaseAddr itself.
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    DEBUG_PRINT("Failed to get TSD base for the thread context");
+    return;
+  }
+
+  void *thread_context_buf_ptr;
+  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &thread_context_buf_ptr);
+  if (rc != TLS_READ_OK) {
+    // TLS_READ_ABSENT is no failure: glibc allocates a thread's block for a
+    // dlopen'd module on its first access.
+    if (rc == TLS_READ_ERR) {
+      // On top of the metricID_UnwindErrBadDTVRead tls_read_var counts on the
+      // DTV arm, to attribute the failure to its consumer.
+      increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
+      DEBUG_PRINT("Failed to read the thread context pointer");
+    }
+    return;
+  }
+
+  // Null until the thread publishes, which must not count as a read error.
+  if (!thread_context_buf_ptr) {
+    DEBUG_PRINT("Thread context unpublished: null TLS pointer");
+    return;
+  }
+
+  // Per OTEP #4947 only the owning thread writes the buffer, and that is the
+  // thread we interrupted, so no write races these reads. valid flags a write
+  // interrupted midway.
+  ThreadContextBuf thread_context_buf;
+  if (bpf_probe_read_user(
+        &thread_context_buf, sizeof(thread_context_buf), thread_context_buf_ptr)) {
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+    DEBUG_PRINT("Failed to read the thread context buffer");
+    return;
+  }
+
+  if (!thread_context_buf.valid) {
+    DEBUG_PRINT("Thread context buffer mid-update, skipping");
+    return;
+  }
+
+  // A thread with no active span publishes zero IDs, which must not clobber the
+  // OTel span IDs set earlier in unwind_stop.
+  if (
+    thread_context_buf.trace_id.as_int.hi | thread_context_buf.trace_id.as_int.lo |
+    thread_context_buf.span_id.as_int) {
+    trace->trace_id = thread_context_buf.trace_id;
+    trace->span_id  = thread_context_buf.span_id;
+  }
+
+  u16 attrs_data_size = thread_context_buf.attrs_data_size;
+  if (attrs_data_size > MAX_THREAD_LABEL_DATA_SZ) {
+    // Counted, not dropped: a truncated payload is still usable.
+    increment_metric(metricID_UnwindThreadContextAttrsTruncated);
+    attrs_data_size = MAX_THREAD_LABEL_DATA_SZ;
+  }
+  if (attrs_data_size != 0) {
+    // A fixed reservation keeps the destination bounded for the verifier.
+    void *attrs_data = reserve_variable_data(trace, MAX_THREAD_LABEL_DATA_SZ, 0);
+    if (!attrs_data) {
+      return;
+    }
+    if (bpf_probe_read_user(
+          attrs_data, attrs_data_size, thread_context_buf_ptr + sizeof(thread_context_buf))) {
+      increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+      return;
+    }
+    commit_variable_data(trace, attrs_data_size);
+  }
+
+  // Keep the exact payload end, then align the next section for Go labels.
+  trace->thread_label_end = end_variable_data(trace, 1);
+  increment_metric(metricID_UnwindThreadContextReadSuccesses);
+
+  // WARN: we print this as little endian
+  DEBUG_PRINT(
+    "Thread context trace ID: %016lX%016lX, span ID: %016lX",
+    trace->trace_id.as_int.hi,
+    trace->trace_id.as_int.lo,
+    trace->span_id.as_int);
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
@@ -266,6 +353,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
+  // Overrides the IDs set above, unless its own are zero.
   maybe_add_thread_context_info(trace);
 
   // Dispatches without returning, so it must come last.
