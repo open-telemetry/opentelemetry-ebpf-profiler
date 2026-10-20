@@ -76,6 +76,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			Config:               *cfg,
 			ExecutableReporter:   controllerOption.executableReporter,
 			ProcessMetaEnrichers: controllerOption.processMetaEnrichers,
+			ResourceEnrichers:    controllerOption.resourceEnrichers,
 			ReporterFactory:      controllerOption.reporterFactory,
 			OnShutdown:           controllerOption.onShutdown,
 		}

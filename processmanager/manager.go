@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -74,6 +75,20 @@ type Config struct {
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
+	ResourceEnrichers     []procmeta.ResourceEnricher
+}
+
+// newMappingFilters resolves each enricher's mapping requirements once, so the
+// mapping pass need not re-read them, pairing every non-nil filter with the index of
+// the enricher that declared it — the index the selected mappings are delivered by.
+func newMappingFilters(enrichers []procmeta.ResourceEnricher) []mappingFilter {
+	var filters []mappingFilter
+	for i, e := range enrichers {
+		if want := e.ResourceConfig().WantMapping; want != nil {
+			filters = append(filters, mappingFilter{enricher: i, want: want})
+		}
+	}
+	return filters
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -85,6 +100,9 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 	if cfg.FrameCacheSize == 0 {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
+
+	resourceEnrichers := slices.Clone(cfg.ResourceEnrichers)
+	mappingFilters := newMappingFilters(resourceEnrichers)
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](ELFInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)
@@ -144,6 +162,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		metaEnrichers:            metaEnrichers,
+		resourceEnrichers:        resourceEnrichers,
+		mappingFilters:           mappingFilters,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 	}
 
@@ -387,7 +407,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // trace handling to a goroutine pool, the caching strategy needs to be updated
 // accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
+	procMeta, resourceAttrs, resource := pm.metaForPID(bpfTrace.PID)
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -401,6 +421,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		Value:          bpfTrace.Value,
 		EnvVars:        procMeta.EnvVariables,
 		ResourceAttrs:  resourceAttrs,
+		Resource:       resource,
 		TraceID:        bpfTrace.APMTraceID,
 		SpanID:         bpfTrace.APMTransactionID,
 		ExtraMeta:      procMeta.ExtraMeta,

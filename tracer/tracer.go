@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -280,6 +281,10 @@ type Config struct {
 	// ProcessMetaEnrichers are optional hooks for enriching process metadata at
 	// process discovery time. Multiple enrichers are called in order.
 	ProcessMetaEnrichers []process.MetaEnricher
+	// ResourceEnrichers are optional hooks for contributing OTel resource
+	// attributes to a process, called on every process synchronization.
+	// Multiple enrichers are called in order.
+	ResourceEnrichers []procmeta.ResourceEnricher
 	// PIDNamespaceTranslationMode controls the scope of PID namespace translation.
 	// It supports None (disabled, default), Auto (translates recursively when kernel BTF
 	// layout is available, otherwise Exact), Exact, and Recursive (requires BTF).
@@ -368,6 +373,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
+		ResourceEnrichers:     cfg.ResourceEnrichers,
 	})
 	if err != nil {
 		lifecycleCancel()

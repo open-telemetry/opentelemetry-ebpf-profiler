@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sys/unix"
 
@@ -36,6 +37,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/process/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/procmeta"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -122,15 +124,19 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 // metadata is gathered (including configured process MetaEnrichers) without
 // the processmanager lock held.
 //
+// created reports whether this call created the processInfo, i.e. the first
+// observation of the process. That is the lifecycle signal to use: a process may be
+// synchronized many times without ever retaining a mapping.
+//
 // Returns nil on failure.
 // Caller must not hold the pm.mu lock.
 func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
-	pr process.Process) *processInfo {
+	pr process.Process) (info *processInfo, created bool) {
 	pm.mu.RLock()
 	info, ok := pm.pidToProcessInfo[pid]
 	pm.mu.RUnlock()
 	if ok {
-		return info
+		return info, false
 	}
 
 	// Gather metadata without holding the processmanager lock:
@@ -142,21 +148,80 @@ func (pm *ProcessManager) getOrCreateProcessInfo(pid libpf.PID,
 
 	// Check if another goroutine registered the PID in-between.
 	if info, ok = pm.pidToProcessInfo[pid]; ok {
-		return info
+		return info, false
 	}
 
 	if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
-		return nil
+		return nil, false
 	}
 
 	pm.pidPageToMappingInfoSize++
 	info = &processInfo{
 		meta:     meta,
 		libcInfo: nil,
+		// Sole allocation site of the slots, so they are always as long as the
+		// registered enrichers, which index them.
+		contributions: make([]*pcommon.Resource, len(pm.resourceEnrichers)),
+		enricherState: make([]any, len(pm.resourceEnrichers)),
 	}
 	pm.pidToProcessInfo[pid] = info
 
-	return info
+	return info, true
+}
+
+// enrichResources runs the resource enrichers for a process and publishes the merge
+// of their contributions. One that reports no change keeps its previous
+// contribution, so data that has become unreadable is not lost.
+//
+// Caller must not hold pm.mu: enrichers run arbitrary code and read /proc and
+// remote process memory.
+func (pm *ProcessManager) enrichResources(pr process.Process, info *processInfo,
+	interpreters map[util.OnDiskFileIdentifier]interpreter.Instance,
+	enricherMappings [][]process.RawMapping, newProcessOrExec bool,
+) {
+	if info == nil || len(pm.resourceEnrichers) == 0 {
+		return
+	}
+
+	// The enricher slots belong to the synchronizing goroutine; metaForPID only
+	// reads the published resource. So the enrichers update the slots in place,
+	// and pm.mu is taken once, to publish resource.
+	if newProcessOrExec {
+		// Nothing derived from the replaced program can carry over: "no change" means
+		// "my contribution still holds", which after an exec it cannot. Otherwise an
+		// enricher resolving nothing for the new executable would keep the old
+		// program's attributes, and a fill-once one would never look again.
+		clear(info.contributions)
+		clear(info.enricherState)
+	}
+
+	req := procmeta.ResourceRequest{
+		Process:      pr,
+		Interpreters: interpreters,
+	}
+
+	// A new or execed process starts from cleared state, so the merge is due even if
+	// no enricher reports a change.
+	changed := newProcessOrExec
+	for i, e := range pm.resourceEnrichers {
+		if enricherMappings != nil {
+			req.Mappings = enricherMappings[i]
+		}
+		req.State = &info.enricherState[i]
+		if res, ok := e.EnrichResource(&req); ok {
+			info.contributions[i] = res
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+
+	merged := procmeta.MergeResources(nil, info.contributions)
+
+	pm.mu.Lock()
+	info.resource = merged
+	pm.mu.Unlock()
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
@@ -614,7 +679,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// the case of main thread exit. Ignore it.
 	}
 
-	info := pm.getOrCreateProcessInfo(pid, pr)
+	info, firstObservation := pm.getOrCreateProcessInfo(pid, pr)
 	if info == nil {
 		return
 	}
@@ -669,6 +734,16 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
+	// enricherMappings collects, per enricher, the mappings its filter selected, and
+	// is nil when none wants any. The filters are hoisted so the callback below,
+	// which runs once per mapping, captures a slice header instead of reaching
+	// through pm each iteration.
+	mappingFilters := pm.mappingFilters
+	var enricherMappings [][]process.RawMapping
+	if len(mappingFilters) > 0 {
+		enricherMappings = make([][]process.RawMapping, len(pm.resourceEnrichers))
+	}
+
 	// Reading the payload is deferred until after GetProcessMeta so env vars
 	// are available for the merge. 0 means absent.
 	var contextMappingAddr uint64
@@ -683,6 +758,15 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			contextMappingAddr = m.Vaddr
 			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
 			// PID resynchronization when the process names its context mapping "OTEL_CTX".
+		}
+
+		for _, f := range mappingFilters {
+			if f.want(&m) {
+				// Detach Path from the recycled scanner buffer before storing.
+				selected := m
+				selected.Path = libpf.Intern(selected.Path).String()
+				enricherMappings[f.enricher] = append(enricherMappings[f.enricher], selected)
+			}
 		}
 
 		interpreterMapping := isInterpreterMapping(&m)
@@ -823,17 +907,27 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// Sort and publish the new mappings and meta.
 	slices.SortFunc(mappings, compareMapping)
 
-	info = pm.getOrCreateProcessInfo(pid, pr)
+	// A concurrent ProcessedUntil may have dropped the processInfo since this
+	// synchronization started; recreating it starts from empty enricher state.
+	info, recreated := pm.getOrCreateProcessInfo(pid, pr)
 	pm.mu.Lock()
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
 			info.meta = meta
+			// Reset resource to nil to avoid pairing the replaced program's samples with
+			// the old one.
+			info.resource = nil
 		}
 		info.processContext = newProcessContextInfo
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
+
+	// Contribute resource attributes, now that the mappings and the interpreters
+	// attached this round are known.
+	pm.enrichResources(pr, info, interpreters, enricherMappings,
+		updateProcessMeta || firstObservation || recreated)
 
 	// Synchronize all interpreters with updated mappings
 	for _, instance := range interpreters {
@@ -892,15 +986,15 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// metaForPID returns the process metadata and process-context resource
-// attributes for pid, read under one lock.
-func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set) {
+// metaForPID returns a consistent snapshot of the process metadata, process-context
+// attributes, and resource contributed by enrichers, read under one lock.
+func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set, *pcommon.Resource) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.meta, procInfo.processContext.ResourceAttrs
+		return procInfo.meta, procInfo.processContext.ResourceAttrs, procInfo.resource
 	}
-	return process.Meta{}, attribute.Set{}
+	return process.Meta{}, attribute.Set{}, nil
 }
 
 // ThreadLabelDecoderForPID returns a decoder for pid's per-thread labels, or nil
