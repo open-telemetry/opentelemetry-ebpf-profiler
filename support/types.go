@@ -313,6 +313,8 @@ type ThreadContextProcInfo struct {
 	Tls TLSVarInfo
 }
 type V8ProcInfo struct {
+	Default_isolate_group_addr   uint64
+	Js_dispatch_table_offset     uint32
 	Type_JSFunction_first        uint16
 	Type_JSFunction_last         uint16
 	Type_Code                    uint16
@@ -331,6 +333,8 @@ type V8ProcInfo struct {
 	Codekind_shift               uint8
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
+	Leaptiering                  uint8
+	Pad_cgo_0                    [5]byte
 }
 
 const (
@@ -392,16 +396,15 @@ const (
 
 	V8FpContextSize = 0x40
 
-	V8FileTypeMarker       = 0x0
-	V8FileTypeByteCode     = 0x1
-	V8FileTypeNativeSFI    = 0x2
-	V8FileTypeNativeCode   = 0x3
-	V8FileTypeNativeJSFunc = 0x4
-	V8FileTypeMask         = 0x7
+	V8FrameTypeMarker     = 0x0
+	V8FrameTypeByteCode   = 0x1
+	V8FrameTypeNativeSFI  = 0x2
+	V8FrameTypeNativeCode = 0x3
+	V8FrameTypeMask       = 0x7
 
-	V8LineCookieShift = 0x20
-	V8LineCookieMask  = 0xffffffff00000000
-	V8LineDeltaMask   = 0xffffffff
+	V8DataDeltaMask     = 0xffffffff
+	V8DataCodeKindShift = 0x20
+	V8DataCodeKindMask  = 0xff
 
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
