@@ -446,6 +446,7 @@ func (store *Store) ListLocalModules() (libpf.Set[ID], error) {
 //
 // Concurrent writes to the same cache directory may be removed.
 func (store *Store) RemoveLocalTempFiles(dryRun bool) error {
+	failedRemovals := 0
 	moduleVisitor := func(ID) error {
 		return nil
 	}
@@ -456,13 +457,20 @@ func (store *Store) RemoveLocalTempFiles(dryRun bool) error {
 		}
 		log.Infof("Removing local temporary file `%s`", unkPath)
 		if !dryRun {
-			if err := os.Remove(unkPath); err != nil {
-				return fmt.Errorf("failed to remove file: %w", err)
+			if err := os.Remove(unkPath); err != nil && !os.IsNotExist(err) {
+				log.Errorf("Failed to remove temporary file: %v", err)
+				failedRemovals++
 			}
 		}
 		return nil
 	}
-	return store.visitLocalModules(moduleVisitor, unkVisitor)
+	if err := store.visitLocalModules(moduleVisitor, unkVisitor); err != nil {
+		return err
+	}
+	if failedRemovals > 0 {
+		return fmt.Errorf("failed to remove %d temporary files", failedRemovals)
+	}
+	return nil
 }
 
 // ensurePresentLocally makes sure a module is present locally, downloading it from the remote
@@ -529,7 +537,7 @@ func (store *Store) visitLocalModules(moduleVisitor func(ID) error,
 			err = unkVisitor(path.Join(store.localCachePath, file.Name()))
 		}
 		if err != nil {
-			return nil
+			return err
 		}
 	}
 
