@@ -43,7 +43,6 @@ const (
 type ebpfMapsImpl struct {
 	// Interpreter related eBPF maps
 	InterpreterOffsets *cebpf.Map `name:"interpreter_offsets"`
-	DotnetProcs        *cebpf.Map `name:"dotnet_procs"`
 	PerlProcs          *cebpf.Map `name:"perl_procs"`
 	PyProcs            *cebpf.Map `name:"py_procs"`
 	HotspotProcs       *cebpf.Map `name:"hotspot_procs"`
@@ -151,8 +150,6 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 // or an error if typ is not supported.
 func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*cebpf.Map, error) {
 	switch typ {
-	case libpf.Dotnet:
-		return impl.DotnetProcs, nil
 	case libpf.Perl:
 		return impl.PerlProcs, nil
 	case libpf.Python:
