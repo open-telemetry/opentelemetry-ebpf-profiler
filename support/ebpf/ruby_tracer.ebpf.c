@@ -561,7 +561,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
       DEBUG_PRINT("ruby: failed to read EC from TLS");
       goto exit;
     }
-    DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
+    DEBUG_PRINT("ruby: EC from TLS: 0x%lx", (u64)current_ctx_addr);
   } else if (rubyinfo->running_ec) {
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(

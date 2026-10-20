@@ -255,7 +255,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 
   // WARN: we print this as little endian
   DEBUG_PRINT(
-    "APM transaction ID: %016llX, flags: 0x%02X",
+    "APM transaction ID: %016lx, flags: 0x%02x",
     trace->apm_transaction_id.as_int,
     corr_buf.trace_flags);
 }

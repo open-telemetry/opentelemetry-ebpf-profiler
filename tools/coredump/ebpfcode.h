@@ -68,10 +68,10 @@ int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
   return ret ? ret : cgoctx.ret;
 }
 
-int __bpf_copy_frame(u64, void *);
+long __bpf_copy_frame(u64, void *);
 
-int bpf_perf_event_output(
-  UNUSED void *ctx, UNUSED void *map, UNUSED unsigned long long flags, void *data, UNUSED int size)
+long bpf_perf_event_output(
+  UNUSED void *ctx, UNUSED void *map, UNUSED u64 flags, void *data, UNUSED u64 size)
 {
   return __cgo_ctx->ret = __bpf_copy_frame(__cgo_ctx->id, data);
 }
