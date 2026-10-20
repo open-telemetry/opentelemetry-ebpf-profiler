@@ -59,11 +59,17 @@ func compareStubRoutine(a, b StubRoutine) int {
 // previous stub function might have the perfect length for the next one to
 // not need alignment. Also in some cases the JVM devs omitted/forgot to insert
 // the padding. The two heuristics combined, however, yield reliable results.
-func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
-	rm remotememory.RemoteMemory,
-) []StubRoutine {
+//
+// Stubs that are already tracked in d.stubs are skipped: the NOP sweep issues up to
+// MaxStubLen/CodeAlign remote reads per stub, which is far too costly to repeat for
+// stubs we already track. d.stubs is read-locked for the whole duration; its only
+// writer is updateStubMappings, which runs after this function returns.
+func (d *hotspotInstance) findStubBounds(vmd *hotspotVMData) []StubRoutine {
 	const CodeAlign = 64
 	const MaxStubLen = 8 * 1024
+
+	tracked := d.stubs.RLock()
+	defer d.stubs.RUnlock(&tracked)
 
 	stubs := make([]StubRoutine, 0, 64)
 	for field, addr := range vmd.vmStructs.StubRoutines.CatchAll {
@@ -72,7 +78,7 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 		}
 
 		// Not all stubs are generated for all architectures.
-		entry := rm.Ptr(addr + bias)
+		entry := d.rm.Ptr(addr + d.bias)
 		if entry == 0 {
 			continue
 		}
@@ -87,6 +93,8 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 	slices.SortFunc(stubs, compareStubRoutine)
 
 	filtered := make([]StubRoutine, 0, len(stubs))
+	// Scratch buffer for the NOP sweep, reused for all blocks of all stubs.
+	block := make([]byte, CodeAlign)
 	for i := 0; i < len(stubs); i++ {
 		cur := &stubs[i]
 
@@ -111,6 +119,10 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 			}
 		}
 
+		if _, exists := (*tracked)[cur.start]; exists {
+			continue
+		}
+
 		// Sweep for stub function boundary.
 		heuristicEnd := libpf.Address(0)
 	NopHeuristic:
@@ -118,8 +130,7 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 			const NopARM4 = 0xD503201F
 			const NopAMD64 = 0x90
 
-			block := make([]byte, CodeAlign)
-			if err := rm.Read(p-CodeAlign, block); err != nil {
+			if err := d.rm.Read(p-CodeAlign, block); err != nil {
 				continue
 			}
 

@@ -388,7 +388,7 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 		return nil, err
 	}
 
-	return &hotspotInstance{
+	inst := &hotspotInstance{
 		d:              d,
 		rm:             rm,
 		bias:           bias,
@@ -398,7 +398,11 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 		addrToStubName: addrToStubName,
 		prefixes:       libpf.Set[lpm.Prefix]{},
 		stubs:          xsync.NewRWMutex(map[libpf.Address]StubRoutine{}),
-	}, nil
+	}
+	// Scan for stubs on the first sync after the main attachment is done.
+	inst.processStubs.Store(true)
+
+	return inst, nil
 }
 
 func (d *hotspotData) Unload(_ interpreter.EbpfHandler) {
