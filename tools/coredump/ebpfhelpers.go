@@ -35,8 +35,8 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export bpf_ktime_get_ns
-func bpf_ktime_get_ns() C.ulonglong {
-	return C.ulonglong(times.GetKTime())
+func bpf_ktime_get_ns() C.u64 {
+	return C.u64(times.GetKTime())
 }
 
 //export bpf_get_current_comm
