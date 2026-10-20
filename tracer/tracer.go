@@ -548,7 +548,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	// specifications ("perf_" and "kprobe_" prefixed), and the probe unwinders only
 	// depend on already loaded maps, not on the loaded perf programs. Collect the load
 	// jobs of both so that all of them are verified by the kernel concurrently.
-	var perfJobs, probeJobs []loadJob
+	var perfJobs, probeJobs []progEntry
 	perfJobs, err = perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to prepare perf eBPF programs: %v", err)
@@ -845,7 +845,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 // call targets. It only prepares the jobs, it does not load anything into the kernel.
 func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 	tailCallProgs []ProgLoaderHelper,
-) ([]loadJob, error) {
+) ([]progEntry, error) {
 	progs := make([]ProgLoaderHelper, len(tailCallProgs)+3)
 	copy(progs, tailCallProgs)
 
@@ -867,7 +867,7 @@ func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			Enable:           true,
 		})
 
-	jobs := make([]loadJob, 0, len(progs))
+	jobs := make([]progEntry, 0, len(progs))
 	for _, unwindProg := range progs {
 		if !unwindProg.Enable {
 			continue
@@ -883,7 +883,7 @@ func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
-		jobs = append(jobs, loadJob{
+		jobs = append(jobs, progEntry{
 			progID:           unwindProg.ProgID,
 			progSpec:         progSpec,
 			tailcallMap:      tailcallMap,
@@ -935,8 +935,8 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 	progs []ProgLoaderHelper, perfTailCallMapFD int,
 	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
-) ([]loadJob, error) {
-	jobs := make([]loadJob, 0, len(progs))
+) ([]progEntry, error) {
+	jobs := make([]progEntry, 0, len(progs))
 	for _, unwindProg := range progs {
 		if !unwindProg.Enable {
 			continue
@@ -971,7 +971,7 @@ func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			}
 		}
 
-		jobs = append(jobs, loadJob{
+		jobs = append(jobs, progEntry{
 			progID:           unwindProg.ProgID,
 			progSpec:         progSpec,
 			tailcallMap:      tailcallMap,
@@ -982,8 +982,9 @@ func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 	return jobs, nil
 }
 
-// loadJob describes a single eBPF program that needs to be loaded into the kernel.
-type loadJob struct {
+// progEntry is an eBPF program to load into the kernel, together with the
+// result of loading it (prog, err and loadTime).
+type progEntry struct {
 	// progID is the tail call map index of the program, unused if noTailCallTarget.
 	progID uint32
 	// progSpec is the specification of the program to load. Each job refers to a
@@ -1009,7 +1010,7 @@ type loadJob struct {
 // program is verified independently of the others, so the programs are loaded
 // concurrently. Everything that mutates shared state (registering the programs and
 // updating the tail call maps) is done sequentially once all programs are loaded.
-func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
+func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 	ebpfProgs map[string]*cebpf.Program,
 ) error {
 	if len(jobs) == 0 {
@@ -1039,12 +1040,12 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 	// it misranks cheaper ones (unwind_stop is large yet verifies quickly, while
 	// go_labels is small yet verifies slowly). That is sufficient here, because
 	// the schedule only depends on the expensive programs being started early.
-	slices.SortStableFunc(jobs, func(a, b loadJob) int {
+	slices.SortStableFunc(jobs, func(a, b progEntry) int {
 		return len(b.progSpec.Instructions) - len(a.progSpec.Instructions)
 	})
 
 	eg := &errgroup.Group{}
-	eg.SetLimit(min(runtime.GOMAXPROCS(0), len(jobs)))
+	eg.SetLimit(runtime.GOMAXPROCS(0))
 	for i := range jobs {
 		job := &jobs[i]
 		eg.Go(func() error {
@@ -1068,12 +1069,31 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 	if err := eg.Wait(); err != nil {
 		// Nothing references the programs that did load yet, and the caller only
 		// gets an error, so close them here rather than waiting for the GC.
+		//
+		// A single unsupported instruction usually makes every program fail, and
+		// the kernel log of one failure is already hundreds of lines long, so only
+		// the first failure in job order is logged in full and returned, and the
+		// others are summarized. Job order keeps the reported error independent of
+		// the order in which the loads happened to complete.
+		var firstErr error
+		var alsoFailed []string
 		for i := range jobs {
-			if jobs[i].prog != nil {
-				jobs[i].prog.Close()
+			job := &jobs[i]
+			switch {
+			case job.prog != nil:
+				job.prog.Close()
+			case firstErr == nil:
+				logLoadError(job.err)
+				firstErr = fmt.Errorf("failed to load %s: %w", job.progSpec.Name, job.err)
+			default:
+				alsoFailed = append(alsoFailed, job.progSpec.Name)
 			}
 		}
-		return reportLoadErrors(jobs)
+		if len(alsoFailed) > 0 {
+			log.Errorf("%d other eBPF programs failed to load: %s",
+				len(alsoFailed), strings.Join(alsoFailed, ", "))
+		}
+		return firstErr
 	}
 
 	// Logged in job order, which is the order the loads were started in, so that
@@ -1103,35 +1123,6 @@ func loadPrograms(jobs []loadJob, bpfVerifierLogLevel uint32,
 		}
 	}
 	return nil
-}
-
-// reportLoadErrors logs the failures recorded by loadPrograms and returns the error
-// of the first job that failed, in job order, so that the reported error does not
-// depend on the order in which the loads happened to complete.
-//
-// A single unsupported instruction usually makes every program fail, and the kernel
-// log of one failure is already hundreds of lines long, so only the first one is
-// logged in full and the others are summarized.
-func reportLoadErrors(jobs []loadJob) error {
-	var firstErr error
-	var alsoFailed []string
-	for i := range jobs {
-		job := &jobs[i]
-		if job.err == nil {
-			continue
-		}
-		if firstErr == nil {
-			logLoadError(job.err)
-			firstErr = fmt.Errorf("failed to load %s: %w", job.progSpec.Name, job.err)
-			continue
-		}
-		alsoFailed = append(alsoFailed, job.progSpec.Name)
-	}
-	if len(alsoFailed) > 0 {
-		log.Errorf("%d other eBPF programs failed to load: %s",
-			len(alsoFailed), strings.Join(alsoFailed, ", "))
-	}
-	return firstErr
 }
 
 // logLoadError logs a program load error. These errors tend to have hundreds of
