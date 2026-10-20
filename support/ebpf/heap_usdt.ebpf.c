@@ -62,8 +62,8 @@ int uprobe_heap_alloc(struct pt_regs *ctx)
     return 0;
   }
 
-  DEBUG_PRINT("heap_usdt: alloc pid=%u ptr=%llx", pid, user);
-  DEBUG_PRINT("heap_usdt: alloc size=%llu weighted_bytes=%llu", size, weighted_bytes);
+  DEBUG_PRINT("heap_usdt: alloc pid=%u ptr=%lx", pid, user);
+  DEBUG_PRINT("heap_usdt: alloc size=%lu weighted_bytes=%lu", size, weighted_bytes);
 
   PerCPURecord *record =
     prepare_trace(origin_id_heap_alloc, pid, tid, group_leader, bpf_ktime_get_ns());

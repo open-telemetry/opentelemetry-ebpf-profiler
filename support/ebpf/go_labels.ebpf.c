@@ -23,14 +23,14 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
 
   u64 klen = MIN(k->len, sizeof l->key - 1);
   if (bpf_probe_read_user(l->key, (u32)klen, k->str)) {
-    DEBUG_PRINT("cl: failed to read label key (%lx)", (unsigned long)k->str);
+    DEBUG_PRINT("cl: failed to read label key (%lx)", (u64)k->str);
     return false;
   }
   l->key[klen] = 0;
 
   u64 vlen = MIN(v->len, sizeof l->val - 1);
   if (bpf_probe_read_user(l->val, (u32)vlen, v->str)) {
-    DEBUG_PRINT("cl: failed to read label value (%lx)", (unsigned long)v->str);
+    DEBUG_PRINT("cl: failed to read label value (%lx)", (u64)v->str);
     return false;
   }
   l->val[vlen] = 0;
@@ -45,7 +45,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
   // https://github.com/golang/go/blob/80e2e474/src/runtime/pprof/label.go#L20
   struct GoSlice labels_slice;
   if (bpf_probe_read_user(&labels_slice, sizeof(struct GoSlice), labels_slice_ptr)) {
-    DEBUG_PRINT("cl: failed to read value for labels slice (%lx)", (unsigned long)labels_slice_ptr);
+    DEBUG_PRINT("cl: failed to read value for labels slice (%lx)", (u64)labels_slice_ptr);
     return false;
   }
 
@@ -53,8 +53,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
   u64 num = 2 * (u64)MIN(labels_slice.len, MAX_GO_LABELS);
   if (bpf_probe_read_user(
         &record->goLabels, sizeof(struct GoString) * (u32)num, labels_slice.array)) {
-    DEBUG_PRINT(
-      "cl: failed to read strings from labels slice (%lx)", (unsigned long)labels_slice.array);
+    DEBUG_PRINT("cl: failed to read strings from labels slice (%lx)", (u64)labels_slice.array);
     return false;
   }
 
@@ -77,8 +76,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
   GoRuntimeOffsets *offs = &record->goOffsets;
   void *labels_map_ptr;
   if (bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr)) {
-    DEBUG_PRINT(
-      "cl: failed to read value for labels_map_ptr (%lx)", (unsigned long)labels_map_ptr_ptr);
+    DEBUG_PRINT("cl: failed to read value for labels_map_ptr (%lx)", (u64)labels_map_ptr_ptr);
     return false;
   }
 
@@ -167,10 +165,7 @@ static EBPF_INLINE bool get_go_custom_labels(PerCPURecord *record)
 
   void *labels_ptr;
   if (bpf_probe_read_user(&labels_ptr, sizeof(void *), (void *)(curg_ptr_addr + offs->labels))) {
-    DEBUG_PRINT(
-      "cl: failed to read value for curg->labels (%lx->%lx)",
-      (unsigned long)curg_ptr_addr,
-      (unsigned long)offs->labels);
+    DEBUG_PRINT("cl: failed to read value for curg->labels (%lx->%x)", curg_ptr_addr, offs->labels);
     return false;
   }
 
@@ -197,7 +192,7 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
   DEBUG_PRINT(
     "cl: go offsets found, %d recognized as a go binary: m_ptr: %lx",
     pid,
-    (unsigned long)record->golangLabelsState.go_m_ptr);
+    (u64)record->golangLabelsState.go_m_ptr);
   bool success = get_go_custom_labels(record);
   if (!success) {
     increment_metric(metricID_UnwindGoLabelsFailures);

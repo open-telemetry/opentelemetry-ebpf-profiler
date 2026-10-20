@@ -1,7 +1,6 @@
 /* WARNING: this file is auto-generated, DO NOT CHANGE MANUALLY */
 
-#ifndef OPTI_ERRORS_H
-#define OPTI_ERRORS_H
+#pragma once
 
 typedef enum ErrorCode {
 {{- range $i, $el := .Errors -}}
@@ -10,5 +9,3 @@ typedef enum ErrorCode {
   {{enumident .Name}} = {{.ID}}{{end}}
 {{- end}}
 } ErrorCode;
-
-#endif // OPTI_ERRORS_H

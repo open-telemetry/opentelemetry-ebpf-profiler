@@ -1,7 +1,6 @@
 // References to the map definitions in the BPF C code.
 
-#ifndef OPTI_EXTMAPS_H
-#define OPTI_EXTMAPS_H
+#pragma once
 
 // References to map definitions in *.ebpf.c.
 extern struct perf_progs_t perf_progs;
@@ -50,5 +49,3 @@ extern struct py_procs_t py_procs;
 extern struct ruby_procs_t ruby_procs;
 extern struct v8_procs_t v8_procs;
 #endif // TESTING_COREDUMP
-
-#endif // OPTI_EXTMAPS_H
