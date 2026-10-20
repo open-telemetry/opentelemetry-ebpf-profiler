@@ -1106,7 +1106,7 @@ func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, e
 	}
 
 	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
-	dst := vd.dst[:n]
+	dst := vd.dst[:n:n]
 	copy(dst, src)
 	vd.dst = vd.dst[n:]
 	return dst, nil
@@ -1136,7 +1136,6 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		PID:              libpf.PID(ptr.Pid),
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           ptr.Origin,
-		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
 		CpuID:            ptr.Cpu_id,
 		NumFrames:        ptr.Num_frames,
@@ -1148,7 +1147,14 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 
 	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
 
+	// Context values precede the kernel/user frames; the region is empty for
+	// origins without a value.
 	var err error
+	trace.ContextValues, err = vd.copyUint64(ptr.Context_value_end, "context value")
+	if err != nil {
+		return nil, err
+	}
+
 	trace.KernelFrames, err = vd.copyUint64(ptr.Kernel_frame_end, "kernel_frame")
 	if err != nil {
 		return nil, err
@@ -1402,6 +1408,12 @@ type originRegistry struct {
 // Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
+	if len(metadata.SampleTypes) == 0 {
+		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
+	}
+	if metadata.AppendValues == nil {
+		return 0, fmt.Errorf("origin registry entry needs AppendValues")
+	}
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}
