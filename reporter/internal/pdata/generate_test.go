@@ -408,7 +408,6 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	resourceKey := samples.ResourceKey{
 		ExecutablePath: filePath,
 		PID:            123,
-		APMServiceName: "svc",
 		ContainerID:    libpf.Intern("container1"),
 	}
 	events := map[*samples.TypeMetadata]samples.SampleToEvents{
@@ -631,8 +630,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 				Comm:   libpf.NewCommFromString("abc"),
 				TID:    42,
 				CPU:    73,
-				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
-				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+				SpanID: libpf.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+				TraceID: libpf.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
 			}: &samples.TraceEvents{
 				Frames: singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
@@ -851,8 +850,8 @@ func TestGenerate_Validate(t *testing.T) {
 				Comm:   libpf.NewCommFromString("abc"),
 				TID:    42,
 				CPU:    73,
-				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
-				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+				SpanID: libpf.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+				TraceID: libpf.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
 			}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
@@ -1024,7 +1023,6 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 	tree := singleEventTree(samples.ResourceKey{
 		ExecutablePath: libpf.Intern("/bin/svc"),
 		PID:            99,
-		APMServiceName: "apm-svc",
 	}, attribute.Set{})
 
 	profiles, err := testGenerate(d, tree, "agent", "v1")
@@ -1033,7 +1031,6 @@ func TestGenerate_ProcessContextResource_NoAttrs(t *testing.T) {
 	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
 
 	expected := map[string]any{
-		string(semconv.ServiceNameKey):           "apm-svc",
 		string(semconv.ProcessPIDKey):            int64(99),
 		string(semconv.ProcessExecutablePathKey): "/bin/svc",
 		string(semconv.ProcessExecutableNameKey): "svc",

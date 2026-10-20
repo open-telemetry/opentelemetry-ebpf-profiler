@@ -17,19 +17,18 @@ type TraceEventMeta struct {
 	// ExtraMeta holds key-value pairs produced by a processmanager.ProcessMetaEnricher.
 	// It is nil when no enricher is configured. Consumers can access this via
 	// SampleAttrProducer.CollectExtraSampleMeta to attach process-level attributes.
-	ExtraMeta      map[libpf.String]string
-	APMServiceName string
-	ResourceAttrs  attribute.Set
-	Timestamp      libpf.UnixTime64
-	CPU            uint32
-	ProfileType    *TypeMetadata
+	ExtraMeta     map[libpf.String]string
+	ResourceAttrs attribute.Set
+	Timestamp     libpf.UnixTime64
+	CPU           uint32
+	ProfileType   *TypeMetadata
 	// ContextValues aliases the origin-specific value prefix in the pooled
 	// libpf.EbpfTrace. It is valid only while the trace event is being handled
 	// and must not be retained by the reporter.
 	ContextValues []uint64
 	PID, TID      libpf.PID
-	SpanID        libpf.APMSpanID
-	TraceID       libpf.APMTraceID
+	SpanID        libpf.SpanID
+	TraceID       libpf.TraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -79,9 +78,6 @@ type ResourceKey struct {
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
 
-	// APMServiceName is provided by the eBPF programs
-	APMServiceName string
-
 	PID int64
 }
 
@@ -99,8 +95,8 @@ type SampleKey struct {
 	TID int64
 	CPU int64
 
-	SpanID  libpf.APMSpanID
-	TraceID libpf.APMTraceID
+	SpanID  libpf.SpanID
+	TraceID libpf.TraceID
 }
 
 // SampleType describes one profile emitted from an event type: what its
