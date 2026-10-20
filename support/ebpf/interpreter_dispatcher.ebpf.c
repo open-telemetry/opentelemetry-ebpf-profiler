@@ -264,8 +264,7 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 // and attribute payload, published through otel_thread_ctx_v1, into trace.
 static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 {
-  u32 pid                     = trace->pid; // verifier needs this to be on stack on 4.15 kernel
-  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &pid);
+  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &trace->pid);
   if (!proc) {
     return;
   }
@@ -330,15 +329,14 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   }
 
   u16 attrs_data_size = thread_context_buf.attrs_data_size;
-  if (attrs_data_size > MAX_FRAME_TRAILER_DATA_SZ) {
+  if (attrs_data_size > MAX_THREAD_LABEL_DATA_SZ) {
     // Counted, not dropped: a truncated payload is still usable.
     increment_metric(metricID_UnwindThreadContextAttrsTruncated);
-    attrs_data_size = MAX_FRAME_TRAILER_DATA_SZ;
+    attrs_data_size = MAX_THREAD_LABEL_DATA_SZ;
   }
   if (attrs_data_size != 0) {
-    // The full trailer, which frame writers leave free, keeps the destination
-    // bounded for the verifier.
-    void *attrs_data = reserve_variable_data(trace, MAX_FRAME_TRAILER_DATA_SZ, 0);
+    // A fixed reservation keeps the destination bounded for the verifier.
+    void *attrs_data = reserve_variable_data(trace, MAX_THREAD_LABEL_DATA_SZ, 0);
     if (!attrs_data) {
       return;
     }
