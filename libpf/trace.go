@@ -5,9 +5,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"encoding/binary"
-	"hash/fnv"
 	"hash/maphash"
-	"strconv"
 	"unique"
 
 	"github.com/zeebo/xxh3"
@@ -138,28 +136,6 @@ type Trace struct {
 	cachedHash TraceHash
 }
 
-// APMHash returns the trace's hash required by the APM Agent for correlation.
-// The result is not memoized.
-func (t *Trace) APMHash() TraceHash {
-	var buf [24]byte
-	// Review and maybe update invalidTraceHash if hash function changes from FNV128A
-	h := fnv.New128a()
-	for _, uniqueFrame := range t.Frames {
-		frame := uniqueFrame.Value()
-		fileID := FileID{}
-		if frame.Mapping.Valid() {
-			fileID = frame.Mapping.Value().File.Value().FileID
-		}
-		_, _ = h.Write(fileID.Bytes())
-		// Using FormatUint() or putting AppendUint() into a function leads
-		// to escaping to heap (allocation).
-		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
-	}
-	// Avoid a heap allocation by reusing the stack-allocated buffer.
-	traceHash, _ := TraceHashFromBytes(h.Sum(buf[:0]))
-	return traceHash
-}
-
 var customLabelHashSeed = maphash.MakeSeed()
 
 // Hash returns a cached hash of the frames and custom labels for internal use.
@@ -215,18 +191,18 @@ type EbpfTrace struct {
 	// value; later entries may hold data such as pointers or allocation sizes.
 	// It aliases the leading portion of FrameDataBuf and is valid for the
 	// lifetime of this pooled trace.
-	ContextValues    []uint64
-	KernelFrames     []uint64
-	FrameData        []uint64
-	FrameDataBuf     [3072]uint64
-	KTime            int64
-	CpuID            uint32
-	TID              PID
-	PID              PID
-	NumFrames        uint16
-	Origin           uint16
-	APMTraceID       APMTraceID
-	APMTransactionID APMTransactionID
+	ContextValues []uint64
+	KernelFrames  []uint64
+	FrameData     []uint64
+	FrameDataBuf  [3072]uint64
+	KTime         int64
+	CpuID         uint32
+	TID           PID
+	PID           PID
+	NumFrames     uint16
+	Origin        uint16
+	TraceID       TraceID
+	SpanID        SpanID
 }
 
 type EbpfFrame []uint64

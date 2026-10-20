@@ -4,8 +4,7 @@
 // NOTE: As this is included by both kernel and user-land components, do not
 // include any files that cannot be included in both contexts.
 
-#ifndef OPTI_FRAMETYPES_H
-#define OPTI_FRAMETYPES_H
+#pragma once
 
 // Indicates that the interpreter/runtime this frame belongs to is unknown.
 #define FRAME_MARKER_UNKNOWN 0x0
@@ -57,4 +56,3 @@
 #define RUBY_FRAME_TYPE_ISEQ      3
 #define RUBY_FRAME_TYPE_GC        4
 #define RUBY_FRAME_TYPE_JIT       5
-#endif

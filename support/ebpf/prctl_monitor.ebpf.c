@@ -24,7 +24,7 @@ SEC("tracepoint/syscalls/sys_exit_prctl")
 int tracepoint__sys_exit_prctl(void *ctx)
 {
   struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-  long ptregs_addr         = get_task_pt_regs(task);
+  u64 ptregs_addr          = get_task_pt_regs(task);
   if (!ptregs_addr) {
     goto exit;
   }
@@ -37,16 +37,16 @@ int tracepoint__sys_exit_prctl(void *ctx)
 // prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4,
 //       unsigned long arg5): we only need option, arg2 and arg5 (the name).
 #if defined(__x86_64__)
-  unsigned long option   = regs.di;
-  unsigned long ret      = regs.ax;
-  unsigned long arg2     = regs.si;
-  unsigned long name_ptr = regs.r8;
+  u64 option   = regs.di;
+  u64 ret      = regs.ax;
+  u64 arg2     = regs.si;
+  u64 name_ptr = regs.r8;
 #elif defined(__aarch64__)
   // At exit x0 (regs[0]) holds the return value, arg1 is preserved in orig_x0.
-  unsigned long option   = regs.orig_x0;
-  unsigned long ret      = regs.regs[0];
-  unsigned long arg2     = regs.regs[1];
-  unsigned long name_ptr = regs.regs[4];
+  u64 option   = regs.orig_x0;
+  u64 ret      = regs.regs[0];
+  u64 arg2     = regs.regs[1];
+  u64 name_ptr = regs.regs[4];
 #else
   #error unsupported architecture
 #endif

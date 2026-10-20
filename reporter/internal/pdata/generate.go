@@ -221,8 +221,8 @@ func (p *Pdata) setProfile(
 			setSampleValues(sample, traceInfo.Values, valueIndex, valueWidth)
 		}
 
-		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
-			sampleKey.TraceID != libpf.InvalidAPMTraceID {
+		if sampleKey.SpanID != libpf.InvalidSpanID &&
+			sampleKey.TraceID != libpf.InvalidTraceID {
 			link, ok := linkSet.AddWithCheck(linkInfo{
 				traceID: sampleKey.TraceID,
 				spanID:  sampleKey.SpanID,
@@ -352,14 +352,11 @@ func setSampleValues(sample pprofile.Sample, values []int64, index, width int) {
 
 func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
 	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set) {
-	// service.name, container.id, process.pid, process.executable.{path,name}
-	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 5)
+	// container.id, process.pid, process.executable.{path,name}
+	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 4)
 	for iter := resourceAttrs.Iter(); iter.Next(); {
 		kv := iter.Attribute()
 		setAttributeValue(dst.PutEmpty(string(kv.Key)), kv.Value)
-	}
-	if resourceKey.APMServiceName != "" {
-		dst.PutStr(string(semconv.ServiceNameKey), resourceKey.APMServiceName)
 	}
 	if resourceKey.ContainerID != libpf.NullString {
 		dst.PutStr(string(semconv.ContainerIDKey), resourceKey.ContainerID.String())

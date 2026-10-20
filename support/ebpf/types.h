@@ -1,8 +1,6 @@
 // Provides type definitions shared by the eBPF and Go components
 
-#ifndef OPTI_TYPES_H
-#define OPTI_TYPES_H
-
+#pragma once
 #include "errors.h"
 #include "kernel.h"
 
@@ -270,18 +268,6 @@ enum {
 
   // number of times an unwind_info_array index was invalid
   metricID_UnwindNativeErrBadUnwindInfoIndex,
-
-  // number of failures to get TSD base for APM correlation
-  metricID_UnwindApmIntErrReadTsdBase,
-
-  // number of failures read the APM correlation pointer
-  metricID_UnwindApmIntErrReadCorrBufPtr,
-
-  // number of failures read the APM correlation buffer
-  metricID_UnwindApmIntErrReadCorrBuf,
-
-  // number of successful reads of APM correlation info
-  metricID_UnwindApmIntReadSuccesses,
 
   // number of attempted Dotnet unwinds
   metricID_UnwindDotnetAttempts,
@@ -565,7 +551,12 @@ typedef struct RubyProcInfo {
 } RubyProcInfo;
 
 // V8ProcInfo is a container for the data needed to build a stack trace for a V8 process.
+// Fields are ordered by size so that there is no padding between them.
 typedef struct V8ProcInfo {
+  // Address of IsolateGroup::default_isolate_group_. It is read at unwind time
+  // as V8 only sets it in V8::Initialize(), which may be after attach.
+  u64 default_isolate_group_addr;
+  u32 js_dispatch_table_offset;
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
   u8 off_HeapObject_map, off_Map_instancetype, off_JSFunction_code, off_JSFunction_shared;
@@ -573,6 +564,7 @@ typedef struct V8ProcInfo {
   u8 off_Code_instruction_start, off_Code_instruction_size, off_Code_flags;
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;
+  u8 leaptiering;
 } V8ProcInfo;
 
 // BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.
@@ -594,43 +586,29 @@ typedef struct LuaJITProcInfo {
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
-// 128-bit APM trace ID.
-typedef union ApmTraceID {
+// 128-bit trace ID.
+typedef union TraceID {
   u8 raw[16];
   struct {
     u64 lo;
     u64 hi;
   } as_int;
-} ApmTraceID;
+} TraceID;
 
-_Static_assert(sizeof(ApmTraceID) == 16, "unexpected trace ID size");
+_Static_assert(sizeof(TraceID) == 16, "unexpected trace ID size");
 
-// 64-bit APM transaction / span ID.
-typedef union ApmSpanID {
+// 64-bit span ID.
+typedef union SpanID {
   u8 raw[8];
   u64 as_int;
-} ApmSpanID;
+} SpanID;
 
-_Static_assert(sizeof(ApmSpanID) == 8, "unexpected trace ID size");
+_Static_assert(sizeof(SpanID) == 8, "unexpected span ID size");
 
 typedef struct __attribute__((packed)) SpanTraceInfo {
-  ApmTraceID trace_id;
-  ApmSpanID span_id;
+  TraceID trace_id;
+  SpanID span_id;
 } SpanTraceInfo;
-
-// Defines the format of the APM correlation TLS buffer.
-//
-// Specification:
-// https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#thread-local-storage-layout
-typedef struct __attribute__((packed)) ApmCorrelationBuf {
-  u16 layout_minor_ver;
-  u8 valid;
-  u8 trace_present;
-  u8 trace_flags;
-  ApmTraceID trace_id;
-  ApmSpanID span_id;
-  ApmSpanID transaction_id;
-} ApmCorrelationBuf;
 
 typedef struct GolangLabel {
   u8 key[16];
@@ -678,10 +656,10 @@ typedef struct Trace {
   u64 ktime;
   // The current COMM of the thread of this Trace.
   u8 comm[COMM_LEN];
-  // APM transaction ID or all-zero if not present.
-  ApmSpanID apm_transaction_id;
-  // APM trace ID or all-zero if not present.
-  ApmTraceID apm_trace_id;
+  // Span ID or all-zero if not present.
+  SpanID span_id;
+  // Trace ID or all-zero if not present.
+  TraceID trace_id;
 
   // The CPU that captured this trace.
   u32 cpu_id;
@@ -1176,16 +1154,8 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_MASK  0x0000000f
 #define PSR_MODE_EL0t  0x00000000
 
-typedef struct ApmIntProcInfo {
-  // Invalid until located: an agent library in dynamic TLS stays so until
-  // UpdateLibcInfo supplies the DTV layout.
-  TLSVarInfo tls;
-} ApmIntProcInfo;
-
 // ThreadContextProcInfo is a container for the data needed to locate the
 // thread context TLS variable of a process.
 typedef struct ThreadContextProcInfo {
   TLSVarInfo tls;
 } ThreadContextProcInfo;
-
-#endif // OPTI_TYPES_H
