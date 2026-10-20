@@ -567,7 +567,9 @@ typedef struct RubyProcInfo {
 // V8ProcInfo is a container for the data needed to build a stack trace for a V8 process.
 // Fields are ordered by size so that there is no padding between them.
 typedef struct V8ProcInfo {
-  u64 default_isolate_group;
+  // Address of IsolateGroup::default_isolate_group_. It is read at unwind time
+  // as V8 only sets it in V8::Initialize(), which may be after attach.
+  u64 default_isolate_group_addr;
   u32 js_dispatch_table_offset;
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;

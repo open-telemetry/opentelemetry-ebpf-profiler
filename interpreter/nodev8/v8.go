@@ -511,7 +511,8 @@ type v8Data struct {
 	jsDispatchTableOffset uint32
 
 	// defaultIsolateGroupAddr is the address of the
-	// IsolateGroup::default_isolate_group_ pointer variable.
+	// IsolateGroup::default_isolate_group_ pointer variable. eBPF reads the
+	// pointer when unwinding as V8 sets it only in V8::Initialize().
 	defaultIsolateGroupAddr libpf.Address
 }
 
@@ -1821,7 +1822,7 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.
 	}
 	if d.leaptiering {
 		data.Leaptiering = 1
-		data.Default_isolate_group = uint64(rm.Ptr(d.defaultIsolateGroupAddr + bias))
+		data.Default_isolate_group_addr = uint64(d.defaultIsolateGroupAddr + bias)
 		data.Js_dispatch_table_offset = d.jsDispatchTableOffset
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {

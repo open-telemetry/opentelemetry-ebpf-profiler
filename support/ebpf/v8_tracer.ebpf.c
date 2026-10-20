@@ -103,7 +103,8 @@ static EBPF_INLINE u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
 }
 
 // Unwind one V8 frame
-static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
+static EBPF_INLINE ErrorCode
+unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, u64 isolate_group, bool top)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -193,6 +194,12 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     // holds a 32-bit JSDispatchHandle (at the same offset the Code pointer used to
     // occupy) that indexes the per-IsolateGroup JSDispatchTable, whose entry encodes
     // the current Code pointer.
+    if (!isolate_group) {
+      DEBUG_PRINT("v8: leaptiering: default isolate group not initialized");
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
     u32 dispatch_handle = 0;
     if (bpf_probe_read_user(
           &dispatch_handle, sizeof(dispatch_handle), (void *)(jsfunc + vi->off_JSFunction_code))) {
@@ -207,10 +214,10 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     if (bpf_probe_read_user(
           &table_base,
           sizeof(table_base),
-          (void *)(vi->default_isolate_group + vi->js_dispatch_table_offset))) {
+          (void *)(isolate_group + vi->js_dispatch_table_offset))) {
       DEBUG_PRINT(
         "v8: leaptiering: failed to read dispatch table base, isolate group = %llx, offset = %x",
-        vi->default_isolate_group,
+        isolate_group,
         vi->js_dispatch_table_offset);
       increment_metric(metricID_UnwindV8ErrBadCode);
       goto frame_done;
@@ -404,10 +411,20 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   unwinder_analyze_frame_pointer(&record->state);
 
+  // IsolateGroup::default_isolate_group_ is set in V8::Initialize(), so read it
+  // here instead of at attach time. It is zero until V8 has been initialized.
+  u64 isolate_group = 0;
+  if (
+    vi->leaptiering &&
+    bpf_probe_read_user(
+      &isolate_group, sizeof(isolate_group), (void *)vi->default_isolate_group_addr)) {
+    isolate_group = 0;
+  }
+
   for (u64 i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
-    error = unwind_one_v8_frame(record, vi, i == 0);
+    error = unwind_one_v8_frame(record, vi, isolate_group, i == 0);
     if (error) {
       break;
     }

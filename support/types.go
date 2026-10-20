@@ -313,7 +313,7 @@ type ThreadContextProcInfo struct {
 	Tls TLSVarInfo
 }
 type V8ProcInfo struct {
-	Default_isolate_group        uint64
+	Default_isolate_group_addr   uint64
 	Js_dispatch_table_offset     uint32
 	Type_JSFunction_first        uint16
 	Type_JSFunction_last         uint16
