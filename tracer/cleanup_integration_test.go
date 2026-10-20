@@ -55,17 +55,22 @@ func TestInitializeMapsAndProgramsCleansUpOnFailure(t *testing.T) {
 	kmod, err := symbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
 	require.NoError(t, err)
 
-	// Sizing the trace_events ring buffer from a zero sample rate gives it a single
+	// Sizing the trace_events ring buffer from zero online CPUs gives it a single
 	// byte, which the kernel rejects because a ring buffer has to be a page aligned
 	// power of two. Exactly one map fails, so the maps created before it are what
-	// must not be left behind.
+	// must not be left behind. The sample rate cannot be zero instead, as it is
+	// also used to compute the sampling period.
 	//
 	// Which map is created first is up to the iteration order of the collection, so
 	// run the whole initialization a few times: a single run could, in principle,
 	// fail on the very first map and leave nothing to clean up.
+	origOnlineCPUs := onlineCPUsOnce
+	onlineCPUsOnce = func() ([]int, error) { return nil, nil }
+	t.Cleanup(func() { onlineCPUsOnce = origOnlineCPUs })
+
 	cfg := &Config{
 		InterpretersConfig: interpreterconfig.AllInterpreters(),
-		SamplesPerSecond:   0,
+		SamplesPerSecond:   20,
 	}
 
 	for range 5 {
