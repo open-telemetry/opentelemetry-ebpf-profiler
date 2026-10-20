@@ -103,5 +103,14 @@ int finish_task_switch(struct pt_regs *ctx)
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
-  return collect_trace(ctx, origin_id_off_cpu, pid, tid, group_leader, ts, diff);
+  PerCPURecord *record = prepare_trace(origin_id_off_cpu, pid, tid, group_leader, ts);
+  if (!record) {
+    return 0;
+  }
+  u64 *values = push_context_values(&record->trace, 1);
+  if (!values) {
+    return 0;
+  }
+  values[0] = diff;
+  return unwind_trace(ctx, record, true);
 }

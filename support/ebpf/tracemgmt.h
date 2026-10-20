@@ -520,6 +520,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
+  trace->context_value_end = 0;
   trace->kernel_frame_end  = 0;
   trace->frame_data_end    = 0;
   trace->thread_label_end  = 0;
@@ -662,6 +663,23 @@ static inline EBPF_INLINE u16 end_variable_data(Trace *trace, u16 item_sz)
   return end;
 }
 
+// push_context_values appends 'n' origin-specific context values to the trace
+// and returns them for the caller to fill in, like push_frame. Context values
+// must be pushed before unwind_trace; userspace rejects traces where they
+// follow kernel frames. Returns NULL if the values do not fit.
+static inline EBPF_INLINE u64 *push_context_values(Trace *trace, u8 n)
+{
+  const u16 values_sz = sizeof(u64[n]);
+
+  u64 *pos = reserve_variable_data(trace, values_sz, MAX_FRAME_TRAILER_DATA_SZ);
+  if (!pos) {
+    return NULL;
+  }
+  commit_variable_data(trace, values_sz);
+  trace->context_value_end = end_variable_data(trace, sizeof(u64));
+  return pos;
+}
+
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
 {
   // frame header format (fixed size):
@@ -735,8 +753,8 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 }
 
 // push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
-// the raw addresses in the variable data. Must be called before any
-// userspace frames are pushed.
+// the raw addresses in the variable data, after any context values. Must be
+// called before any userspace frames are pushed.
 static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
 {
   const u32 max_bytes = sizeof(u64[PERF_MAX_STACK_DEPTH]);
@@ -1173,22 +1191,19 @@ static inline EBPF_INLINE ErrorCode get_usermode_regs(struct pt_regs *ctx, Unwin
 
 #endif // TESTING_COREDUMP
 
-static inline EBPF_INLINE int collect_trace(
-  struct pt_regs *ctx,
-  u16 origin,
-  u32 pid,
-  u32 tid,
-  u64 group_leader,
-  u64 trace_timestamp,
-  u64 value)
+// prepare_trace resets the per-CPU record and fills in the trace header. It
+// returns NULL if the trace should be dropped. Callers may push context values
+// before handing the record to unwind_trace.
+static inline EBPF_INLINE PerCPURecord *
+prepare_trace(u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp)
 {
   // Only continue processing the trace with a valid origin.
   if (origin == 0) {
-    return -1;
+    return NULL;
   }
 
   if (process_is_too_new(trace_timestamp, group_leader)) {
-    return 0;
+    return NULL;
   }
 
   // The trace is reused on each call to this function so we have to reset the
@@ -1196,7 +1211,7 @@ static inline EBPF_INLINE int collect_trace(
   DEBUG_PRINT("Resetting CPU record");
   PerCPURecord *record = get_pristine_per_cpu_record();
   if (!record) {
-    return -1;
+    return NULL;
   }
 
   Trace *trace  = &record->trace;
@@ -1204,13 +1219,24 @@ static inline EBPF_INLINE int collect_trace(
   trace->pid    = pid;
   trace->tid    = tid;
   trace->ktime  = trace_timestamp;
-  trace->value  = value;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }
+  return record;
+}
 
-  // Capture kernel stack and push each frame into frame_data.
-  push_kernel_frames(ctx, trace);
+// unwind_trace optionally captures kernel frames, then tail-calls into the
+// unwinder for a record set up by prepare_trace.
+static inline EBPF_INLINE int
+unwind_trace(struct pt_regs *ctx, PerCPURecord *record, bool kernel_frames)
+{
+  Trace *trace = &record->trace;
+  u32 pid      = trace->pid;
+
+  if (kernel_frames) {
+    // Capture kernel stack and push each frame into frame_data.
+    push_kernel_frames(ctx, trace);
+  }
 
   ErrorCode error = ERR_OK;
   int unwinder    = PROG_UNWIND_STOP;
@@ -1235,7 +1261,7 @@ static inline EBPF_INLINE int collect_trace(
 
   PIDPageMappingInfo *pidInfo = pid_information(pid);
   if (!pidInfo) {
-    u64 pid_tgid = (u64)pid << 32 | tid;
+    u64 pid_tgid = (u64)pid << 32 | trace->tid;
     if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
     }
@@ -1251,6 +1277,18 @@ static inline EBPF_INLINE int collect_trace(
 exit:
   record->state.unwind_error = error;
   return tail_call(ctx, record, unwinder);
+}
+
+// collect_trace captures a trace without context values, including kernel
+// frames, and tail-calls into the unwinder.
+static inline EBPF_INLINE int collect_trace(
+  struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 group_leader, u64 trace_timestamp)
+{
+  PerCPURecord *record = prepare_trace(origin, pid, tid, group_leader, trace_timestamp);
+  if (!record) {
+    return 0;
+  }
+  return unwind_trace(ctx, record, true);
 }
 
 #endif
