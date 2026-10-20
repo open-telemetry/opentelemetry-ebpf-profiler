@@ -1888,6 +1888,7 @@
     "id": 256
   },
   {
+    "obsolete": true,
     "description": "Number of failures to get TSD base for APM correlation",
     "type": "counter",
     "name": "UnwindApmIntErrReadTsdBase",
@@ -1895,6 +1896,7 @@
     "id": 257
   },
   {
+    "obsolete": true,
     "description": "Number of failures read the APM correlation pointer",
     "type": "counter",
     "name": "UnwindApmIntErrReadCorrBufPtr",
@@ -1902,6 +1904,7 @@
     "id": 258
   },
   {
+    "obsolete": true,
     "description": "Number of failures read the APM correlation buffer",
     "type": "counter",
     "name": "UnwindApmIntErrReadCorrBuf",
@@ -1909,6 +1912,7 @@
     "id": 259
   },
   {
+    "obsolete": true,
     "description": "Number of successful reads of APM correlation info",
     "type": "counter",
     "name": "UnwindApmIntReadSuccesses",

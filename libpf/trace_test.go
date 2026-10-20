@@ -32,28 +32,6 @@ func newHashTestTrace() *Trace {
 	return trace
 }
 
-func TestTraceHash(t *testing.T) {
-	tests := map[string]struct {
-		trace  *Trace
-		result TraceHash
-	}{
-		"empty trace": {
-			trace:  &Trace{},
-			result: NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d)},
-		"native trace": {
-			trace:  newHashTestTrace(),
-			result: NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8)},
-	}
-
-	for name, testcase := range tests {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, testcase.result, testcase.trace.APMHash())
-			// The memoized result must match the first computation.
-			assert.Equal(t, testcase.result, testcase.trace.APMHash())
-		})
-	}
-}
-
 func TestTraceHashCustomLabels(t *testing.T) {
 	labels := map[String]String{
 		Intern("first"):  Intern("one"),
@@ -62,8 +40,6 @@ func TestTraceHashCustomLabels(t *testing.T) {
 	trace := newHashTestTrace()
 	trace.CustomLabels = labels
 	hash := trace.Hash()
-	apmHash := newHashTestTrace().APMHash()
-	assert.Equal(t, apmHash, trace.APMHash())
 
 	reordered := make(map[String]String)
 	reordered[Intern("second")] = Intern("two")
@@ -97,7 +73,6 @@ func TestTraceHashCustomLabels(t *testing.T) {
 			other := newHashTestTrace()
 			other.CustomLabels = test.labels
 			otherHash := other.Hash()
-			assert.Equal(t, apmHash, other.APMHash())
 			if test.equal {
 				assert.Equal(t, hash, otherHash)
 			} else {

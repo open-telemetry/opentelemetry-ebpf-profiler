@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 )
 
@@ -30,8 +31,8 @@ func TestAttrTableManager(t *testing.T) {
 		"empty": {
 			k: []ResourceKey{
 				{
-					APMServiceName: "",
-					PID:            0,
+					ContainerID: libpf.NullString,
+					PID:         0,
 				},
 			},
 			expectedIndices: [][]int32{{0}},
@@ -42,36 +43,36 @@ func TestAttrTableManager(t *testing.T) {
 		"duplicate": {
 			k: []ResourceKey{
 				{
-					APMServiceName: "APMServiceName1",
-					PID:            1234,
+					ContainerID: libpf.Intern("container1"),
+					PID:         1234,
 				},
 				{
-					APMServiceName: "APMServiceName1",
-					PID:            1234,
+					ContainerID: libpf.Intern("container1"),
+					PID:         1234,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {0, 1}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "service.name", Value: "APMServiceName1"},
+				{Key: "container.id", Value: "container1"},
 				{Key: "process.pid", Value: int64(1234)},
 			},
 		},
 		"different": {
 			k: []ResourceKey{
 				{
-					APMServiceName: "APMServiceName1",
-					PID:            1234,
+					ContainerID: libpf.Intern("container1"),
+					PID:         1234,
 				},
 				{
-					APMServiceName: "APMServiceName2",
-					PID:            6789,
+					ContainerID: libpf.Intern("container2"),
+					PID:         6789,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {2, 3}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "service.name", Value: "APMServiceName1"},
+				{Key: "container.id", Value: "container1"},
 				{Key: "process.pid", Value: int64(1234)},
-				{Key: "service.name", Value: "APMServiceName2"},
+				{Key: "container.id", Value: "container2"},
 				{Key: "process.pid", Value: int64(6789)},
 			},
 		},
@@ -85,7 +86,7 @@ func TestAttrTableManager(t *testing.T) {
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
-				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.APMServiceName)
+				mgr.AppendOptionalString(inner, semconv.ContainerIDKey, k.ContainerID.String())
 				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.PID)
 				indices = append(indices, inner.AsRaw())
 			}

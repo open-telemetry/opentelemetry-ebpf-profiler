@@ -35,8 +35,8 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export bpf_ktime_get_ns
-func bpf_ktime_get_ns() C.ulonglong {
-	return C.ulonglong(times.GetKTime())
+func bpf_ktime_get_ns() C.u64 {
+	return C.u64(times.GetKTime())
 }
 
 //export bpf_get_current_comm
@@ -97,7 +97,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 			key.prefixLen--
 			shiftBits := support.BitWidthPID + support.BitWidthPage - key.prefixLen
 			mask := uint64(0xffffffffffffffff) << shiftBits
-			key.page &= C.ulonglong(bits.ReverseBytes64(mask))
+			key.page &= C.u64(bits.ReverseBytes64(mask))
 		}
 	case unsafe.Pointer(&C.per_cpu_records):
 		return ctx.perCPURecord
@@ -142,7 +142,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 }
 
 //export __bpf_copy_frame
-func __bpf_copy_frame(id C.u64, trace *C.Trace) C.int {
+func __bpf_copy_frame(id C.u64, trace *C.Trace) C.long {
 	ctx := ebpfContextMap[id]
 	if trace.kernel_frame_end != 0 {
 		log.Errorf("coredump trace unexpectedly has kernel_frame_end %d", trace.kernel_frame_end)

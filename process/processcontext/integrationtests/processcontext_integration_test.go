@@ -54,9 +54,9 @@ var expectedThreadLabels = map[string]string{
 
 // expectedTraceID and expectedSpanID mirror processctx.c, whose integers
 // update_thread_context() memcpys in native, little-endian, byte order.
-var expectedTraceID, expectedSpanID = func() (libpf.APMTraceID, libpf.APMSpanID) {
-	var traceID libpf.APMTraceID
-	var spanID libpf.APMSpanID
+var expectedTraceID, expectedSpanID = func() (libpf.TraceID, libpf.SpanID) {
+	var traceID libpf.TraceID
+	var spanID libpf.SpanID
 	binary.LittleEndian.PutUint64(traceID[:8], 0x1234567890abcdef)
 	binary.LittleEndian.PutUint64(traceID[8:], 0xfedcba9876543210)
 	binary.LittleEndian.PutUint64(spanID[:], 0x1234)
@@ -205,8 +205,8 @@ func Test_ProcessContext(t *testing.T) {
 
 			// Tracked separately, as a sample can land before either is published.
 			gotResource, gotLabels := false, false
-			var traceID libpf.APMTraceID
-			var spanID libpf.APMSpanID
+			var traceID libpf.TraceID
+			var spanID libpf.SpanID
 		Loop:
 			for !gotResource || !gotLabels {
 				select {
