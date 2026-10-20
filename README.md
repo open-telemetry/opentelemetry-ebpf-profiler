@@ -140,6 +140,7 @@ For more information about the maintainer role, see the
 - [Roger Coll](https://github.com/rogercoll), Grafana Labs
 - [Florian Lehner](https://github.com/florianl), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
+- [Nicolas Savoire](https://github.com/nsavoire), Datadog
 
 For more information about the approver role, see the
 [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).

@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
+	"maps"
 	"reflect"
 	"strings"
 	"sync"
@@ -141,4 +143,187 @@ func TestVMStructsFieldKinds(t *testing.T) {
 		}
 	}
 	checkType(reflect.TypeOf(hotspotVMData{}.vmStructs), "")
+}
+
+// TestUpdateStubMappingsSkipsKnownStubs verifies that a repeated sync does not
+// redo the expensive per-stub boundary sweep and does not change tracked stubs.
+func TestUpdateStubMappingsSkipsKnownStubs(t *testing.T) {
+	const (
+		numStubs    = 20
+		slotsBase   = 16
+		codeBase    = 1024
+		stubSpacing = 128
+		bufSize     = codeBase + numStubs*stubSpacing + 8*1024
+	)
+
+	buf := make([]byte, bufSize)
+	catchAll := make(map[string]libpf.Address, numStubs)
+	for i := range numStubs {
+		slot := libpf.Address(slotsBase + i*8)
+		binary.LittleEndian.PutUint64(buf[slot:], uint64(codeBase+i*stubSpacing))
+		catchAll[fmt.Sprintf("_stub_%d", i)] = slot
+	}
+
+	cr := &countingReaderAt{r: bytes.NewReader(buf)}
+	rm := remotememory.RemoteMemory{ReaderAt: cr}
+
+	id := hotspotData{}
+	vmd, _ := id.GetOrInit(func() (hotspotVMData, error) {
+		vmd := hotspotVMData{}
+		vmd.vmStructs.StubRoutines.CatchAll = catchAll
+		return vmd, nil
+	})
+	instance, err := id.Attach(nil, 0, 0, rm)
+	require.NoError(t, err)
+	ii := instance.(*hotspotInstance)
+
+	ii.updateStubMappings(vmd, nil, 0)
+	firstReads := cr.reads
+	stubs := ii.stubs.RLock()
+	first := maps.Clone(*stubs)
+	ii.stubs.RUnlock(&stubs)
+	require.Len(t, first, numStubs)
+
+	cr.reads = 0
+	ii.updateStubMappings(vmd, nil, 0)
+	stubs = ii.stubs.RLock()
+	second := maps.Clone(*stubs)
+	ii.stubs.RUnlock(&stubs)
+
+	assert.Equal(t, first, second)
+	// Second pass only re-reads the stub entry pointers, no boundary sweeps.
+	assert.LessOrEqual(t, cr.reads, numStubs)
+	assert.Greater(t, firstReads, cr.reads)
+}
+
+// newStubSyncInstance creates an instance with numStubs stub slots in a fake memory
+// image. Only the first `initial` slots are populated, populate() fills the others.
+func newStubSyncInstance(t *testing.T, numStubs, initial int) (
+	ii *hotspotInstance, vmd *hotspotVMData, cr *countingReaderAt, populate func(),
+) {
+	t.Helper()
+	const (
+		slotsBase   = 16
+		codeBase    = 1024
+		stubSpacing = 128
+	)
+
+	buf := make([]byte, codeBase+numStubs*stubSpacing+8*1024)
+	catchAll := make(map[string]libpf.Address, numStubs)
+	setSlot := func(i int) {
+		binary.LittleEndian.PutUint64(buf[slotsBase+i*8:], uint64(codeBase+i*stubSpacing))
+	}
+	for i := range numStubs {
+		catchAll[fmt.Sprintf("_stub_%d", i)] = libpf.Address(slotsBase + i*8)
+		if i < initial {
+			setSlot(i)
+		}
+	}
+
+	cr = &countingReaderAt{r: bytes.NewReader(buf)}
+	id := hotspotData{}
+	vmd, _ = id.GetOrInit(func() (hotspotVMData, error) {
+		v := hotspotVMData{}
+		v.vmStructs.StubRoutines.CatchAll = catchAll
+		return v, nil
+	})
+	instance, err := id.Attach(nil, 0, 0, remotememory.RemoteMemory{ReaderAt: cr})
+	require.NoError(t, err)
+
+	return instance.(*hotspotInstance), vmd, cr, func() {
+		for i := initial; i < numStubs; i++ {
+			setSlot(i)
+		}
+	}
+}
+
+func stubCount(ii *hotspotInstance) int {
+	stubs := ii.stubs.RLock()
+	defer ii.stubs.RUnlock(&stubs)
+	return len(*stubs)
+}
+
+// TestSyncStubMappingsTwoPasses verifies that stubs are scanned once after attach and
+// once after the first Java frame, and never again.
+func TestSyncStubMappingsTwoPasses(t *testing.T) {
+	const numStubs, initial = 20, 10
+	ii, vmd, cr, populate := newStubSyncInstance(t, numStubs, initial)
+
+	// Pass 1: stubs generated so far are found.
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, initial, stubCount(ii))
+
+	// Boot continues and generates the remaining stubs; without a Java frame
+	// there is no second pass yet.
+	populate()
+	cr.reads = 0
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Zero(t, cr.reads, "no scan expected before the first Java frame")
+	assert.Equal(t, initial, stubCount(ii))
+
+	// Pass 2: runs after the first Java frame and picks up the late stubs.
+	ii.markFrameSeen()
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, numStubs, stubCount(ii))
+
+	// No further scans.
+	cr.reads = 0
+	ii.syncStubMappings(vmd, nil, 0)
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Zero(t, cr.reads, "no scan expected after both passes")
+}
+
+// TestSyncStubMappingsFrameAlreadySeen verifies that a single scan is enough when
+// the first Java frame was already received before the first scan.
+func TestSyncStubMappingsFrameAlreadySeen(t *testing.T) {
+	const numStubs = 20
+	ii, vmd, cr, _ := newStubSyncInstance(t, numStubs, numStubs)
+	ii.markFrameSeen()
+
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, numStubs, stubCount(ii))
+
+	cr.reads = 0
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Zero(t, cr.reads, "second pass is redundant after a post-boot scan")
+}
+
+// hookReaderAt calls hook once, before serving the first read at or above minOff.
+type hookReaderAt struct {
+	io.ReaderAt
+	minOff int64
+	hook   func()
+}
+
+func (h *hookReaderAt) ReadAt(p []byte, off int64) (int, error) {
+	if h.hook != nil && off >= h.minOff {
+		hook := h.hook
+		h.hook = nil
+		hook()
+	}
+	return h.ReaderAt.ReadAt(p, off)
+}
+
+// TestSyncStubMappingsFrameDuringScan verifies that a Java frame arriving while a
+// scan is running triggers another scan, which picks up stubs generated meanwhile.
+func TestSyncStubMappingsFrameDuringScan(t *testing.T) {
+	const numStubs, initial = 20, 10
+	ii, vmd, cr, populate := newStubSyncInstance(t, numStubs, initial)
+	ii.rm = remotememory.RemoteMemory{ReaderAt: &hookReaderAt{
+		ReaderAt: cr,
+		// Stub pointers are read below this offset, stub code (boundary sweep) above.
+		minOff: 1024,
+		hook: func() {
+			// Boot finishes and the first frame arrives in the middle of the scan,
+			// after the stub pointers were read.
+			populate()
+			ii.markFrameSeen()
+		},
+	}}
+
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, initial, stubCount(ii), "scan started before the stubs were generated")
+
+	ii.syncStubMappings(vmd, nil, 0)
+	assert.Equal(t, numStubs, stubCount(ii))
 }
