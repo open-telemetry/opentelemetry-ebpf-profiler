@@ -530,9 +530,9 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->pid               = 0;
   trace->tid               = 0;
 
-  trace->apm_trace_id.as_int.hi    = 0;
-  trace->apm_trace_id.as_int.lo    = 0;
-  trace->apm_transaction_id.as_int = 0;
+  trace->trace_id.as_int.hi = 0;
+  trace->trace_id.as_int.lo = 0;
+  trace->span_id.as_int     = 0;
 
   return record;
 }

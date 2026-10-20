@@ -38,6 +38,6 @@ func hashLocationIndices(locationIndices []int32) uint64 {
 
 // linkInfo is a helper used to deduplicate Links.
 type linkInfo struct {
-	spanID  libpf.APMSpanID
-	traceID libpf.APMTraceID
+	spanID  libpf.SpanID
+	traceID libpf.TraceID
 }

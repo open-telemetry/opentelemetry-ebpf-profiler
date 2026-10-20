@@ -193,9 +193,9 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
   // as proposed in
   // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 
-  trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
-  trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
-  trace->apm_transaction_id.as_int = info->span_id.as_int;
+  trace->trace_id.as_int.hi = info->trace_id.as_int.hi;
+  trace->trace_id.as_int.lo = info->trace_id.as_int.lo;
+  trace->span_id.as_int     = info->span_id.as_int;
 }
 
 // Stub: only looks the process up, so thread_context_procs stays loaded

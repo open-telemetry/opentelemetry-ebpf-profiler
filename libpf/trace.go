@@ -191,18 +191,18 @@ type EbpfTrace struct {
 	// value; later entries may hold data such as pointers or allocation sizes.
 	// It aliases the leading portion of FrameDataBuf and is valid for the
 	// lifetime of this pooled trace.
-	ContextValues    []uint64
-	KernelFrames     []uint64
-	FrameData        []uint64
-	FrameDataBuf     [3072]uint64
-	KTime            int64
-	CpuID            uint32
-	TID              PID
-	PID              PID
-	NumFrames        uint16
-	Origin           uint16
-	APMTraceID       APMTraceID
-	APMTransactionID APMTransactionID
+	ContextValues []uint64
+	KernelFrames  []uint64
+	FrameData     []uint64
+	FrameDataBuf  [3072]uint64
+	KTime         int64
+	CpuID         uint32
+	TID           PID
+	PID           PID
+	NumFrames     uint16
+	Origin        uint16
+	TraceID       TraceID
+	SpanID        SpanID
 }
 
 type EbpfFrame []uint64

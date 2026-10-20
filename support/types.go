@@ -88,8 +88,8 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
-type ApmSpanID [8]byte
-type ApmTraceID [16]byte
+type SpanID [8]byte
+type TraceID [16]byte
 type Event struct {
 	Type uint32
 }
@@ -158,22 +158,22 @@ type TLSVarInfo struct {
 	Pad_cgo_0  [1]byte
 }
 type Trace struct {
-	Pid                uint32
-	Tid                uint32
-	Ktime              uint64
-	Comm               [16]uint8
-	Apm_transaction_id [8]byte
-	Apm_trace_id       [16]byte
-	Cpu_id             uint32
-	Context_value_end  uint16
-	Kernel_frame_end   uint16
-	Frame_data_end     uint16
-	Thread_label_end   uint16
-	Golang_label_end   uint16
-	Variable_data_end  uint16
-	Num_frames         uint16
-	Origin             uint16
-	Pad_cgo_0          [4]byte
+	Pid               uint32
+	Tid               uint32
+	Ktime             uint64
+	Comm              [16]uint8
+	Span_id           [8]byte
+	Trace_id          [16]byte
+	Cpu_id            uint32
+	Context_value_end uint16
+	Kernel_frame_end  uint16
+	Frame_data_end    uint16
+	Thread_label_end  uint16
+	Golang_label_end  uint16
+	Variable_data_end uint16
+	Num_frames        uint16
+	Origin            uint16
+	Pad_cgo_0         [4]byte
 }
 type UnwindInfo struct {
 	Flags       uint8

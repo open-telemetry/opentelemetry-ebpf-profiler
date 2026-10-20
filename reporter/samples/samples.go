@@ -27,8 +27,8 @@ type TraceEventMeta struct {
 	// and must not be retained by the reporter.
 	ContextValues []uint64
 	PID, TID      libpf.PID
-	SpanID        libpf.APMSpanID
-	TraceID       libpf.APMTraceID
+	SpanID        libpf.SpanID
+	TraceID       libpf.TraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -95,8 +95,8 @@ type SampleKey struct {
 	TID int64
 	CPU int64
 
-	SpanID  libpf.APMSpanID
-	TraceID libpf.APMTraceID
+	SpanID  libpf.SpanID
+	TraceID libpf.TraceID
 }
 
 // SampleType describes one profile emitted from an event type: what its

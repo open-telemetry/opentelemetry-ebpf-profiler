@@ -98,8 +98,8 @@ const (
 	HSTSIDSegMapMask      = C.HS_TSID_SEG_MAP_MASK
 )
 
-type ApmSpanID C.ApmSpanID
-type ApmTraceID C.ApmTraceID
+type SpanID C.SpanID
+type TraceID C.TraceID
 type Event C.Event
 type GolangLabel C.GolangLabel
 type OffsetRange C.OffsetRange

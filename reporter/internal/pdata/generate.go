@@ -221,8 +221,8 @@ func (p *Pdata) setProfile(
 			setSampleValues(sample, traceInfo.Values, valueIndex, valueWidth)
 		}
 
-		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
-			sampleKey.TraceID != libpf.InvalidAPMTraceID {
+		if sampleKey.SpanID != libpf.InvalidSpanID &&
+			sampleKey.TraceID != libpf.InvalidTraceID {
 			link, ok := linkSet.AddWithCheck(linkInfo{
 				traceID: sampleKey.TraceID,
 				spanID:  sampleKey.SpanID,

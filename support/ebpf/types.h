@@ -582,28 +582,28 @@ typedef struct LuaJITProcInfo {
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
-// 128-bit APM trace ID.
-typedef union ApmTraceID {
+// 128-bit trace ID.
+typedef union TraceID {
   u8 raw[16];
   struct {
     u64 lo;
     u64 hi;
   } as_int;
-} ApmTraceID;
+} TraceID;
 
-_Static_assert(sizeof(ApmTraceID) == 16, "unexpected trace ID size");
+_Static_assert(sizeof(TraceID) == 16, "unexpected trace ID size");
 
-// 64-bit APM transaction / span ID.
-typedef union ApmSpanID {
+// 64-bit span ID.
+typedef union SpanID {
   u8 raw[8];
   u64 as_int;
-} ApmSpanID;
+} SpanID;
 
-_Static_assert(sizeof(ApmSpanID) == 8, "unexpected trace ID size");
+_Static_assert(sizeof(SpanID) == 8, "unexpected span ID size");
 
 typedef struct __attribute__((packed)) SpanTraceInfo {
-  ApmTraceID trace_id;
-  ApmSpanID span_id;
+  TraceID trace_id;
+  SpanID span_id;
 } SpanTraceInfo;
 
 typedef struct GolangLabel {
@@ -652,10 +652,10 @@ typedef struct Trace {
   u64 ktime;
   // The current COMM of the thread of this Trace.
   u8 comm[COMM_LEN];
-  // APM transaction ID or all-zero if not present.
-  ApmSpanID apm_transaction_id;
-  // APM trace ID or all-zero if not present.
-  ApmTraceID apm_trace_id;
+  // Span ID or all-zero if not present.
+  SpanID span_id;
+  // Trace ID or all-zero if not present.
+  TraceID trace_id;
 
   // The CPU that captured this trace.
   u32 cpu_id;
