@@ -5,7 +5,9 @@
 // origin_id_probe is set during load time.
 BPF_RODATA_VAR(u16, origin_id_probe, 0)
 
-static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
+// probe__generic captures a trace, carrying *value as its context value if
+// value is non-NULL.
+static EBPF_INLINE int probe__generic(struct pt_regs *ctx, const u64 *value)
 {
   u32 pid          = 0;
   u32 tid          = 0;
@@ -20,14 +22,25 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx, u64 value)
 
   u64 ts = bpf_ktime_get_ns();
 
-  return collect_trace(ctx, origin_id_probe, pid, tid, group_leader, ts, value);
+  PerCPURecord *record = prepare_trace(origin_id_probe, pid, tid, group_leader, ts);
+  if (!record) {
+    return 0;
+  }
+  if (value) {
+    u64 *values = push_context_values(&record->trace, 1);
+    if (!values) {
+      return 0;
+    }
+    values[0] = *value;
+  }
+  return unwind_trace(ctx, record, true);
 }
 
 // kprobe__generic serves as entry point for kprobe based profiling.
 SEC("kprobe/generic")
 int kprobe__generic(struct pt_regs *ctx)
 {
-  return probe__generic(ctx, 0);
+  return probe__generic(ctx, NULL);
 }
 
 // ext_probe_value enables externally hosted probes to forward values
@@ -49,7 +62,7 @@ int kprobe__external(struct pt_regs *ctx)
     DEBUG_PRINT("Failed to read value from ext_probe_value");
     return 0;
   }
-  return probe__generic(ctx, *value);
+  return probe__generic(ctx, value);
 }
 
 // perf_event__external serves as tail call target for externally hosted perf_event based probes.
@@ -62,5 +75,5 @@ int perf_event__external(struct bpf_perf_event_data *ctx)
     DEBUG_PRINT("Failed to read value from ext_probe_value");
     return 0;
   }
-  return probe__generic((struct pt_regs *)&ctx->regs, *value);
+  return probe__generic((struct pt_regs *)&ctx->regs, value);
 }
