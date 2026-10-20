@@ -93,6 +93,16 @@ type hotspotInstance struct {
 
 	// stubs stores all known stub routine regions.
 	stubs xsync.RWMutex[map[libpf.Address]StubRoutine]
+
+	// processStubs is set when stubs need to be (re)scanned: at startup, and once the
+	// first Java frame is seen. It is cleared right before scanning, so that a frame
+	// arriving during a scan triggers another one.
+	processStubs atomic.Bool
+
+	// frameSeen records that a Java frame was already delivered by the unwinder, which
+	// implies that the JVM has finished booting and generating its stubs. It is only
+	// accessed from Symbolize.
+	frameSeen bool
 }
 
 func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -806,7 +816,7 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
-	allStubs := findStubBounds(vmd, d.bias, d.rm)
+	allStubs := d.findStubBounds(vmd)
 
 	stubs := d.stubs.WLock()
 	defer d.stubs.WUnlock(&stubs)
@@ -877,9 +887,33 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return nil
 	}
 
-	d.updateStubMappings(vmd, ebpf, pid)
+	d.syncStubMappings(vmd, ebpf, pid)
 
 	return nil
+}
+
+// syncStubMappings scans for stubs at most twice per instance, as the JVM generates
+// them only during boot and scanning is expensive (remote reads):
+//  1. once after the main attachment is done, and
+//  2. once after the first Java frame was received: that proves boot is complete, so
+//     everything generated since pass 1 is picked up.
+func (d *hotspotInstance) syncStubMappings(vmd *hotspotVMData,
+	ebpf interpreter.EbpfHandler, pid libpf.PID,
+) {
+	if !d.processStubs.Load() {
+		return
+	}
+	d.processStubs.Store(false)
+	d.updateStubMappings(vmd, ebpf, pid)
+}
+
+// markFrameSeen records the first Java frame and requests a final stub scan.
+func (d *hotspotInstance) markFrameSeen() {
+	if d.frameSeen {
+		return
+	}
+	d.frameSeen = true
+	d.processStubs.Store(true)
 }
 
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
@@ -895,6 +929,8 @@ func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ 
 	subtype := uint32(ef.Variable(1)>>60) & 0xf
 	ripOrBci := uint32(ef.Variable(1)>>32) & 0x0fffffff
 	ptrCheck := uint32(ef.Variable(1))
+
+	d.markFrameSeen()
 
 	var err error
 	sfCounter := successfailurecounter.New(&d.successCount, &d.failCount)

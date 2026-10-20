@@ -44,9 +44,9 @@ type probe struct {
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
 	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
+		SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
 		ReportValues: true,
+		AppendValues: samples.AppendFirstContextValue,
 	})
 	if err != nil {
 		return fmt.Errorf("registering off-CPU origin: %w", err)
