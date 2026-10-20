@@ -2276,7 +2276,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
 	val := reflect.ValueOf(&rv).Elem()
 	typ := val.Type()
-	anyFailed := false
+	scanSymTab := false
 	for i := 0; i < val.NumField(); i++ {
 		ftyp := typ.Field(i)
 		fval := val.Field(i)
@@ -2287,17 +2287,17 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 			if !errors.Is(err, libpf.ErrSymbolNotFound) {
 				log.Warnf("Couldn't get V8 symbol %s: %v", ftyp.Name, err)
 			}
-			anyFailed = true
+			if ftyp.Tag.Get("optional") != "true" {
+				scanSymTab = true
+			}
 		} else {
 			fval.Set(reflect.ValueOf(sym))
 		}
 	}
-	if anyFailed {
-		err := rv.scan(ef)
-		return rv, err
-	} else {
-		return rv, nil
+	if scanSymTab {
+		return rv, rv.scan(ef)
 	}
+	return rv, nil
 }
 
 func GetLoader(_ Config) interpreter.Loader {
