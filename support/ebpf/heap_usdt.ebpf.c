@@ -12,34 +12,14 @@
 // package once per (process, probe site) discovered via .note.stapsdt
 // scanning.
 //
-// v1 reads arguments directly out of pt_regs using the architecture-specific
-// register layout, matching the fixed tracepoint signatures emitted by the
-// sampler. Honouring per-arg location descriptors from the SDT note is
-// follow-up work.
-
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
+#include "usdt_args.h"
 
 // origin_id_heap_alloc is set during load time by the heap probe's Load()
 // method via the origin registry.
 BPF_RODATA_VAR(u16, origin_id_heap_alloc, 0)
-
-// ─────────────────────────────────────────────────────────────────────────
-// USDT argument accessors: the registers holding the first three integer
-// arguments per the SysV/AAPCS calling conventions, read as ctx->usdt_argN.
-// ─────────────────────────────────────────────────────────────────────────
-#if defined(__x86_64__)
-  #define usdt_arg0 di
-  #define usdt_arg1 si
-  #define usdt_arg2 dx
-#elif defined(__aarch64__)
-  #define usdt_arg0 regs[0]
-  #define usdt_arg1 regs[1]
-  #define usdt_arg2 regs[2]
-#else
-  #error "Unsupported architecture"
-#endif
 
 // ─────────────────────────────────────────────────────────────────────────
 // heap:alloc(user, size, weighted_bytes)
@@ -51,14 +31,24 @@ BPF_RODATA_VAR(u16, origin_id_heap_alloc, 0)
 SEC("uprobe/heap_alloc")
 int uprobe_heap_alloc(struct pt_regs *ctx)
 {
-  u64 user           = ctx->usdt_arg0;
-  u64 size           = ctx->usdt_arg1;
-  u64 weighted_bytes = ctx->usdt_arg2;
-
   u32 pid          = 0;
   u32 tid          = 0;
   u64 group_leader = 0;
   if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
+    return 0;
+  }
+
+  USDTSpec *spec = bpf_usdt_spec(ctx, pid);
+  if (!spec) {
+    return 0;
+  }
+
+  u64 user           = 0;
+  u64 size           = 0;
+  u64 weighted_bytes = 0;
+  if (
+    bpf_usdt_arg(ctx, spec, 0, &user) || bpf_usdt_arg(ctx, spec, 1, &size) ||
+    bpf_usdt_arg(ctx, spec, 2, &weighted_bytes)) {
     return 0;
   }
 
