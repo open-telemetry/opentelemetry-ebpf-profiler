@@ -90,10 +90,10 @@ int finish_task_switch(struct pt_regs *ctx)
   }
 
   // Trace timestamps are CLOCK_BOOTTIME
-  u64 ts       = bpf_ktime_get_boot_ns();
+  u64 ts      = bpf_ktime_get_boot_ns();
   // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
   // tracepoint__sched_switch.
-  u64 mono_ts  = bpf_ktime_get_ns();
+  u64 mono_ts = bpf_ktime_get_ns();
 
   u64 pid_tgid = ((u64)pid << 32) | tid;
 
