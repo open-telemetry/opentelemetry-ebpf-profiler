@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/probes/heap"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -335,6 +336,12 @@ func TestAllTracers(t *testing.T) {
 			})
 			require.NoError(t, err)
 			defer tr.Close()
+
+			heapProbe := heap.New()
+			require.NoError(t, tr.Enable(t.Context(), heapProbe))
+			defer func() {
+				require.NoError(t, heapProbe.Unload())
+			}()
 		})
 	}
 }
