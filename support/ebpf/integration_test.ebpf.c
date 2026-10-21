@@ -9,7 +9,7 @@
 static EBPF_INLINE void
 send_sample_trace(void *ctx, u32 pid, u32 tid, u8 test_case, bool capture_kernel_frames)
 {
-  PerCPURecord *record = prepare_trace(origin_id_sampling, pid, tid, 0, bpf_ktime_get_ns());
+  PerCPURecord *record = prepare_trace(origin_id_sampling, pid, tid, 0, bpf_ktime_get_boot_ns());
   if (!record) {
     return;
   }

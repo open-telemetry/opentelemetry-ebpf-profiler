@@ -31,8 +31,8 @@ const (
 var _ IntervalsAndTimers = (*Times)(nil)
 
 var (
-	// Monotonic-to-unixtime delta that can be added to a monotonic (CLOCK_MONOTONIC)
-	// timestamp to convert it to time-since-epoch.
+	// System boot time in nanoseconds since the epoch: a delta that, added
+	// to a CLOCK_BOOTTIME timestamp (KTime) converts it to time-since-epoch.
 	bootTimeUnixNano atomic.Int64
 )
 
@@ -100,9 +100,10 @@ func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticIn
 
 func (t *Times) ExecutableUnloadDelay() time.Duration { return t.executableUnloadDelay }
 
-// StartRealtimeSync calculates a delta between the monotonic clock
-// (CLOCK_MONOTONIC, rebased to unixtime) and the realtime clock. If syncInterval is
-// greater than zero, it also starts a goroutine to perform that calculation periodically.
+// StartRealtimeSync calculates the delta between CLOCK_BOOTTIME and the realtime
+// clock. Because CLOCK_BOOTTIME includes time spent in suspend, this delta only changes
+// when the realtime clock is stepped or slewed (e.g. by NTP). If syncInterval is greater
+// than zero, a goroutine repeats the calculation periodically to track such adjustments.
 func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
 	bootTimeUnixNano.Store(getBootTimeUnixNano())
 

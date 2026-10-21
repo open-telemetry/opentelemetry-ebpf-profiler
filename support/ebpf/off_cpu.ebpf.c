@@ -14,7 +14,7 @@ struct kprobe_progs_t {
 struct sched_times_t {
   __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
   __type(key, u64);         // pid_tgid
-  __type(value, u64);       // time in ns
+  __type(value, u64);       // CLOCK_MONOTONIC time in ns
   __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
 } sched_times SEC(".maps");
 
@@ -43,11 +43,14 @@ int tracepoint__sched_switch(UNUSED void *ctx)
     return 0;
   }
 
-  u64 ts = bpf_ktime_get_ns();
-  if (process_is_too_new(ts, group_leader)) {
+  if (process_is_too_new(bpf_ktime_get_boot_ns(), group_leader)) {
     return 0;
   }
 
+  // Measure off-CPU duration on CLOCK_MONOTONIC, which does not advance on system
+  // suspend. We don't use CLOCK_BOOTTIME to avoid charging the whole suspend period
+  // to every thread that happened to be descheduled across it.
+  u64 ts       = bpf_ktime_get_ns();
   u64 pid_tgid = ((u64)pid << 32) | tid;
 
   if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
@@ -86,7 +89,12 @@ int finish_task_switch(struct pt_regs *ctx)
     return 0;
   }
 
-  u64 ts       = bpf_ktime_get_ns();
+  // Trace timestamps are CLOCK_BOOTTIME
+  u64 ts       = bpf_ktime_get_boot_ns();
+  // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
+  // tracepoint__sched_switch.
+  u64 mono_ts  = bpf_ktime_get_ns();
+
   u64 pid_tgid = ((u64)pid << 32) | tid;
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
@@ -100,7 +108,7 @@ int finish_task_switch(struct pt_regs *ctx)
   bpf_map_delete_elem(&sched_times, &pid_tgid);
 
   // diff stores the nanoseconds that the trace was off-cpu for.
-  u64 diff = ts - *start_ts;
+  u64 diff = mono_ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
   PerCPURecord *record = prepare_trace(origin_id_off_cpu, pid, tid, group_leader, ts);

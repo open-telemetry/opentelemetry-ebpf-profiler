@@ -652,7 +652,8 @@ typedef struct Trace {
   // The thread ID
   // NOTE: Confusingly, this is what Linux calls "pid".
   u32 tid;
-  // Monotonic kernel time in nanosecond precision.
+  // Capture time in nanoseconds on CLOCK_BOOTTIME (bpf_ktime_get_boot_ns). Unlike
+  // CLOCK_MONOTONIC this clock keeps advancing while the system is suspended.
   u64 ktime;
   // The current COMM of the thread of this Trace.
   u8 comm[COMM_LEN];

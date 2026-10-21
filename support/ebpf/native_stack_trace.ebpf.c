@@ -40,9 +40,10 @@ BPF_RODATA_VAR(u32, task_group_leader_offset, 0)
 // The offset of stack base within `task_struct`.
 BPF_RODATA_VAR(u32, task_stack_offset, 0)
 
-// task_start_time_offset is set during load time.
-// The offset of start_time within `task_struct`.
-BPF_RODATA_VAR(u32, task_start_time_offset, 0)
+// task_start_boottime_offset is set during load time.
+// The offset of start_boottime within `task_struct`. This is the process start
+// time on CLOCK_BOOTTIME, the same clock as bpf_ktime_get_boot_ns().
+BPF_RODATA_VAR(u32, task_start_boottime_offset, 0)
 
 // stack_ptregs_offset is set during load time.
 // The offset of struct pt_regs within the kernel entry stack.
@@ -210,7 +211,7 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
     return 0;
   }
 
-  u64 ts = bpf_ktime_get_ns();
+  u64 ts = bpf_ktime_get_boot_ns();
 
   return collect_trace(
     (struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, group_leader, ts);
