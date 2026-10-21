@@ -11,6 +11,7 @@ import (
 
 /*
 #include "./ebpf/types.h"
+#include "./ebpf/usdt_defs.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
 #include "./ebpf/luajit.h"
@@ -78,6 +79,37 @@ const (
 )
 
 const (
+	USDTMaxArguments = C.USDT_MAX_ARGUMENTS
+
+	USDTArgumentConstant            uint32 = C.USDT_ARGUMENT_CONSTANT
+	USDTArgumentRegister            uint32 = C.USDT_ARGUMENT_REGISTER
+	USDTArgumentRegisterDereference uint32 = C.USDT_ARGUMENT_REGISTER_DEREFERENCE
+
+	USDTRegisterNone uint8 = C.USDT_REGISTER_NONE
+	USDTRegisterRAX  uint8 = C.USDT_REGISTER_RAX
+	USDTRegisterRBX  uint8 = C.USDT_REGISTER_RBX
+	USDTRegisterRCX  uint8 = C.USDT_REGISTER_RCX
+	USDTRegisterRDX  uint8 = C.USDT_REGISTER_RDX
+	USDTRegisterRSI  uint8 = C.USDT_REGISTER_RSI
+	USDTRegisterRDI  uint8 = C.USDT_REGISTER_RDI
+	USDTRegisterRBP  uint8 = C.USDT_REGISTER_RBP
+	USDTRegisterRSP  uint8 = C.USDT_REGISTER_RSP
+	USDTRegisterR8   uint8 = C.USDT_REGISTER_R8
+	USDTRegisterR9   uint8 = C.USDT_REGISTER_R9
+	USDTRegisterR10  uint8 = C.USDT_REGISTER_R10
+	USDTRegisterR11  uint8 = C.USDT_REGISTER_R11
+	USDTRegisterR12  uint8 = C.USDT_REGISTER_R12
+	USDTRegisterR13  uint8 = C.USDT_REGISTER_R13
+	USDTRegisterR14  uint8 = C.USDT_REGISTER_R14
+	USDTRegisterR15  uint8 = C.USDT_REGISTER_R15
+	USDTRegisterRIP  uint8 = C.USDT_REGISTER_RIP
+	USDTRegisterX0   uint8 = C.USDT_REGISTER_X0
+	USDTRegisterX30  uint8 = C.USDT_REGISTER_X30
+	USDTRegisterSP   uint8 = C.USDT_REGISTER_SP
+	USDTRegisterPC   uint8 = C.USDT_REGISTER_PC
+)
+
+const (
 	// StackDeltaBucket[Smallest|Largest] define the boundaries of the bucket sizes of the various
 	// nested stack delta maps.
 	StackDeltaBucketSmallest = C.STACK_DELTA_BUCKET_SMALLEST
@@ -106,6 +138,9 @@ type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
 type PIDNamespaceLayout C.PIDNamespaceLayout
+type USDTArgumentSpec C.USDTArgumentSpec
+type USDTSpec C.USDTSpec
+type USDTSpecKey C.USDTSpecKey
 type StackDelta C.StackDelta
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey

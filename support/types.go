@@ -71,6 +71,37 @@ const (
 )
 
 const (
+	USDTMaxArguments = 0xc
+
+	USDTArgumentConstant            uint32 = 0x0
+	USDTArgumentRegister            uint32 = 0x1
+	USDTArgumentRegisterDereference uint32 = 0x2
+
+	USDTRegisterNone uint8 = 0x0
+	USDTRegisterRAX  uint8 = 0x1
+	USDTRegisterRBX  uint8 = 0x2
+	USDTRegisterRCX  uint8 = 0x3
+	USDTRegisterRDX  uint8 = 0x4
+	USDTRegisterRSI  uint8 = 0x5
+	USDTRegisterRDI  uint8 = 0x6
+	USDTRegisterRBP  uint8 = 0x7
+	USDTRegisterRSP  uint8 = 0x8
+	USDTRegisterR8   uint8 = 0x9
+	USDTRegisterR9   uint8 = 0xa
+	USDTRegisterR10  uint8 = 0xb
+	USDTRegisterR11  uint8 = 0xc
+	USDTRegisterR12  uint8 = 0xd
+	USDTRegisterR13  uint8 = 0xe
+	USDTRegisterR14  uint8 = 0xf
+	USDTRegisterR15  uint8 = 0x10
+	USDTRegisterRIP  uint8 = 0x11
+	USDTRegisterX0   uint8 = 0x20
+	USDTRegisterX30  uint8 = 0x3e
+	USDTRegisterSP   uint8 = 0x3f
+	USDTRegisterPC   uint8 = 0x40
+)
+
+const (
 	StackDeltaBucketSmallest = 0x8
 	StackDeltaBucketLargest  = 0x17
 
@@ -122,6 +153,25 @@ type PIDNamespaceLayout struct {
 	Upid_nr_offset            uint32
 	Upid_ns_offset            uint32
 	Pid_namespace_inum_offset uint32
+}
+type USDTArgumentSpec struct {
+	Value_offset uint64
+	Kind         uint32
+	Reg          uint8
+	Is_signed    uint8
+	Bit_shift    int8
+	Is_float     uint8
+}
+type USDTSpec struct {
+	Arguments [12]USDTArgumentSpec
+	Count     uint8
+	X_pad     [7]uint8
+}
+type USDTSpecKey struct {
+	Pid         uint32
+	X_pad       uint32
+	File_id     uint64
+	Elf_address uint64
 }
 type StackDelta struct {
 	AddrLow    uint16
