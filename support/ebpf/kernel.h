@@ -55,6 +55,12 @@ typedef _Bool bool;
   #endif
 #endif
 
+// errno values
+// https://github.com/torvalds/linux/blob/master/include/uapi/asm-generic/errno-base.h
+#ifndef ENOENT
+  #define ENOENT 2 /* No such file or directory */
+#endif
+
 // Go defines `NULL` in `cgo-builtin-prolog`, so we have to check whether
 // it is already defined here (for when this is included in CGo).
 #ifndef NULL
