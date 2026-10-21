@@ -147,36 +147,21 @@ struct thread_context_procs_t {
   __uint(max_entries, 1024);
 } thread_context_procs SEC(".maps");
 
+// go_procs stores Go runtime-specific offsets per Go process.
+struct go_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u32);
+  __type(value, GoRuntimeOffsets);
+  __uint(max_entries, 1024);
+} go_procs SEC(".maps");
+
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
-// go_labels_disabled gates Go custom-label extraction. It mirrors the Go labels
+// go_labels_disabled gates Go label extraction. It mirrors the Go labels
 // configuration (Config.IsLabelsDisabled). The Go runtime offsets are loaded
 // independently whenever Go support is enabled.
 BPF_RODATA_VAR(bool, go_labels_disabled, true)
-
-static EBPF_INLINE bool should_tailcall_go_labels(PerCPURecord *record)
-{
-  if (go_labels_disabled) {
-    return false;
-  }
-
-  if (record->goOffsets.m_offset == 0) {
-    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", record->trace.pid);
-    return false;
-  }
-  GoRuntimeOffsets *offsets = &record->goOffsets;
-
-  void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
-  if (!m_ptr_addr) {
-    return false;
-  }
-  record->golangLabelsState.go_m_ptr = m_ptr_addr;
-
-  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
-  increment_metric(metricID_UnwindGoLabelsAttempts);
-  return true;
-}
 
 // Implements the specification to share span/trace IDs according to:
 // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
@@ -203,6 +188,195 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
   if (!proc) {
     return;
   }
+}
+
+// Golang label extraction
+static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct GoString *v)
+{
+  GolangLabel *l = reserve_variable_data(trace, sizeof(GolangLabel), 0);
+  if (!l) {
+    return false;
+  }
+
+  volatile u8 klen = MIN(k->len, sizeof l->key - 1);
+  if (bpf_probe_read_user(l->key, klen, k->str)) {
+    DEBUG_PRINT("cl: failed to read label key (%lx)", (unsigned long)k->str);
+    return false;
+  }
+  l->key[klen] = 0;
+
+  volatile u8 vlen = MIN(v->len, sizeof l->val - 1);
+  if (bpf_probe_read_user(l->val, vlen, v->str)) {
+    DEBUG_PRINT("cl: failed to read label value (%lx)", (unsigned long)v->str);
+    return false;
+  }
+  l->val[vlen] = 0;
+  commit_variable_data(trace, sizeof(GolangLabel));
+
+  return true;
+}
+
+static EBPF_INLINE bool go_labels_get_from_slice(PerCPURecord *record, void *labels_slice_ptr)
+{
+  // https://github.com/golang/go/blob/80e2e474/src/runtime/pprof/label.go#L20
+  struct GoSlice labels_slice;
+  if (bpf_probe_read_user(&labels_slice, sizeof(struct GoSlice), labels_slice_ptr)) {
+    DEBUG_PRINT("cl: failed to read value for labels slice (%lx)", (unsigned long)labels_slice_ptr);
+    return false;
+  }
+
+  // len is number of pairs, ie its a vector of key/val structs.
+  u64 num = 2 * (u64)MIN(labels_slice.len, MAX_GO_LABELS);
+  if (bpf_probe_read_user(
+        &record->goLabels, sizeof(struct GoString) * (u32)num, labels_slice.array)) {
+    DEBUG_PRINT(
+      "cl: failed to read strings from labels slice (%lx)", (unsigned long)labels_slice.array);
+    return false;
+  }
+
+  // Convert the data from the scratch array to event label data payload
+  bool ret = false;
+  for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
+    if (i >= num)
+      break;
+    if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
+      goto done;
+  }
+  ret = true;
+done:
+  return ret;
+}
+
+static EBPF_INLINE bool go_labels_get_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  void *labels_map_ptr;
+  if (bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr)) {
+    DEBUG_PRINT(
+      "cl: failed to read value for labels_map_ptr (%lx)", (unsigned long)labels_map_ptr_ptr);
+    return false;
+  }
+
+  u64 labels_count = 0;
+  if (bpf_probe_read_user(&labels_count, sizeof(labels_count), labels_map_ptr + offs->hmap_count)) {
+    DEBUG_PRINT("cl: failed to read value for labels_count");
+    return false;
+  }
+  if (labels_count == 0) {
+    DEBUG_PRINT("cl: no labels");
+    return true;
+  }
+
+  unsigned char log_2_bucket_count;
+  if (bpf_probe_read_user(
+        &log_2_bucket_count,
+        sizeof(log_2_bucket_count),
+        labels_map_ptr + offs->hmap_log2_bucket_count)) {
+    DEBUG_PRINT("cl: failed to read value for bucket_count");
+    return false;
+  }
+  GoMapBucket *label_buckets;
+  if (bpf_probe_read_user(
+        &label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets)) {
+    DEBUG_PRINT("cl: failed to read value for label_buckets");
+    return false;
+  }
+
+  // Limit extracted labels to MAX_GO_LABELS
+  const u16 max_end = record->trace.variable_data_end + MAX_GO_LABEL_DATA_SZ;
+
+  // If the map has more than 16 buckets we just don't support it, pprof maps are typically
+  // small and if its a problem upgrading to Go 1.24+ is a potential solution.
+  u64 bucket_count = 1UL << log_2_bucket_count;
+  bool ret         = false;
+  for (u64 b = 0; b < 16; b++) {
+    if (b >= bucket_count)
+      break;
+
+    GoMapBucket *bucket = &record->goMapBucket;
+    if (bpf_probe_read_user(bucket, sizeof(GoMapBucket), &label_buckets[b])) {
+      goto done;
+    }
+
+    for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
+      // map tophash values for Go 1.12 (first supported) to 1.23 (last used in pprof)
+      // https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L82-L87
+      const u8 emptyRest = 0, minTopHash = 5;
+
+      u8 tophash = bucket->tophash[i];
+      if (tophash == emptyRest)
+        break;
+      if (tophash < minTopHash)
+        continue;
+      if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
+        goto done;
+      if (record->trace.variable_data_end >= max_end)
+        goto success;
+    }
+  }
+success:
+  ret = true;
+done:
+  return ret;
+}
+
+// Go processes store the current goroutine in thread local store. From there
+// this reads the g (aka goroutine) struct, then the m (the actual operating
+// system thread) of that goroutine, and finally curg (current goroutine). This
+// chain is necessary because getg().m.curg points to the current user g
+// assigned to the thread (curg == getg() when not on the system stack). curg
+// may be nil if there is no user g, such as when running in the scheduler. If
+// curg is nil, then g is either a system stack (called g0) or a signal handler
+// g (gsignal). Neither one will ever have label.
+static EBPF_INLINE bool add_golang_labels(PerCPURecord *record, void *m_ptr)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  size_t curg_ptr_addr;
+  if (bpf_probe_read_user(&curg_ptr_addr, sizeof(void *), m_ptr + offs->curg)) {
+    DEBUG_PRINT("cl: failed to read value for m_ptr->curg");
+    return false;
+  }
+
+  void *labels_ptr;
+  if (bpf_probe_read_user(&labels_ptr, sizeof(void *), (void *)(curg_ptr_addr + offs->labels))) {
+    DEBUG_PRINT(
+      "cl: failed to read value for curg->labels (%lx->%lx)",
+      (unsigned long)curg_ptr_addr,
+      (unsigned long)offs->labels);
+    return false;
+  }
+
+  if (offs->hmap_buckets == 0) {
+    // go 1.24+ labels is a slice
+    return go_labels_get_from_slice(record, labels_ptr);
+  }
+  // go 1.23- labels is a map
+  return go_labels_get_from_map(record, labels_ptr);
+}
+
+static EBPF_INLINE void maybe_add_golang_labels(PerCPURecord *record)
+{
+  if (go_labels_disabled) {
+    return;
+  }
+
+  GoRuntimeOffsets *offsets = &record->goOffsets;
+  if (offsets->m_offset == 0) {
+    DEBUG_PRINT("cl: %d not a go binary", record->trace.pid);
+    return;
+  }
+
+  void *m_ptr = go_get_m_ptr(offsets, &record->state);
+  if (!m_ptr) {
+    return;
+  }
+
+  DEBUG_PRINT("cl: collecting Go labels");
+  increment_metric(metricID_UnwindGoLabelsAttempts);
+  if (!add_golang_labels(record, m_ptr)) {
+    increment_metric(metricID_UnwindGoLabelsFailures);
+  }
+  record->trace.golang_label_end = end_variable_data(&record->trace, sizeof(GolangLabel));
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
@@ -267,14 +441,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
   maybe_add_thread_context_info(trace);
-
-  // Dispatches without returning, so it must come last.
-  if (should_tailcall_go_labels(record)) {
-    // The Go label extraction code inlined in its current form causes issues with old
-    // kernel verifier. So tail_call the separate program. It duplicates trace sending.
-    return tail_call(ctx, record, PROG_GO_LABELS);
-  }
-
+  maybe_add_golang_labels(record);
   send_trace(ctx, trace);
 
   return 0;

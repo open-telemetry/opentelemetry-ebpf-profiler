@@ -31,7 +31,6 @@ void bpf_log(const char *fmt, ...)
 
 #include "../../support/ebpf/beam_tracer.ebpf.c"
 #include "../../support/ebpf/dotnet_tracer.ebpf.c"
-#include "../../support/ebpf/go_labels.ebpf.c"
 #include "../../support/ebpf/hotspot_tracer.ebpf.c"
 #include "../../support/ebpf/interpreter_dispatcher.ebpf.c"
 #include "../../support/ebpf/luajit_tracer.ebpf.c"
@@ -96,7 +95,6 @@ int bpf_tail_call(void *ctx, UNUSED void *map, int index)
   case PROG_UNWIND_DOTNET10: return unwind_dotnet10(ctx);
   case PROG_UNWIND_BEAM: return unwind_beam(ctx);
   case PROG_UNWIND_LUAJIT: return unwind_luajit(ctx);
-  case PROG_GO_LABELS: return go_labels(ctx);
   default: return -1;
   }
 }

@@ -390,7 +390,6 @@ typedef enum TracePrograms {
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
   PROG_UNWIND_DOTNET10,
-  PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
   PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
@@ -870,10 +869,6 @@ typedef struct GoRuntimeOffsets {
   u32 sched_bp_off;
 } GoRuntimeOffsets;
 
-typedef struct GolangLabelsState {
-  void *go_m_ptr;
-} GolangLabelsState;
-
 // Container for additional scratch space needed by the Go unwinder.
 typedef struct GoUnwindScratchSpace {
   // Max size for a single bpf_probe_read, so the larger of runtime.m[0:curg+8) and
@@ -896,8 +891,6 @@ typedef struct PerCPURecord {
   PHPUnwindState phpUnwindState;
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
-  // State for Go labels
-  GolangLabelsState golangLabelsState;
   // Per-process Go runtime offsets, preloaded once per trace from go_procs in
   // collect_trace. m_offset is always non-zero for a Go process.
   GoRuntimeOffsets goOffsets;
