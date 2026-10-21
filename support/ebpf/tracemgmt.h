@@ -852,14 +852,10 @@ find_vma_callback(UNUSED struct task_struct *task, struct vm_area_struct *vma, v
   return 0;
 }
 
-static inline EBPF_INLINE VMAInfo find_vma_info_for_pc(u64 pc)
+static inline EBPF_INLINE long find_vma_info_for_pc(u64 pc, VMAInfo *info)
 {
-  VMAInfo info = {};
-
   struct task_struct *task = bpf_get_current_task_btf();
-  bpf_find_vma(task, pc, find_vma_callback, &info, 0);
-
-  return info;
+  return bpf_find_vma(task, pc, find_vma_callback, info, 0);
 }
 
 // resolve_unwind_mapping decodes the current PC's mapping and prepares unwinding information.
@@ -927,12 +923,20 @@ refine_missing_mapping_error(UnwindState *state, bool interpreter_uses_anonymous
   }
 
   bool update_unwind_error = state->unwind_error == ERR_NATIVE_NO_PID_PAGE_MAPPING;
-  VMAInfo vma              = find_vma_info_for_pc(state->pc);
-  if (!vma.found) {
+  VMAInfo vma              = {};
+  long ret                 = find_vma_info_for_pc(state->pc, &vma);
+  if (ret == -ENOENT) {
     state->error_metric = metricID_UnwindNativeErrNoVMA;
     if (update_unwind_error) {
       state->unwind_error = ERR_NATIVE_NO_VMA;
     }
+    return;
+  }
+  if (ret != 0 || !vma.found) {
+    // bpf_find_vma returned an error before lookup (e.g. EBUSY), or the callback did not run. Do
+    // not refine to ERR_NATIVE_NO_VMA so unwind_stop still requests a PID sync.
+    DEBUG_PRINT(
+      "bpf_find_vma did not reach the callback for PC 0x%lx: %ld", (unsigned long)state->pc, ret);
     return;
   }
 
