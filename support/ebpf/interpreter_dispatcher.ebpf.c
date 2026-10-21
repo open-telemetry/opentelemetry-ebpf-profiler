@@ -198,6 +198,7 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
     return false;
   }
 
+  _Static_assert(sizeof l->key < 256, "Golang label key length must fit u8");
   volatile u8 klen = MIN(k->len, sizeof l->key - 1);
   if (bpf_probe_read_user(l->key, klen, k->str)) {
     DEBUG_PRINT("cl: failed to read label key (%lx)", (unsigned long)k->str);
@@ -205,6 +206,7 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
   }
   l->key[klen] = 0;
 
+  _Static_assert(sizeof l->val < 256, "Golang label value length must fit u8");
   volatile u8 vlen = MIN(v->len, sizeof l->val - 1);
   if (bpf_probe_read_user(l->val, vlen, v->str)) {
     DEBUG_PRINT("cl: failed to read label value (%lx)", (unsigned long)v->str);
