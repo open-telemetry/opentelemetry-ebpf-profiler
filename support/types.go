@@ -123,6 +123,25 @@ type PIDNamespaceLayout struct {
 	Upid_ns_offset            uint32
 	Pid_namespace_inum_offset uint32
 }
+type USDTArgumentSpec struct {
+	Value_offset uint64
+	Kind         uint32
+	Reg          uint8
+	Is_signed    uint8
+	Bit_shift    int8
+	Is_float     uint8
+}
+type USDTSpec struct {
+	Arguments [12]USDTArgumentSpec
+	Count     uint8
+	X_pad     [7]uint8
+}
+type USDTSpecKey struct {
+	Pid         uint32
+	X_pad       uint32
+	File_id     uint64
+	Elf_address uint64
+}
 type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16
