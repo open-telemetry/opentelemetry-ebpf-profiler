@@ -110,6 +110,16 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	if offset < r.start {
 		return 0, errOffset
 	}
+
+	// Fast path: the seek target is within the currently buffered data.
+	// Keep 'r.off' (the refill anchor) and 'nlim' untouched, and just move
+	// the read position. Seeks past the section limit ('nlim') are fine:
+	// reads then return the section end (or EOF) as appropriate.
+	if bufStart := r.off - int64(r.nbuf); offset >= bufStart && offset < r.off {
+		r.pos = int(offset - bufStart)
+		return offset - r.start, nil
+	}
+
 	r.off = offset
 	r.flush()
 	return offset - r.start, nil

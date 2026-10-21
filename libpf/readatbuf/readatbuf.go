@@ -73,8 +73,8 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 	return
 }
 
-// InvalidateCache flushes the internal cache. Resets the statistics.
-func (reader *Reader) InvalidateCache() {
+// Release flushes the internal cache. Resets the statistics.
+func (reader *Reader) Release() {
 	reader.cache.Purge()
 	reader.stats = Statistics{}
 }
@@ -135,6 +135,25 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 	return int(writeOffset), nil
 }
 
+// PeekAt returns the cached []byte slice starting from given offset. The returned
+// slice length is until eof or end of cached area. The returned slice is valid
+// until next PeekAt or ReadAt call.
+func (reader *Reader) PeekAt(off int64) (data []byte, err error) {
+	if off < 0 {
+		return nil, fmt.Errorf("negative offset value %d given", off)
+	}
+	skipOffset := uint(off) % reader.pageSize
+	pageIdx := uint(off) / reader.pageSize
+	data, _, err = reader.getOrReadPage(pageIdx)
+	if err != nil {
+		return nil, err
+	}
+	if skipOffset >= uint(len(data)) {
+		return nil, io.EOF
+	}
+	return data[skipOffset:], nil
+}
+
 func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err error) {
 	if cachedPage, exists := reader.cache.Get(pageIdx); exists {
 		// Data is cached: serve from there.
@@ -155,11 +174,15 @@ func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err er
 			buffer = buffer[:n]
 			eof = true
 		} else {
+			// Return the buffer for reuse.
+			libpf.PutBuffer(buffer)
 			return nil, false, err
 		}
 	}
 
 	if !eof && uint(n) < reader.pageSize {
+		// Return the buffer for reuse.
+		libpf.PutBuffer(buffer)
 		return nil, false, errors.New("failed to read whole page")
 	}
 

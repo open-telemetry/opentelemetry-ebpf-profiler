@@ -5,6 +5,7 @@ package elfunwindinfo
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"testing"
 	"unsafe"
@@ -18,33 +19,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Go 1.2 spec Appendix: PC-Value Table Encoding example
+// Go 1.2 spec Appendix: PC-Value Table Encoding example. Each step returns
+// the PC where a value starts to be in effect, along with that value.
 func TestPcval(t *testing.T) {
 	res := []struct {
 		val int32
 		pc  uint
 	}{
-		{0, 0x2019},
-		{32, 0x206b},
-		{40, 0x206d},
-		{48, 0x2073},
-		{40, 0x2074},
-		{32, 0x209b},
-		{0, 0x209c},
+		{0, 0},
+		{32, 0x19},
+		{40, 0x6b},
+		{48, 0x6d},
+		{40, 0x73},
+		{32, 0x74},
+		{0, 0x9b},
 	}
 	data := []byte{
 		0x02, 0x19, 0x40, 0x52, 0x10, 0x02, 0x10, 0x06,
 		0x0f, 0x01, 0x0f, 0x27, 0x3f, 0x01, 0x00}
-	p, ok := newPcval(data, 0x2000, 1)
-	require.True(t, ok)
+	p := newPcvalDecoder(&pcvalMemReader{area: data}, 0, int64(len(data)), 1)
 	i := 0
-	for ; ok; ok = p.step() {
-		t.Logf("Pcval %d, %x", p.val, p.pcEnd)
+	for {
+		pc, val, err := p.step()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
 		// Guard the indexing below: a regression that makes the table step
 		// further than expected should fail here, not panic.
 		require.Less(t, i, len(res))
-		assert.Equal(t, res[i].val, p.val)
-		assert.Equal(t, res[i].pc, p.pcEnd)
+		assert.Equal(t, res[i].val, val)
+		assert.Equal(t, res[i].pc, pc)
 		i++
 	}
 	assert.Equal(t, len(res), i)
@@ -55,16 +60,21 @@ func TestPcval(t *testing.T) {
 // leave val at its -1 sentinel while reporting success.
 func TestPcvalInvalid(t *testing.T) {
 	data := []byte{0x81}
-	p, ok := newPcval(data, 0x2000, 1)
-	assert.False(t, ok)
+	p := newPcvalDecoder(&pcvalMemReader{area: data}, 0, int64(len(data)), 1)
+	_, _, err := p.step()
+	require.ErrorIs(t, err, io.EOF)
 	assert.Equal(t, int32(-1), p.val)
-	assert.False(t, p.step())
+	// The decoder stays at the end of the data: a repeated step keeps
+	// reporting the end of the table.
+	_, _, err = p.step()
+	require.ErrorIs(t, err, io.EOF)
+	assert.Equal(t, int32(-1), p.val)
 }
 
-// TestNewPcvalEmpty verifies that newPcval reports failure when the table has
-// no decodable first entry, so that callers never see the -1 sentinel in val.
-// The parse loops read val before their first step, so a sentinel would be
-// emitted as unwind information: 7 on x86 (val+8) and -1 on arm64.
+// TestNewPcvalEmpty verifies that a table with no decodable first entry is
+// rejected, so that callers never see the -1 sentinel in val. The parse loops
+// read val before their first step, so a sentinel would be emitted as unwind
+// information: 7 on x86 (val+8) and -1 on arm64.
 func TestNewPcvalEmpty(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -79,8 +89,9 @@ func TestNewPcvalEmpty(t *testing.T) {
 		{"truncatedContinuation", []byte{0x02, 0x81}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			p, ok := newPcval(test.data, 0x2000, 1)
-			assert.False(t, ok)
+			p := newPcvalDecoder(&pcvalMemReader{area: test.data}, 0, int64(len(test.data)), 1)
+			_, _, err := p.step()
+			require.Error(t, err)
 			assert.Equal(t, int32(-1), p.val)
 		})
 	}
@@ -170,45 +181,50 @@ func TestTextStart(t *testing.T) {
 	require.Equal(t, runtimeTextAddr, gStripped.textStart)
 }
 
-// TestGetPcvalBounds verifies that an out-of-range pcval offset, which is
-// untrusted data from the pclntab function descriptor, is rejected rather than
-// slicing out of bounds. The negative cases must not panic with "slice bounds
-// out of range".
-func TestGetPcvalBounds(t *testing.T) {
-	g := &Gopclntab{
-		pctab:   []byte{0x02, 0x19, 0x00},
-		quantum: 1,
-	}
+// TestPcvalBounds verifies that an out-of-range pcval offset, which is
+// untrusted data from the pclntab function descriptor, is rejected rather
+// than reading out of bounds. The negative cases must not panic with "slice
+// bounds out of range".
+func TestPcvalBounds(t *testing.T) {
+	data := []byte{0x02, 0x19, 0x00}
 	for _, test := range []struct {
-		name    string
-		offs    int32
-		wantErr string
+		name      string
+		offs      int32
+		outOfBnds bool
 	}{
-		{"negative", -1, "out of bounds"},
-		{"minInt32", math.MinInt32, "out of bounds"},
-		{"pastEnd", int32(len(g.pctab) + 1), "out of bounds"},
-		{"maxInt32", math.MaxInt32, "out of bounds"},
-		// An offset of exactly len(pctab) yields an empty table rather than an
-		// out of range slice, so it has to be caught by the bounds check and
-		// not by the empty table check further down.
-		{"atEnd", int32(len(g.pctab)), "out of bounds"},
+		{"negative", -1, true},
+		{"minInt32", math.MinInt32, true},
+		{"maxInt32", math.MaxInt32, false},
+		// An offset of exactly len(pctab) or past it yields io.EOF from the
+		// bounded reader rather than an out of range slice.
+		{"atEnd", int32(len(data)), false},
 		// In bounds, but pointing at the end-of-table marker.
-		{"terminator", 2, "has no valid first entry"},
+		{"terminator", 2, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := g.getPcval(test.offs, 0x2000)
-			require.ErrorContains(t, err, test.wantErr)
+			p := newPcvalDecoder(&pcvalMemReader{area: data}, 0, int64(len(data)), 1)
+			p.reset(test.offs, 0)
+			_, _, err := p.step()
+			require.Error(t, err)
+			if test.outOfBnds {
+				assert.ErrorContains(t, err, "out of bounds")
+			} else {
+				assert.ErrorIs(t, err, io.EOF)
+			}
 		})
 	}
 
-	// A valid offset still decodes the table.
-	p, err := g.getPcval(0, 0x2000)
+	// A valid offset still decodes the table: the first entry starts at pc 0
+	// with the value 0 in effect up to 0x19.
+	p := newPcvalDecoder(&pcvalMemReader{area: data}, 0, int64(len(data)), 1)
+	p.reset(0, 0)
+	pc, val, err := p.step()
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), p.val)
-	assert.Equal(t, uint(0x2019), p.pcEnd)
+	assert.Equal(t, int32(0), val)
+	assert.Equal(t, uint(0), pc)
 }
 
-// TestGetPcvalSentinel verifies that a table whose first entry steps
+// TestPcvalSentinel verifies that a table whose first entry steps
 // successfully, but leaves val negative, is rejected. Rejecting truncated
 // varints is not enough on its own: a non-canonical encoding of zero decodes
 // fine, so the -1 sentinel survives a successful step and would be emitted as
@@ -217,36 +233,39 @@ func TestGetPcvalBounds(t *testing.T) {
 // The expected reason is asserted, not just that some error is returned, so
 // that a case cannot silently start being caught by an earlier check and stop
 // testing what its name says.
-func TestGetPcvalSentinel(t *testing.T) {
+func TestPcvalSentinel(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		pctab   []byte
+		wantEOF bool
 		wantErr string
 	}{
-		// 0x80 0x00 is a non-canonical encoding of 0, then a pc delta of 2.
-		// The value is unchanged, so val is still the sentinel, but unlike a
-		// truncated table this steps successfully.
-		{"nonCanonicalZero", []byte{0x80, 0x00, 0x02, 0x00},
-			"starts with negative value -1"},
+		// 0x80 0x00 is a non-canonical encoding of zero, and thus decodes as
+		// the end-of-table marker. Kept to pin that behavior: this is
+		// rejected as an empty table, not by value.
+		{"nonCanonicalZero", []byte{0x80, 0x00, 0x02, 0x00}, true, ""},
 		// The same value, with the maximum padding getInt will consume before
 		// the shift stops contributing.
-		{"nonCanonicalZeroLong", []byte{0x80, 0x80, 0x80, 0x00, 0x02, 0x00},
-			"starts with negative value -1"},
-		// A negative delta, taking val below the sentinel rather than leaving
-		// it there. Rejected by value, not by being the sentinel.
-		{"negativeDelta", []byte{0x03, 0x02, 0x00},
-			"starts with negative value -3"},
+		{"nonCanonicalZeroLong", []byte{0x80, 0x80, 0x80, 0x00, 0x02, 0x00}, true, ""},
+		// A negative delta, taking val below the minimum valid value rather
+		// than leaving it at the sentinel. Rejected by value, not by being
+		// the sentinel.
+		{"negativeDelta", []byte{0x03, 0x02, 0x00}, false, "is below 0"},
 		// A canonical zero cannot be encoded as a leading 0x00, because that
 		// byte is the end-of-table marker. That is precisely why the
 		// non-canonical encoding above is the interesting case. Kept to pin
 		// that behavior: this is rejected as an empty table, not by value.
-		{"leadingTerminator", []byte{0x00, 0x02, 0x00},
-			"has no valid first entry"},
+		{"leadingTerminator", []byte{0x00, 0x02, 0x00}, true, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			g := &Gopclntab{pctab: test.pctab, quantum: 1}
-			_, err := g.getPcval(0, 0x2000)
-			require.ErrorContains(t, err, test.wantErr)
+			p := newPcvalDecoder(&pcvalMemReader{area: test.pctab}, 0, int64(len(test.pctab)), 1)
+			p.reset(0, 0)
+			_, _, err := p.step()
+			if test.wantEOF {
+				assert.ErrorIs(t, err, io.EOF)
+			} else {
+				assert.ErrorContains(t, err, test.wantErr)
+			}
 		})
 	}
 }
