@@ -16,12 +16,16 @@ import (
 )
 
 func TestParseSDTDescriptor(t *testing.T) {
+	// One unsigned eight-byte argument held in the amd64 rdi register.
+	const arguments = "8@%rdi"
+
 	note, err := parseSDTDescriptor(buildSDTDescriptor(
-		0x1200, 0x1000, 0x2100, "otel_memory", "alloc", "8@%rdi"))
+		0x1200, 0x1000, 0x2100, "otel_memory", "alloc", arguments))
 	require.NoError(t, err)
 	assert.Equal(t, sdtNote{
 		provider:  "otel_memory",
 		name:      "alloc",
+		arguments: arguments,
 		location:  0x1200,
 		base:      0x1000,
 		semaphore: 0x2100,
@@ -48,6 +52,8 @@ func TestParseSDTDescriptorRejectsMalformed(t *testing.T) {
 			desc: append(make([]byte, 24), []byte("provider")...)},
 		{name: "missing name terminator",
 			desc: append(make([]byte, 24), []byte("provider\x00probe")...)},
+		{name: "missing arguments terminator",
+			desc: append(make([]byte, 24), []byte("provider\x00probe\x008@%rdi")...)},
 		{name: "truncated addresses", desc: valid[:20]},
 	}
 	for _, tc := range tests {
@@ -121,7 +127,7 @@ func TestELFFileOffset(t *testing.T) {
 }
 
 func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
-	f := &pfelf.File{Progs: []pfelf.Prog{
+	f := &pfelf.File{Machine: elf.EM_X86_64, Progs: []pfelf.Prog{
 		{ProgHeader: elf.ProgHeader{
 			Type: elf.PT_LOAD, Flags: elf.PF_R | elf.PF_X,
 			Vaddr: 0x1000, Off: 0x200, Filesz: 0x100,
@@ -133,8 +139,8 @@ func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
 	}}
 	notes := []sdtNote{
 		{provider: "provider", name: "bad", location: 0x3000, base: 0x1000},
-		{provider: "provider", name: "alloc", location: 0x1020, base: 0x1000,
-			semaphore: 0x2020},
+		{provider: "provider", name: "alloc", arguments: "8@%rdi",
+			location: 0x1020, base: 0x1000, semaphore: 0x2020},
 	}
 
 	points, err := attachmentPointsFromNotes(f, 0x1000, notes)
@@ -143,7 +149,10 @@ func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
 		Provider:        "provider",
 		Name:            "alloc",
 		Location:        0x220,
+		ELFAddress:      0x1020,
 		SemaphoreOffset: 0x420,
+		Arguments:       "8@%rdi",
+		Machine:         elf.EM_X86_64,
 	}}, points)
 }
 
