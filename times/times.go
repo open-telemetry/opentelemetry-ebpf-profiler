@@ -5,6 +5,7 @@ package times // import "go.opentelemetry.io/ebpf-profiler/times"
 
 import (
 	"context"
+	"math"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,12 @@ import (
 const (
 	// Number of timing samples to use when retrieving system boot time.
 	sampleSize = 5
+	// bootTimeUpdateThreshold is the minimum change in the measured boot time
+	// before the stored value is replaced. The true CLOCK_BOOTTIME to CLOCK_REALTIME
+	// offset only changes when the realtime clock is stepped, so any smaller
+	// difference between two measurements is syscall jitter. Applying it would
+	// shift later timestamps against earlier ones for no reason.
+	bootTimeUpdateThreshold = int64(time.Millisecond)
 	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
 	// gRPC auth error.
 	GRPCAuthErrorDelay = 10 * time.Minute
@@ -102,14 +109,23 @@ func (t *Times) ExecutableUnloadDelay() time.Duration { return t.executableUnloa
 
 // StartRealtimeSync calculates the delta between CLOCK_BOOTTIME and the realtime
 // clock. Because CLOCK_BOOTTIME includes time spent in suspend, this delta only changes
-// when the realtime clock is stepped or slewed (e.g. by NTP). If syncInterval is greater
+// when the realtime clock is stepped (NTP slewing does not affect the delta as it's
+// applies uniformly to CLOCK_REALTIME and CLOCK_BOOTTIME). If syncInterval is greater
 // than zero, a goroutine repeats the calculation periodically to track such adjustments.
 func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
 	bootTimeUnixNano.Store(getBootTimeUnixNano())
 
 	if syncInterval > 0 {
 		periodiccaller.Start(ctx, syncInterval, func() {
-			bootTimeUnixNano.Store(getBootTimeUnixNano())
+			measured := getBootTimeUnixNano()
+			delta := measured - bootTimeUnixNano.Load()
+			if delta < 0 {
+				delta = -delta
+			}
+			if delta >= bootTimeUpdateThreshold {
+				// Filter timing jitter due to syscall. See bootTimeUpdateThreshold.
+				bootTimeUnixNano.Store(measured)
+			}
 		})
 	}
 }
@@ -151,7 +167,7 @@ func getBootTimeUnixNano() int64 {
 	}
 
 	// Find the index with minimal time delta
-	md := int64(^uint64(0) >> 1) // same as math.MaxInt64
+	md := int64(math.MaxInt64)
 	mi := 0
 	for i := range samples {
 		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
@@ -163,6 +179,8 @@ func getBootTimeUnixNano() int64 {
 			mi = i
 		}
 	}
+	// The boot time clock was read somewhere between t1 and t2, so the midpoint
+	// is the unbiased estimate of the realtime instant it corresponds to.
 	// This should never be negative, as t1.UnixNano() >> ktime
-	return samples[mi].t1.UnixNano() - samples[mi].ktime
+	return samples[mi].t1.UnixNano() + md/2 - samples[mi].ktime
 }
