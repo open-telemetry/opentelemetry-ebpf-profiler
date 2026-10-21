@@ -11,6 +11,7 @@ import (
 
 /*
 #include "./ebpf/types.h"
+#include "./ebpf/usdt_defs.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
 #include "./ebpf/luajit.h"
@@ -106,6 +107,9 @@ type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
 type PIDNamespaceLayout C.PIDNamespaceLayout
+type USDTArgumentSpec C.USDTArgumentSpec
+type USDTSpec C.USDTSpec
+type USDTSpecKey C.USDTSpecKey
 type StackDelta C.StackDelta
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey
