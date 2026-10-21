@@ -226,21 +226,15 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	if offset < r.start {
 		return 0, errOffset
 	}
-	if r.zeroCopy {
-		// The borrowed view must never be written to. If the target is
-		// within the loaded view before the section limit, just adjust
-		// the position: ReadSlice and SearchSlice slice the buffer as
-		// [pos:nlim]. Otherwise drop the window and let the next fill()
-		// serve the new position.
-		viewStart := r.off - int64(r.nbuf)
-		if offset >= viewStart && offset <= viewStart+int64(r.nlim) {
-			r.pos = int(offset - viewStart)
-			return offset - r.start, nil
-		}
-		r.off = offset
-		r.flush()
+
+	// A target within the buffered data (before 'nlim') only moves the
+	// read position: reads slice the buffer as [pos:nlim]. Anything else
+	// drops the window; the next fill() reads from the new position.
+	if bufStart := r.off - int64(r.nbuf); offset >= bufStart && offset <= bufStart+int64(r.nlim) {
+		r.pos = int(offset - bufStart)
 		return offset - r.start, nil
 	}
+
 	r.off = offset
 	r.flush()
 	return offset - r.start, nil
