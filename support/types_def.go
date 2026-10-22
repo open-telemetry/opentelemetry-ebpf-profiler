@@ -51,7 +51,6 @@ const (
 	ProgUnwindV8       = C.PROG_UNWIND_V8
 	ProgUnwindDotnet   = C.PROG_UNWIND_DOTNET
 	ProgUnwindDotnet10 = C.PROG_UNWIND_DOTNET10
-	ProgGoLabels       = C.PROG_GO_LABELS
 	ProgUnwindBEAM     = C.PROG_UNWIND_BEAM
 	ProgUnwindLuaJIT   = C.PROG_UNWIND_LUAJIT
 )
