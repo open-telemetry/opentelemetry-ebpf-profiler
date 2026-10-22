@@ -11,8 +11,8 @@ import (
 	"errors"
 	"io"
 	"math"
-	"sync"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
 
@@ -24,6 +24,7 @@ var ErrBufferTooSmall = errors.New("buffer too small")
 const maxBufferSize = 64 * 1024
 
 // Reader implements a pooled, buffered io.Reader on top of io.ReaderAt.
+// After Init() call the Reader must not be copied.
 type Reader struct {
 	source io.ReaderAt
 
@@ -39,37 +40,27 @@ type Reader struct {
 
 	sectionEnds []int64
 
-	buf [maxBufferSize]byte
+	buf []byte
 }
 
-var readerPool = sync.Pool{
-	New: func() any {
-		return &Reader{}
-	},
-}
-
-// GetReader fetches a Reader from the pool.
-func GetReader() *Reader {
-	r := readerPool.Get().(*Reader)
-	return r
-}
-
-// NewReader fetches a Reader from the pool and initializes it.
-func NewReader(source io.ReaderAt, start, maxLen int64) *Reader {
-	r := GetReader()
+// NewReader returns a new reader using given source within the start
+// and maxLen bounds.
+func NewReader(source io.ReaderAt, start, maxLen int64) Reader {
+	r := Reader{}
 	r.Init(source, start, maxLen)
 	return r
 }
 
-// PutReader clears references and returns the Reader to the pool.
-func PutReader(r *Reader) {
+// Release clears references and returns the buffer to the pool.
+func (r *Reader) Release() {
+	libpf.PutBuffer(r.buf)
+	r.buf = nil
 	r.source = nil
 	r.off = 0
 	r.limit = 0
 	r.slimit = 0
 	r.sectionEnds = r.sectionEnds[:0]
 	r.flush()
-	readerPool.Put(r)
 }
 
 func (r *Reader) flush() {
@@ -78,7 +69,9 @@ func (r *Reader) flush() {
 	r.nlim = 0
 }
 
-// Init initializes the reader source.
+// Init initializes the reader source. An initialized Reader must not
+// be duplicated: both the shared buffer and the source reader position
+// would get corrupted.
 func (r *Reader) Init(source io.ReaderAt, start, maxLen int64) {
 	r.source = source
 	r.start = start
@@ -86,6 +79,9 @@ func (r *Reader) Init(source io.ReaderAt, start, maxLen int64) {
 	r.limit = start + maxLen
 	r.slimit = r.limit
 	r.bufSize = maxBufferSize
+	if r.buf == nil {
+		r.buf = libpf.GetBuffer(maxBufferSize)
+	}
 	r.flush()
 }
 
