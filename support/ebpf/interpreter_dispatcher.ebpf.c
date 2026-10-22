@@ -198,6 +198,8 @@ static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct Go
     return false;
   }
 
+  // Use volatile for key and value length to force localized memory load. This allows the verifier
+  // to infer the size bounds on older kernels that would lose it on stack spills.
   _Static_assert(sizeof l->key < 256, "Golang label key length must fit u8");
   volatile u8 klen = MIN(k->len, sizeof l->key - 1);
   if (bpf_probe_read_user(l->key, klen, k->str)) {
