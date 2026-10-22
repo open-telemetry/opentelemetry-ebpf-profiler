@@ -44,9 +44,8 @@ const (
 	ProgUnwindV8       = 0x7
 	ProgUnwindDotnet   = 0x8
 	ProgUnwindDotnet10 = 0x9
-	ProgGoLabels       = 0xa
-	ProgUnwindBEAM     = 0xb
-	ProgUnwindLuaJIT   = 0xc
+	ProgUnwindBEAM     = 0xa
+	ProgUnwindLuaJIT   = 0xb
 )
 
 const (
