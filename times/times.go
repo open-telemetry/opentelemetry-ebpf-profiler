@@ -109,7 +109,7 @@ func (t *Times) ExecutableUnloadDelay() time.Duration { return t.executableUnloa
 
 // StartRealtimeSync calculates the delta between CLOCK_BOOTTIME and the realtime
 // clock. Because CLOCK_BOOTTIME includes time spent in suspend, this delta only changes
-// when the realtime clock is stepped (NTP slewing does not affect the delta as it's
+// when the realtime clock is stepped (NTP slewing does not affect the delta as it
 // applies uniformly to CLOCK_REALTIME and CLOCK_BOOTTIME). If syncInterval is greater
 // than zero, a goroutine repeats the calculation periodically to track such adjustments.
 func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
