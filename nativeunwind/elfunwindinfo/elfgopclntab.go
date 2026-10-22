@@ -790,8 +790,8 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	// Walk all filenames and record the ones needing a strategy
 	offsetStrategy := make(map[int]strategy)
@@ -826,8 +826,8 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 }
 
 func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	functionInfo := make(map[int32]*sdtypes.UnwindInfo)
 	rdr.Init(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))

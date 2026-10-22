@@ -8,7 +8,6 @@ import (
 	"debug/elf"
 	"testing"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -175,14 +174,13 @@ func TestParseCIE(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			rdr := pfbufio.NewReader(bytes.NewReader(tc.data), 0, int64(len(tc.data)))
-			defer pfbufio.PutReader(rdr)
-
 			fakeReader := &reader{
-				Reader:     rdr,
 				machine:    tc.expected.initialState.arch,
 				debugFrame: tc.debugFrame,
 			}
+			defer fakeReader.Release()
+			fakeReader.Init(bytes.NewReader(tc.data), 0, int64(len(tc.data)))
+
 			length, marker, err := fakeReader.parseLengthAndMarker()
 			require.NoError(t, err)
 			require.Equal(t, int64(-1), marker)
