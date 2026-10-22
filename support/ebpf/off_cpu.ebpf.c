@@ -89,12 +89,6 @@ int finish_task_switch(struct pt_regs *ctx)
     return 0;
   }
 
-  // Trace timestamps are CLOCK_BOOTTIME
-  u64 ts      = bpf_ktime_get_boot_ns();
-  // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
-  // tracepoint__sched_switch.
-  u64 mono_ts = bpf_ktime_get_ns();
-
   u64 pid_tgid = ((u64)pid << 32) | tid;
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
@@ -102,6 +96,12 @@ int finish_task_switch(struct pt_regs *ctx)
     // There is no information from the sched/sched_switch entry hook.
     return 0;
   }
+
+  // Trace timestamps are CLOCK_BOOTTIME
+  u64 ts      = bpf_ktime_get_boot_ns();
+  // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
+  // tracepoint__sched_switch.
+  u64 mono_ts = bpf_ktime_get_ns();
 
   // Remove entry from the map so the stack for the same pid_tgid does not get unwound and
   // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
