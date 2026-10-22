@@ -90,6 +90,30 @@ func TestPFELFSymbols(t *testing.T) {
 	require.Positive(t, visited)
 }
 
+func TestReadSymbolData(t *testing.T) {
+	exePath, err := testsupport.WriteSharedLibrary()
+	require.NoError(t, err)
+	defer os.Remove(exePath)
+
+	ef, err := Open(exePath)
+	require.NoError(t, err)
+	defer ef.Close()
+
+	sym, err := ef.LookupSymbol("func")
+	require.NoError(t, err)
+
+	data, err := ef.ReadSymbolData(sym, 4)
+	require.NoError(t, err)
+	assert.Len(t, data, int(min(sym.Size, 4)))
+
+	// A crafted st_size that overflows int must not panic.
+	huge := *sym
+	huge.Size = 1 << 63
+	data, err = ef.ReadSymbolData(&huge, 4)
+	require.NoError(t, err)
+	assert.Len(t, data, 4)
+}
+
 func TestPFELFSections(t *testing.T) {
 	testsupport.RequireGeneratedTestFile(t, "testdata/fixed-address")
 	elfFile, err := Open("testdata/fixed-address")
