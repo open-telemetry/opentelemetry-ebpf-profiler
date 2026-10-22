@@ -12,8 +12,8 @@ import "golang.org/x/sys/unix"
 //
 // This is a real syscall: the Go runtime only has a vDSO fast path for
 // CLOCK_MONOTONIC (runtime.nanotime) and offers nothing for CLOCK_BOOTTIME.
-// Callers invoke this a few times per poll interval at most, so the cost is
-// irrelevant.
+// Callers invoke this once per trace poll and once per process exit, so the
+// cost of the syscall is negligible.
 func GetKTime() KTime {
 	var ts unix.Timespec
 	// clock_gettime(2) only fails for an invalid clock ID or an unmapped timespec
