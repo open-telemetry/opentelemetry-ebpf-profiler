@@ -29,15 +29,15 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  u32 pid = 0;
-  u32 tid = 0;
+  u32 pid = 0, tid = 0;
   if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
     // Execute the hook only in the context of the requesting task.
     return 0;
   }
 
   // Handle the read request
-  sys->err = (s32)bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address);
+  u32 len  = MIN(sys->size, sizeof(sys->code));
+  sys->err = (s32)bpf_probe_read_kernel(sys->code, len, (void *)sys->address);
   if (sys->err) {
     DEBUG_PRINT("Failed to read code from 0x%lx: %d", sys->address, sys->err);
   }
@@ -63,8 +63,7 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  u32 pid = 0;
-  u32 tid = 0;
+  u32 pid = 0, tid = 0;
   if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
     // Execute the hook only in the context of the requesting task.
     return 0;
@@ -80,7 +79,8 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   sys->address = (u64)regs;
 
   // Execute the read request.
-  sys->err = (s32)bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr);
+  u32 len  = MIN(sys->size, sizeof(sys->code));
+  sys->err = (s32)bpf_probe_read_kernel(sys->code, len, (void *)addr);
   if (sys->err) {
     DEBUG_PRINT("Failed to read task_struct from 0x%lx: %d", addr, sys->err);
   }

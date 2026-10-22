@@ -121,8 +121,18 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.27)", goVersion)
 	}
 
+	pclntab, err := elfunwindinfo.NewGopclntab(file)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if pclntab != nil {
+			pclntab.Close()
+		}
+	}()
+
 	offsets := getOffsets(goVersion)
-	tlsOffset, err := extractTLSGOffset(file)
+	tlsOffset, err := extractTLSGOffset(file, pclntab)
 	switch {
 	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
@@ -141,12 +151,9 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		offsets:   offsets,
 	}
 	if !cfg.IsSymbolizationDisabled() {
-		pclntab, err := elfunwindinfo.NewGopclntab(file)
-		if err != nil {
-			return nil, err
-		}
 		d.pclntab = pclntab
 		d.refs.Store(1)
+		pclntab = nil
 	}
 	return d, nil
 }

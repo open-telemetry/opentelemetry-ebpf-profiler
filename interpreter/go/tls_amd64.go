@@ -18,13 +18,7 @@ import (
 // storing the current g but "static" binaries it ends up as -80. There
 // may be dynamic relocating going on so just read it from a known
 // symbol if possible.
-func extractTLSGOffset(f *pfelf.File) (int32, error) {
-	pclntab, err := elfunwindinfo.NewGopclntab(f)
-	if err != nil {
-		return 0, err
-	}
-	defer pclntab.Close()
-
+func extractTLSGOffset(f *pfelf.File, pclntab *elfunwindinfo.Gopclntab) (int32, error) {
 	symbolName := "runtime.stackcheck"
 
 	// Dump of assembler code for function runtime.stackcheck:

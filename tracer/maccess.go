@@ -22,7 +22,7 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	if err != nil {
 		return fmt.Errorf("failed to lookup 'copy_from_user_nofault': %v", err)
 	}
-	code, err := loadKernelCode(coll, maps, libpf.SymbolValue(faultyFunc))
+	code, err := loadKernelCode(coll, maps, libpf.SymbolValue(faultyFunc), 0)
 	if err != nil {
 		return fmt.Errorf("failed to load kernel code for 'copy_from_user_nofault': %v", err)
 	}
