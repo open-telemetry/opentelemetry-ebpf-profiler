@@ -164,8 +164,8 @@ func determinePHPVersion(ef *pfelf.File) (uint32, error) {
 		return 0, errors.New("no RO data")
 	}
 
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	needle := []byte("X-Powered-By: PHP/")
 	for _, seg := range ef.ROData {
