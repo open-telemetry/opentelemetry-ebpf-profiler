@@ -277,14 +277,23 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
 func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue,
+	address libpf.SymbolValue, size int,
 ) (code []byte, addr uint64, err error) {
 	systemAnalysis := maps["system_analysis"]
 
+	maxSize := int(unsafe.Sizeof(support.SystemAnalysis{}.Code))
+	if size < 0 || size > maxSize {
+		return nil, 0, fmt.Errorf("invalid read size for system_analysis %d", size)
+	}
+	if size == 0 {
+		size = maxSize
+	}
+
 	key0 := uint32(0)
 	data := support.SystemAnalysis{
-		Pid:     uint32(os.Getpid()),
 		Address: uint64(address),
+		Size:    uint32(size),
+		Pid:     uint32(os.Getpid()),
 	}
 
 	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
@@ -332,7 +341,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 		return nil, 0, err
 	}
 
-	return data.Code[:], data.Address, nil
+	return data.Code[:size:size], data.Address, nil
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
@@ -353,9 +362,9 @@ func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.Sym
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.
 func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue,
+	address libpf.SymbolValue, size int,
 ) ([]byte, error) {
-	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
+	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address, size)
 	if err != nil {
 		log.Warnf("Failed to load code: %v.\n"+
 			"Possible reasons include using a kernel without syscall tracepoints enabled.", err)
@@ -366,9 +375,9 @@ func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 // readTaskStruct will request the ebpf code to read bytes from the given offset from
 // the current task_struct.
 func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue,
+	address libpf.SymbolValue, size int,
 ) (code []byte, addr uint64, err error) {
-	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address)
+	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address, size)
 }
 
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
@@ -376,7 +385,7 @@ func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	vars *SysConfigVars,
 ) error {
-	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset))
+	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset), 8)
 	if err != nil {
 		return err
 	}
@@ -391,26 +400,20 @@ func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 func determineTargetPIDNamespaceLevel(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	vars *SysConfigVars,
 ) error {
-	data, _, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.pid_namespace_layout.Task_thread_pid_offset))
+	data, _, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.pid_namespace_layout.Task_thread_pid_offset), 8)
 	if err != nil {
 		return fmt.Errorf("read task_struct thread_pid: %w", err)
 	}
-	if len(data) < 8 {
-		return fmt.Errorf("read task_struct thread_pid: short read %d bytes", len(data))
-	}
-	threadPID := binary.LittleEndian.Uint64(data[:8])
+	threadPID := binary.LittleEndian.Uint64(data)
 	if threadPID == 0 {
 		return errors.New("read task_struct thread_pid: null pointer")
 	}
 
-	data, err = loadKernelCode(coll, maps, libpf.SymbolValue(threadPID+uint64(vars.pid_namespace_layout.Pid_level_offset)))
+	data, err = loadKernelCode(coll, maps, libpf.SymbolValue(threadPID+uint64(vars.pid_namespace_layout.Pid_level_offset)), 4)
 	if err != nil {
 		return fmt.Errorf("read pid level: %w", err)
 	}
-	if len(data) < 4 {
-		return fmt.Errorf("read pid level: short read %d bytes", len(data))
-	}
-	level := binary.LittleEndian.Uint32(data[:4])
+	level := binary.LittleEndian.Uint32(data)
 	if level > 32 {
 		return fmt.Errorf("invalid target PID namespace level %d", level)
 	}
@@ -429,7 +432,7 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	pageSizeMinusOne := uint64(os.Getpagesize() - 1)
 
 	for offs := 0; offs < maxTaskStructSize; {
-		data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(offs))
+		data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(offs), 0)
 		if err != nil {
 			return err
 		}
