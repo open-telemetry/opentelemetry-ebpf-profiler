@@ -45,8 +45,8 @@ extern u32 task_group_leader_offset;
 // task_stack_offset is declared in native_stack_trace.ebpf.c
 extern u32 task_stack_offset;
 
-// task_start_time_offset is declared in native_stack_trace.ebpf.c
-extern u32 task_start_time_offset;
+// task_start_boottime_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_start_boottime_offset;
 
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
@@ -246,6 +246,8 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
 }
 
 // process_is_too_new returns true when a trace should be skipped because a process is too new.
+// ts must be a CLOCK_BOOTTIME timestamp (bpf_ktime_get_boot_ns), as it is compared against
+// task_struct::start_boottime.
 // If group_leader is non-zero, it reuses the pointer instead of reading it from current task.
 static inline EBPF_INLINE bool process_is_too_new(u64 ts, u64 group_leader)
 {
@@ -258,21 +260,21 @@ static inline EBPF_INLINE bool process_is_too_new(u64 ts, u64 group_leader)
     u64 group_leader_ptr = task + task_group_leader_offset;
     // task_struct::group_leader is a pointer to the thread-group leader task, whose PID
     // is the PID from userspace's perspective. Follow it so process age filtering uses
-    // the initial thread's start_time instead of the current thread's start_time.
+    // the initial thread's start_boottime instead of the current thread's start_boottime.
     if (bpf_probe_read_kernel(&group_leader, sizeof(group_leader), (void *)group_leader_ptr)) {
       DEBUG_PRINT("Failed to read group_leader");
       return false;
     }
   }
 
-  u64 start_time_ptr = group_leader + task_start_time_offset;
-  u64 start_time;
-  if (bpf_probe_read_kernel(&start_time, sizeof(start_time), (void *)start_time_ptr)) {
-    DEBUG_PRINT("Failed to read start_time");
+  u64 start_boottime_ptr = group_leader + task_start_boottime_offset;
+  u64 start_boottime;
+  if (bpf_probe_read_kernel(&start_boottime, sizeof(start_boottime), (void *)start_boottime_ptr)) {
+    DEBUG_PRINT("Failed to read start_boottime");
     return false;
   }
 
-  if (ts >= start_time && ts - start_time < filter_min_process_age_ns) {
+  if (ts >= start_boottime && ts - start_boottime < filter_min_process_age_ns) {
     increment_metric(metricID_SamplesSkippedProcessTooNew);
     return true;
   }
@@ -369,7 +371,7 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
   const u8 fast_timer_flag      = 0x10;
   const u8 priority_sent_flag   = 0x20;
   u64 *token_ptr                = bpf_map_lookup_elem(&reported_pids, &pid);
-  u64 ts                        = bpf_ktime_get_ns();
+  u64 ts                        = bpf_ktime_get_boot_ns();
   u8 attempt                    = 0;
   u8 fast_timer                 = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
   u8 priority_sent              = 0;

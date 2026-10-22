@@ -195,14 +195,15 @@ type EbpfTrace struct {
 	KernelFrames  []uint64
 	FrameData     []uint64
 	FrameDataBuf  [3072]uint64
-	KTime         int64
-	CpuID         uint32
-	TID           PID
-	PID           PID
-	NumFrames     uint16
-	Origin        uint16
-	TraceID       TraceID
-	SpanID        SpanID
+	// KTime is the capture time in CLOCK_BOOTTIME nanoseconds, see times.KTime.
+	KTime     int64
+	CpuID     uint32
+	TID       PID
+	PID       PID
+	NumFrames uint16
+	Origin    uint16
+	TraceID   TraceID
+	SpanID    SpanID
 }
 
 type EbpfFrame []uint64

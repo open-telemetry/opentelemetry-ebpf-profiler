@@ -38,20 +38,20 @@ const (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
-	inverse_pac_mask         uint64
-	tpbase_offset            uint64
-	task_stack_offset        uint32
-	stack_ptregs_offset      uint32
-	vma_lookup_enabled       bool
-	vma_vm_file_offset       uint32
-	vma_vm_flags_offset      uint32
-	task_group_leader_offset uint32
-	task_start_time_offset   uint32
-	pid_ns_translation_mode  uint8
-	target_pid_ns_level      uint32
-	target_pid_ns_dev        uint64
-	target_pid_ns_inode      uint64
-	pid_namespace_layout     support.PIDNamespaceLayout
+	inverse_pac_mask           uint64
+	tpbase_offset              uint64
+	task_stack_offset          uint32
+	stack_ptregs_offset        uint32
+	vma_lookup_enabled         bool
+	vma_vm_file_offset         uint32
+	vma_vm_flags_offset        uint32
+	task_group_leader_offset   uint32
+	task_start_boottime_offset uint32
+	pid_ns_translation_mode    uint8
+	target_pid_ns_level        uint32
+	target_pid_ns_dev          uint64
+	target_pid_ns_inode        uint64
+	pid_namespace_layout       support.PIDNamespaceLayout
 }
 
 func (v SysConfigVars) pidNamespaceVars() []sysVar {
@@ -253,11 +253,11 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 	}
 
 	if needProcessStartTime {
-		startTimeOffset, err := calculateFieldOffset(taskStruct, "start_time")
+		startBoottimeOffset, err := calculateFieldOffset(taskStruct, "start_boottime")
 		if err != nil {
 			return err
 		}
-		vars.task_start_time_offset = uint32(startTimeOffset)
+		vars.task_start_boottime_offset = uint32(startBoottimeOffset)
 	}
 
 	if needPIDNamespaceLayout {
@@ -560,14 +560,14 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	}
 
 	log.Debugf(
-		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_time %#x, target_pid_ns_level %d",
+		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x, group_leader %#x, start_boottime %#x, target_pid_ns_level %d",
 		vars.task_stack_offset,
 		vars.stack_ptregs_offset,
 		vars.tpbase_offset,
 		vars.vma_vm_file_offset,
 		vars.vma_vm_flags_offset,
 		vars.task_group_leader_offset,
-		vars.task_start_time_offset,
+		vars.task_start_boottime_offset,
 		vars.target_pid_ns_level)
 
 	return nil
@@ -824,8 +824,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if err := coll.Variables["task_group_leader_offset"].Set(rodataVars.task_group_leader_offset); err != nil {
 		return fmt.Errorf("failed to set task_group_leader_offset: %v", err)
 	}
-	if err := coll.Variables["task_start_time_offset"].Set(rodataVars.task_start_time_offset); err != nil {
-		return fmt.Errorf("failed to set task_start_time_offset: %v", err)
+	if err := coll.Variables["task_start_boottime_offset"].Set(rodataVars.task_start_boottime_offset); err != nil {
+		return fmt.Errorf("failed to set task_start_boottime_offset: %v", err)
 	}
 
 	*out = rodataVars
