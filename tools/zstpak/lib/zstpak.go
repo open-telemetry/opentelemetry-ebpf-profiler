@@ -30,6 +30,8 @@ import (
 	"os"
 
 	"github.com/klauspost/compress/zstd"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // footerSize is the size of the static portion of the footer (without the index data).
@@ -116,8 +118,10 @@ func (ftr *footer) write(out io.Writer) error {
 // determines how often to create new chunks. Higher numbers increase compression rates, but come
 // at the cost of making random access less efficient.
 func CompressInto(in io.Reader, out io.Writer, chunkSize uint64) error {
-	readBuf := make([]byte, chunkSize)
-	compressBuf := make([]byte, chunkSize)
+	readBuf := libpf.GetBuffer(int(chunkSize))
+	compressBuf := libpf.GetBuffer(int(chunkSize))
+	defer libpf.PutBuffer(readBuf)
+	defer libpf.PutBuffer(compressBuf)
 
 	// Compress chunks, memorizing their start offsets.
 	index := []uint64{0}
