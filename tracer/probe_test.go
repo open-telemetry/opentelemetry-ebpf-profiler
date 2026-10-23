@@ -4,10 +4,13 @@
 package tracer
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 func TestParseProbe(t *testing.T) {
@@ -134,4 +137,36 @@ func TestParseProbe(t *testing.T) {
 			}
 		})
 	}
+}
+
+type snapshotTestProbe struct {
+	profile samples.SnapshotProfile
+}
+
+func (p *snapshotTestProbe) Load(context.Context, ProbeRegistrar, *ProbeContext) error {
+	return nil
+}
+
+func (p *snapshotTestProbe) Unload() error {
+	return nil
+}
+
+func (p *snapshotTestProbe) ProduceSnapshots() []samples.SnapshotProfile {
+	return []samples.SnapshotProfile{p.profile}
+}
+
+func TestEnableRegistersSnapshotSource(t *testing.T) {
+	profileType := &samples.TypeMetadata{}
+	probe := &snapshotTestProbe{profile: samples.SnapshotProfile{ProfileType: profileType}}
+	tracer := &Tracer{
+		origins:           &originRegistry{},
+		preTraceHandlers:  make(map[uint16][]PreTraceHandler),
+		postTraceHandlers: make(map[uint16][]PostTraceHandler),
+	}
+
+	require.NoError(t, tracer.Enable(context.Background(), probe))
+
+	profiles := tracer.CollectSnapshots()
+	require.Len(t, profiles, 1)
+	assert.Same(t, profileType, profiles[0].ProfileType)
 }
