@@ -23,8 +23,7 @@ const (
 	ArgumentRegisterDereference
 )
 
-// Register is the architecture-independent identifier shared with the eBPF
-// USDT argument decoder.
+// Register identifies an architecture register referenced by an SDT argument.
 type Register uint8
 
 const (
@@ -89,7 +88,7 @@ type Spec struct {
 // a SystemTap SDT note. Each argument has the form <size>[f]@<location>, where
 // a negative size denotes a signed value and f denotes floating-point bits.
 // Parsing preserves this metadata, but consumers must validate the subset they
-// support. The current BPF decoder accepts unsigned, non-floating 64-bit values.
+// support. The current heap consumer accepts unsigned, non-floating 64-bit values.
 //
 // See [SystemTap userspace probe implementation] for the SDT note ABI.
 //
