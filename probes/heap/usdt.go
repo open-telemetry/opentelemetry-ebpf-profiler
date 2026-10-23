@@ -29,13 +29,22 @@ func parseAllocSpec(point usdt.AttachmentPoint) (support.USDTSpec, error) {
 			return support.USDTSpec{}, fmt.Errorf(
 				"alloc argument %d must be an unsigned 8-byte integer", i)
 		}
+		var registerOffset uint16
+		switch arg.Kind {
+		case usdt.ArgumentConstant:
+		case usdt.ArgumentRegister, usdt.ArgumentRegisterDereference:
+			registerOffset, err = arg.Register.PTRegsOffset(point.Machine)
+			if err != nil {
+				return support.USDTSpec{}, fmt.Errorf("convert alloc argument %d: %w", i, err)
+			}
+		default:
+			return support.USDTSpec{}, fmt.Errorf(
+				"convert alloc argument %d: unsupported argument kind %d", i, arg.Kind)
+		}
 		spec.Arguments[i] = support.USDTArgumentSpec{
-			Value_offset: arg.ValueOffset,
-			Kind:         uint32(arg.Kind),
-			Reg:          uint8(arg.Register),
-			Is_signed:    arg.Signed,
-			Bit_shift:    arg.BitShift,
-			Is_float:     arg.Float,
+			Value_offset:    arg.ValueOffset,
+			Register_offset: registerOffset,
+			Kind:            uint8(arg.Kind),
 		}
 	}
 	spec.Count = parsed.ArgumentCount

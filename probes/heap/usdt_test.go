@@ -44,10 +44,11 @@ func TestParseAllocSpecConvertsToBPF(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, [3]support.USDTArgumentSpec{
-		{Kind: uint32(usdt.ArgumentRegister), Reg: uint8(usdt.RegisterR12)},
-		{Value_offset: ^uint64(15), Kind: uint32(usdt.ArgumentRegisterDereference),
-			Reg: uint8(usdt.RegisterRBP)},
-		{Value_offset: 1, Kind: uint32(usdt.ArgumentConstant)},
+		{Register_offset: support.USDTAMD64PtRegsR12Offset,
+			Kind: uint8(usdt.ArgumentRegister)},
+		{Value_offset: ^uint64(15), Register_offset: support.USDTAMD64PtRegsRBPOffset,
+			Kind: uint8(usdt.ArgumentRegisterDereference)},
+		{Value_offset: 1, Kind: uint8(usdt.ArgumentConstant)},
 	}, [3]support.USDTArgumentSpec(spec.Arguments[:3]))
 }
 
