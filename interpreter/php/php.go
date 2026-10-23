@@ -96,9 +96,13 @@ type phpData struct {
 	}
 }
 
+// versionString returns the dotted representation of an encoded PHP version.
+func versionString(ver uint32) string {
+	return fmt.Sprintf("%d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+}
+
 func (d *phpData) String() string {
-	ver := d.version
-	return fmt.Sprintf("PHP %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+	return "PHP " + versionString(d.version)
 }
 
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
@@ -307,14 +311,14 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		var vmKind uint
 		vmKind, err = determineVMKind(ef)
 		if err != nil {
-			log.Debugf("PHP version %x: an error occurred while determining "+
-				"the VM kind (%v)",
-				version, err)
+			log.Debug("An error occurred while determining the PHP VM kind",
+				"version", versionString(version), "error", err)
 		} else if vmKind == ZEND_VM_KIND_HYBRID {
 			rtAddr, err = recoverExecuteExJumpLabelAddress(ef)
 			if err != nil {
-				log.Debugf("PHP version %x: an error occurred while determining "+
-					"the return address for execute_ex: (%v)", version, err)
+				log.Debug("An error occurred while determining the return address "+
+					"for PHP execute_ex",
+					"version", versionString(version), "error", err)
 			}
 		}
 	}
