@@ -13,11 +13,11 @@ import (
 )
 
 func TestUSDTConstantsMatchBPF(t *testing.T) {
-	assert.EqualValues(t, usdt.MaxArguments, support.USDTMaxArguments)
+	assert.Equal(t, usdt.MaxArguments, support.USDTMaxArguments)
 
 	argumentKinds := []struct {
 		goValue  usdt.ArgumentKind
-		bpfValue uint32
+		bpfValue uint8
 	}{
 		{usdt.ArgumentConstant, support.USDTArgumentConstant},
 		{usdt.ArgumentRegister, support.USDTArgumentRegister},
@@ -27,34 +27,11 @@ func TestUSDTConstantsMatchBPF(t *testing.T) {
 		assert.EqualValues(t, kind.goValue, kind.bpfValue)
 	}
 
-	registers := []struct {
-		goValue  usdt.Register
-		bpfValue uint8
-	}{
-		{usdt.RegisterNone, support.USDTRegisterNone},
-		{usdt.RegisterRAX, support.USDTRegisterRAX},
-		{usdt.RegisterRBX, support.USDTRegisterRBX},
-		{usdt.RegisterRCX, support.USDTRegisterRCX},
-		{usdt.RegisterRDX, support.USDTRegisterRDX},
-		{usdt.RegisterRSI, support.USDTRegisterRSI},
-		{usdt.RegisterRDI, support.USDTRegisterRDI},
-		{usdt.RegisterRBP, support.USDTRegisterRBP},
-		{usdt.RegisterRSP, support.USDTRegisterRSP},
-		{usdt.RegisterR8, support.USDTRegisterR8},
-		{usdt.RegisterR9, support.USDTRegisterR9},
-		{usdt.RegisterR10, support.USDTRegisterR10},
-		{usdt.RegisterR11, support.USDTRegisterR11},
-		{usdt.RegisterR12, support.USDTRegisterR12},
-		{usdt.RegisterR13, support.USDTRegisterR13},
-		{usdt.RegisterR14, support.USDTRegisterR14},
-		{usdt.RegisterR15, support.USDTRegisterR15},
-		{usdt.RegisterRIP, support.USDTRegisterRIP},
-		{usdt.RegisterX0, support.USDTRegisterX0},
-		{usdt.RegisterX30, support.USDTRegisterX30},
-		{usdt.RegisterSP, support.USDTRegisterSP},
-		{usdt.RegisterPC, support.USDTRegisterPC},
-	}
-	for _, register := range registers {
-		assert.EqualValues(t, register.goValue, register.bpfValue)
-	}
+	assert.EqualValues(t, 80, support.USDTAMD64PtRegsRAXOffset)
+	assert.EqualValues(t, 128, support.USDTAMD64PtRegsRIPOffset)
+	assert.EqualValues(t, 152, support.USDTAMD64PtRegsRSPOffset)
+	assert.EqualValues(t, 0, support.USDTARM64PtRegsX0Offset)
+	assert.EqualValues(t, 8, support.USDTARM64PtRegsRegisterSize)
+	assert.EqualValues(t, 248, support.USDTARM64PtRegsSPOffset)
+	assert.EqualValues(t, 256, support.USDTARM64PtRegsPCOffset)
 }

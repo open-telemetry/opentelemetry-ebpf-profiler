@@ -11,8 +11,8 @@ struct usdt_specs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, USDTSpecKey);
   __type(value, USDTSpec);
-  // One entry is used per live (PID, file, probe site). This default supports
-  // 4096 single-site processes at about 1.2 MiB of locked memory. Consumers
-  // may override MaxEntries before creating their private map.
+  // One entry is used per live (PID, runtime probe address). This default
+  // supports 4096 single-site processes at about 1 MiB of locked memory.
+  // Consumers may override MaxEntries before creating their private map.
   __uint(max_entries, 4096);
 } usdt_specs SEC(".maps");

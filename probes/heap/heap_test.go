@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -52,7 +53,12 @@ func TestDetachDoesNotBlockUnloadWhileClosingLink(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	probe.attachments[pid] = map[attachmentKey]*attachment{
-		key: {lnk: lnk, specKey: support.USDTSpecKey{Pid: uint32(pid), Elf_address: 42}},
+		key: {
+			lnk: lnk,
+			specKeys: map[support.USDTSpecKey]struct{}{
+				{Pid: uint32(pid), Address: 42}: {},
+			},
+		},
 	}
 
 	detachDone := make(chan struct{})
@@ -107,7 +113,10 @@ func TestPendingAttachmentCleanup(t *testing.T) {
 			pid := libpf.PID(123)
 			key := attachmentKey{name: "alloc", offset: 42}
 			probe.attachments[pid] = map[attachmentKey]*attachment{
-				key: {specKey: support.USDTSpecKey{Pid: uint32(pid), Elf_address: 42}},
+				key: {specKeys: map[support.USDTSpecKey]struct{}{
+					{Pid: uint32(pid), Address: 42}: {},
+					{Pid: uint32(pid), Address: 84}: {},
+				}},
 			}
 
 			if err := cleanup(probe, pid); err != nil {
@@ -117,6 +126,41 @@ func TestPendingAttachmentCleanup(t *testing.T) {
 				t.Fatal("pending attachment was not removed")
 			}
 		})
+	}
+}
+
+func TestProbeVirtualAddress(t *testing.T) {
+	mapping := &process.RawMapping{Vaddr: 0x7000, FileOffset: 0x1000, Length: 0x1000}
+	tests := []struct {
+		name       string
+		fileOffset uint64
+		want       uint64
+		contained  bool
+	}{
+		{name: "before mapping", fileOffset: 0xfff},
+		{name: "mapping start", fileOffset: 0x1000, want: 0x7000, contained: true},
+		{name: "inside mapping", fileOffset: 0x1123, want: 0x7123, contained: true},
+		{name: "last mapping byte", fileOffset: 0x1fff, want: 0x7fff, contained: true},
+		{name: "mapping end", fileOffset: 0x2000},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, contained, err := probeVirtualAddress(mapping, tc.fileOffset)
+			if err != nil {
+				t.Fatalf("probeVirtualAddress() returned %v", err)
+			}
+			if got != tc.want || contained != tc.contained {
+				t.Fatalf("probeVirtualAddress() = (%#x, %v), want (%#x, %v)",
+					got, contained, tc.want, tc.contained)
+			}
+		})
+	}
+
+	overflow := &process.RawMapping{
+		Vaddr: math.MaxUint64 - 1, FileOffset: 0x1000, Length: 0x1000,
+	}
+	if _, _, err := probeVirtualAddress(overflow, 0x1002); err == nil {
+		t.Fatal("probeVirtualAddress() accepted an overflowing address")
 	}
 }
 
