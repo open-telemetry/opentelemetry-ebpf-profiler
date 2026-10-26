@@ -30,9 +30,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -77,8 +80,9 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
-	// For Python 3.13+: staticTLSOffset stores the TLS offset for direct TLS access
-	// extracted from assembly analysis.
+	// Location of _Py_tss_tstate for Python 3.13+, either in a shared
+	// libpython (tlsTState) or in the executable (staticTLSOffset).
+	tlsTState       *tls.Var
 	staticTLSOffset int64
 
 	noneStruct libpf.SymbolValue
@@ -364,6 +368,11 @@ type pythonInstance struct {
 
 	// procInfoInserted tracks whether we've already inserted process info into BPF maps.
 	procInfoInserted bool
+
+	// tstateSettled is set once retrying to locate _Py_tss_tstate is pointless.
+	tstateSettled bool
+	libcInfo      libc.LibcInfo
+	hasLibcInfo   bool
 }
 
 var _ interpreter.Instance = &pythonInstance{}
@@ -401,18 +410,40 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
-	d := p.d
+	p.libcInfo = libcInfo
+	p.hasLibcInfo = true
+	return p.updateProcInfo(ebpf, pid)
+}
 
-	// If we don't have a static TLS offset (Python < 3.13 or extraction failed),
-	// we need TSDInfo to access thread state via pthread_getspecific.
-	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
-	// from multiple DSOs, wait until we have TSDInfo before inserting proc data.
-	if d.staticTLSOffset == 0 && !libcInfo.HasTSDInfo() {
+// SynchronizeMappings retries locating _Py_tss_tstate, as libpython might not
+// have been relocated yet on earlier attempts.
+func (p *pythonInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping) error {
+	if !p.hasLibcInfo {
+		return nil
+	}
+	return p.updateProcInfo(ebpf, pr.PID())
+}
+
+func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	d := p.d
+	libcInfo := p.libcInfo
+
+	// Prevent duplicate inserts
+	if p.procInfoInserted && p.tstateSettled {
 		return nil
 	}
 
-	// Prevent duplicate inserts
-	if p.procInfoInserted {
+	// Without _Py_tss_tstate we need TSDInfo to access thread state via
+	// pthread_getspecific. Since UpdateLibcInfo may be called multiple times
+	// as LibcInfo is collected from multiple DSOs, wait until we have TSDInfo
+	// before inserting proc data.
+	tlsTState, settled := p.locateTState(libcInfo)
+	if !tlsTState.Valid && (d.autoTLSKey == 0 || !libcInfo.HasTSDInfo()) {
+		return nil
+	}
+	if p.procInfoInserted && !tlsTState.Valid {
+		p.tstateSettled = settled
 		return nil
 	}
 
@@ -420,7 +451,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		Tls_offset:     int16(d.staticTLSOffset),
+		Tls_tstate:     tlsTState,
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
@@ -455,7 +486,33 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	}
 
 	p.procInfoInserted = true
+	p.tstateSettled = settled || tlsTState.Valid
 	return err
+}
+
+// locateTState returns the TLS info for _Py_tss_tstate and whether retrying later
+// could change the result.
+func (p *pythonInstance) locateTState(libcInfo libc.LibcInfo) (
+	info support.TLSVarInfo, settled bool) {
+	d := p.d
+	if d.staticTLSOffset != 0 {
+		return support.TLSVarInfo{Tls_offset: int32(d.staticTLSOffset), Valid: true}, true
+	}
+	if d.tlsTState == nil {
+		return support.TLSVarInfo{}, true
+	}
+
+	info, pending, err := d.tlsTState.Locate(p.rm, p.bias)
+	if err == nil && pending != nil {
+		info, err = pending.VarInfo(libcInfo.DTVInfo)
+	}
+	if err != nil {
+		log.Debugf("Python: _Py_tss_tstate not located: %v", err)
+		// Not yet relocated, or DTV info still missing
+		temporary := errors.Is(err, tls.ErrUnresolved) || errors.Is(err, tls.ErrNeedDTV)
+		return support.TLSVarInfo{}, !temporary
+	}
+	return info, true
 }
 
 func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
@@ -709,14 +766,15 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	return nil
 }
 
-// getTLSOffsetFromAssembly extracts the TLS offset by analyzing the assembly code
-// of _PyThreadState_GetCurrent which directly accesses _Py_tss_tstate.
-// This works when the TLS variable exists but isn't exported in the symbol table.
+// tstateAccessor directly accesses _Py_tss_tstate, which is not exported.
+const tstateAccessor libpf.SymbolName = "_PyThreadState_GetCurrent"
+
+// getTLSOffsetFromAssembly extracts the TLS offset of _Py_tss_tstate in an
+// executable by analyzing the assembly code of tstateAccessor.
 func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
-	funcName := "_PyThreadState_GetCurrent"
-	sym, code, err := ef.SymbolData(libpf.SymbolName(funcName), 512)
+	sym, code, err := ef.SymbolData(tstateAccessor, 512)
 	if err != nil {
-		return 0, fmt.Errorf("could not read %s: %v", funcName, err)
+		return 0, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
 	}
 
 	var offset int32
@@ -731,10 +789,98 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	}
 
 	if err != nil {
-		return 0, fmt.Errorf("could not extract TLS offset from %s: %v", funcName, err)
+		return 0, fmt.Errorf("could not extract TLS offset from %s: %v",
+			tstateAccessor, err)
 	}
 
 	return int64(offset), nil
+}
+
+// getTLSVarFromAssembly is the shared libpython variant of getTLSOffsetFromAssembly.
+func getTLSVarFromAssembly(ef *pfelf.File) (*tls.Var, error) {
+	sym, code, err := ef.SymbolData(tstateAccessor, 512)
+	if err != nil {
+		return nil, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
+	}
+
+	var slot uint64
+	var disp int64
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		slot, disp, err = arm.ExtractTLSSlot(code, uint64(sym.Address))
+	case elf.EM_X86_64:
+		slot, disp, err = amd.ExtractTLSSlot(code, uint64(sym.Address))
+	default:
+		return nil, fmt.Errorf("unsupported architecture for assembly analysis: %v",
+			ef.Machine)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("could not extract TLS slot from %s: %v",
+			tstateAccessor, err)
+	}
+
+	tstate, err := tlsSlotSymbol(ef, libpf.Address(slot), disp)
+	if err != nil {
+		return nil, err
+	}
+	v, err := tls.Resolve(ef, tstate)
+	if err != nil {
+		return nil, fmt.Errorf("could not resolve TLS access at 0x%x: %v", slot, err)
+	}
+	return &v, nil
+}
+
+// tlsSlotSymbol returns the TLS symbol referenced by the relocation at slot.
+// For hidden variables without a symbol, one is synthesized from the TLS
+// block offset.
+func tlsSlotSymbol(ef *pfelf.File, slot libpf.Address, disp int64) (*libpf.Symbol, error) {
+	var found bool
+	var reloc pfelf.ElfReloc
+	var relocSym string
+	var relocType pfelf.RelocType
+	err := ef.VisitRelocations(func(r pfelf.ElfReloc, symName string,
+		relType pfelf.RelocType) bool {
+		if libpf.Address(r.Off) != slot {
+			return true
+		}
+		found, reloc, relocSym, relocType = true, r, symName, relType
+		return false
+	}, pfelf.RelTLSDESC|pfelf.RelDTPMOD64|pfelf.RelTPOFF64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to visit TLS relocations: %v", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("no TLS relocation for slot 0x%x", slot)
+	}
+
+	if relocSym != "" {
+		if disp != 0 {
+			return nil, fmt.Errorf("unexpected displacement %d for %s at slot 0x%x",
+				disp, relocSym, slot)
+		}
+		return ef.LookupSymbol(libpf.SymbolName(relocSym))
+	}
+
+	offset := reloc.Addend
+	if relocType == pfelf.RelDTPMOD64 {
+		// The tls_index holds the module ID followed by the offset in the
+		// TLS block, which is 0 for local-dynamic.
+		blockOffset, err := ef.GetRemoteMemory().ReadUint64(slot + 8)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read tls_index at 0x%x: %v", slot, err)
+		}
+		offset = int64(blockOffset)
+	}
+	offset += disp
+	if offset < 0 {
+		return nil, fmt.Errorf("invalid TLS block offset %d for slot 0x%x", offset, slot)
+	}
+	return &libpf.Symbol{
+		Name:    "_Py_tss_tstate",
+		Address: libpf.SymbolValue(offset),
+		Info:    elf.ST_INFO(elf.STB_LOCAL, elf.STT_TLS),
+		Shndx:   uint16(elf.SHN_ABS),
+	}, nil
 }
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
@@ -846,7 +992,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Python 3.15 removed autoTSSkey: PyGILState_GetThisThreadState reads a
-	// thread-local variable, and only the static TLS offset below is used.
+	// thread-local variable, and only _Py_tss_tstate located below is used.
 	if version < pythonVer(3, 15) {
 		// Calls first: PyThread_tss_get(autoTSSKey)
 		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
@@ -873,21 +1019,27 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
+	var tlsTState *tls.Var
 	var staticTLSOffset int64
 	if version >= pythonVer(3, 13) {
 		var err error
-		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+		if ef.IsExecutable() {
+			staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+		} else {
+			tlsTState, err = getTLSVarFromAssembly(ef)
+		}
 		if err != nil {
 			if version >= pythonVer(3, 15) {
-				return nil, fmt.Errorf("failed to extract TLS offset: %v", err)
+				return nil, fmt.Errorf("failed to locate _Py_tss_tstate: %v", err)
 			}
-			log.Warnf("Failed to extract TLS offset: %v", err)
+			log.Warnf("Failed to locate _Py_tss_tstate: %v", err)
 		}
 	}
 
 	pd := &pythonData{
 		version:         version,
 		autoTLSKey:      autoTLSKey,
+		tlsTState:       tlsTState,
 		staticTLSOffset: staticTLSOffset,
 	}
 	vms := &pd.vmStructs

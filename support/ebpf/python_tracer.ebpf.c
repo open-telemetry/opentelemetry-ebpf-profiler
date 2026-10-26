@@ -190,14 +190,18 @@ push_frame:
 static EBPF_INLINE ErrorCode get_PyThreadState(
   const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr, void **thread_state)
 {
-  if (pyinfo->tls_offset != 0) {
-    if (bpf_probe_read_user(thread_state, sizeof(void *), tsd_base + pyinfo->tls_offset)) {
-      DEBUG_PRINT(
-        "Failed to read direct TLS at base 0x%lx offset %d", (u64)tsd_base, pyinfo->tls_offset);
+  if (tls_var_valid(&pyinfo->tls_tstate)) {
+    switch (tls_read_var(&pyinfo->tls_tstate, tsd_base, thread_state)) {
+    case TLS_READ_OK: return ERR_OK;
+    case TLS_READ_ABSENT:
+      // The thread never entered libpython, so it has no thread state.
+      *thread_state = NULL;
+      return ERR_OK;
+    default:
+      DEBUG_PRINT("Failed to read _Py_tss_tstate from TLS");
       increment_metric(metricID_UnwindPythonErrReadThreadStateAddr);
       return ERR_PYTHON_READ_THREAD_STATE_ADDR;
     }
-    return ERR_OK;
   }
 
   // Python 3.12 and earlier: use pthread TLS
