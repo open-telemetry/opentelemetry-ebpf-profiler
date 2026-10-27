@@ -852,12 +852,6 @@ find_vma_callback(UNUSED struct task_struct *task, struct vm_area_struct *vma, v
   return 0;
 }
 
-static inline EBPF_INLINE long find_vma_info_for_pc(u64 pc, VMAInfo *info)
-{
-  struct task_struct *task = bpf_get_current_task_btf();
-  return bpf_find_vma(task, pc, find_vma_callback, info, 0);
-}
-
 // resolve_unwind_mapping decodes the current PC's mapping and prepares unwinding information.
 // The state text_section_id and text_section_offset are updated accordingly. The unwinding program
 // index that should be used is written to the given `unwinder` pointer.
@@ -924,7 +918,8 @@ refine_missing_mapping_error(UnwindState *state, bool interpreter_uses_anonymous
 
   bool update_unwind_error = state->unwind_error == ERR_NATIVE_NO_PID_PAGE_MAPPING;
   VMAInfo vma              = {};
-  long ret                 = find_vma_info_for_pc(state->pc, &vma);
+  struct task_struct *task = bpf_get_current_task_btf();
+  long ret                 = bpf_find_vma(task, state->pc, find_vma_callback, &vma, 0);
   if (ret == -ENOENT) {
     state->error_metric = metricID_UnwindNativeErrNoVMA;
     if (update_unwind_error) {
