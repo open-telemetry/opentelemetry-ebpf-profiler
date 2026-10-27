@@ -1,0 +1,224 @@
+{
+  "coredump-ref": "c315d76d1db0efeb9e890f982342324e6fe4bc29a89ae8fb84ae08df0f5b80f9",
+  "threads": [
+    {
+      "lwp": 11869,
+      "frames": [
+        "fib+0 in file:///home/brennan/app.mjs:1:12",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "fib+4 in file:///home/brennan/app.mjs:5:10",
+        "fib+5 in file:///home/brennan/app.mjs:6:10",
+        "cpuBurn+12 in file:///home/brennan/app.mjs:13:12",
+        "listOnTimeout+0 in node:internal/timers:0",
+        "processTimers+0 in node:internal/timers:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0x8951bb",
+        "node+0x894aab",
+        "node+0x728453",
+        "node+0x43b02b",
+        "libuv.so.1.0.0+0x14557",
+        "libuv.so.1.0.0+0x187bb",
+        "node+0x3bd0af",
+        "node+0x5106eb",
+        "node+0x46bf13",
+        "libc.so.6+0x308bb",
+        "libc.so.6+0x30997",
+        "node+0x3bb6af"
+      ]
+    },
+    {
+      "lwp": 11875,
+      "frames": [
+        "libc.so.6+0x957e8",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89ddf",
+        "libc.so.6+0x95687",
+        "libuv.so.1.0.0+0x25823",
+        "node+0x650687",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    },
+    {
+      "lwp": 11874,
+      "frames": [
+        "libc.so.6+0x957e8",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89ddf",
+        "libc.so.6+0x8c587",
+        "libuv.so.1.0.0+0x2578b",
+        "node+0x54bfb3",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    },
+    {
+      "lwp": 11873,
+      "frames": [
+        "libc.so.6+0x957e8",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89ddf",
+        "libc.so.6+0x8c587",
+        "libuv.so.1.0.0+0x2578b",
+        "node+0x54bfb3",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    },
+    {
+      "lwp": 11872,
+      "frames": [
+        "libc.so.6+0x957e8",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89ddf",
+        "libc.so.6+0x8c587",
+        "libuv.so.1.0.0+0x2578b",
+        "node+0x54bfb3",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    },
+    {
+      "lwp": 11871,
+      "frames": [
+        "libc.so.6+0x957e8",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89ddf",
+        "libc.so.6+0x8c587",
+        "libuv.so.1.0.0+0x2578b",
+        "node+0x54bfb3",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    },
+    {
+      "lwp": 11870,
+      "frames": [
+        "libc.so.6+0x957ec",
+        "libc.so.6+0x89a53",
+        "libc.so.6+0x89a8f",
+        "libc.so.6+0xee75f",
+        "libuv.so.1.0.0+0x2a0b7",
+        "libuv.so.1.0.0+0x186df",
+        "node+0x54f407",
+        "libc.so.6+0x8d03f",
+        "libc.so.6+0xee4cb"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "07378bc59db66cc9729a72c5c36b94fe2297b426bfefd383de539b84c51cd903",
+      "local-path": "/gnu/store/b34shxmzf57ipbyw8j2d9kvp30nrg802-glibc-2.41/lib/libc.so.6"
+    },
+    {
+      "ref": "1cb9a6c7702f55ef6acac00dd46cd7b68dcea87b7a8abfad8ac1199ee0483c69",
+      "local-path": "/gnu/store/j3h4lcv2m81a8697kbb20j04c9rakz2x-gcc-15.2.0-lib/lib/libatomic.so.1.2.0"
+    },
+    {
+      "ref": "1780f40ccecf09993dcdbca90e490f463408d5afdfa37ebb7b51ad971bdcdfe3",
+      "local-path": "/gnu/store/q4xvgnb97jr70wr6rfidrpap9srrzbxz-openssl-3.5.5/lib/libcrypto.so.3"
+    },
+    {
+      "ref": "225388c751d2d9ee2dbb21433549cf399b0c4e9785b1bc97a8677a515a0984fd",
+      "local-path": "/gnu/store/1gyrajwwazmayqzc7a3mhbx4ipnqw3bb-ngtcp2-1.15.1/lib/libngtcp2.so.16.5.0"
+    },
+    {
+      "ref": "ee93f78ec8d99104de09291405c74fba9e20429e9e41f84b8af9cf1146bc948b",
+      "local-path": "/gnu/store/vrlxmirj3q6l9knblds3nq4737mra3ra-brotli-1.1.0/lib/libbrotlidec.so.1.1.0"
+    },
+    {
+      "ref": "c62b77645a722f60deb4384cbc618a4a57a62ddf407e3d3a0667061575ba5403",
+      "local-path": "/gnu/store/crjsf0hj7xcd883ls8af9l8fp1gccdly-libuv-1.51.0/lib/libuv.so.1.0.0"
+    },
+    {
+      "ref": "72645bc10b8f271fc63278b23dd99d784f6abd8ba5f8465ed253527380989ed1",
+      "local-path": "/gnu/store/qr9nqkn1cd61qdlv956k3y3lkx2a3mxf-zlib-1.3.1/lib/libz.so.1.3.1"
+    },
+    {
+      "ref": "dcf3b53cfd351ab677634205a81e01d22511e99859eb95c1439bf752328e7bee",
+      "local-path": "/gnu/store/ahra69mj2khn1a3f8swbcajjrzy77dw1-icu4c-78.2/lib/libicudata.so.78.2"
+    },
+    {
+      "ref": "0cf20e0b7865b56423f0b19bc7ba91bc2328341fb1e866e9930d3638f1ad51c7",
+      "local-path": "/gnu/store/vrlxmirj3q6l9knblds3nq4737mra3ra-brotli-1.1.0/lib/libbrotlicommon.so.1.1.0"
+    },
+    {
+      "ref": "5d372f89199f2f46d7bdaf637b89dd55badf56451b54faeb2f4f12f81e9215e3",
+      "local-path": "/gnu/store/ahra69mj2khn1a3f8swbcajjrzy77dw1-icu4c-78.2/lib/libicuuc.so.78.2"
+    },
+    {
+      "ref": "3d213cf5d183181dcba9fb23a48af01cd23c89d43eb4c05cc5244b6391c1cbda",
+      "local-path": "/gnu/store/vrlxmirj3q6l9knblds3nq4737mra3ra-brotli-1.1.0/lib/libbrotlienc.so.1.1.0"
+    },
+    {
+      "ref": "62c0cb6591f8fd1f2ef65d7d672b15b08e6cf0bba84eb9cab204b1f793215742",
+      "local-path": "/home/brennan/code/node_v24/out/Release/node"
+    },
+    {
+      "ref": "ffbe4e68783011b5fa48d28a69a1b274aceb919a58584f4ec8b6cd469fcb465b",
+      "local-path": "/gnu/store/j3h4lcv2m81a8697kbb20j04c9rakz2x-gcc-15.2.0-lib/lib/libgcc_s.so.1"
+    },
+    {
+      "ref": "f3a686fc09fde9fb20ea43a1c33485cb753cfa0f3d39d96b6c449bcfd1846491",
+      "local-path": "/gnu/store/j3h4lcv2m81a8697kbb20j04c9rakz2x-gcc-15.2.0-lib/lib/libstdc++.so.6.0.34"
+    },
+    {
+      "ref": "07107bc1c2c02b566cc77bedefe12b7548d9df12e4718d57248a443a2d3af0db",
+      "local-path": "/gnu/store/ahra69mj2khn1a3f8swbcajjrzy77dw1-icu4c-78.2/lib/libicui18n.so.78.2"
+    },
+    {
+      "ref": "cdd16d06bbfdf19da1dc9a8cc28e81777430422102d690f2489679b369878355",
+      "local-path": "/gnu/store/hbzhp8c3992xmbggffd4174qbi3wa8rz-c-ares-1.34.4/lib/libcares.so.2.19.3"
+    },
+    {
+      "ref": "7917ff3dda0edc091692824e1b5e859760fd8e70eb3734e86ec50a3b45dcb5f6",
+      "local-path": "/gnu/store/b34shxmzf57ipbyw8j2d9kvp30nrg802-glibc-2.41/lib/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "20c64ef58ddfdd76f094aa5175c74c9aeab733b495553caf48b5825c5ce4024d",
+      "local-path": "/gnu/store/b34shxmzf57ipbyw8j2d9kvp30nrg802-glibc-2.41/lib/libm.so.6"
+    },
+    {
+      "ref": "d624a221f8e676d045ad5182d4a5a1a79992aafc307f5d981d47dd44c30ab983",
+      "local-path": "/gnu/store/q4xvgnb97jr70wr6rfidrpap9srrzbxz-openssl-3.5.5/lib/libssl.so.3"
+    },
+    {
+      "ref": "5bd00d18f3c31639d2b4c23480b72f01568dac33e3c97cc4709173859ab8bd42",
+      "local-path": "/gnu/store/4qrxwc84h7yabh1ppcfinhc1xy9x6r4l-nghttp3-1.11.0/lib/libnghttp3.so.9.3.0"
+    },
+    {
+      "ref": "ca5b4066e2414f683ca08c4646fb711e5c39246d73226bb3d344151d707f8919",
+      "local-path": "/gnu/store/h9mf38yzkx5w291f2k1050civ79bbmnf-nghttp2-1.58.0-lib/lib/libnghttp2.so.14.25.1"
+    }
+  ]
+}

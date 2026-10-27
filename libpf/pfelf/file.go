@@ -65,6 +65,8 @@ const (
 var (
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
+	// ErrSectionNotPresent is returned when a section is not present
+	ErrSectionNotPresent = errors.New("section not present")
 
 	// ErrNoDebugLink is returned when debug link does not exist.
 	ErrNoDebugLink = errors.New("no debug link")
@@ -629,17 +631,26 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 
 // SymbolData reads and returns the data associated with given dynamic symbol.
 // The maximum data read is capped to maxSize.
-func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxSize uint) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	data := make([]byte, min(int(sym.Size), maxSize))
-	_, err = f.ReadAt(data, int64(sym.Address))
+	data, err := f.ReadSymbolData(sym, maxSize)
 	if err != nil {
 		return nil, nil, err
 	}
 	return sym, data, nil
+}
+
+// ReadSymbolData reads and returns the data associated with given symbol.
+// The maximum data read is capped to maxSize.
+func (f *File) ReadSymbolData(sym *libpf.Symbol, maxSize uint) ([]byte, error) {
+	data := make([]byte, min(sym.Size, uint64(maxSize)))
+	if _, err := f.ReadAt(data, int64(sym.Address)); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // VisitNotes iterates the ELF notes.
@@ -1267,7 +1278,7 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) error {
 	symTab := f.Section(name)
 	if symTab == nil {
-		return fmt.Errorf("failed to read %v: section not present", name)
+		return ErrSectionNotPresent
 	}
 	if symTab.Link >= uint32(len(f.Sections)) {
 		return fmt.Errorf("failed to read %v strtab: link %v out of range",
@@ -1308,12 +1319,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 
 // VisitSymbols iterates through the symbol table until visitor returns false.
 func (f *File) VisitSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".symtab", visitor)
+	if err := f.visitSymbolTable(".symtab", visitor); err != nil {
+		return fmt.Errorf("failed to visit .symtab: %w", err)
+	}
+	return nil
 }
 
 // VisitDynamicSymbols iterates through the dynamic symbol table until visitor returns false.
 func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".dynsym", visitor)
+	if err := f.visitSymbolTable(".dynsym", visitor); err != nil {
+		return fmt.Errorf("failed to visit .dynsym: %w", err)
+	}
+	return nil
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic

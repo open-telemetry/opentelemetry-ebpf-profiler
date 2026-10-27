@@ -44,9 +44,8 @@ const (
 	ProgUnwindV8       = 0x7
 	ProgUnwindDotnet   = 0x8
 	ProgUnwindDotnet10 = 0x9
-	ProgGoLabels       = 0xa
-	ProgUnwindBEAM     = 0xb
-	ProgUnwindLuaJIT   = 0xc
+	ProgUnwindBEAM     = 0xa
+	ProgUnwindLuaJIT   = 0xb
 )
 
 const (
@@ -62,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x79
+	MetricIDBeginCumulative = 0x75
 )
 
 const (
@@ -88,8 +87,8 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
-type ApmSpanID [8]byte
-type ApmTraceID [16]byte
+type SpanID [8]byte
+type TraceID [16]byte
 type Event struct {
 	Type uint32
 }
@@ -137,10 +136,12 @@ type StackDeltaPageKey struct {
 	Page   uint64
 }
 type SystemAnalysis struct {
-	Address uint64
-	Pid     uint32
-	Err     int32
-	Code    [128]uint8
+	Address   uint64
+	Size      uint32
+	Pid       uint32
+	Err       int32
+	Code      [128]uint8
+	Pad_cgo_0 [4]byte
 }
 type TSDInfo struct {
 	Offset       int16
@@ -158,22 +159,22 @@ type TLSVarInfo struct {
 	Pad_cgo_0  [1]byte
 }
 type Trace struct {
-	Pid                uint32
-	Tid                uint32
-	Ktime              uint64
-	Comm               [16]uint8
-	Apm_transaction_id [8]byte
-	Apm_trace_id       [16]byte
-	Cpu_id             uint32
-	Context_value_end  uint16
-	Kernel_frame_end   uint16
-	Frame_data_end     uint16
-	Thread_label_end   uint16
-	Golang_label_end   uint16
-	Variable_data_end  uint16
-	Num_frames         uint16
-	Origin             uint16
-	Pad_cgo_0          [4]byte
+	Pid               uint32
+	Tid               uint32
+	Ktime             uint64
+	Comm              [16]uint8
+	Span_id           [8]byte
+	Trace_id          [16]byte
+	Cpu_id            uint32
+	Context_value_end uint16
+	Kernel_frame_end  uint16
+	Frame_data_end    uint16
+	Thread_label_end  uint16
+	Golang_label_end  uint16
+	Variable_data_end uint16
+	Num_frames        uint16
+	Origin            uint16
+	Pad_cgo_0         [4]byte
 }
 type UnwindInfo struct {
 	Flags       uint8
@@ -184,9 +185,6 @@ type UnwindInfo struct {
 	AuxParam    int32
 }
 
-type ApmIntProcInfo struct {
-	Tls TLSVarInfo
-}
 type BEAMProcInfo struct {
 	Bias                   uint64
 	R                      uint64
@@ -313,6 +311,8 @@ type ThreadContextProcInfo struct {
 	Tls TLSVarInfo
 }
 type V8ProcInfo struct {
+	Default_isolate_group_addr   uint64
+	Js_dispatch_table_offset     uint32
 	Type_JSFunction_first        uint16
 	Type_JSFunction_last         uint16
 	Type_Code                    uint16
@@ -331,6 +331,8 @@ type V8ProcInfo struct {
 	Codekind_shift               uint8
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
+	Leaptiering                  uint8
+	Pad_cgo_0                    [5]byte
 }
 
 const (
@@ -339,7 +341,6 @@ const (
 	Sizeof_TraceWithData = 0x50 + 0x6280
 	Sizeof_GolangLabel   = 0x40
 
-	sizeof_ApmIntProcInfo        = 0xc
 	sizeof_PHPProcInfo           = 0x18
 	sizeof_RubyProcInfo          = 0x40
 	sizeof_ThreadContextProcInfo = 0xc
@@ -392,16 +393,15 @@ const (
 
 	V8FpContextSize = 0x40
 
-	V8FileTypeMarker       = 0x0
-	V8FileTypeByteCode     = 0x1
-	V8FileTypeNativeSFI    = 0x2
-	V8FileTypeNativeCode   = 0x3
-	V8FileTypeNativeJSFunc = 0x4
-	V8FileTypeMask         = 0x7
+	V8FrameTypeMarker     = 0x0
+	V8FrameTypeByteCode   = 0x1
+	V8FrameTypeNativeSFI  = 0x2
+	V8FrameTypeNativeCode = 0x3
+	V8FrameTypeMask       = 0x7
 
-	V8LineCookieShift = 0x20
-	V8LineCookieMask  = 0xffffffff00000000
-	V8LineDeltaMask   = 0xffffffff
+	V8DataDeltaMask     = 0xffffffff
+	V8DataCodeKindShift = 0x20
+	V8DataCodeKindMask  = 0xff
 
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
@@ -494,36 +494,32 @@ var MetricsTranslation = []metrics.MetricID{
 	0x53: metrics.IDUnwindNativeErrChaseIrqStackLink,
 	0x54: metrics.IDUnwindV8ErrNoProcInfo,
 	0x55: metrics.IDUnwindNativeErrBadUnwindInfoIndex,
-	0x56: metrics.IDUnwindApmIntErrReadTsdBase,
-	0x57: metrics.IDUnwindApmIntErrReadCorrBufPtr,
-	0x58: metrics.IDUnwindApmIntErrReadCorrBuf,
-	0x59: metrics.IDUnwindApmIntReadSuccesses,
-	0x5a: metrics.IDUnwindDotnetAttempts,
-	0x5b: metrics.IDUnwindDotnetFrames,
-	0x5d: metrics.IDUnwindDotnetErrBadFP,
-	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
-	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x62: metrics.IDUnwindRubyErrInvalidIseq,
-	0x63: metrics.IDUnwindRubyErrReadMethodDef,
-	0x64: metrics.IDUnwindRubyErrReadMethodType,
-	0x65: metrics.IDUnwindRubyErrReadSvar,
-	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x68: metrics.IDUnwindErrBadDTVRead,
-	0x69: metrics.IDBPFRingbufOutputErr,
-	0x6a: metrics.IDUnwindNativeErrNoVMA,
-	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
-	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
-	0x6d: metrics.IDUnwindLuaJITAttempts,
-	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
-	0x6f: metrics.IDSamplesSkippedProcessTooNew,
-	0x70: metrics.IDNumSyncsFromPrctl,
-	0x71: metrics.IDNumPriorityEventDeferred,
-	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
-	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
-	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
-	0x75: metrics.IDUnwindThreadContextErrReadTlsPtr,
-	0x76: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
-	0x77: metrics.IDUnwindThreadContextReadSuccesses,
-	0x78: metrics.IDUnwindThreadContextAttrsTruncated,
+	0x56: metrics.IDUnwindDotnetAttempts,
+	0x57: metrics.IDUnwindDotnetFrames,
+	0x59: metrics.IDUnwindDotnetErrBadFP,
+	0x5a: metrics.IDUnwindDotnetErrCodeHeader,
+	0x5b: metrics.IDUnwindDotnetErrCodeTooLarge,
+	0x5e: metrics.IDUnwindRubyErrInvalidIseq,
+	0x5f: metrics.IDUnwindRubyErrReadMethodDef,
+	0x60: metrics.IDUnwindRubyErrReadMethodType,
+	0x61: metrics.IDUnwindRubyErrReadSvar,
+	0x62: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x63: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x64: metrics.IDUnwindErrBadDTVRead,
+	0x65: metrics.IDBPFRingbufOutputErr,
+	0x66: metrics.IDUnwindNativeErrNoVMA,
+	0x67: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
+	0x68: metrics.IDUnwindNativeErrNonExecutableVMA,
+	0x69: metrics.IDUnwindLuaJITAttempts,
+	0x6a: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x6b: metrics.IDSamplesSkippedProcessTooNew,
+	0x6c: metrics.IDNumSyncsFromPrctl,
+	0x6d: metrics.IDNumPriorityEventDeferred,
+	0x6e: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x6f: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x70: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x71: metrics.IDUnwindThreadContextErrReadTlsPtr,
+	0x72: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
+	0x73: metrics.IDUnwindThreadContextReadSuccesses,
+	0x74: metrics.IDUnwindThreadContextAttrsTruncated,
 }

@@ -150,14 +150,14 @@ static EBPF_INLINE bool hotspot_addr_in_codecache(u32 pid, u64 addr)
 // information from the PidPageMapping for the PC.
 static EBPF_INLINE u64 hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
 {
-  unsigned long segment, codeblob, segmap_start;
+  u64 segment, codeblob, segmap_start;
   u8 tag;
 
   DEBUG_PRINT(
     "jvm:  -> %lx in code start %lx, offset %lx",
-    (unsigned long)state->pc,
-    (unsigned long)state->text_section_bias,
-    (unsigned long)state->text_section_offset);
+    state->pc,
+    state->text_section_bias,
+    state->text_section_offset);
 
   // The segment map contains information on finding the control data
   // structures given a PC. For documentation on this structure, see:
@@ -283,11 +283,7 @@ static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
     // Convert Code Pointer to Index (offset)
     bcp -= cmethod + ji->cmethod_size;
   }
-  DEBUG_PRINT(
-    "jvm:  -> method = 0x%lx, cmethod = 0x%lx, bcp = %lx",
-    (unsigned long)method,
-    (unsigned long)cmethod,
-    (unsigned long)bcp);
+  DEBUG_PRINT("jvm:  -> method = 0x%lx, cmethod = 0x%lx, bcp = %lx", method, cmethod, bcp);
   if (bcp >= 0xffff) {
     // Range check, and mark BCI invalid if outside JVM spec range
     bcp = 0xffff;
@@ -613,7 +609,7 @@ static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
     } else {
       DEBUG_PRINT(
         "jvm:  -> deoptimized frame, pc recovered as 0x%lx (from sp+%d)",
-        (unsigned long)orig,
+        orig,
         (s32)cbi->orig_pc_offset);
       ui->pc                   = orig;
       ui->line.pc_delta_or_bci = (u32)(ui->pc - cbi->code_start);
@@ -670,9 +666,9 @@ static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   u64 stack[HOTSPOT_RA_SEARCH_SLOTS];
   bpf_probe_read_user(stack, sizeof(stack), (void *)(ui->sp - sizeof(u64)));
   for (u64 i = 0; i < HOTSPOT_RA_SEARCH_SLOTS; i++, ui->sp += sizeof(u64)) {
-    DEBUG_PRINT("jvm:    -> %lu pc candidate 0x%lx", (unsigned long)i, (unsigned long)stack[i]);
+    DEBUG_PRINT("jvm:    -> %lu pc candidate 0x%lx", i, stack[i]);
     if (hotspot_addr_in_codecache(trace->pid, stack[i])) {
-      DEBUG_PRINT("jvm:  -> unwinding complete frame + %lu words", (unsigned long)i);
+      DEBUG_PRINT("jvm:  -> unwinding complete frame + %lu words", i);
       *action = UA_UNWIND_REGS;
       return ERR_OK;
     }
@@ -712,7 +708,7 @@ static EBPF_INLINE ErrorCode hotspot_handle_stub(
     return hotspot_handle_stub_fallback(cbi, action);
   }
 
-  DEBUG_PRINT("jvm:  -> unwind stub with unwind info 0x%016llX", info);
+  DEBUG_PRINT("jvm:  -> unwind stub with unwind info 0x%016lx", info);
 
   if (info & (1UL << HS_TSID_HAS_FRAME_BIT)) {
     *action = UA_UNWIND_FRAME_POINTER;
@@ -845,8 +841,7 @@ static EBPF_INLINE ErrorCode hotspot_read_codeblob(
     cbi->code_end   = cbi->address + (cbi->code_end & 0xffffffff);
   }
 
-  DEBUG_PRINT(
-    "jvm:  -> code %lx-%lx", (unsigned long)cbi->code_start, (unsigned long)cbi->code_end);
+  DEBUG_PRINT("jvm:  -> code %lx-%lx", cbi->code_start, cbi->code_end);
   DEBUG_PRINT(
     "jvm:  -> frame_complete %u, frame_size %u, frame_type 0x%x",
     cbi->frame_comp,

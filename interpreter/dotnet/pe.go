@@ -547,6 +547,9 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 		if err != nil {
 			return err
 		}
+		if index >= uint32(len(pp.info.methodSpecs)) {
+			return fmt.Errorf("method spec index %d is out of range (%d)", index, len(pp.info.methodSpecs))
+		}
 		// The entry decoding is from:
 		// https://github.com/dotnet/runtime/blob/v8.0.0/src/coreclr/vm/readytoruninfo.cpp#L1181
 		if id&1 != 0 {

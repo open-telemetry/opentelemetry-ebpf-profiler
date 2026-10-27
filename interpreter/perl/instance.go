@@ -232,16 +232,18 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	// hekLen and report it.
 	util.AtomicUpdateMaxUint32(&i.hekLen, hekLen)
 
-	if hekSize := uint32(vms.hek.hek_key) + hekLen; hekSize > hekInitialRead {
-		if hekSize > hekLenLimit {
-			return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
-		}
-		if err := i.rm.Read(addr+hekInitialRead, buf[hekInitialRead:]); err != nil {
+	if hekLen > hekLenLimit-uint32(vms.hek.hek_key) {
+		return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
+	}
+
+	hekSize := uint32(vms.hek.hek_key) + hekLen
+	if hekSize > hekInitialRead {
+		if err := i.rm.Read(addr+hekInitialRead, buf[hekInitialRead:hekSize]); err != nil {
 			return libpf.NullString, err
 		}
 	}
 
-	s := pfunsafe.ToString(buf[vms.hek.hek_key : vms.hek.hek_key+uint(hekLen)])
+	s := pfunsafe.ToString(buf[vms.hek.hek_key:hekSize])
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted invalid hek string at 0x%x '%v'", addr, []byte(s))
 		return libpf.NullString, fmt.Errorf("extracted invalid hek string at 0x%x", addr)

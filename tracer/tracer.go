@@ -1299,15 +1299,15 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
-		Comm:             libpf.NewComm(ptr.Comm),
-		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
-		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
-		PID:              libpf.PID(ptr.Pid),
-		TID:              libpf.PID(ptr.Tid),
-		Origin:           ptr.Origin,
-		KTime:            int64(ptr.Ktime),
-		CpuID:            ptr.Cpu_id,
-		NumFrames:        ptr.Num_frames,
+		Comm:      libpf.NewComm(ptr.Comm),
+		TraceID:   *(*libpf.TraceID)(unsafe.Pointer(&ptr.Trace_id)),
+		SpanID:    *(*libpf.SpanID)(unsafe.Pointer(&ptr.Span_id)),
+		PID:       libpf.PID(ptr.Pid),
+		TID:       libpf.PID(ptr.Tid),
+		Origin:    ptr.Origin,
+		KTime:     int64(ptr.Ktime),
+		CpuID:     ptr.Cpu_id,
+		NumFrames: ptr.Num_frames,
 	}
 
 	if t.origins.lookup(trace.Origin) == nil {
