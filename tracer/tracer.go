@@ -1108,22 +1108,21 @@ func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 	// the instruction count heuristic used above can be compared against the load
 	// times it is standing in for.
 	for i := range jobs {
-		log.Debugf("Loaded eBPF program %s in %v (%d instructions)",
-			jobs[i].progSpec.Name, jobs[i].loadTime, len(jobs[i].progSpec.Instructions))
-	}
-
-	for i := range jobs {
-		ebpfProgs[jobs[i].progSpec.Name] = jobs[i].prog
-	}
-
-	for i := range jobs {
 		job := &jobs[i]
+		log.Debugf("Loaded eBPF program %s in %v (%d instructions)",
+			job.progSpec.Name, job.loadTime, len(job.progSpec.Instructions))
+
+		// From here on, the program belongs to the owner of ebpfProgs, also on error.
+		ebpfProgs[job.progSpec.Name] = job.prog
 		if job.noTailCallTarget {
 			continue
 		}
 		fd := uint32(job.prog.FD())
 		if err := job.tailcallMap.Update(unsafe.Pointer(&job.progID), unsafe.Pointer(&fd),
 			cebpf.UpdateAny); err != nil {
+			for _, later := range jobs[i+1:] {
+				later.prog.Close()
+			}
 			// Every eBPF program that is loaded within loadUnwinders can be the
 			// destination of a tail call of another eBPF program. If we can not update
 			// the eBPF map that manages these destinations our unwinding will fail.
