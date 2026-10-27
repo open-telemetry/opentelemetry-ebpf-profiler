@@ -352,6 +352,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
+		closeEBPFResources(ebpfMaps, ebpfProgs)
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -372,6 +373,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	})
 	if err != nil {
 		lifecycleCancel()
+		closeEBPFResources(ebpfMaps, ebpfProgs)
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
