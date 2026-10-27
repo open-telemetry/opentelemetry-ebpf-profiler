@@ -622,7 +622,9 @@ func (st *state) step(r *reader) error {
 		case cfaValExpression:
 			// Not really supported, just mark the register undefined
 			st.rule(r.uleb(), regUndefined, 0)
-			r.Discard(int(r.uleb()))
+			if _, err := r.Discard(int(r.uleb())); err != nil {
+				return err
+			}
 		case cfaGNUWindowSave:
 			// No handling needed
 		case cfaGNUArgsSize:
@@ -729,7 +731,9 @@ func (r *reader) parseCIE(length int64) (*cieInfo, error) {
 		// read them so the rest of the data is aligned correctly.
 
 		// Skip the address_size and segment_selector_size fields
-		r.Discard(2)
+		if _, err := r.Discard(2); err != nil {
+			return nil, err
+		}
 	}
 
 	cie.codeAlign = r.uleb()
@@ -897,7 +901,9 @@ func (r *reader) parseFDE(id, n int64, ipStart uintptr, cie *cieInfo, ee *elfExt
 		return fde, err
 	}
 	if cie.hasAugmentation {
-		r.Discard(int(r.uleb()))
+		if _, err := r.Discard(int(r.uleb())); err != nil {
+			return fde, err
+		}
 	}
 
 	// Exit early if no stack delta extraction is done

@@ -287,6 +287,9 @@ func (r *Reader) Discard(n int) (discarded int, err error) {
 // Peek returns the internal buffer for next 'n' bytes if possible.
 // The returned slice points to the internal buffer and is invalid after the next read.
 func (r *Reader) Peek(n int) ([]byte, error) {
+	if n < 0 {
+		return nil, errNegativeCount
+	}
 	if n > r.bufSize {
 		return nil, ErrBufferTooSmall
 	}
