@@ -475,6 +475,7 @@ func runPIDNamespaceTranslationWorkload(comm string) int {
 func BenchmarkNewTracer(b *testing.B) {
 	// Keep the benchmark output parseable by benchstat.
 	log.SetLevel(slog.LevelError)
+	b.Cleanup(func() { log.SetLevel(slog.LevelInfo) })
 
 	ctx := b.Context()
 
