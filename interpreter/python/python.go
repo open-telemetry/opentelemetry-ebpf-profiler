@@ -80,10 +80,8 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
-	// Location of _Py_tss_tstate for Python 3.13+, either in a shared
-	// libpython (tlsTState) or in the executable (staticTLSOffset).
-	tlsTState       *tls.Var
-	staticTLSOffset int64
+	// For Python 3.13+: tlsTState is the location of _Py_tss_tstate.
+	tlsTState *tls.Var
 
 	noneStruct libpf.SymbolValue
 
@@ -495,9 +493,6 @@ func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 func (p *pythonInstance) locateTState(libcInfo libc.LibcInfo) (
 	info support.TLSVarInfo, settled bool) {
 	d := p.d
-	if d.staticTLSOffset != 0 {
-		return support.TLSVarInfo{Tls_offset: int32(d.staticTLSOffset), Valid: true}, true
-	}
 	if d.tlsTState == nil {
 		return support.TLSVarInfo{}, true
 	}
@@ -769,12 +764,12 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 // tstateAccessor directly accesses _Py_tss_tstate, which is not exported.
 const tstateAccessor libpf.SymbolName = "_PyThreadState_GetCurrent"
 
-// getTLSOffsetFromAssembly extracts the TLS offset of _Py_tss_tstate in an
-// executable by analyzing the assembly code of tstateAccessor.
-func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
+// getTLSOffsetFromAssembly extracts the local-exec TLS offset of _Py_tss_tstate
+// in an executable by analyzing the assembly code of tstateAccessor.
+func getTLSOffsetFromAssembly(ef *pfelf.File) (*tls.Var, error) {
 	sym, code, err := ef.SymbolData(tstateAccessor, 512)
 	if err != nil {
-		return 0, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
+		return nil, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
 	}
 
 	var offset int32
@@ -784,16 +779,20 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	case elf.EM_X86_64:
 		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
 	default:
-		return 0, fmt.Errorf("unsupported architecture for assembly analysis: %v",
+		return nil, fmt.Errorf("unsupported architecture for assembly analysis: %v",
 			ef.Machine)
 	}
 
 	if err != nil {
-		return 0, fmt.Errorf("could not extract TLS offset from %s: %v",
+		return nil, fmt.Errorf("could not extract TLS offset from %s: %v",
 			tstateAccessor, err)
 	}
 
-	return int64(offset), nil
+	v, err := tls.LocalExec(ef.Machine, int64(offset))
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 // getTLSVarFromAssembly is the shared libpython variant of getTLSOffsetFromAssembly.
@@ -1020,11 +1019,10 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
 	var tlsTState *tls.Var
-	var staticTLSOffset int64
 	if version >= pythonVer(3, 13) {
 		var err error
 		if ef.IsExecutable() {
-			staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+			tlsTState, err = getTLSOffsetFromAssembly(ef)
 		} else {
 			tlsTState, err = getTLSVarFromAssembly(ef)
 		}
@@ -1037,10 +1035,9 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	pd := &pythonData{
-		version:         version,
-		autoTLSKey:      autoTLSKey,
-		tlsTState:       tlsTState,
-		staticTLSOffset: staticTLSOffset,
+		version:    version,
+		autoTLSKey: autoTLSKey,
+		tlsTState:  tlsTState,
 	}
 	vms := &pd.vmStructs
 
