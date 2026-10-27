@@ -55,37 +55,25 @@ func TestInitializeMapsAndProgramsCleansUpOnFailure(t *testing.T) {
 	kmod, err := symbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
 	require.NoError(t, err)
 
-	// Sizing the trace_events ring buffer from zero online CPUs gives it a single
-	// byte, which the kernel rejects because a ring buffer has to be a page aligned
-	// power of two. Exactly one map fails, so the maps created before it are what
-	// must not be left behind. The sample rate cannot be zero instead, as it is
-	// also used to compute the sampling period.
-	//
-	// Which map is created first is up to the iteration order of the collection, so
-	// run the whole initialization a few times: a single run could, in principle,
-	// fail on the very first map and leave nothing to clean up.
-	origOnlineCPUs := onlineCPUsOnce
-	onlineCPUsOnce = func() ([]int, error) { return nil, nil }
-	t.Cleanup(func() { onlineCPUsOnce = origOnlineCPUs })
-
+	// The highest verifier log flag is BPF_LOG_FIXED (8), so the kernel rejects a
+	// log level of 16 with EINVAL for every program. Programs are loaded after all
+	// maps, so every map has been created by then and must not be left behind.
 	cfg := &Config{
-		InterpretersConfig: interpreterconfig.AllInterpreters(),
-		SamplesPerSecond:   20,
+		InterpretersConfig:  interpreterconfig.AllInterpreters(),
+		SamplesPerSecond:    20,
+		BPFVerifierLogLevel: 1 << 4,
 	}
 
-	for range 5 {
-		// Other tests in this package hold eBPF objects of their own, and the
-		// garbage collector may release them at any point, so sample the count
-		// for every attempt and only require that the failed initialization did
-		// not add to it.
-		before := countBPFObjects(t)
-		ebpfMaps, ebpfProgs, _, err := initializeMapsAndPrograms(kmod, cfg,
-			&originRegistry{}, &SysConfigVars{})
-		require.Error(t, err)
-		require.Nil(t, ebpfMaps)
-		require.Nil(t, ebpfProgs)
+	// Other tests in this package hold eBPF objects of their own, and the garbage
+	// collector may release them at any point, so only require that the failed
+	// initialization did not add to the count.
+	before := countBPFObjects(t)
+	ebpfMaps, ebpfProgs, _, err := initializeMapsAndPrograms(kmod, cfg,
+		&originRegistry{}, &SysConfigVars{})
+	require.ErrorContains(t, err, "failed to load unwinder eBPF programs")
+	require.Nil(t, ebpfMaps)
+	require.Nil(t, ebpfProgs)
 
-		require.LessOrEqual(t, countBPFObjects(t), before,
-			"failed initialization left eBPF objects loaded")
-	}
+	require.LessOrEqual(t, countBPFObjects(t), before,
+		"failed initialization left eBPF objects loaded")
 }
