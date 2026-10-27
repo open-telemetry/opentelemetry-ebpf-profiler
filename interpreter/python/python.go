@@ -296,7 +296,7 @@ func walkLineTable(m *pythonCodeObject, addrq uint32) uint32 {
 	}
 	lineTable := m.lineTable
 	var line, start, end uint32
-	for i := 0; i < len(lineTable)/2; i += 2 {
+	for i := 0; i < len(lineTable); i += 2 {
 		sDelta := lineTable[i]
 		lDelta := int8(lineTable[i+1])
 		if lDelta == 0 {
@@ -1001,10 +1001,8 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
 	var interp *libpf.Symbol
-	var code []byte
-	const maxCodeSize = 128 * 1024 // observed ~65k in the wild
-	if interp, code, err = ef.SymbolData("_PyEval_EvalFrameDefault", maxCodeSize); err != nil {
-		interp, code, err = ef.SymbolData("PyEval_EvalFrameEx", maxCodeSize)
+	if interp, err = ef.LookupSymbol("_PyEval_EvalFrameDefault"); err != nil {
+		interp, err = ef.LookupSymbol("PyEval_EvalFrameEx")
 	}
 	if err != nil {
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
@@ -1014,7 +1012,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 		Start: uint64(interp.Address),
 		End:   uint64(interp.Address) + interp.Size,
 	})
-	coldRange, err := findColdRange(info, ef, code, interp)
+	coldRange, err := findColdRange(info, ef, interp)
 	if err != nil {
 		log.Debugf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
@@ -1028,9 +1026,14 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 // (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the .cold range.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
+func findColdRange(info *interpreter.LoaderInfo, ef *pfelf.File, interp *libpf.Symbol) (util.Range, error) {
 	if ef.Machine != elf.EM_X86_64 {
 		return util.Range{}, nil
+	}
+	const maxCodeSize = 128 * 1024 // observed ~65k in the wild
+	code, err := ef.ReadSymbolData(interp, maxCodeSize)
+	if err != nil {
+		return util.Range{}, err
 	}
 	dst, err := amd.FindExternalJump(code, interp)
 	if err != nil || dst == 0 {

@@ -96,6 +96,11 @@ func (m *dotnetMethod) mapPCOffsetToILOffset(pcOffset uint32, findCall bool) uin
 			lastCallILOffset = ilOffset
 		}
 
+		if err := nr.Error(); err != nil {
+			log.Debugf(" %3d, nibble reader error: %v", i, err)
+			break
+		}
+
 		// NOTE: _DEBUG builds could have a 0xA nibble to identify row change.
 		log.Debugf(" %3d, native %3d -> IL %#03x, sourceFlags %#x",
 			i, nativeOffset, ilOffset, sourceFlags)
