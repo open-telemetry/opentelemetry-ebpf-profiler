@@ -1,0 +1,67 @@
+{
+  "coredump-ref": "e41f4a50010514644b50fc6c10dfe8cb2e4d1865152ccd6d667b1a1387a5ae4f",
+  "threads": [
+    {
+      "lwp": 121702,
+      "frames": [
+        "libpython3.15.so.1.0+0x164758",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "<module>+6 in <string>:7",
+        "libpython3.15.so.1.0+0x15036b",
+        "libpython3.15.so.1.0+0x14db6b",
+        "libpython3.15.so.1.0+0x2118a3",
+        "libpython3.15.so.1.0+0x2802f7",
+        "libpython3.15.so.1.0+0x27738b",
+        "libpython3.15.so.1.0+0x277253",
+        "libpython3.15.so.1.0+0xa55c7",
+        "embed_shared+0x843",
+        "libc.so.6+0x2225b",
+        "libc.so.6+0x2233b",
+        "embed_shared+0x72f"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1b882eddacd494b060413a8aa4f0a4754ee3f84775e68cecbf8a86092b59cca6",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "e93f6c07e27547d6ad881dfb9e51973ba4120e9fb01b4d10f468964f0b271c0e",
+      "local-path": "/tmp/work/embed_shared"
+    },
+    {
+      "ref": "a8afb2d1f4a0c5e14c0fc82f794ec839eafe29738907aa92895410f57630bbe2",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "70fa4c4cf57eabeb96097cce47582d02379c4cd1de3db3e98ade4dd7089a1b13",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "32528facc66d51f2c634cedb3511ab1bb27087b8bd66287ccbe65701715d93ca",
+      "local-path": "/usr/local/lib/libpython3.15.so.1.0"
+    }
+  ]
+}
