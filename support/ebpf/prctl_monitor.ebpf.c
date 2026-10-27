@@ -53,6 +53,11 @@ int tracepoint__sys_exit_prctl(void *ctx)
     goto exit;
   }
 
+  // The prctl return value is intentionally ignored. Per OTEP 4719, naming the
+  // mapping is best-effort and fails on kernels without CONFIG_ANON_VMA_NAME.
+  // A memfd-backed context is still discoverable as "/memfd:OTEL_CTX" in that
+  // case, so the attempt itself is the signal to resynchronize.
+
   u32 pid = 0;
   u32 tid = 0;
   if (!get_pid_tgid(&pid, &tid)) {
