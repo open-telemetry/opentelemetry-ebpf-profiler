@@ -13,7 +13,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1004,6 +1003,14 @@ type progEntry struct {
 	loadTime time.Duration
 }
 
+// maxConcurrentProgLoads caps how many eBPF programs are verified at once.
+//
+// While verifying a program, the kernel allocates temporary memory that is charged
+// to the memory cgroup of the profiler: up to ~9 MiB for the largest programs, and
+// ~80 MiB for all of them together. Four concurrent loads bound this to ~30 MiB,
+// independently of the number of CPUs, and already give most of the speedup.
+const maxConcurrentProgLoads = 4
+
 // loadPrograms loads the given eBPF programs into the kernel and populates the related
 // maps.
 //
@@ -1046,7 +1053,7 @@ func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 	})
 
 	eg := &errgroup.Group{}
-	eg.SetLimit(runtime.GOMAXPROCS(0))
+	eg.SetLimit(maxConcurrentProgLoads)
 	for i := range jobs {
 		job := &jobs[i]
 		eg.Go(func() error {
