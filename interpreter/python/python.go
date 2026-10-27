@@ -296,7 +296,7 @@ func walkLineTable(m *pythonCodeObject, addrq uint32) uint32 {
 	}
 	lineTable := m.lineTable
 	var line, start, end uint32
-	for i := 0; i < len(lineTable)/2; i += 2 {
+	for i := 0; i < len(lineTable); i += 2 {
 		sDelta := lineTable[i]
 		lDelta := int8(lineTable[i+1])
 		if lDelta == 0 {
