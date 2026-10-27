@@ -50,7 +50,7 @@ func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			continue
 		}
 
-		code, err := loadKernelCode(coll, maps, libpf.SymbolValue(sym))
+		code, err := loadKernelCode(coll, maps, libpf.SymbolValue(sym), 0)
 		if err != nil {
 			return 0, err
 		}

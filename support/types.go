@@ -44,9 +44,8 @@ const (
 	ProgUnwindV8       = 0x7
 	ProgUnwindDotnet   = 0x8
 	ProgUnwindDotnet10 = 0x9
-	ProgGoLabels       = 0xa
-	ProgUnwindBEAM     = 0xb
-	ProgUnwindLuaJIT   = 0xc
+	ProgUnwindBEAM     = 0xa
+	ProgUnwindLuaJIT   = 0xb
 )
 
 const (
@@ -137,10 +136,12 @@ type StackDeltaPageKey struct {
 	Page   uint64
 }
 type SystemAnalysis struct {
-	Address uint64
-	Pid     uint32
-	Err     int32
-	Code    [128]uint8
+	Address   uint64
+	Size      uint32
+	Pid       uint32
+	Err       int32
+	Code      [128]uint8
+	Pad_cgo_0 [4]byte
 }
 type TSDInfo struct {
 	Offset       int16

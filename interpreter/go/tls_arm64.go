@@ -106,13 +106,7 @@ func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, int, error) {
 //	0x00000000000c22a4 <+20>:	movk	x27, #0x10
 //	0x00000000000c22a8 <+24>:	ldr	x28, [x0, x27]
 //	0x00000000000c22ac <+28>:	ret
-func extractTLSGOffset(f *pfelf.File) (int32, error) {
-	pclntab, err := elfunwindinfo.NewGopclntab(f)
-	if err != nil {
-		return 0, err
-	}
-	defer pclntab.Close()
-
+func extractTLSGOffset(f *pfelf.File, pclntab *elfunwindinfo.Gopclntab) (int32, error) {
 	symbolName := "runtime.load_g.abi0"
 	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {

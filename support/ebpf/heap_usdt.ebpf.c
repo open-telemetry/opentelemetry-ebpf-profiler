@@ -66,7 +66,7 @@ int uprobe_heap_alloc(struct pt_regs *ctx)
   DEBUG_PRINT("heap_usdt: alloc size=%lu weighted_bytes=%lu", size, weighted_bytes);
 
   PerCPURecord *record =
-    prepare_trace(origin_id_heap_alloc, pid, tid, group_leader, bpf_ktime_get_ns());
+    prepare_trace(origin_id_heap_alloc, pid, tid, group_leader, bpf_ktime_get_boot_ns());
   if (!record) {
     return 0;
   }
