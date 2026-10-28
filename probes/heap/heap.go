@@ -156,8 +156,9 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	if err != nil {
 		return fmt.Errorf("adjusting memlock rlimit: %w", err)
 	}
+	defer restoreRlimit()
+
 	specMap, err := cebpf.NewMap(coll.Maps["usdt_specs"])
-	restoreRlimit()
 	if err != nil {
 		return fmt.Errorf("creating usdt_specs map: %w", err)
 	}
