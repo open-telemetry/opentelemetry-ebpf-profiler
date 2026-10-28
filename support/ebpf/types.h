@@ -390,7 +390,6 @@ typedef enum TracePrograms {
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
   PROG_UNWIND_DOTNET10,
-  PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
   PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
@@ -671,7 +670,8 @@ typedef struct Trace {
   // The thread ID
   // NOTE: Confusingly, this is what Linux calls "pid".
   u32 tid;
-  // Monotonic kernel time in nanosecond precision.
+  // Capture time in nanoseconds on CLOCK_BOOTTIME (bpf_ktime_get_boot_ns). Unlike
+  // CLOCK_MONOTONIC this clock keeps advancing while the system is suspended.
   u64 ktime;
   // The current COMM of the thread of this Trace.
   u8 comm[COMM_LEN];
@@ -889,10 +889,6 @@ typedef struct GoRuntimeOffsets {
   u32 sched_bp_off;
 } GoRuntimeOffsets;
 
-typedef struct GolangLabelsState {
-  void *go_m_ptr;
-} GolangLabelsState;
-
 // Container for additional scratch space needed by the Go unwinder.
 typedef struct GoUnwindScratchSpace {
   // Max size for a single bpf_probe_read, so the larger of runtime.m[0:curg+8) and
@@ -915,8 +911,6 @@ typedef struct PerCPURecord {
   PHPUnwindState phpUnwindState;
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
-  // State for Go labels
-  GolangLabelsState golangLabelsState;
   // Per-process Go runtime offsets, preloaded once per trace from go_procs in
   // collect_trace. m_offset is always non-zero for a Go process.
   GoRuntimeOffsets goOffsets;
@@ -1087,6 +1081,7 @@ typedef struct OffsetRange {
 // SystemAnalysis is the structure in system_analysis map
 typedef struct SystemAnalysis {
   u64 address;
+  u32 size;
   u32 pid;
   s32 err;
   u8 code[128];

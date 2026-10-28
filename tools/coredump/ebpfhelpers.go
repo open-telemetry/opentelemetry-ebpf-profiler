@@ -15,11 +15,12 @@ import (
 	"math/bits"
 	"unsafe"
 
+	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 /*
@@ -36,6 +37,15 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 
 //export bpf_ktime_get_ns
 func bpf_ktime_get_ns() C.u64 {
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
+		return 0
+	}
+	return C.u64(ts.Nano())
+}
+
+//export bpf_ktime_get_boot_ns
+func bpf_ktime_get_boot_ns() C.u64 {
 	return C.u64(times.GetKTime())
 }
 

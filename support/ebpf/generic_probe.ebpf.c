@@ -20,7 +20,7 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx, const u64 *value)
     return 0;
   }
 
-  u64 ts = bpf_ktime_get_ns();
+  u64 ts = bpf_ktime_get_boot_ns();
 
   PerCPURecord *record = prepare_trace(origin_id_probe, pid, tid, group_leader, ts);
   if (!record) {
