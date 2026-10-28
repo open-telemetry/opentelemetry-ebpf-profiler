@@ -96,6 +96,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		KernelVersionCheck:          !c.config.NoKernelVersionCheck,
 		VerboseMode:                 c.config.VerboseMode,
 		BPFVerifierLogLevel:         uint32(c.config.BPFVerifierLogLevel),
+		MaxConcurrentProgLoads:      int(c.config.MaxConcurrentProgLoads),
 		ProbabilisticInterval:       c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:      c.config.ProbabilisticThreshold,
 		IncludeEnvVars:              envVars,
