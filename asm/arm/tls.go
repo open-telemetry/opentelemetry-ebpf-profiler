@@ -152,14 +152,18 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 //  1. Initial-exec: ADRP/LDR of the GOT slot, MRS TPIDR_EL0, then LDR or ADD
 //     with both registers
 //  2. TLS descriptor: ADRP/LDR/ADD X0 and BLR, with optional ADDs to X0 after
+//  3. General/local-dynamic: ADRP/ADD X0, BL __tls_get_addr, then LDR through
+//     X0, with optional ADDs to X0 in between
 //
 // Besides the slot address, it returns the sum of immediates added to the
-// descriptor result.
+// call result.
 func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err error) {
 	capture := expression.NewImmediateCapture("slot")
 	it := NewInterpreterWithCodeAt(code, expression.Imm(baseAddr))
 	tpReg := -1
 	called := false
+	// The call returns the variable's address instead of its TP offset
+	viaGetAddr := false
 	offReg := -1
 
 	for {
@@ -187,6 +191,13 @@ func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err 
 			if called {
 				return 0, 0, errors.New("unexpected call after TLS slot lookup")
 			}
+			// Pattern 3: BL __tls_get_addr with the tls_index in X0
+			if regs.Get(X0).Match(capture) {
+				slot = capture.CapturedValue()
+				called = true
+				viaGetAddr = true
+				offReg = 0
+			}
 		case aa.BLR:
 			if called {
 				return 0, 0, errors.New("unexpected call after TLS slot lookup")
@@ -199,6 +210,18 @@ func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err 
 				offReg = 0
 			}
 		case aa.LDR:
+			// LDR Xd, [Xn, #imm] through the __tls_get_addr result
+			if mem, ok := inst.Args[1].(aa.MemImmediate); ok && viaGetAddr {
+				base, baseOk := Xreg2num(mem.Base)
+				if !baseOk || base != off {
+					continue
+				}
+				imm, immOk := DecodeImmediate(mem)
+				if mem.Mode != aa.AddrOffset || !immOk {
+					return 0, 0, fmt.Errorf("unsupported access to TLS call result: %v", inst)
+				}
+				return slot, disp + imm, nil
+			}
 			// LDR Xd, [Xt, Xn]
 			mem, ok := inst.Args[1].(aa.MemExtend)
 			if !ok {
@@ -209,7 +232,7 @@ func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err 
 			if !baseOk || !indexOk || base != tpReg {
 				continue
 			}
-			if called && index == off {
+			if called && !viaGetAddr && index == off {
 				return slot, disp, nil
 			}
 			if regs.GetArm(mem.Index).Match(expression.Mem8(capture)) {
@@ -235,13 +258,17 @@ func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err 
 				continue
 			}
 			// ADD Xd, Xt, Xn
-			if called && (left == tpReg && right == off || left == off && right == tpReg) {
+			if called && !viaGetAddr &&
+				(left == tpReg && right == off || left == off && right == tpReg) {
 				return slot, disp, nil
 			}
 			if left == tpReg && regs.Get(X0+Reg(right)).Match(expression.Mem8(capture)) {
 				return capture.CapturedValue(), 0, nil
 			}
 		}
+	}
+	if viaGetAddr {
+		return 0, 0, errors.New("could not follow the address returned by the TLS call")
 	}
 	if called {
 		return 0, 0, errors.New("could not follow the offset returned by the TLS descriptor call")
