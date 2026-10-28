@@ -184,14 +184,3 @@ func Resolve(ef *pfelf.File, sym *libpf.Symbol) (Var, error) {
 
 	return Var{}, ErrUnsupportedModel
 }
-
-// LocalExec returns a Var for a local-exec TLS variable whose TP-relative
-// offset is already known, e.g. from decoding an accessor's code in an
-// executable without a symbol for the variable.
-func LocalExec(machine elf.Machine, tpOffset int64) (Var, error) {
-	variant, err := tlsVariantOf(machine)
-	if err != nil {
-		return Var{}, err
-	}
-	return Var{access: accessLocalExec, addend: uint64(tpOffset), variant: variant}, nil
-}

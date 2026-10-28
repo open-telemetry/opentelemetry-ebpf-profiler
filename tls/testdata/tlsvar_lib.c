@@ -25,6 +25,14 @@ __thread long tls_var;
 long *tls_var_addr(void) {
   return &tls_var;
 }
+
+#ifdef TLS_GETTERS
+// Accessor for tls.ResolveAccessor. Force optimization to get the same
+// code patterns as real accessors, e.g. in libpython.
+__attribute__((optimize("O2"))) long tls_var_get(void) {
+  return tls_var;
+}
+#endif
 #endif
 
 #ifdef BIG_TLS
@@ -43,4 +51,10 @@ __attribute__((visibility("hidden"))) __thread long other_tls_var;
 long *other_tls_var_addr(void) {
   return &other_tls_var;
 }
+
+#ifdef TLS_GETTERS
+__attribute__((optimize("O2"))) long other_tls_var_get(void) {
+  return other_tls_var;
+}
+#endif
 #endif

@@ -22,7 +22,6 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
-	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -764,124 +763,6 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 // gilstateAccessor directly accesses _Py_tss_gilstate, which is not exported.
 const gilstateAccessor libpf.SymbolName = "PyGILState_GetThisThreadState"
 
-// getTLSOffsetFromAssembly extracts the local-exec TLS offset of _Py_tss_gilstate
-// in an executable by analyzing the assembly code of gilstateAccessor.
-func getTLSOffsetFromAssembly(ef *pfelf.File) (*tls.Var, error) {
-	sym, code, err := ef.SymbolData(gilstateAccessor, 512)
-	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %v", gilstateAccessor, err)
-	}
-
-	var offset int32
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
-	case elf.EM_X86_64:
-		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
-	default:
-		return nil, fmt.Errorf("unsupported architecture for assembly analysis: %v",
-			ef.Machine)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("could not extract TLS offset from %s: %v",
-			gilstateAccessor, err)
-	}
-
-	v, err := tls.LocalExec(ef.Machine, int64(offset))
-	if err != nil {
-		return nil, err
-	}
-	return &v, nil
-}
-
-// getTLSVarFromAssembly is the shared libpython variant of getTLSOffsetFromAssembly.
-func getTLSVarFromAssembly(ef *pfelf.File) (*tls.Var, error) {
-	sym, code, err := ef.SymbolData(gilstateAccessor, 512)
-	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %v", gilstateAccessor, err)
-	}
-
-	var slot uint64
-	var disp int64
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		slot, disp, err = arm.ExtractTLSSlot(code, uint64(sym.Address))
-	case elf.EM_X86_64:
-		slot, disp, err = amd.ExtractTLSSlot(code, uint64(sym.Address))
-	default:
-		return nil, fmt.Errorf("unsupported architecture for assembly analysis: %v",
-			ef.Machine)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("could not extract TLS slot from %s: %v",
-			gilstateAccessor, err)
-	}
-
-	gilstate, err := tlsSlotSymbol(ef, libpf.Address(slot), disp)
-	if err != nil {
-		return nil, err
-	}
-	v, err := tls.Resolve(ef, gilstate)
-	if err != nil {
-		return nil, fmt.Errorf("could not resolve TLS access at 0x%x: %v", slot, err)
-	}
-	return &v, nil
-}
-
-// tlsSlotSymbol returns the TLS symbol referenced by the relocation at slot.
-// For hidden variables without a symbol, one is synthesized from the TLS
-// block offset.
-func tlsSlotSymbol(ef *pfelf.File, slot libpf.Address, disp int64) (*libpf.Symbol, error) {
-	var found bool
-	var reloc pfelf.ElfReloc
-	var relocSym string
-	var relocType pfelf.RelocType
-	err := ef.VisitRelocations(func(r pfelf.ElfReloc, symName string,
-		relType pfelf.RelocType) bool {
-		if libpf.Address(r.Off) != slot {
-			return true
-		}
-		found, reloc, relocSym, relocType = true, r, symName, relType
-		return false
-	}, pfelf.RelTLSDESC|pfelf.RelDTPMOD64|pfelf.RelTPOFF64)
-	if err != nil {
-		return nil, fmt.Errorf("failed to visit TLS relocations: %v", err)
-	}
-	if !found {
-		return nil, fmt.Errorf("no TLS relocation for slot 0x%x", slot)
-	}
-
-	if relocSym != "" {
-		if disp != 0 {
-			return nil, fmt.Errorf("unexpected displacement %d for %s at slot 0x%x",
-				disp, relocSym, slot)
-		}
-		return ef.LookupSymbol(libpf.SymbolName(relocSym))
-	}
-
-	offset := reloc.Addend
-	if relocType == pfelf.RelDTPMOD64 {
-		// The tls_index holds the module ID followed by the offset in the
-		// TLS block, which is 0 for local-dynamic.
-		blockOffset, err := ef.GetRemoteMemory().ReadUint64(slot + 8)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read tls_index at 0x%x: %v", slot, err)
-		}
-		offset = int64(blockOffset)
-	}
-	offset += disp
-	if offset < 0 {
-		return nil, fmt.Errorf("invalid TLS block offset %d for slot 0x%x", offset, slot)
-	}
-	return &libpf.Symbol{
-		Name:    "_Py_tss_gilstate",
-		Address: libpf.SymbolValue(offset),
-		Info:    elf.ST_INFO(elf.STB_LOCAL, elf.STT_TLS),
-		Shndx:   uint16(elf.SHN_ABS),
-	}, nil
-}
-
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
@@ -1024,14 +905,11 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// in pthread TSS.
 	var tlsGilstate *tls.Var
 	if version >= pythonVer(3, 15) {
-		if ef.IsExecutable() {
-			tlsGilstate, err = getTLSOffsetFromAssembly(ef)
-		} else {
-			tlsGilstate, err = getTLSVarFromAssembly(ef)
-		}
+		v, err := tls.ResolveAccessor(ef, gilstateAccessor)
 		if err != nil {
 			return nil, fmt.Errorf("failed to locate _Py_tss_gilstate: %v", err)
 		}
+		tlsGilstate = &v
 	}
 
 	pd := &pythonData{
