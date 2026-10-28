@@ -458,8 +458,8 @@ typedef struct PyProcInfo {
   // The address of the autoTLSkey variable
   u64 autoTLSKeyAddr;
   u64 noneStructAddr;
-  // Location of _Py_tss_tstate on Python 3.13+. It is invalid if
-  // _Py_tss_tstate was not found, or if it is in dynamic TLS and the DTV
+  // Location of _Py_tss_gilstate on Python 3.15+. It is invalid if
+  // _Py_tss_gilstate was not found, or if it is in dynamic TLS and the DTV
   // layout was not known when this was filled in.
   TLSVarInfo tls_tstate;
   TSDInfo tsdInfo;

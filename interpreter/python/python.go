@@ -80,8 +80,8 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
-	// For Python 3.13+: tlsTState is the location of _Py_tss_tstate.
-	tlsTState *tls.Var
+	// For Python 3.15+: tlsGilstate is the location of _Py_tss_gilstate.
+	tlsGilstate *tls.Var
 
 	noneStruct libpf.SymbolValue
 
@@ -367,10 +367,10 @@ type pythonInstance struct {
 	// procInfoInserted tracks whether we've already inserted process info into BPF maps.
 	procInfoInserted bool
 
-	// tstateSettled is set once retrying to locate _Py_tss_tstate is pointless.
-	tstateSettled bool
-	libcInfo      libc.LibcInfo
-	hasLibcInfo   bool
+	// gilstateSettled is set once retrying to locate _Py_tss_gilstate is pointless.
+	gilstateSettled bool
+	libcInfo        libc.LibcInfo
+	hasLibcInfo     bool
 }
 
 var _ interpreter.Instance = &pythonInstance{}
@@ -413,7 +413,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	return p.updateProcInfo(ebpf, pid)
 }
 
-// SynchronizeMappings retries locating _Py_tss_tstate, as libpython might not
+// SynchronizeMappings retries locating _Py_tss_gilstate, as libpython might not
 // have been relocated yet on earlier attempts.
 func (p *pythonInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping) error {
@@ -428,20 +428,20 @@ func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	libcInfo := p.libcInfo
 
 	// Prevent duplicate inserts
-	if p.procInfoInserted && p.tstateSettled {
+	if p.procInfoInserted && p.gilstateSettled {
 		return nil
 	}
 
-	// Without _Py_tss_tstate we need TSDInfo to access thread state via
+	// Without _Py_tss_gilstate we need TSDInfo to access thread state via
 	// pthread_getspecific. Since UpdateLibcInfo may be called multiple times
 	// as LibcInfo is collected from multiple DSOs, wait until we have TSDInfo
 	// before inserting proc data.
-	tlsTState, settled := p.locateTState(libcInfo)
-	if !tlsTState.Valid && (d.autoTLSKey == 0 || !libcInfo.HasTSDInfo()) {
+	tlsGilstate, settled := p.locateGilstate(libcInfo)
+	if !tlsGilstate.Valid && (d.autoTLSKey == 0 || !libcInfo.HasTSDInfo()) {
 		return nil
 	}
-	if p.procInfoInserted && !tlsTState.Valid {
-		p.tstateSettled = settled
+	if p.procInfoInserted && !tlsGilstate.Valid {
+		p.gilstateSettled = settled
 		return nil
 	}
 
@@ -449,7 +449,7 @@ func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		Tls_tstate:     tlsTState,
+		Tls_tstate:     tlsGilstate,
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
@@ -484,25 +484,25 @@ func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	}
 
 	p.procInfoInserted = true
-	p.tstateSettled = settled || tlsTState.Valid
+	p.gilstateSettled = settled || tlsGilstate.Valid
 	return err
 }
 
-// locateTState returns the TLS info for _Py_tss_tstate and whether retrying later
-// could change the result.
-func (p *pythonInstance) locateTState(libcInfo libc.LibcInfo) (
+// locateGilstate returns the TLS info for _Py_tss_gilstate and whether retrying
+// later could change the result.
+func (p *pythonInstance) locateGilstate(libcInfo libc.LibcInfo) (
 	info support.TLSVarInfo, settled bool) {
 	d := p.d
-	if d.tlsTState == nil {
+	if d.tlsGilstate == nil {
 		return support.TLSVarInfo{}, true
 	}
 
-	info, pending, err := d.tlsTState.Locate(p.rm, p.bias)
+	info, pending, err := d.tlsGilstate.Locate(p.rm, p.bias)
 	if err == nil && pending != nil {
 		info, err = pending.VarInfo(libcInfo.DTVInfo)
 	}
 	if err != nil {
-		log.Debugf("Python: _Py_tss_tstate not located: %v", err)
+		log.Debugf("Python: _Py_tss_gilstate not located: %v", err)
 		// Not yet relocated, or DTV info still missing
 		temporary := errors.Is(err, tls.ErrUnresolved) || errors.Is(err, tls.ErrNeedDTV)
 		return support.TLSVarInfo{}, !temporary
@@ -761,15 +761,15 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	return nil
 }
 
-// tstateAccessor directly accesses _Py_tss_tstate, which is not exported.
-const tstateAccessor libpf.SymbolName = "_PyThreadState_GetCurrent"
+// gilstateAccessor directly accesses _Py_tss_gilstate, which is not exported.
+const gilstateAccessor libpf.SymbolName = "PyGILState_GetThisThreadState"
 
-// getTLSOffsetFromAssembly extracts the local-exec TLS offset of _Py_tss_tstate
-// in an executable by analyzing the assembly code of tstateAccessor.
+// getTLSOffsetFromAssembly extracts the local-exec TLS offset of _Py_tss_gilstate
+// in an executable by analyzing the assembly code of gilstateAccessor.
 func getTLSOffsetFromAssembly(ef *pfelf.File) (*tls.Var, error) {
-	sym, code, err := ef.SymbolData(tstateAccessor, 512)
+	sym, code, err := ef.SymbolData(gilstateAccessor, 512)
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
+		return nil, fmt.Errorf("could not read %s: %v", gilstateAccessor, err)
 	}
 
 	var offset int32
@@ -785,7 +785,7 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (*tls.Var, error) {
 
 	if err != nil {
 		return nil, fmt.Errorf("could not extract TLS offset from %s: %v",
-			tstateAccessor, err)
+			gilstateAccessor, err)
 	}
 
 	v, err := tls.LocalExec(ef.Machine, int64(offset))
@@ -797,9 +797,9 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (*tls.Var, error) {
 
 // getTLSVarFromAssembly is the shared libpython variant of getTLSOffsetFromAssembly.
 func getTLSVarFromAssembly(ef *pfelf.File) (*tls.Var, error) {
-	sym, code, err := ef.SymbolData(tstateAccessor, 512)
+	sym, code, err := ef.SymbolData(gilstateAccessor, 512)
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %v", tstateAccessor, err)
+		return nil, fmt.Errorf("could not read %s: %v", gilstateAccessor, err)
 	}
 
 	var slot uint64
@@ -815,14 +815,14 @@ func getTLSVarFromAssembly(ef *pfelf.File) (*tls.Var, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("could not extract TLS slot from %s: %v",
-			tstateAccessor, err)
+			gilstateAccessor, err)
 	}
 
-	tstate, err := tlsSlotSymbol(ef, libpf.Address(slot), disp)
+	gilstate, err := tlsSlotSymbol(ef, libpf.Address(slot), disp)
 	if err != nil {
 		return nil, err
 	}
-	v, err := tls.Resolve(ef, tstate)
+	v, err := tls.Resolve(ef, gilstate)
 	if err != nil {
 		return nil, fmt.Errorf("could not resolve TLS access at 0x%x: %v", slot, err)
 	}
@@ -875,7 +875,7 @@ func tlsSlotSymbol(ef *pfelf.File, slot libpf.Address, disp int64) (*libpf.Symbo
 		return nil, fmt.Errorf("invalid TLS block offset %d for slot 0x%x", offset, slot)
 	}
 	return &libpf.Symbol{
-		Name:    "_Py_tss_tstate",
+		Name:    "_Py_tss_gilstate",
 		Address: libpf.SymbolValue(offset),
 		Info:    elf.ST_INFO(elf.STB_LOCAL, elf.STT_TLS),
 		Shndx:   uint16(elf.SHN_ABS),
@@ -990,8 +990,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 	}
 
-	// Python 3.15 removed autoTSSkey: PyGILState_GetThisThreadState reads a
-	// thread-local variable, and only _Py_tss_tstate located below is used.
+	// Python 3.15 replaced autoTSSkey with the thread-local _Py_tss_gilstate,
+	// which is located below.
 	if version < pythonVer(3, 15) {
 		// Calls first: PyThread_tss_get(autoTSSKey)
 		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
@@ -1017,27 +1017,27 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
-	var tlsTState *tls.Var
-	if version >= pythonVer(3, 13) {
-		var err error
+	// The thread state is read from the gilstate, the thread state bound to
+	// the OS thread. Unlike the attached thread state (_Py_tss_tstate on 3.13+),
+	// it is not cleared when the thread releases the GIL, e.g. while running
+	// native code. Python 3.15+ keeps it in a thread-local variable instead of
+	// in pthread TSS.
+	var tlsGilstate *tls.Var
+	if version >= pythonVer(3, 15) {
 		if ef.IsExecutable() {
-			tlsTState, err = getTLSOffsetFromAssembly(ef)
+			tlsGilstate, err = getTLSOffsetFromAssembly(ef)
 		} else {
-			tlsTState, err = getTLSVarFromAssembly(ef)
+			tlsGilstate, err = getTLSVarFromAssembly(ef)
 		}
 		if err != nil {
-			if version >= pythonVer(3, 15) {
-				return nil, fmt.Errorf("failed to locate _Py_tss_tstate: %v", err)
-			}
-			log.Warnf("Failed to locate _Py_tss_tstate: %v", err)
+			return nil, fmt.Errorf("failed to locate _Py_tss_gilstate: %v", err)
 		}
 	}
 
 	pd := &pythonData{
-		version:    version,
-		autoTLSKey: autoTLSKey,
-		tlsTState:  tlsTState,
+		version:     version,
+		autoTLSKey:  autoTLSKey,
+		tlsGilstate: tlsGilstate,
 	}
 	vms := &pd.vmStructs
 
