@@ -35,6 +35,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -42,7 +43,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -93,21 +93,15 @@ var (
 
 // File represents an open ELF file
 type File struct {
-	// closer is called internally when resources for this File are to be released
-	closer io.Closer
-
 	// elfReader is the ReadAt implementation used for this File. It is
 	// always a ViewAtReader: files are memory mapped if possible (stable
 	// zero-copy views), already-cached sources are borrowed, and raw
 	// sources are wrapped in a page cache.
 	elfReader libpf.ViewAtReader
 
-	// ownsCache indicates that elfReader was created by newFile, and must
-	// be released by Close.
-	ownsCache bool
-
-	// mmapReader is the mmap reader for this File if available
-	mmapReader *mmap.ReaderAt
+	// resources holds the reference-counted owned resources of this File.
+	// It is nil when the File borrows the reader from the caller.
+	resources *fileResources
 
 	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
 	loadData []*Prog
@@ -224,22 +218,66 @@ func Open(name string) (*File, error) {
 	return newFile(f, f, 0, false)
 }
 
-// Close closes the File.
+// fileResources is a reference-counted holder for the owned resources of a
+// File. Take increments the reference count, and the returned Closer releases
+// it; the underlying reader is closed when the last reference is dropped.
+// This lets long-lived users (e.g. Gopclntab) keep the underlying reader
+// readable after the File itself has been closed.
+type fileResources struct {
+	// refCount is the number of references. The owned resources are
+	// released when it drops to zero.
+	refCount atomic.Int32
+	// closer is the owned underlying reader. It is nil after it has been
+	// closed.
+	closer io.Closer
+	// cache is the page cache owned by the File, or nil. It is invalidated
+	// when the last reference is dropped.
+	cache *readatbuf.Reader
+}
+
+// newFileResources creates the reference-counted holder for the owned
+// resources, with the File's own reference taken.
+func newFileResources(closer io.Closer, cache *readatbuf.Reader) *fileResources {
+	res := &fileResources{closer: closer, cache: cache}
+	res.refCount.Store(1)
+	return res
+}
+
+// Take takes a reference on the owned resources, keeping them usable past
+// the File's Close. The returned Closer releases this reference.
+func (r *fileResources) Take() io.Closer {
+	r.refCount.Add(1)
+	return r
+}
+
+// Close drops a reference, and releases the owned resources when the last
+// reference is dropped.
+func (r *fileResources) Close() error {
+	if r.refCount.Add(-1) > 0 {
+		return nil
+	}
+	if r.cache != nil {
+		st := r.cache.Statistics()
+		log.Debugf("ELF cache statistics: hits %d, misses %d, evictions %d",
+			st.Hits, st.Misses, st.Evictions)
+		r.cache.InvalidateCache()
+		r.cache = nil
+	}
+	if r.closer == nil {
+		return nil
+	}
+	c := r.closer
+	r.closer = nil
+	return c.Close()
+}
+
+// Close closes the File. If the caller has taken references on the File via
+// Take, the owned resources are released only when the last reference has
+// been released.
 func (f *File) Close() (err error) {
-	if f.ownsCache && f.elfReader != nil {
-		if cache, ok := f.elfReader.(*readatbuf.Reader); ok {
-			st := cache.Statistics()
-			log.Debugf("ELF cache statistics: hits %d, misses %d, evictions %d",
-				st.Hits, st.Misses, st.Evictions)
-			cache.InvalidateCache()
-		}
-	}
-	if f.mmapReader != nil {
-		f.mmapReader.Close()
-	}
-	if f.closer != nil {
-		err = f.closer.Close()
-		f.closer = nil
+	if f.resources != nil {
+		err = f.resources.Close()
+		f.resources = nil
 	}
 	return err
 }
@@ -321,36 +359,29 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	// wrapped in a small page cache so that random access reads do not hit
 	// the kernel for every read.
 	var elfReader libpf.ViewAtReader
-	var ownsCache bool
+	var ownedCache *readatbuf.Reader
 	if cache, ok := r.(*readatbuf.Reader); ok {
 		elfReader = cache
-	} else if osFile, ok := r.(*os.File); ok {
-		// Attempt to mmap the file if possible.
-		if mapping, err := mmap.OpenFile(osFile); err == nil {
-			elfReader = mapping
-		}
 	} else if view, ok := r.(libpf.ViewAtReader); ok {
 		elfReader = view
 	}
 	if elfReader == nil {
 		var err error
-		if elfReader, err = readatbuf.New(r, defaultPageSize, defaultCachePages); err != nil {
+		if ownedCache, err = readatbuf.New(r, defaultPageSize, defaultCachePages); err != nil {
 			return nil, err
 		}
-		ownsCache = true
+		elfReader = ownedCache
 	}
 
 	f := &File{
 		elfReader:     elfReader,
-		ownsCache:     ownsCache,
 		InsideCore:    loadAddress != 0,
-		closer:        closer,
 		debuglinkPath: notYetProcessed,
 		notesError:    errNotProcessed,
 		golangVersion: strNotProcessed,
 	}
-	if mapping, ok := elfReader.(*mmap.ReaderAt); ok {
-		f.mmapReader = mapping
+	if closer != nil || ownedCache != nil {
+		f.resources = newFileResources(closer, ownedCache)
 	}
 	success := false
 	defer func() {
@@ -404,7 +435,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			Memsz:  ph.Memsz,
 			Align:  ph.Align,
 		}
-		p.elfReader = f.getReader()
+		p.elfReader = f.elfReader
 
 		if p.Type == elf.PT_LOAD {
 			if p.Vaddr < virtualBase {
@@ -510,32 +541,24 @@ func getString(section []byte, start int) (string, bool) {
 	return string(section[start : start+slen]), true
 }
 
-// NoMmapCloser is a no-op io.Closer which is returned from Take() when
+// NoOpCloser is a no-op io.Closer which is returned from Take() when
 // the File is not memory mapped.
-type NoMmapCloser libpf.Void
+type NoOpCloser libpf.Void
 
 // Close implements io.Closer interface.
-func (NoMmapCloser) Close() error {
+func (NoOpCloser) Close() error {
 	return nil
 }
 
-// Take takes a reference on the backing mmapped data. This allows callers to
-// keep slices returned by Section.Data() and Prog.Data() after File has been
-// GCd. The returned Close() will release the reference on data.
+// Take takes a reference on the owned resources of this File, keeping the
+// underlying reader open and readable past the File's Close. This allows
+// callers to keep slices returned by Section.Data() and Prog.Data() after
+// File has been GCd. The returned Close() releases this reference.
 func (f *File) Take() io.Closer {
-	if f.mmapReader != nil {
-		return f.mmapReader.Take()
+	if f.resources != nil {
+		return f.resources.Take()
 	}
-	return NoMmapCloser{}
-}
-
-// getReader returns the mmap reader if available, or otherwise the
-// ViewAtReader (page cache or borrowed source) used for this File.
-func (f *File) getReader() libpf.ViewAtReader {
-	if f.mmapReader != nil {
-		return f.mmapReader
-	}
-	return f.elfReader
+	return NoOpCloser{}
 }
 
 // Underlying returns the underlying reader used for this File. It always
@@ -589,7 +612,7 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
-		s.elfReader = f.getReader()
+		s.elfReader = f.elfReader
 	}
 
 	// Load the section name string table
@@ -1137,15 +1160,6 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, sh.FileSize)
 	_, err := sh.ReadAt(p, 0)
 	return p, err
-}
-
-// SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
-func (f *File) SetDontNeed() {
-	if f.mmapReader != nil {
-		if err := f.mmapReader.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
-		}
-	}
 }
 
 // ReadAt reads bytes from given virtual address

@@ -138,8 +138,8 @@ func detectEntry(ef *pfelf.File) int {
 	}
 
 	// Typically 52-80 bytes, allow for a bit of variance
-	code, err := ef.VirtualMemory(int64(ef.Entry), 128, 128)
-	if err != nil {
+	code := make([]byte, 128)
+	if _, err := ef.ReadAt(code, int64(ef.Entry)); err != nil {
 		return 0
 	}
 	return detectEntryCode(ef.Machine, code)

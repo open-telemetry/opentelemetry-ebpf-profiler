@@ -245,3 +245,49 @@ func TestGetGoBuildID(t *testing.T) {
 	expectedBuildID := strings.TrimRight(string(out), "\n")
 	assert.Equal(t, expectedBuildID, buildID)
 }
+
+// TestFileTakeRefcount verifies that the underlying reader stays readable
+// after Close while a Take reference is outstanding, and is closed when the
+// last reference is dropped.
+func TestFileTakeRefcount(t *testing.T) {
+	ef := getPFELF(t, "testdata/go-binary")
+
+	dataRef := ef.Take()
+	// Close the File: the reference keeps the underlying reader open.
+	require.NoError(t, ef.Close())
+
+	// The File is closed, but the reference keeps the reader readable.
+	progs := make([]byte, 64)
+	_, err := ef.Underlying().ReadAt(progs, 0)
+	require.NoError(t, err)
+
+	// A second Take/Close pair is balanced; the reader is still open.
+	dataRef2 := ef.Take()
+	require.NoError(t, dataRef2.Close())
+	_, err = ef.Underlying().ReadAt(progs, 0)
+	require.NoError(t, err)
+
+	// Dropping the last reference closes the underlying reader.
+	require.NoError(t, dataRef.Close())
+	_, err = ef.Underlying().ReadAt(progs, 0)
+	assert.Error(t, err)
+}
+
+// TestFileBorrowedReaderTake verifies that Take is a no-op for Files that
+// borrow the reader from the caller.
+func TestFileBorrowedReaderTake(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/go-binary")
+	f, err := os.Open("testdata/go-binary")
+	require.NoError(t, err)
+	defer f.Close()
+
+	ef, err := NewFile(f, 0, false)
+	require.NoError(t, err)
+
+	dataRef := ef.Take()
+	require.NoError(t, ef.Close())
+	require.NoError(t, dataRef.Close())
+	// The borrowed reader remains functional.
+	_, err = f.ReadAt(make([]byte, 4), 0)
+	assert.NoError(t, err)
+}

@@ -19,20 +19,18 @@ import (
 	"strings"
 	"unsafe"
 
+	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
-	// maximum pclntab (or rodata segment) size to inspect. The .gopclntab is
-	// often huge. Host agent binaries have about 32M .rodata, so allow for more.
-	maxBytesGoPclntab = 128 * 1024 * 1024
-
 	// internally used gopclntab version
 	goInvalid = 0
 	go1_2     = 2
@@ -45,6 +43,13 @@ const (
 	textOffset = 22 * 8
 	// section name for the module data for Go 1.26+
 	moduleDataSectionName = ".go.module"
+
+	// sparseIndexStep is the interval of the function lookup map entries stored
+	// in the in-memory sparse index.
+	sparseIndexStep = 1024
+
+	// funcDataCacheSize is the maximum number of cached function data entries.
+	funcDataCacheSize = 1024
 )
 
 func goMagicToVersion(magic uint32) uint8 {
@@ -93,18 +98,6 @@ type pclntabHeaderOffsets struct {
 // pclntabHeaderSize is the minimum size of valid gopclntab that includes all headers.
 const pclntabHeaderSize = int(unsafe.Sizeof(pclntabHeader{}) + unsafe.Sizeof(pclntabHeaderOffsets{}) + unsafe.Sizeof([1]uintptr{}))
 
-// pclntabFuncMap is the Golang function symbol table map entry
-type pclntabFuncMap struct {
-	pc      uintptr
-	funcOff uintptr
-}
-
-// pclntabFuncMap118 is the Golang function symbol table map entry for Go 1.18+.
-type pclntabFuncMap118 struct {
-	pc      uint32
-	funcOff uint32
-}
-
 // pclntabFunc is the common portion of the Golang function definition.
 type pclntabFunc struct {
 	// The actual data is preceded with the function start PC value, which is
@@ -114,7 +107,6 @@ type pclntabFunc struct {
 	pcspOff, pcfileOff, pclnOff  int32
 	nfuncData, npcData           int32
 }
-
 
 // pcvalDecoder is a decoder for pcval tables. A pcval table decodes to
 // a Program Counter (pc) and a value (val) associated with it. The meaning of
@@ -274,26 +266,6 @@ func (p *pcvalDecoder) step() (uint, int32, error) {
 	return pc, p.val, nil
 }
 
-// getInt32 gets a 32-bit integer from the data slice at offset with bounds checking
-func getInt32(data []byte, offset int) int {
-	if offset < 0 || offset+4 > len(data) {
-		return -1
-	}
-	return int(*(*int32)(unsafe.Pointer(&data[offset])))
-}
-
-// getString returns a string from the data slice at given offset.
-func getString(data []byte, offset int) string {
-	if offset < 0 || offset > len(data) {
-		return ""
-	}
-	zeroIdx := bytes.IndexByte(data[offset:], 0)
-	if zeroIdx < 0 {
-		return ""
-	}
-	return pfunsafe.ToString(data[offset : offset+zeroIdx])
-}
-
 // searchGoPclntab uses heuristic to find the gopclntab from RO data. Final fallback path
 // when sections and symbol table are not present.
 func searchGoPclntab(ef *pfelf.File) (start, end libpf.SymbolValue) {
@@ -342,13 +314,10 @@ func searchGoPclntab(ef *pfelf.File) (start, end libpf.SymbolValue) {
 }
 
 // locateGoPclntab determine the location of .gopclntab data from a given pfelf.File.
-func locateGoPclntab(ef *pfelf.File) (fileoff, size int64, data []byte, err error) {
+func locateGoPclntab(ef *pfelf.File) (fileoff, size int64, err error) {
 	if s := ef.Section(".gopclntab"); s != nil {
 		// Load the .gopclntab via section if available.
-		if data, err = s.Data(maxBytesGoPclntab); err != nil {
-			return 0, 0, nil, fmt.Errorf("failed to load .gopclntab section: %v", err)
-		}
-		return int64(s.Offset), int64(s.Size), data, nil
+		return int64(s.Offset), int64(s.Size), nil
 	}
 
 	// Try the runtime.pclntab symbols, as the .gopclntab section is not available
@@ -368,42 +337,50 @@ func locateGoPclntab(ef *pfelf.File) (fileoff, size int64, data []byte, err erro
 		// It seems the Go binary was stripped. So we use the heuristic approach.
 		start, end = searchGoPclntab(ef)
 		if start == 0 {
-			return 0, 0, nil, errors.New("failed to search gocpclntab")
+			return 0, 0, errors.New("failed to search gopclntab")
 		}
 	} else if start >= end {
-		return 0, 0, nil, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
+		return 0, 0, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
 	}
 
-	data, err = ef.VirtualMemory(int64(start), int(end-start), maxBytesGoPclntab)
-	if err != nil {
-		return 0, 0, nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
-	}
 	p := ef.ProgByVirtualAddress(uint64(start))
 	if p == nil {
-		return 0, 0, nil, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
+		return 0, 0, errors.New(".gopclntab virtual address is unmappable")
 	}
-	offset := int64(p.Off) + int64(start) - int64(p.Vaddr)
-	return offset, int64(end - start), data, err
-
+	return int64(p.Off) + int64(start) - int64(p.Vaddr), int64(end - start), nil
 }
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
-	dataRef       io.Closer
-	readerAt      io.ReaderAt
-	setDontNeed   func()
+	// dataRef holds a reference on the backing pfelf.File, keeping the
+	// underlying reader open (and readable) past the File's Close. It is
+	// released on Close.
+	dataRef  io.Closer
+	readerAt libpf.ViewAtReader
+
+	// funcDataCache is an LRU cache mapping the function descriptor offset
+	// to the symbolization data of a function.
+	funcDataCache *lru.LRU[uintptr, *functionData]
+
+	// pcval decodes the pcval tables (source files and line numbers) of the
+	// cached functions directly from the file via the reader. Symbolize is
+	// not safe for concurrent use, so a single decoder is enough.
+	pcval pcvalDecoder
+
 	pclntabOffset int64
 	pclntabSize   int64
 
-	data      []byte
-	textStart uintptr
-	numFuncs  int
-	numFiles  uint
+	textStart uint64
+	textEnd   uint64
+
+	numFuncs int
+	numFiles uint
 
 	version     uint8
 	quantum     uint8
 	ptrSize     uint8
 	funSize     uint8
+	pcSize      uint8
 	funcMapSize uint8
 
 	funcnameOffset int64
@@ -412,14 +389,17 @@ type Gopclntab struct {
 	pctabOffset    int64
 	pclnOffset     int64
 
-	// These are read-only byte slices to various areas within .gopclntab
-	// (subslices of data []byte). Since 'data' a slice returned by pfelf.File
-	// it can be allocated or mmapped read-only data. To keep memory usage
-	// and GC stress minimal the returned strings (symbol and file names) refer
-	// to this data directly (via unsafe.String).
-	functab, funcnametab, filetab, cutab []byte
-	// Temporary pcval reader
-	pctab *libpf.BytesView
+	// sparseIndex holds the entry pc (relative to the text start) of every
+	// sparseIndexStep-th entry of the function lookup map, including the
+	// sentinel entry marking the end of the Go code. It allows bounding the
+	// file search for a function to a small window of the function lookup
+	// map. The pcs are stored as int32 so that pcs below the text start
+	// compare negative.
+	sparseIndex []int32
+	// initFailed records that the symbolization initialization was attempted
+	// and failed (e.g. corrupt function lookup map): it is not retried for
+	// every symbolization call.
+	initFailed bool
 }
 
 func (g *Gopclntab) walkFuncMap(visitor func(pc, endPc uint64, fun *pclntabFunc) error) (start, end uint64, err error) {
@@ -434,21 +414,18 @@ func (g *Gopclntab) walkFuncMap(visitor func(pc, endPc uint64, fun *pclntabFunc)
 	descRdr.InitSlideView(g.readerAt, g.pclntabOffset+g.pclnOffset, g.pclntabSize-g.pclnOffset)
 	defer descRdr.Release()
 
-	var pcSize int
 	var readOffset func() uint64
 	var decodeFuncPc func(data []byte) uint64
 
-	textStart := uint64(g.textStart)
+	textStart := g.textStart
 	if g.version >= go1_18 {
 		// 32-bit offsets
-		pcSize = 4
 		readOffset = func() uint64 { return uint64(mapRdr.Uint32()) }
 		decodeFuncPc = func(data []byte) uint64 {
 			return textStart + uint64(binary.LittleEndian.Uint32(data))
 		}
 	} else {
 		// pointer type
-		pcSize = 8
 		readOffset = mapRdr.Uint64
 		decodeFuncPc = binary.LittleEndian.Uint64
 	}
@@ -462,12 +439,12 @@ func (g *Gopclntab) walkFuncMap(visitor func(pc, endPc uint64, fun *pclntabFunc)
 		if _, err := descRdr.Seek(int64(funcOff), io.SeekStart); err != nil {
 			return 0, 0, fmt.Errorf("func %v descriptor is invalid: %v", i, err)
 		}
-		data, err := descRdr.ReadN(pcSize + int(unsafe.Sizeof(pclntabFunc{})))
+		data, err := descRdr.ReadN(int(g.pcSize) + int(unsafe.Sizeof(pclntabFunc{})))
 		if err != nil {
 			return 0, 0, fmt.Errorf("func %v descriptor is invalid: %v", i, err)
 		}
 		funcPc := decodeFuncPc(data)
-		fun := (*pclntabFunc)(unsafe.Pointer(&data[pcSize]))
+		fun := (*pclntabFunc)(unsafe.Pointer(&data[g.pcSize]))
 		if pc != funcPc {
 			return 0, 0, fmt.Errorf("func %v descriptor is invalid (pc %x/%x)",
 				i, pc, funcPc)
@@ -534,12 +511,14 @@ func (g *Gopclntab) LookupSymbols(symbols []libpf.Symbol) error {
 }
 
 // NewGopclntab parses and returns the parsed data for further operations.
+// It takes a reference on the backing pfelf.File, keeping the underlying
+// reader open (and readable) even after the File has been closed. This
+// reference is released on Gopclntab.Close.
 func NewGopclntab(ef *pfelf.File) (g *Gopclntab, err error) {
-	pclntabOffset, pclntabSize, data, err := locateGoPclntab(ef)
+	pclntabOffset, pclntabSize, err := locateGoPclntab(ef)
 	if err != nil {
 		return nil, err
 	}
-	defer ef.SetDontNeed()
 
 	if pclntabSize < int64(pclntabHeaderSize) {
 		return nil, fmt.Errorf(".gopclntab is too short (%v)", pclntabSize)
@@ -553,9 +532,9 @@ func NewGopclntab(ef *pfelf.File) (g *Gopclntab, err error) {
 	hdr := (*pclntabHeader)(unsafe.Pointer(&headerData[0]))
 	pos := unsafe.Sizeof(pclntabHeader{})
 	g = &Gopclntab{
+		readerAt:      ef.Underlying(),
 		pclntabOffset: pclntabOffset,
 		pclntabSize:   pclntabSize,
-		readerAt:      ef.Underlying(),
 		version:       goMagicToVersion(hdr.magic),
 		quantum:       hdr.quantum,
 		ptrSize:       hdr.ptrSize,
@@ -570,8 +549,10 @@ func NewGopclntab(ef *pfelf.File) (g *Gopclntab, err error) {
 
 	switch g.version {
 	case go1_16:
+		g.pcSize = 8
 	case go1_18, go1_20:
-		g.textStart = *(*uintptr)(unsafe.Pointer(&headerData[pos]))
+		g.pcSize = 4
+		g.textStart = uint64(*(*uintptr)(unsafe.Pointer(&headerData[pos])))
 		pos += uintptr(hdr.ptrSize)
 
 		if g.textStart == 0 {
@@ -607,105 +588,267 @@ func NewGopclntab(ef *pfelf.File) (g *Gopclntab, err error) {
 		g.filetabOffset >= g.pctabOffset ||
 		g.pctabOffset >= g.pclnOffset ||
 		g.pclnOffset >= pclntabSize ||
-		int64(g.numFuncs+1)*int64(g.funcMapSize) > pclntabSize-g.pclnOffset {
+		uint64(g.numFuncs)+1 > uint64(pclntabSize-g.pclnOffset)/uint64(g.funcMapSize) {
 		return nil, fmt.Errorf("corrupt header (%x < %x < %x < %x < %x)",
 			g.funcnameOffset, g.cuOffset, g.filetabOffset, g.pctabOffset, g.pclnOffset)
 	}
 
-	g.funcnametab = data[g.funcnameOffset:g.cuOffset]
-	g.cutab = data[g.cuOffset:g.filetabOffset]
-	g.filetab = data[g.filetabOffset:g.pctabOffset]
-	g.functab = data[g.pclnOffset:]
-	g.dataRef = ef.Take()
-	g.setDontNeed = ef.SetDontNeed
-	g.pctab = libpf.NewBytesView(data[g.pctabOffset:g.pclnOffset])
+	g.pcval = newPcvalDecoder(g.readerAt, g.pclntabOffset+g.pctabOffset, g.pclntabOffset+g.pclnOffset, g.quantum)
 
+	// Take the reference only once the pclntab is known to be usable: on the
+	// error paths above there is no Gopclntab to release it on Close.
+	g.dataRef = ef.Take()
 	return g, nil
 }
 
-// SetDontNeed gives advice about further use of memory.
-func (g *Gopclntab) SetDontNeed() error {
-	g.setDontNeed()
+// Close releases the resources held for symbolization.
+func (g *Gopclntab) Close() error {
+	if g.dataRef != nil {
+		_ = g.dataRef.Close()
+		g.readerAt = nil
+		g.dataRef = nil
+	}
+	if g.funcDataCache != nil {
+		g.funcDataCache.Purge()
+		g.funcDataCache = nil
+	}
+	g.sparseIndex = nil
+	g.initFailed = false
 	return nil
 }
 
-// Close releases the pfelf Data reference taken.
-func (g *Gopclntab) Close() error {
-	return g.dataRef.Close()
+// functionData caches the data needed for symbolization of one function:
+// the resolved function name from the function descriptor, and the offsets
+// of the associated pcval tables for source files and line numbers.
+type functionData struct {
+	startPc uint64
+	// npcData is the number of pc data entries of the function, needed to
+	// resolve the source file names from the cutab area.
+	npcData  int32
+	funcName libpf.String
+	// pcfileOff and pclnOff are the offsets of the pcval tables within the
+	// pctab area. Zero means the function has no such table.
+	pcfileOff int32
+	pclnOff   int32
 }
 
-// getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
-func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
-	if g.version >= go1_18 {
-		//nolint:lll
-		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
-		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
-		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
-	} else {
-		fmap := (*pclntabFuncMap)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
-		return fmap.pc, fmap.funcOff
+// hashFuncOff hashes a function descriptor offset for the LRU cache.
+func hashFuncOff(v uintptr) uint32 {
+	return uint32(hash.Uint64(uint64(v)))
+}
+
+// initSymbolization builds the in-memory sparse index of the function lookup
+// map, and allocates the read caches. It is called on the first symbolization
+// so that binaries that are only used for stack delta generation do not pay
+// for it.
+func (g *Gopclntab) initSymbolization() error {
+	sparse := make([]int32, 0, g.numFuncs/sparseIndexStep+2)
+	idx := int32(0)
+	_, end, err := g.walkFuncMap(func(pc, _ uint64, _ *pclntabFunc) error {
+		// Store the entry pc of every sparseIndexStep-th entry in the
+		// sparse index. The pcs are stored relative to the text start.
+		if idx%int32(sparseIndexStep) == 0 {
+			sparse = append(sparse, int32(pc-uint64(g.textStart)))
+		}
+		idx++
+		return nil
+	})
+	if err != nil {
+		return err
 	}
+	g.textEnd = end
+
+	// The function lookup map has one extra sentinel entry at the end to
+	// indicate the end of Go code. It holds the end pc of the last function.
+	// Record it to bound the last window.
+	sparse = append(sparse, int32(end-uint64(g.textStart)))
+
+	funcDataCache, err := lru.New[uintptr, *functionData](funcDataCacheSize, hashFuncOff)
+	if err != nil {
+		return err
+	}
+	g.funcDataCache = funcDataCache
+	g.sparseIndex = sparse
+	return nil
 }
 
-// getFunc returns the gopclntab function data and its start address.
-func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
+// readFuncMapEntry reads the function lookup map entry at the given index
+// from the file. It returns (0, 0) if the entry cannot be read.
+func (g *Gopclntab) readFuncMapEntry(index int) (pc uint64, funcOff uintptr) {
+	var buf [16]byte
+	off := g.pclntabOffset + g.pclnOffset + int64(index)*int64(g.funcMapSize)
+	n, err := g.readerAt.ReadAt(buf[:g.funcMapSize], off)
+	if err != nil || n != int(g.funcMapSize) {
+		return 0, 0
+	}
+	if g.version >= go1_18 {
+		return uint64(g.textStart) + uint64(binary.LittleEndian.Uint32(buf[0:4])),
+			uintptr(binary.LittleEndian.Uint32(buf[4:8]))
+	}
+	return binary.LittleEndian.Uint64(buf[0:8]), uintptr(binary.LittleEndian.Uint64(buf[8:16]))
+}
+
+// searchFuncMapWindow returns the index of the last function lookup map entry
+// whose pc is less than or equal to the given pc, searching the window that
+// is delimited by the neighboring sparse index entries. The caller guarantees
+// that the sparse index entry pc is less than or equal to the given pc.
+func (g *Gopclntab) searchFuncMapWindow(sparseIdx int, pc uint64) int {
+	// The sparse index records every sparseIndexStep-th entry, so the window
+	// of the function lookup map is derived from the position of the sparse
+	// index entry. The sentinel window is clamped to the number of functions.
+	lo := min(sparseIdx*sparseIndexStep, g.numFuncs)
+	hi := min(lo+sparseIndexStep, g.numFuncs+1)
+	// The search lambda makes 'sort.Search' return the first entry in the
+	// window that is larger than the pc. Thus -1 is needed to get the index
+	// of the entry which is equal or less than the pc.
+	return lo + sort.Search(hi-lo, func(i int) bool {
+		midPc, _ := g.readFuncMapEntry(lo + i)
+		return midPc > pc
+	}) - 1
+}
+
+// readFuncName reads the function name at the given offset in the function
+// name table area.
+func (g *Gopclntab) readFuncName(nameOff int32) libpf.String {
+	if nameOff < 0 || int64(nameOff) >= g.cuOffset-g.funcnameOffset {
+		return libpf.NullString
+	}
+	str, _ := libpf.InternFromView(g.readerAt, g.pclntabOffset+g.funcnameOffset+int64(nameOff), g.pclntabOffset+g.cuOffset)
+	return str
+}
+
+// readFiletabName resolves the source file name for the given file index in
+// the cutab area, and reads the string at the resulting offset in the file
+// name table area. npcData is the number of pc data entries of the function.
+func (g *Gopclntab) readFiletabName(fileIndex, npcData int32) libpf.String {
+	cuIndex := int64(fileIndex) + int64(npcData)
+	if cuIndex < 0 || 4*cuIndex+4 > g.filetabOffset-g.cuOffset {
+		return libpf.NullString
+	}
+	var buf [4]byte
+	n, err := g.readerAt.ReadAt(buf[:], g.pclntabOffset+g.cuOffset+4*cuIndex)
+	if err != nil || n != 4 {
+		return libpf.NullString
+	}
+	fileOff := int64(int32(binary.LittleEndian.Uint32(buf[:])))
+	if fileOff < 0 || fileOff >= g.pctabOffset-g.filetabOffset {
+		return libpf.NullString
+	}
+	str, _ := libpf.InternFromView(g.readerAt, g.pclntabOffset+g.filetabOffset+fileOff, g.pclntabOffset+g.pctabOffset)
+	return str
+}
+
+// readFuncData reads the function descriptor at the given offset in the
+// functab area from the file, and caches the data needed for symbolization.
+// It returns nil if the descriptor is invalid.
+func (g *Gopclntab) readFuncData(funcOff uintptr) *functionData {
 	// Get the function data. Compare without overflowing, making sure
 	// funcOff+funSize does not wrap around.
-	if funcOff > uintptr(len(g.functab)) ||
-		uintptr(len(g.functab))-funcOff < uintptr(g.funSize) {
-		return 0, nil
+	areaSize := uint64(g.pclntabSize - g.pclnOffset)
+	if uint64(funcOff) > areaSize || uint64(funcOff)+uint64(g.funSize) > areaSize {
+		return nil
 	}
-	var pc uintptr
+	var buf [8 + unsafe.Sizeof(pclntabFunc{})]byte
+	n, err := g.readerAt.ReadAt(buf[:g.funSize], g.pclntabOffset+g.pclnOffset+int64(funcOff))
+	if err != nil || n != int(g.funSize) {
+		return nil
+	}
+	fun := (*pclntabFunc)(unsafe.Pointer(&buf[g.pcSize]))
+	fd := &functionData{npcData: fun.npcData}
 	if g.version >= go1_18 {
-		pc = g.textStart + uintptr(*(*uint32)(unsafe.Pointer(&g.functab[funcOff])))
-		funcOff += 4
+		fd.startPc = uint64(g.textStart) + uint64(binary.LittleEndian.Uint32(buf[0:4]))
 	} else {
-		pc = *(*uintptr)(unsafe.Pointer(&g.functab[funcOff]))
-		funcOff += uintptr(g.ptrSize)
+		fd.startPc = binary.LittleEndian.Uint64(buf[0:8])
 	}
-	return pc, (*pclntabFunc)(unsafe.Pointer(&g.functab[funcOff]))
+	fd.funcName = g.readFuncName(fun.nameOff)
+	fd.pcfileOff = fun.pcfileOff
+	fd.pclnOff = fun.pclnOff
+	return fd
+}
+
+// getCachedFuncData returns the symbolization data for the function
+// descriptor at the given offset, reading it from the file on a cache miss.
+func (g *Gopclntab) getCachedFuncData(funcOff uintptr) *functionData {
+	if fd, ok := g.funcDataCache.Get(funcOff); ok {
+		return fd
+	}
+	fd := g.readFuncData(funcOff)
+	if fd == nil {
+		return nil
+	}
+	g.funcDataCache.Add(funcOff, fd)
+	return fd
 }
 
 // Symbolize returns the file, line and function information for given PC
-func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
-	// Binary search for the matching go function maps entry. The search
-	// lambda makes 'sort.Search' return the first entry that is larger
-	// than the pc. Thus -1 is needed to get index for the first entry
-	// which is equal or less than pc. The gopclntab has an extra entry in
-	// the end to indicate the end of Go code, use that to determine
-	// if the pc is higher than any Go function address.
-	index := sort.Search(g.numFuncs+1, func(i int) bool {
-		funcPc, _ := g.getFuncMapEntry(i)
-		return funcPc > pc
-	}) - 1
-	if index >= g.numFuncs || index < 0 {
-		return "", 0, ""
-	}
-
-	pcval := newPcvalDecoder(g.pctab, 0, int64(g.pctab.Len()), g.quantum)
-
-	mapPc, funcOff := g.getFuncMapEntry(index)
-	funcPc, fun := g.getFunc(funcOff)
-	if fun == nil || mapPc != funcPc {
-		return "", 0, ""
-	}
-	pcDiff := uint(pc - funcPc)
-
-	funcName = getString(g.funcnametab, int(fun.nameOff))
-	if fun.pcfileOff != 0 {
-		if fileIndex, err := pcval.mapValue(fun.pcfileOff, pcDiff); err == nil {
-			sourceFile = getString(g.filetab, getInt32(g.cutab, 4*int(fileIndex+fun.npcData)))
+func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, funcName libpf.String) {
+	if g.sparseIndex == nil {
+		if g.readerAt == nil || g.initFailed {
+			return libpf.NullString, 0, libpf.NullString
+		}
+		if g.initSymbolization() != nil {
+			// Initialization failed (e.g. corrupt function lookup map): do
+			// not retry the full map walk for every symbolization call.
+			g.initFailed = true
+			return libpf.NullString, 0, libpf.NullString
 		}
 	}
-	if fun.pclnOff != 0 {
-		if lineNo, err := pcval.mapValue(fun.pclnOff, pcDiff); err == nil {
+
+	// Fast check for if within gopclntab code range
+	if pc < g.textStart || pc >= g.textEnd {
+		return libpf.NullString, 0, libpf.NullString
+	}
+
+	// Binary search the sparse index for the window of the function lookup
+	// map that can contain the entry matching the pc. The search lambda
+	// makes 'sort.Search' return the first sparse index entry that is larger
+	// than the pc. Thus -1 is needed to get the entry which is equal or less
+	// than the pc. The sparse index stores the pc values relative to the
+	// text start, as int32: pcs below the text start compare negative, and
+	// find no matching window.
+	pcRel := int32(uint64(pc) - uint64(g.textStart))
+	idx := sort.Search(len(g.sparseIndex), func(i int) bool {
+		return g.sparseIndex[i] > pcRel
+	}) - 1
+	if idx < 0 {
+		return libpf.NullString, 0, libpf.NullString
+	}
+
+	// Then search the function lookup map entries in the window by reading
+	// them from the file via the cached reader.
+	funcIdx := g.searchFuncMapWindow(idx, uint64(pc))
+	if funcIdx >= g.numFuncs {
+		// The pc is higher than any Go function address.
+		return libpf.NullString, 0, libpf.NullString
+	}
+
+	mapPc, funcOff := g.readFuncMapEntry(funcIdx)
+	if mapPc == 0 {
+		return libpf.NullString, 0, libpf.NullString
+	}
+	fd := g.getCachedFuncData(funcOff)
+	if fd == nil || fd.startPc != mapPc {
+		return libpf.NullString, 0, libpf.NullString
+	}
+	pcDiff := uint(uint64(pc) - mapPc)
+
+	funcName = fd.funcName
+	if fd.pcfileOff != 0 {
+		// Resolve the source file name from the pcfile table.
+		if fileIndex, err := g.pcval.mapValue(fd.pcfileOff, pcDiff); err == nil {
+			sourceFile = g.readFiletabName(fileIndex, fd.npcData)
+		}
+	}
+	if fd.pclnOff != 0 {
+		// Read the line number from the pcln table.
+		if lineNo, err := g.pcval.mapValue(fd.pclnOff, pcDiff); err == nil {
 			line = uint(lineNo)
 		}
 	}
 	return sourceFile, line, funcName
 }
 
-func findTextStart(ef *pfelf.File) (uintptr, error) {
+func findTextStart(ef *pfelf.File) (uint64, error) {
 	// Get textstart from moduledata
 	// Starting from Go 1.26, moduledata has its own `.go.module` section.
 	// Since this function is expected to be called only for Go 1.26+ binaries,
@@ -721,7 +864,7 @@ func findTextStart(ef *pfelf.File) (uintptr, error) {
 		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textOffset, err)
 	}
 
-	return uintptr(binary.LittleEndian.Uint64(textBytes[:])), nil
+	return binary.LittleEndian.Uint64(textBytes[:]), nil
 }
 
 type strategy uint8
@@ -985,18 +1128,6 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	maxPcfileOff := int32(0)
 	firstFileIndex := make(map[int32]int32)
 
-	// reader for pctab
-	rdr, ok := g.readerAt.(libpf.ViewAtReader)
-	if !ok {
-		rb, err := readatbuf.New(g.readerAt, 4096, 8)
-		if err != nil {
-			return fmt.Errorf("failed to get readatbuf: %v", err)
-		}
-		rdr = rb
-	}
-
-	pcvalDecoder := newPcvalDecoder(rdr, g.pclntabOffset+g.pctabOffset, g.pclntabOffset+g.pclnOffset, g.quantum)
-
 	start, end, err := g.walkFuncMap(func(pc, endPc uint64, fun *pclntabFunc) error {
 		bb := sdtypes.BasicBlock{
 			Start: pc,
@@ -1016,7 +1147,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		if fun.pcfileOff != 0 {
 			val, ok := firstFileIndex[fun.pcfileOff]
 			if !ok {
-				val, err = pcvalDecoder.getFirst(fun.pcfileOff)
+				val, err = g.pcval.getFirst(fun.pcfileOff)
 				if err != nil {
 					return fmt.Errorf("func %x pcfileOff: %w", pc, err)
 				}
@@ -1045,8 +1176,8 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		}
 
 		// Generate stack deltas as the information is available
-		pcvalDecoder.reset(fun.pcspOff, pcspMinimumValue)
-		if err := parsePcsp(&bb, &pcvalDecoder, fileStrategy); err != io.EOF {
+		g.pcval.reset(fun.pcspOff, pcspMinimumValue)
+		if err := parsePcsp(&bb, &g.pcval, fileStrategy); err != io.EOF {
 			return err
 		}
 		ee.intervals.Add(bb)

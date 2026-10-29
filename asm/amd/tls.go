@@ -58,8 +58,8 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 		if file != nil {
 			addr := e.NewImmediateCapture("addr")
 			if actual.Match(e.Mem8(addr)) {
-				valueBytes, err := file.VirtualMemory(int64(addr.CapturedValue()), 8, 8)
-				if err != nil {
+				valueBytes := make([]byte, 8)
+				if _, err := file.ReadAt(valueBytes, int64(addr.CapturedValue())); err != nil {
 					continue
 				}
 				// Read the 8-byte value as int64 (little-endian)
