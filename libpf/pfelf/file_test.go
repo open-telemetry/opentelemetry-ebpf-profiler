@@ -269,6 +269,12 @@ func TestFileTakeRefcount(t *testing.T) {
 	_, err := ef.Underlying().ReadAt(progs, 0)
 	require.NoError(t, err)
 
+	// A second Take/Close pair is balanced; the reader is still open.
+	dataRef2 := ef.Take()
+	require.NoError(t, dataRef2.Close())
+	_, err = ef.Underlying().ReadAt(progs, 0)
+	require.NoError(t, err)
+
 	// Dropping the last reference closes the reader and unmaps the mapping.
 	require.NoError(t, dataRef.Close())
 	assert.Nil(t, dataRef.(*fileResources).mmap)
