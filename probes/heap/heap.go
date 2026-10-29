@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
@@ -144,6 +145,8 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	if err != nil {
 		return fmt.Errorf("building collection spec: %w", err)
 	}
+	// Probe-owned maps bypass the tracer's normal map-size adaptation.
+	coll.Maps["usdt_specs"].MaxEntries <<= uint32(pctx.MapScaleFactor())
 
 	// Set origin ID in RODATA so the eBPF program emits the correct value.
 	if v, ok := coll.Variables[allocOriginVar]; ok {
@@ -325,6 +328,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 			}
 			if err := hp.usdtSpecs.Put(candidate.specKey, candidate.spec); err != nil {
 				hp.mu.Unlock()
+				metrics.Add(metrics.IDUSDTSpecsUpdate, 1)
 				log.Warnf("heap probe: register arguments for %s:%s PID %d at address %#x: %v",
 					candidate.point.Provider, candidate.point.Name, pid,
 					candidate.specKey.Address, err)
@@ -338,6 +342,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		}
 		if err := hp.usdtSpecs.Put(candidate.specKey, candidate.spec); err != nil {
 			hp.mu.Unlock()
+			metrics.Add(metrics.IDUSDTSpecsUpdate, 1)
 			log.Warnf("heap probe: register arguments for %s:%s PID %d at address %#x: %v",
 				candidate.point.Provider, candidate.point.Name, pid,
 				candidate.specKey.Address, err)

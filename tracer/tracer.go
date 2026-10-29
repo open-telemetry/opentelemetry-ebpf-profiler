@@ -190,6 +190,9 @@ type Tracer struct {
 	// samplesPerSecond holds the configured number of samples per second.
 	samplesPerSecond int
 
+	// mapScaleFactor is the configured scaling factor for eBPF map sizes.
+	mapScaleFactor int
+
 	// probabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	probabilisticInterval time.Duration
 
@@ -390,6 +393,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		intervals:              cfg.Intervals,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
 		samplesPerSecond:       cfg.SamplesPerSecond,
+		mapScaleFactor:         cfg.MapScaleFactor,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
