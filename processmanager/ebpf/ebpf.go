@@ -53,6 +53,10 @@ type ebpfMapsImpl struct {
 	LuaJitProcs        *cebpf.Map `name:"luajit_procs"`
 	GoProcs            *cebpf.Map `name:"go_procs"`
 	ThreadContextProcs *cebpf.Map `name:"thread_context_procs"`
+	HeapAllocLive      *cebpf.Map `name:"heap_alloc_live"`
+	HeapLivePids       *cebpf.Map `name:"heap_live_pids"`
+	HeapPIDAllocCount  *cebpf.Map `name:"heap_pid_alloc_count"`
+	HeapPIDAllocLimit  *cebpf.Map `name:"heap_pid_alloc_limit"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map

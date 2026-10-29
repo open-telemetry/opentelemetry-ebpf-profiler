@@ -376,6 +376,14 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 	return c.registerAttacher(a)
 }
 
+// Map returns a handle to one of the tracer's shared eBPF maps by name.
+// Probes use this to perform userspace reads/writes on maps that were loaded
+// as part of the main tracer collection, such as writing per-PID entries.
+func (c *ProbeContext) Map(name string) (*cebpf.Map, bool) {
+	m, ok := c.maps[name]
+	return m, ok
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
@@ -436,6 +444,17 @@ type PostTraceHandler interface {
 	PostHandleTrace(trace *libpf.Trace)
 }
 
+// SnapshotSource is an optional interface that Probe implementations may satisfy
+// to produce additional profiles at each report interval. This allows probes to
+// emit data that isn't tied to individual traces (e.g. live/inuse heap snapshots
+// aggregated from alloc/free correlation).
+//
+// The tracer checks whether a Probe satisfies SnapshotSource after Enable and, if
+// so, includes it in the periodic collection performed by CollectSnapshots.
+type SnapshotSource interface {
+	ProduceSnapshots() []samples.SnapshotProfile
+}
+
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
@@ -484,5 +503,19 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		}
 	}
 
+	if ss, ok := p.(SnapshotSource); ok {
+		t.snapshotSources = append(t.snapshotSources, ss)
+	}
+
 	return nil
+}
+
+// CollectSnapshots invokes all registered SnapshotSource probes and returns
+// their combined profiles. Called by the reporter once per collection interval.
+func (t *Tracer) CollectSnapshots() []samples.SnapshotProfile {
+	var profiles []samples.SnapshotProfile
+	for _, ss := range t.snapshotSources {
+		profiles = append(profiles, ss.ProduceSnapshots()...)
+	}
+	return profiles
 }
