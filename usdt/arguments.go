@@ -9,18 +9,20 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // MaxArguments is the maximum number of arguments carried by a USDT Spec.
-const MaxArguments = 12
+const MaxArguments = support.USDTMaxArguments
 
 // ArgumentKind describes how an SDT argument value is obtained.
-type ArgumentKind uint32
+type ArgumentKind uint8
 
 const (
-	ArgumentConstant ArgumentKind = iota
-	ArgumentRegister
-	ArgumentRegisterDereference
+	ArgumentConstant            = ArgumentKind(support.USDTArgumentConstant)
+	ArgumentRegister            = ArgumentKind(support.USDTArgumentRegister)
+	ArgumentRegisterDereference = ArgumentKind(support.USDTArgumentRegisterDereference)
 )
 
 // Register identifies an architecture register referenced by an SDT argument.

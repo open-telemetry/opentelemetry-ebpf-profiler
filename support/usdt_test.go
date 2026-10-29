@@ -9,24 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/usdt"
 )
 
-func TestUSDTConstantsMatchBPF(t *testing.T) {
-	assert.Equal(t, usdt.MaxArguments, support.USDTMaxArguments)
-
-	argumentKinds := []struct {
-		goValue  usdt.ArgumentKind
-		bpfValue uint8
-	}{
-		{usdt.ArgumentConstant, support.USDTArgumentConstant},
-		{usdt.ArgumentRegister, support.USDTArgumentRegister},
-		{usdt.ArgumentRegisterDereference, support.USDTArgumentRegisterDereference},
-	}
-	for _, kind := range argumentKinds {
-		assert.EqualValues(t, kind.goValue, kind.bpfValue)
-	}
-
+func TestUSDTPtRegsOffsets(t *testing.T) {
 	assert.EqualValues(t, 80, support.USDTAMD64PtRegsRAXOffset)
 	assert.EqualValues(t, 128, support.USDTAMD64PtRegsRIPOffset)
 	assert.EqualValues(t, 152, support.USDTAMD64PtRegsRSPOffset)

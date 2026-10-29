@@ -11,7 +11,6 @@ enum USDTArgumentKind {
   USDT_ARGUMENT_REGISTER_DEREFERENCE,
 };
 
-// SCOTT - per my previous comment on types_def.go - maybe here is the right spot
 // Byte offsets within the Linux user register ABI. They are exposed to Go by
 // support/types_def.go and checked against the pt_regs definition selected by
 // each eBPF target below.

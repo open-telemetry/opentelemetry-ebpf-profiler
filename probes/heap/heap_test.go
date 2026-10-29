@@ -55,7 +55,7 @@ func TestDetachDoesNotBlockUnloadWhileClosingLink(t *testing.T) {
 	probe.attachments[pid] = map[attachmentKey]*attachment{
 		key: {
 			lnk: lnk,
-			specKeys: map[support.USDTSpecKey]struct{}{
+			specKeys: map[support.USDTSpecKey]libpf.Void{
 				{Pid: uint32(pid), Address: 42}: {},
 			},
 		},
@@ -113,7 +113,7 @@ func TestPendingAttachmentCleanup(t *testing.T) {
 			pid := libpf.PID(123)
 			key := attachmentKey{name: "alloc", offset: 42}
 			probe.attachments[pid] = map[attachmentKey]*attachment{
-				key: {specKeys: map[support.USDTSpecKey]struct{}{
+				key: {specKeys: map[support.USDTSpecKey]libpf.Void{
 					{Pid: uint32(pid), Address: 42}: {},
 					{Pid: uint32(pid), Address: 84}: {},
 				}},

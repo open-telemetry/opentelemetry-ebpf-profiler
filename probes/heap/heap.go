@@ -41,9 +41,8 @@ type attachmentKey struct {
 }
 
 type attachment struct {
-	lnk io.Closer
-	// SCOTT: Why's this change to struct{}
-	specKeys  map[support.USDTSpecKey]struct{}
+	lnk       io.Closer
+	specKeys  map[support.USDTSpecKey]libpf.Void
 	detaching bool
 }
 
@@ -68,7 +67,9 @@ func New() *Probe {
 	}
 }
 
-// SCOTT: This should have a comment on it, especially because of the tuple it returns!
+// probeVirtualAddress translates a file offset to its runtime virtual address.
+// The boolean reports whether the offset is contained in mapping. An error is
+// returned when a contained offset can't be represented as a virtual address.
 func probeVirtualAddress(mapping *process.RawMapping, fileOffset uint64) (uint64, bool, error) {
 	if fileOffset < mapping.FileOffset {
 		return 0, false, nil
@@ -244,7 +245,8 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		if !ok {
 			continue
 		}
-		// SCOTT: This needs a comment
+		// USDT notes identify sites by file offset, while the spec map is keyed by
+		// the runtime PC. Ignore sites that belong to another mapping of this ELF.
 		virtualAddress, contained, err := probeVirtualAddress(mapping, point.Location)
 		if err != nil {
 			log.Warnf("heap probe: resolve virtual address for %s:%s PID %d at offset %#x: %v",
@@ -334,7 +336,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 					candidate.specKey.Address, err)
 				continue
 			}
-			attached.specKeys[candidate.specKey] = struct{}{}
+			attached.specKeys[candidate.specKey] = libpf.Void{}
 			hp.mu.Unlock()
 			// A PID-scoped uprobe is registered by inode and file offset, so the
 			// existing link fires for every mapping of that site in this process.
@@ -351,7 +353,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		if hp.attachments[pid] == nil {
 			hp.attachments[pid] = make(map[attachmentKey]*attachment)
 		}
-		pending := &attachment{specKeys: map[support.USDTSpecKey]struct{}{
+		pending := &attachment{specKeys: map[support.USDTSpecKey]libpf.Void{
 			candidate.specKey: {},
 		}}
 		hp.attachments[pid][candidate.key] = pending
