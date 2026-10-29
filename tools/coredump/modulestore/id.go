@@ -63,26 +63,12 @@ func (id *ID) UnmarshalJSON(b []byte) error {
 
 // calculateModuleID calculates the module ID for the given reader.
 func calculateModuleID(reader io.Reader) (ID, error) {
-	buf := make([]byte, 16*1024)
 	hasher := sha256.New()
-	for {
-		n, err := reader.Read(buf)
-		if n == 0 {
-			break
-		}
-
-		hasher.Write(buf[:n])
-
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return ID{}, fmt.Errorf("failed to read chunk: %w", err)
-		}
+	if _, err := io.Copy(hasher, reader); err != nil {
+		return ID{}, fmt.Errorf("failed to read chunk: %w", err)
 	}
 
 	var id ID
 	copy(id.hash[:], hasher.Sum(nil))
-
 	return id, nil
 }

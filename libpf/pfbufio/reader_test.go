@@ -18,7 +18,7 @@ func TestReader_BasicRead(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 
 	buf := make([]byte, 5)
 	n, err := r.Read(buf)
@@ -37,7 +37,7 @@ func TestReader_SearchSlice(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 
 	offset, err := r.SearchSlice(pattern)
 
@@ -52,7 +52,7 @@ func TestReader_ReadByteAndDiscard(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 
 	// Read 'H'
 	b, err := r.ReadByte()
@@ -75,7 +75,7 @@ func TestReader_EOF(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 
 	_, err := r.Discard(5)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestReader_ReadString(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 
 	str, err := r.ReadString(',')
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ func TestReadSlice_CrossBoundary(t *testing.T) {
 	source := bytes.NewReader(data)
 
 	r := NewReader(source, 0, int64(len(data)))
-	defer PutReader(r)
+	defer r.Release()
 	r.SetBufferSize(bufferSize)
 
 	slice, err := r.ReadSlice(',')
