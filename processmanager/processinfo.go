@@ -972,9 +972,11 @@ func (pm *ProcessManager) SynchronizeMapping(pr process.Process, rm *process.Raw
 
 	pm.mu.Lock()
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
-		info.mappings = append(info.mappings, mapping)
-		// findMappingForTrace binary-searches info.mappings, so keep it sorted.
-		slices.SortFunc(info.mappings, compareMapping)
+		// findMappingForTrace searches a snapshot after releasing pm.mu. Copy before
+		// sorting so we don't mutate a snapshot it may still be reading.
+		mappings := append(slices.Clone(info.mappings), mapping)
+		slices.SortFunc(mappings, compareMapping)
+		info.mappings = mappings
 		pm.pidPageToMappingInfoSize += numChanges
 	}
 	pm.mu.Unlock()
