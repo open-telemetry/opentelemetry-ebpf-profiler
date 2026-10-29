@@ -97,8 +97,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261027174604-cdd9b2e2fb28 h1:rD3Wbavap5C91BAgirCIHiCEPOlj1NmyYFVQqZ4dE/M=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261027174604-cdd9b2e2fb28/go.mod h1:h5QXzn/6qQY+R0GKrUnSOjThUBb3Sc4ujoGTSzEe+PM=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261028090819-87c992c5af65 h1:KgVsJ6TR1exXVu2Thp1NR6uwfT/WPc7fx0gPxE09T0Q=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261028090819-87c992c5af65/go.mod h1:h5QXzn/6qQY+R0GKrUnSOjThUBb3Sc4ujoGTSzEe+PM=
 github.com/opencontainers/go-digest v1.0.0 h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=
 github.com/opencontainers/go-digest v1.0.0/go.mod h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=
 github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=
