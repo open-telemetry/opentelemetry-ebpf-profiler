@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -45,11 +46,36 @@ func TestOriginRegistryRegisterValidates(t *testing.T) {
 			id, err := r.Register(tc.metadata)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
-				assert.Nil(t, r.lookup(1))
+				meta, hooks := r.lookup(1)
+				assert.Nil(t, meta)
+				assert.Nil(t, hooks)
 				return
 			}
 			require.NoError(t, err)
-			assert.Same(t, tc.metadata, r.lookup(id))
+			meta, hooks := r.lookup(id)
+			assert.Same(t, tc.metadata, meta)
+			assert.NotNil(t, hooks)
 		})
 	}
 }
+
+func TestOriginRegistryRegisterWithHooks(t *testing.T) {
+	metadata := &samples.TypeMetadata{
+		SampleTypes:  []samples.SampleType{{Type: "a", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
+	}
+	hooks := &traceHandlerHooksStub{}
+
+	var r originRegistry
+	id, err := r.RegisterWithHooks(metadata, hooks)
+	require.NoError(t, err)
+
+	meta, gotHooks := r.lookup(id)
+	assert.Same(t, metadata, meta)
+	assert.Same(t, hooks, gotHooks)
+}
+
+type traceHandlerHooksStub struct{}
+
+func (*traceHandlerHooksStub) PreHandleTrace(*libpf.EbpfTrace) bool { return true }
+func (*traceHandlerHooksStub) PostHandleTrace(*libpf.Trace)         {}

@@ -376,10 +376,33 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 	return c.registerAttacher(a)
 }
 
+// TraceHandlerHooks is a set of trace handler hooks that may be attached to a
+// freshly registered origin ID via ProbeRegistrar.RegisterWithHooks. It
+// allows probes to intercept traces with a matching origin either before
+// symbolization (e.g. heap free events that need only update a tracker and
+// should never be symbolized or reported) or after symbolization and
+// reporting (e.g. feeding alloc events into a live-heap correlator).
+type TraceHandlerHooks interface {
+	// PreHandleTrace is called for each incoming trace (with matching origin)
+	// before symbolization.
+	//
+	// Return true to continue with normal symbolization and reporting, or
+	// false to consume the trace (it will not be symbolized or reported).
+	PreHandleTrace(trace *libpf.EbpfTrace) bool
+
+	// PostHandleTrace is called after symbolization and reporting for traces
+	// with a matching origin. Handlers that need the trace hash should call
+	// trace.Hash(), which memoizes the result across callers.
+	PostHandleTrace(trace *libpf.Trace)
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
-// Each call to Register allocates a unique ID backed by the supplied metadata;
+// Each call to Register or RegisterWithHooks allocates a unique ID backed by
+// the supplied metadata. Trace handler hooks attached via RegisterWithHooks
+// make the tracer dispatch traces emitted with that origin to them.
 type ProbeRegistrar interface {
 	Register(meta *samples.TypeMetadata) (uint16, error)
+	RegisterWithHooks(meta *samples.TypeMetadata, hooks TraceHandlerHooks) (uint16, error)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
@@ -396,53 +419,12 @@ type Probe interface {
 	Unload() error
 }
 
-// PreTraceHandler is an optional interface that Probe implementations may
-// satisfy to intercept traces before symbolization. This allows probes to
-// consume traces entirely (e.g. heap free events that need only update a
-// tracker and should never be symbolized or reported).
-//
-// The tracer checks whether a Probe satisfies PreTraceHandler after Enable
-// and registers it for the origins returned by PreOrigins(). The handler is
-// only invoked for traces whose origin matches one of the registered values.
-type PreTraceHandler interface {
-	// PreOrigins returns the set of origin IDs this handler wants to receive.
-	// The tracer dispatches only traces with a matching origin to this handler.
-	PreOrigins() []uint16
-
-	// PreHandleTrace is called for each incoming trace (with matching origin)
-	// before symbolization.
-	//
-	// Return true to continue with normal symbolization and reporting, or
-	// false to consume the trace (it will not be symbolized or reported).
-	PreHandleTrace(trace *libpf.EbpfTrace) bool
-}
-
-// PostTraceHandler is an optional interface that Probe implementations may
-// satisfy to receive traces after symbolization and reporting. This allows
-// probes to perform post-processing on the symbolized trace (e.g. feeding
-// alloc events into a live-heap correlator).
-//
-// The tracer checks whether a Probe satisfies PostTraceHandler after Enable
-// and registers it for the origins returned by PostOrigins(). The handler is
-// only invoked for traces whose origin matches one of the registered values.
-type PostTraceHandler interface {
-	// PostOrigins returns the set of origin IDs this handler wants to receive.
-	// The tracer dispatches only traces with a matching origin to this handler.
-	PostOrigins() []uint16
-
-	// PostHandleTrace is called after symbolization and reporting for traces
-	// with a matching origin. Handlers that need the trace hash should call
-	// trace.Hash(), which memoizes the result across callers.
-	PostHandleTrace(trace *libpf.Trace)
-}
-
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
 //
-// If the probe satisfies PreTraceHandler and/or PostTraceHandler, it is
-// registered to intercept traces before symbolization or receive them after
-// symbolization, respectively.
+// Trace handler hooks are attached to registered origin IDs via the
+// ProbeRegistrar; the tracer dispatches traces with a matching origin to them.
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
 // startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
@@ -470,18 +452,6 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
-	}
-
-	if pth, ok := p.(PreTraceHandler); ok {
-		for _, origin := range pth.PreOrigins() {
-			t.preTraceHandlers[origin] = append(t.preTraceHandlers[origin], pth)
-		}
-	}
-
-	if pth, ok := p.(PostTraceHandler); ok {
-		for _, origin := range pth.PostOrigins() {
-			t.postTraceHandlers[origin] = append(t.postTraceHandlers[origin], pth)
-		}
 	}
 
 	return nil

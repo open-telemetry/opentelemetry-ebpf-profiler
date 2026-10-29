@@ -211,14 +211,6 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
-	// preTraceHandlers maps origin ID to pre-trace handlers registered for
-	// that origin. Only traces with a matching origin are dispatched.
-	preTraceHandlers map[uint16][]PreTraceHandler
-
-	// postTraceHandlers maps origin ID to post-trace handlers registered for
-	// that origin. Only traces with a matching origin are dispatched.
-	postTraceHandlers map[uint16][]PostTraceHandler
-
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -398,8 +390,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
-		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
-		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
 	tracer.mmapEventOnce = sync.OnceValue(func() error {
 		return tracer.startMmapEventMonitor(tracer.lifecycleCtx)
@@ -1318,7 +1308,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		NumFrames: ptr.Num_frames,
 	}
 
-	if t.origins.lookup(trace.Origin) == nil {
+	if meta, _ := t.origins.lookup(trace.Origin); meta == nil {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
@@ -1552,22 +1542,20 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	// Pre-handlers gated by origin may consume traces before symbolization.
-	for _, h := range t.preTraceHandlers[bpfTrace.Origin] {
-		if !h.PreHandleTrace(bpfTrace) {
-			t.tracePool.Put(bpfTrace)
-			return
-		}
+	// Handlers registered with the trace origin may consume traces before
+	// symbolization.
+	meta, hooks := t.origins.lookup(bpfTrace.Origin)
+	if !hooks.PreHandleTrace(bpfTrace) {
+		t.tracePool.Put(bpfTrace)
+		return
 	}
 
-	origin := bpfTrace.Origin
-	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))
+	trace := t.processManager.HandleTrace(bpfTrace, meta)
 	t.tracePool.Put(bpfTrace)
 
-	// Post-handlers gated by origin receive the symbolized result.
-	for _, h := range t.postTraceHandlers[origin] {
-		h.PostHandleTrace(trace)
-	}
+	// Handlers registered with the trace origin receive the symbolized
+	// result after symbolization and reporting.
+	hooks.PostHandleTrace(trace)
 }
 
 // originRegistry is the tracer-wide registry origin IDs are assigned from
@@ -1578,13 +1566,37 @@ type originRegistry struct {
 	// lastID is the most recently assigned origin ID.
 	lastID atomic.Uint32
 
-	// types maps a trace origin (uint16) to its *samples.TypeMetadata.
-	types sync.Map
+	// entries maps a trace origin (uint16) to its *originEntry.
+	entries sync.Map
 }
+
+// originEntry bundles the profile type metadata and the trace handler hooks
+// registered for a single origin ID.
+type originEntry struct {
+	meta  *samples.TypeMetadata
+	hooks TraceHandlerHooks
+}
+
+// StubTraceHandlerHooks provides no-op TraceHandlerHooks implementations. It
+// can be embedded by probe implementations that only need to override a
+// subset of the hooks. It is also used for origins registered without hooks.
+type StubTraceHandlerHooks struct{}
+
+func (StubTraceHandlerHooks) PreHandleTrace(*libpf.EbpfTrace) bool { return true }
+func (StubTraceHandlerHooks) PostHandleTrace(*libpf.Trace)         {}
 
 // Register hands out a fresh origin ID and stores metadata for it, keyed by
 // that ID.
 func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
+	return r.RegisterWithHooks(metadata, StubTraceHandlerHooks{})
+}
+
+// RegisterWithHooks is the same as Register, but additionally attaches trace
+// handler hooks to the fresh origin ID. The hooks receive traces emitted with
+// that origin.
+func (r *originRegistry) RegisterWithHooks(metadata *samples.TypeMetadata,
+	hooks TraceHandlerHooks,
+) (uint16, error) {
 	if len(metadata.SampleTypes) == 0 {
 		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
 	}
@@ -1595,16 +1607,18 @@ func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}
 	id := uint16(r.lastID.Add(1))
-	r.types.Store(id, metadata)
+	r.entries.Store(id, &originEntry{meta: metadata, hooks: hooks})
 	return id, nil
 }
 
-// lookup returns the profile type metadata registered for origin, or nil if
-// origin is unknown.
-func (r *originRegistry) lookup(origin uint16) *samples.TypeMetadata {
-	v, ok := r.types.Load(origin)
+// lookup returns the profile type metadata and the trace handler hooks
+// registered for origin. Both are nil if origin is unknown. Hooks are a
+// no-op stub if origin was registered without hooks.
+func (r *originRegistry) lookup(origin uint16) (*samples.TypeMetadata, TraceHandlerHooks) {
+	v, ok := r.entries.Load(origin)
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	return v.(*samples.TypeMetadata)
+	entry := v.(*originEntry)
+	return entry.meta, entry.hooks
 }
