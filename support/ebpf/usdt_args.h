@@ -49,6 +49,8 @@ static inline EBPF_INLINE USDTSpec *bpf_usdt_spec(struct pt_regs *ctx, u32 pid)
 // bpf_usdt_arg reads one argument from a specification returned by
 // bpf_usdt_spec. It returns zero on success and a negative value when the
 // argument cannot be decoded.
+// Currently we only support unsigned 8-byte arguments, but we can extend this
+// mechanism as the need arises.
 static inline EBPF_INLINE long
 bpf_usdt_arg(struct pt_regs *ctx, USDTSpec *spec, u32 argument_index, u64 *result)
 {
