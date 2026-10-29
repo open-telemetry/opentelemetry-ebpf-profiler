@@ -210,8 +210,9 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 		return libpf.NullString
 	}
 
-	// Always allocate the string separately so it does not hold the backing
-	// buffer that might be larger than needed
+	// The symbol is read into the pooled scratch buffer and converted to a
+	// string without copying. That string aliases buf, which is returned to
+	// the pool on exit, so it must be interned (copied) before returning.
 	startIndex := vms.Symbol.Body
 	endIndex := startIndex + uint(symLen)
 	if endIndex > symInitialRead {
