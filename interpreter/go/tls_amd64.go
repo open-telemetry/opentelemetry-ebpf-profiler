@@ -39,8 +39,8 @@ func extractTLSGOffset(f *pfelf.File, pclntab *elfunwindinfo.Gopclntab) (int32, 
 	}
 
 	sz := int(min(sym.Size, 128))
-	code, err := f.VirtualMemory(int64(sym.Address), sz, sz)
-	if err != nil {
+	code := make([]byte, sz)
+	if _, err := f.ReadAt(code, int64(sym.Address)); err != nil {
 		return 0, err
 	}
 
