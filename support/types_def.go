@@ -80,8 +80,6 @@ const (
 const (
 	USDTMaxArguments = C.USDT_MAX_ARGUMENTS
 
-	// SCOTT - should we comment what these are for briefly, and that they are
-	// held in sync via tests? Or, wherever the canonical values go.
 	USDTArgumentConstant            uint8 = C.USDT_ARGUMENT_CONSTANT
 	USDTArgumentRegister            uint8 = C.USDT_ARGUMENT_REGISTER
 	USDTArgumentRegisterDereference uint8 = C.USDT_ARGUMENT_REGISTER_DEREFERENCE
