@@ -7,12 +7,15 @@ import (
 	"io"
 	"io/fs"
 	"time"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // ModuleReader allows reading a module from the module store. It implements
-// fs.File and io.ReaderAt.
+// fs.File, and serves the module data through a libpf.ViewAtReader: a chunk
+// cache over the compressed file, providing zero-copy views.
 type ModuleReader struct {
-	io.ReaderAt
+	libpf.ViewAtReader
 	io.Closer
 	name              string
 	preferredReadSize uint
@@ -21,6 +24,7 @@ type ModuleReader struct {
 }
 
 var _ fs.File = &ModuleReader{}
+var _ libpf.ViewAtReader = &ModuleReader{}
 
 // PreferredReadSize returns the preferred size and alignment of reads on this reader.
 func (m *ModuleReader) PreferredReadSize() uint {

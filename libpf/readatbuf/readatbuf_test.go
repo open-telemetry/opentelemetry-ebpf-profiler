@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 )
@@ -42,4 +43,216 @@ func TestOutOfBoundsTail(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
+}
+
+func TestViewAt(t *testing.T) {
+	file := testsupport.GenerateTestInputFile(255, 1000)
+	rawReader := bytes.NewReader(file)
+	r, err := readatbuf.New(rawReader, 64, 4)
+	require.NoError(t, err)
+
+	// View at the start of a page.
+	view, err := r.ViewAt(0, 1)
+	require.NoError(t, err)
+	require.Equal(t, file[:64], view)
+
+	// View at an unaligned offset: maximal view extends to the page end.
+	view, err = r.ViewAt(10, 10)
+	require.NoError(t, err)
+	require.Equal(t, file[10:64], view)
+
+	// Past the end.
+	view, err = r.ViewAt(1024, 1)
+	require.ErrorIs(t, err, io.EOF)
+	require.Nil(t, view)
+
+	// Truncated last page: view within the page end is fine.
+	view, err = r.ViewAt(990, 1)
+	require.NoError(t, err)
+	require.Equal(t, file[990:1000], view)
+
+	// minLen extending beyond the truncated page end.
+	_, err = r.ViewAt(990, 11)
+	require.ErrorIs(t, err, io.EOF)
+
+	// Straddling a page boundary.
+	view, err = r.ViewAt(60, 5)
+	require.ErrorIs(t, err, libpf.ErrNotContiguous)
+	require.Nil(t, view)
+
+	// minLen larger than the page size.
+	_, err = r.ViewAt(0, 65)
+	require.ErrorIs(t, err, libpf.ErrNotContiguous)
+
+	// Negative offset.
+	_, err = r.ViewAt(-1, 1)
+	require.Error(t, err)
+
+	// Non-positive minLen is treated as one.
+	view, err = r.ViewAt(32, 0)
+	require.NoError(t, err)
+	require.Equal(t, file[32:64], view)
+}
+
+func TestViewAtNoPollution(t *testing.T) {
+	// ErrNotContiguous must be determinable without any I/O and without
+	// populating the cache.
+	file := testsupport.GenerateTestInputFile(255, 1024)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 4)
+	require.NoError(t, err)
+
+	stats := r.Statistics()
+	for i := range 64 {
+		_, err := r.ViewAt(int64(i), 128)
+		require.ErrorIs(t, err, libpf.ErrNotContiguous)
+	}
+	require.Equal(t, stats, r.Statistics())
+}
+
+func TestViewAtMatchesReadAt(t *testing.T) {
+	file := testsupport.GenerateTestInputFile(255, 2048)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 4)
+	require.NoError(t, err)
+
+	for _, off := range []int64{0, 1, 63, 64, 65, 1975, 2047} {
+		view, err := r.ViewAt(off, 1)
+		require.NoError(t, err)
+		expected := file[off:min(int64(len(file)), off+64-int64(off%64))]
+		require.Equal(t, expected, view)
+	}
+}
+
+func TestViewAtPinProtectsFromEviction(t *testing.T) {
+	// A page aliased by an outstanding view must not be pooled on eviction:
+	// even if the cache evicts it, the view stays valid, and the data is
+	// re-read on the next access.
+	file := testsupport.GenerateTestInputFile(255, 2048)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 1)
+	require.NoError(t, err)
+
+	view, err := r.ViewAt(0, 1)
+	require.NoError(t, err)
+	require.Equal(t, file[:64], view)
+
+	// Force page-ins and evictions through small ReadAt calls.
+	buf := make([]byte, 16)
+	for page := int64(1); page < 32; page++ {
+		_, err = r.ReadAt(buf, page*64)
+		require.NoError(t, err)
+	}
+
+	// The view must still hold the original, unmodified data.
+	require.Equal(t, file[:64], view)
+
+	// The cache must remain transparent.
+	again, err := r.ViewAt(0, 1)
+	require.NoError(t, err)
+	require.Equal(t, file[:64], again)
+}
+
+func TestPinAtAcrossIncarnations(t *testing.T) {
+	// A pinned page that gets evicted and re-read creates a new incarnation:
+	// Unpin of a stale handle must only affect the old one, and the old view
+	// stays valid.
+	file := testsupport.GenerateTestInputFile(255, 4096)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 1)
+	require.NoError(t, err)
+
+	pinned, h, err := r.PinAt(0, 1)
+	require.NoError(t, err)
+
+	// Evict the pinned page and re-read it (new incarnation).
+	buf := make([]byte, 64)
+	_, err = r.ReadAt(buf, 64)
+	require.NoError(t, err)
+	_, err = r.ReadAt(buf, 0)
+	require.NoError(t, err)
+
+	// The old view is still intact, and unpinning does not corrupt anything.
+	r.Unpin(h)
+	require.Equal(t, file[0:64], pinned)
+
+	fresh, err := r.ViewAt(0, 1)
+	require.NoError(t, err)
+	require.Equal(t, file[0:64], fresh)
+}
+
+func TestPinHandleReuse(t *testing.T) {
+	// Freed slots are recycled, and stale handles hitting a recycled slot
+	// are detected via the generation counter.
+	file := testsupport.GenerateTestInputFile(255, 4096)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 4)
+	require.NoError(t, err)
+
+	view, h1, err := r.PinAt(0, 1)
+	require.NoError(t, err)
+	r.Unpin(h1)
+
+	_, h2, err := r.PinAt(0, 1)
+	require.NoError(t, err)
+	require.NotEqual(t, h1, h2)
+
+	// The stale handle must not release the new pin.
+	r.Unpin(h1)
+
+	// The pin from the fresh handle still protects the page: the view
+	// stays valid across forced evictions of the page.
+	buf := make([]byte, 16)
+	for page := int64(1); page < 64; page++ {
+		_, err = r.ReadAt(buf, page*64)
+		require.NoError(t, err)
+	}
+	require.Equal(t, file[0:64], view)
+	r.Unpin(h2)
+
+	// Unpin of a zero handle is a no-op.
+	r.Unpin(0)
+}
+
+func TestPinSlotNotRecycledTwice(t *testing.T) {
+	// A pin record detached by eviction must not match the same page index
+	// again: otherwise a page that is evicted, re-read and evicted again
+	// would push its record slot into the free list twice, and two later
+	// pins would clobber each other's records (one pin would silently lose
+	// its protection). Uses the pooled 4 KiB page size, so an unpinned
+	// eviction hands the buffer back to the pool and corrupts an aliased
+	// view when reused.
+	file := testsupport.GenerateTestInputFile(255, 64*4096)
+	r, err := readatbuf.New(bytes.NewReader(file), 4096, 2)
+	require.NoError(t, err)
+
+	buf := make([]byte, 64)
+	_, h1, err := r.PinAt(0, 1)
+	require.NoError(t, err)
+
+	// Evict page 0 (detaches its pin record and recycles the slot).
+	_, err = r.ReadAt(buf, 4096)
+	require.NoError(t, err)
+	_, err = r.ReadAt(buf, 2*4096)
+	require.NoError(t, err)
+	r.Unpin(h1) // stale: no-op
+
+	// Re-read page 0 and evict it again: the detached record must not be
+	// matched a second time.
+	_, err = r.ReadAt(buf, 0)
+	require.NoError(t, err)
+	_, err = r.ReadAt(buf, 4096)
+	require.NoError(t, err)
+	_, err = r.ReadAt(buf, 2*4096)
+	require.NoError(t, err)
+
+	// Two pins on different pages: both records must be tracked
+	// separately, and both views must survive forced evictions.
+	viewA, hA, err := r.PinAt(0, 1)
+	require.NoError(t, err)
+	viewB, hB, err := r.PinAt(4096, 1)
+	require.NoError(t, err)
+	for page := int64(2); page < 64; page++ {
+		_, err = r.ReadAt(buf, page*4096)
+		require.NoError(t, err)
+	}
+	require.Equal(t, file[0:64], viewA[:64])
+	require.Equal(t, file[4096:4096+64], viewB[:64])
+	r.Unpin(hA)
+	r.Unpin(hB)
 }
