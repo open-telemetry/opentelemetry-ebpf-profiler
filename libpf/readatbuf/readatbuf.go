@@ -155,11 +155,13 @@ func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err er
 			buffer = buffer[:n]
 			eof = true
 		} else {
+			libpf.PutBuffer(buffer)
 			return nil, false, err
 		}
 	}
 
 	if !eof && uint(n) < reader.pageSize {
+		libpf.PutBuffer(buffer)
 		return nil, false, errors.New("failed to read whole page")
 	}
 
