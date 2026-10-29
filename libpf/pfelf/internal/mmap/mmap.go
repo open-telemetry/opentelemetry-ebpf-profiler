@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"unsafe"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // ReaderAt reads a memory-mapped file.
@@ -23,6 +25,8 @@ type ReaderAt struct {
 
 	data []byte
 }
+
+var _ libpf.ViewAtReader = &ReaderAt{}
 
 // Take takes a reference on the data
 func (r *ReaderAt) Take() io.Closer {
@@ -74,16 +78,31 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-// Subslice returns a subset of the mmapped backed data.
-func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
-	// Compare without overflowing: corrupt ELF headers can carry huge or
-	// negative values that would wrap around in a plain offset+length sum.
-	if offset < 0 || length < 0 || offset > r.Len() || length > r.Len()-offset {
-		return nil, fmt.Errorf("requested data %x-%x exceeds %x: %w",
-			offset, offset+length, r.Len(), io.EOF)
+// ViewAt implements the libpf.ViewAtReader interface. The returned view
+// extends up to the end of the mapping.
+func (r *ReaderAt) ViewAt(offs, minLen int64) ([]byte, error) {
+	if offs < 0 {
+		return nil, fmt.Errorf("mmap: negative ViewAt offset %d", offs)
 	}
-	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offset])), length), nil
+	if minLen <= 0 {
+		minLen = 1
+	}
+	if offs >= int64(r.Len()) || int64(r.Len())-offs < minLen {
+		return nil, io.EOF
+	}
+	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offs])), r.Len()-int(offs)), nil
 }
+
+// PinAt implements the libpf.ViewAtReader interface. The mapping is
+// naturally stable for its full lifetime, so pinning is trivial: the view
+// is valid until the mapping is closed.
+func (r *ReaderAt) PinAt(offs, minLen int64) ([]byte, error) {
+	return r.ViewAt(offs, minLen)
+}
+
+// UnpinAt implements the libpf.ViewAtReader interface. It is a no-op, as
+// the mapping is naturally stable.
+func (r *ReaderAt) UnpinAt(offs int64) {}
 
 // Open memory-maps the named file for reading.
 func Open(filename string) (*ReaderAt, error) {

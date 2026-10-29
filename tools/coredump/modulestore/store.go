@@ -128,51 +128,70 @@ func (store *Store) InsertModuleLocally(localPath string) (id ID, isNew bool, er
 	return id, true, nil
 }
 
-// OpenReadAt opens a file in the store for random-access reading.
+// OpenReadAt opens a file in the store for random-access reading. The
+// returned reader serves the module data through a small chunk cache, as
+// zstpak decompresses whole chunks per read.
 func (store *Store) OpenReadAt(id ID) (*ModuleReader, error) {
-	localPath, err := store.ensurePresentLocally(id)
+	reader, file, err := store.openModuleReader(id)
 	if err != nil {
 		return nil, err
 	}
 
+	buffered, err := readatbuf.New(file, reader.preferredReadSize, moduleReadAtCacheChunks)
+	if err != nil {
+		_ = reader.Close()
+		return nil, fmt.Errorf("failed to add buffering to the reader: %w", err)
+	}
+	reader.ViewAtReader = buffered
+
+	return reader, nil
+}
+
+// moduleReadAtCacheChunks is the default number of cached chunks for
+// OpenReadAt.
+const moduleReadAtCacheChunks = 8
+
+// openModuleReader opens the compressed module file, without a cache.
+func (store *Store) openModuleReader(id ID) (*ModuleReader, *zstpak.Reader, error) {
+	localPath, err := store.ensurePresentLocally(id)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	file, err := zstpak.Open(localPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open local file %s: %w", localPath, err)
+		return nil, nil, fmt.Errorf("failed to open local file %s: %w", localPath, err)
 	}
 
 	reader := &ModuleReader{
-		ReaderAt:          file,
 		Closer:            file,
 		name:              id.String(),
 		preferredReadSize: uint(file.ChunkSize()),
 		size:              uint(file.UncompressedSize()),
 	}
 
-	return reader, nil
+	return reader, file, nil
 }
 
-// OpenBufferedReadAt is a buffered version of `OpenReadAt`.
+// OpenBufferedReadAt is a buffered version of `OpenReadAt`, with the cache
+// sized in bytes.
 func (store *Store) OpenBufferedReadAt(id ID, cacheSizeBytes uint) (
 	*ModuleReader, error,
 ) {
-	reader, err := store.OpenReadAt(id)
+	reader, file, err := store.openModuleReader(id)
 	if err != nil {
 		return nil, err
 	}
 
-	numChunks := cacheSizeBytes / reader.preferredReadSize
+	numChunks := max(cacheSizeBytes/reader.preferredReadSize, 1)
 
-	if numChunks == 0 {
-		// Cache size too small for a full page: continue without buffering.
-		return reader, nil
-	}
-
-	buffered, err := readatbuf.New(reader.ReaderAt, reader.preferredReadSize, numChunks)
+	buffered, err := readatbuf.New(file, reader.preferredReadSize, numChunks)
 	if err != nil {
+		_ = reader.Close()
 		return nil, fmt.Errorf("failed to add buffering to the reader: %w", err)
 	}
+	reader.ViewAtReader = buffered
 
-	reader.ReaderAt = buffered
 	return reader, nil
 }
 

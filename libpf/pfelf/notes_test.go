@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 func TestGetBuildIDFromNotesFile(t *testing.T) {
@@ -30,8 +32,9 @@ func TestGetBuildIDFromNotesFileReturnsErrNoBuildID(t *testing.T) {
 
 func TestVisitNotesReturnsErrNoteNotFound(t *testing.T) {
 	data := testELFNote("LINUX", 0, []byte("not a build ID"))
+	cache := libpf.NewBytesView(data)
 	f := &File{
-		elfReader: bytes.NewReader(data),
+		elfReader: cache,
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Filesz: uint64(len(data))}},
 		},
@@ -50,8 +53,9 @@ func TestVisitNotesReturnsNilWhenVisitorStops(t *testing.T) {
 	first := testELFNote("LINUX", 0, []byte("not a build ID"))
 	second := testELFNote("GNU", 3, []byte("_notorious_build_id_"))
 	data := append(append([]byte{}, first...), second...)
+	cache := libpf.NewBytesView(data)
 	f := &File{
-		elfReader: bytes.NewReader(data),
+		elfReader: cache,
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(first))}},
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second))}},
@@ -72,7 +76,7 @@ func TestVisitNoteSections(t *testing.T) {
 	sdt := testELFNote("stapsdt", 3, []byte("descriptor"))
 	data := append(append([]byte{}, other...), sdt...)
 	f := &File{
-		elfReader: bytes.NewReader(data),
+		elfReader: libpf.NewBytesView(data),
 		Sections: []Section{
 			{SectionHeader: elf.SectionHeader{Name: ".note.other", Type: elf.SHT_NOTE,
 				Offset: 0, Size: uint64(len(other))}},
@@ -107,7 +111,7 @@ func TestGetBuildIDVisitsAllProgramNoteSegments(t *testing.T) {
 	data := append(append([]byte{}, first...), second...)
 
 	f := &File{
-		elfReader: bytes.NewReader(data),
+		elfReader: libpf.NewBytesView(data),
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(first))}},
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: uint64(len(first)), Filesz: uint64(len(second))}},
@@ -156,7 +160,7 @@ func TestGetBuildIDReadsNamedNoteSection(t *testing.T) {
 	data = append(data, sectionHeaders.Bytes()...)
 
 	f := &File{
-		elfReader: bytes.NewReader(data),
+		elfReader: libpf.NewBytesView(data),
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(goNote))}},
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_LOAD, Off: 0, Filesz: uint64(len(goNote) + len(gnuNote))}},
@@ -213,7 +217,7 @@ func TestGetBuildIDInsideCoreUsesProgramNotes(t *testing.T) {
 	data = append(data, sectionHeaders.Bytes()...)
 
 	f := &File{
-		elfReader:  bytes.NewReader(data),
+		elfReader:  libpf.NewBytesView(data),
 		InsideCore: true,
 		Progs: []Prog{
 			{ProgHeader: elf.ProgHeader{Type: elf.PT_NOTE, Off: 0, Filesz: uint64(len(programNote))}},
