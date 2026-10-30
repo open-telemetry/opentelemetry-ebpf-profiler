@@ -61,4 +61,3 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 
 	return ticker.Stop
 }
-
