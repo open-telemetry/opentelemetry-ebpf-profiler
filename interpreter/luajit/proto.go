@@ -3,7 +3,30 @@
 
 package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
-import "go.opentelemetry.io/ebpf-profiler/libpf"
+import (
+	"errors"
+	"fmt"
+	"unicode/utf8"
+	"unsafe"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
+)
+
+const (
+	sizeofGCstr   = 24
+	sizeofGCproto = 104
+	stringGCType  = 4
+	//https://github.com/openresty/luajit2/blob/7952882d/src/lj_def.h#L66
+	byteCodeMax = 1 << 26
+)
+
+type GCobj struct {
+	_   uint64 // nextgc
+	_   byte   // marked
+	gct byte
+}
 
 // GCproto minus first 8 bytes.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_obj.h#L372
@@ -34,4 +57,335 @@ type protoRaw struct {
 	lineinfo  libpf.Address /*     80      |       8 */
 	uvinfo    libpf.Address /*     88      |       8 */
 	varinfo   libpf.Address /*     96      |       8 */
+}
+
+// proto is a userland cached version of LuaJIT's GCproto object which is
+// contains all the static data for a function. A function on the stack
+// will be a GCfunc which is basically a GCproto pointer and any captured
+// upvalues.
+type proto struct {
+	protoRaw
+	ptAddr       libpf.Address
+	name         string
+	bc           []uint32
+	lineinfo8    []uint8
+	lineinfo16   []uint16
+	lineinfo32   []uint32
+	upvalueNames []string
+	// the underlying byte array is used as a
+	// backing store for `string` objects, so
+	// it must not be mutated!
+	varinforaw []byte
+	constants  []string
+}
+
+// newProto creates a proto from a GCproto* by reading memory remotely.
+func newProto(rm remotememory.RemoteMemory, pt libpf.Address) (*proto, error) {
+	p := &proto{ptAddr: pt}
+	if err := rm.Read(pt+8, pfunsafe.FromPointer(&p.protoRaw)); err != nil {
+		return nil, err
+	}
+
+	// reading memory from a remote process is always dicey, validate
+	// we're looking at a GCproto object by checking that the debugging
+	// info pointers are valid internal pointers or NULL.
+	end := pt + libpf.Address(p.sizept)
+	bad := func(addr libpf.Address) bool {
+		return addr != 0 && (addr < pt || addr >= end)
+	}
+	if bad(p.lineinfo) || bad(p.uvinfo) || bad(p.varinfo) {
+		return nil, errors.New("invalid GCproto object")
+	}
+
+	// string data is stored after the GCstr object
+	p.name = rm.String(p.chunkname + sizeofGCstr)
+	if !utf8.ValidString(p.name) {
+		return nil, errors.New("invalid chunkname string")
+	}
+
+	// This should never be empty string.
+	if p.name == "" {
+		return nil, errors.New("invalid chunkname string")
+	}
+
+	if p.sizebc == 0 || p.sizebc > byteCodeMax {
+		return nil, errors.New("invalid bytecode size")
+	}
+
+	p.bc = make([]uint32, p.sizebc)
+	// bytecode starts at end of GCproto object
+	// https://github.com/openresty/luajit2/blob/7952882d/src/lj_obj.h#L420
+	if err := rm.Read(p.ptAddr+sizeofGCproto, pfunsafe.FromSlice(p.bc)); err != nil {
+		return nil, err
+	}
+	if p.lineinfo != 0 {
+		if p.numline < 256 {
+			p.lineinfo8 = make([]uint8, p.sizebc)
+			if err := rm.Read(p.lineinfo, pfunsafe.FromSlice(p.lineinfo8)); err != nil {
+				return nil, err
+			}
+		} else if p.numline < 65536 {
+			p.lineinfo16 = make([]uint16, p.sizebc)
+			if err := rm.Read(p.lineinfo, pfunsafe.FromSlice(p.lineinfo16)); err != nil {
+				return nil, err
+			}
+		} else {
+			p.lineinfo32 = make([]uint32, p.sizebc)
+			if err := rm.Read(p.lineinfo, pfunsafe.FromSlice(p.lineinfo32)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if p.sizekgc > 0 {
+		objs := make([]libpf.Address, p.sizekgc)
+		p.constants = make([]string, p.sizekgc)
+		if err := rm.Read(p.k-libpf.Address(p.sizekgc*8), pfunsafe.FromSlice(objs)); err != nil {
+			return nil, err
+		}
+		for i, c := range objs {
+			var gco GCobj
+			if err := rm.Read(c, pfunsafe.FromPointer(&gco)); err != nil {
+				return nil, err
+			}
+			if gco.gct == stringGCType {
+				str := rm.String(objs[i] + sizeofGCstr)
+				p.constants[len(objs)-i-1] = str
+			}
+		}
+	}
+
+	//https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L225
+	if p.uvinfo != 0 {
+		// lineinfo/uvinfo/varinfo are all either null or set so we can calculate lengths from them
+		lenuv := p.varinfo - p.uvinfo
+		b := make([]byte, lenuv)
+		if err := rm.Read(p.uvinfo, pfunsafe.FromSlice(b)); err != nil {
+			return nil, err
+		}
+		p.upvalueNames = []string{}
+		for len(b) > 0 {
+			var name string
+			var err error
+			// this is safe: b never escapes the containing block and
+			// within that block is never mutated.
+			b, name, err = unsafeParseString(b)
+			if err != nil {
+				return nil, fmt.Errorf("malformed data while parsing upvalue names: %w", err)
+			}
+			b = b[1:] // skip null terminator
+			p.upvalueNames = append(p.upvalueNames, name)
+		}
+		if p.sizeuv != uint8(len(p.upvalueNames)) {
+			return nil, errors.New("invalid upvalue count")
+		}
+	}
+
+	// varinfo is a pointer to data colocated with GCproto, its at the end
+	// and its length isn't stored, but it can be derived by subtracting the
+	// end of the object from the varinfo pointer.
+	if p.varinfo != 0 {
+		varinfolen := (p.ptAddr + libpf.Address(p.sizept)) - p.varinfo
+		p.varinforaw = make([]byte, varinfolen)
+		if err := rm.Read(p.varinfo, pfunsafe.FromSlice(p.varinforaw)); err != nil {
+			return nil, err
+		}
+	}
+
+	return p, nil
+}
+
+func (p *proto) getName() string {
+	if p == nil {
+		return ""
+	}
+	return p.name
+}
+
+// https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L123
+func (p *proto) getLine(pc uint32) uint32 {
+	if p == nil || p.lineinfo == 0 || pc > p.sizebc || pc == 0 {
+		return 0
+	}
+	first := p.firstline
+	if pc == p.sizebc {
+		return first + p.numline
+	}
+	pc--
+	if pc == 0 {
+		return first
+	}
+	if p.numline < 256 {
+		return first + uint32(p.lineinfo8[pc])
+	} else if p.numline < 65536 {
+		return first + uint32(p.lineinfo16[pc])
+	}
+	return first + p.lineinfo32[pc]
+}
+
+func (p *proto) getVarname(slot, pc uint32) (string, error) {
+	return parseVarinfo(p.varinforaw, pc, slot)
+}
+
+func (p *proto) getUpvalueName(slot uint32) string {
+	return p.upvalueNames[slot]
+}
+
+func (p *proto) getConstant(idx uint32) string {
+	return p.constants[idx]
+}
+
+// https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L259
+func (p *proto) getSlotName(pc, slot uint32) (string, error) {
+restart:
+	if pc == 0 || pc >= p.sizebc {
+		return "", nil
+	}
+	name, err := p.getVarname(slot, pc)
+	if err != nil {
+		return "", err
+	}
+	if name != "" {
+		return name, nil
+	}
+	// Walk the lua instructions backwards to find the name used to put the function in the slot
+	pc--
+	for ; pc > 0; pc-- {
+		ins := p.bc[pc]
+		op := bcOp(ins)
+		ra := bcA(ins)
+		if bcModeAIsBase(op) {
+			if slot >= ra && (op != BC_KNIL || slot <= bcD(ins)) {
+				return "", nil
+			}
+		} else if bcModeAIsDst(op) && ra == slot {
+			switch op {
+			case BC_MOV:
+				if ra == slot {
+					slot = bcD(ins)
+					goto restart
+				}
+			case BC_GGET:
+				return p.getConstant(bcD(ins)), nil
+			case BC_TGETS:
+				method := p.getConstant(bcC(ins))
+				table, err := p.getSlotName(pc, bcB(ins))
+				if err != nil {
+					return "", err
+				}
+				if table != "" {
+					return table + ":" + method, nil
+				}
+				return method, nil
+			case BC_UGET:
+				return p.getUpvalueName(bcD(ins)), nil
+			default:
+				return "", nil
+			}
+		}
+	}
+
+	return "", nil
+}
+
+func (p *proto) getFunctionName(pc uint32) (string, error) {
+	if p == nil {
+		return "main", nil
+	}
+	if pc >= p.sizebc {
+		// TODO: can we get a better pc for JIT frames?
+		pc = 0
+	}
+	slot, metaname := getSlotOrMetaname(p.bc[pc])
+	if metaname != "" {
+		return metaname, nil
+	}
+	return p.getSlotName(pc, slot)
+}
+
+// Parse a ULEB128 encoded number from a byte slice and return
+// remaining bytes and the number.
+//
+//nolint:gocritic
+func parseULEB128(b []byte) ([]byte, uint32) {
+	v := uint32(b[0])
+	b = b[1:]
+	if v >= 0x80 {
+		shift := 0
+		v &= 0x7f
+		for {
+			shift += 7
+			v |= uint32(b[0]&0x7f) << shift
+			b = b[1:]
+			if b[0] < 0x80 {
+				break
+			}
+		}
+	}
+	return b, v
+}
+
+// unsafeParseString gets the first null-terminated
+// string from the buffer, and returns the rest of the buffer (starting with the null byte)
+// along with the string.
+//
+// The original buffer is used as a backing store, so it must never be modified
+// as long as the returned string is alive.
+func unsafeParseString(b []byte) ([]byte, string, error) {
+	for i, c := range b {
+		if c == 0 {
+			return b[i:], unsafe.String(unsafe.SliceData(b), i), nil
+		}
+	}
+	return nil, "", errors.New("no null terminator in string")
+}
+
+var varnames = []string{
+	"(for index)",
+	"(for limit)",
+	"(for step)",
+	"(for generator)",
+	"(for state)",
+	"(for control)"}
+
+func parseVarinfo(b []byte, pc, slot uint32) (string, error) {
+	var lastpc uint32
+	for {
+		var name string
+		vn := int(b[0])
+		if vn <= len(varnames) {
+			if vn == 0 {
+				break
+			}
+		} else {
+			// This is safe as long as the backing storage
+			// of `b` is never mutated.  Currently we're
+			// calling it on `proto.varinforaw` which is indeed never mutated.
+			var err error
+			b, name, err = unsafeParseString(b)
+			if err != nil {
+				return "", fmt.Errorf("malformed data while parsing varinfo: %w", err)
+			}
+		}
+		b = b[1:]
+		var pcdelta uint32
+		b, pcdelta = parseULEB128(b)
+		startpc := lastpc + pcdelta
+		lastpc = startpc
+		if startpc > pc {
+			break
+		}
+		b, pcdelta = parseULEB128(b)
+		endpc := startpc + pcdelta
+		if pc < endpc {
+			if slot == 0 {
+				if vn <= len(varnames) {
+					return varnames[vn-1], nil
+				}
+				return name, nil
+			}
+			slot--
+		}
+	}
+	return "", nil
 }
