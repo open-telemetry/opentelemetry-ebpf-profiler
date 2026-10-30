@@ -111,8 +111,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261028090819-87c992c5af65 h1:KgVsJ6TR1exXVu2Thp1NR6uwfT/WPc7fx0gPxE09T0Q=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261028090819-87c992c5af65/go.mod h1:h5QXzn/6qQY+R0GKrUnSOjThUBb3Sc4ujoGTSzEe+PM=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261029111436-c9681b9759cd h1:GW+2jprn5KLh2sC8zlR5PQHoumXojnjgQ/1HHKrKfaU=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261029111436-c9681b9759cd/go.mod h1:h5QXzn/6qQY+R0GKrUnSOjThUBb3Sc4ujoGTSzEe+PM=
 github.com/peterbourgon/ff/v3 v3.4.0 h1:QBvM/rizZM1cB0p0lGMdmR7HxZeI/ZrBWB4DqLkMUBc=
 github.com/peterbourgon/ff/v3 v3.4.0/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
