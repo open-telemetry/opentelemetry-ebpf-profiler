@@ -22,7 +22,6 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
-	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -30,9 +29,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tls"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -77,9 +79,8 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
-	// For Python 3.13+: staticTLSOffset stores the TLS offset for direct TLS access
-	// extracted from assembly analysis.
-	staticTLSOffset int64
+	// For Python 3.15+: tlsGilstate is the location of _Py_tss_gilstate.
+	tlsGilstate *tls.Var
 
 	noneStruct libpf.SymbolValue
 
@@ -364,6 +365,11 @@ type pythonInstance struct {
 
 	// procInfoInserted tracks whether we've already inserted process info into BPF maps.
 	procInfoInserted bool
+
+	// gilstateSettled is set once retrying to locate _Py_tss_gilstate is pointless.
+	gilstateSettled bool
+	libcInfo        libc.LibcInfo
+	hasLibcInfo     bool
 }
 
 var _ interpreter.Instance = &pythonInstance{}
@@ -401,18 +407,40 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
-	d := p.d
+	p.libcInfo = libcInfo
+	p.hasLibcInfo = true
+	return p.updateProcInfo(ebpf, pid)
+}
 
-	// If we don't have a static TLS offset (Python < 3.13 or extraction failed),
-	// we need TSDInfo to access thread state via pthread_getspecific.
-	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
-	// from multiple DSOs, wait until we have TSDInfo before inserting proc data.
-	if d.staticTLSOffset == 0 && !libcInfo.HasTSDInfo() {
+// SynchronizeMappings retries locating _Py_tss_gilstate, as libpython might not
+// have been relocated yet on earlier attempts.
+func (p *pythonInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping) error {
+	if !p.hasLibcInfo {
+		return nil
+	}
+	return p.updateProcInfo(ebpf, pr.PID())
+}
+
+func (p *pythonInstance) updateProcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	d := p.d
+	libcInfo := p.libcInfo
+
+	// Prevent duplicate inserts
+	if p.procInfoInserted && p.gilstateSettled {
 		return nil
 	}
 
-	// Prevent duplicate inserts
-	if p.procInfoInserted {
+	// Without _Py_tss_gilstate we need TSDInfo to access thread state via
+	// pthread_getspecific. Since UpdateLibcInfo may be called multiple times
+	// as LibcInfo is collected from multiple DSOs, wait until we have TSDInfo
+	// before inserting proc data.
+	tlsGilstate, settled := p.locateGilstate(libcInfo)
+	if !tlsGilstate.Valid && (d.autoTLSKey == 0 || !libcInfo.HasTSDInfo()) {
+		return nil
+	}
+	if p.procInfoInserted && !tlsGilstate.Valid {
+		p.gilstateSettled = settled
 		return nil
 	}
 
@@ -420,7 +448,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		Tls_offset:     int16(d.staticTLSOffset),
+		Tls_tstate:     tlsGilstate,
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
@@ -455,7 +483,30 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	}
 
 	p.procInfoInserted = true
+	p.gilstateSettled = settled || tlsGilstate.Valid
 	return err
+}
+
+// locateGilstate returns the TLS info for _Py_tss_gilstate and whether retrying
+// later could change the result.
+func (p *pythonInstance) locateGilstate(libcInfo libc.LibcInfo) (
+	info support.TLSVarInfo, settled bool) {
+	d := p.d
+	if d.tlsGilstate == nil {
+		return support.TLSVarInfo{}, true
+	}
+
+	info, pending, err := d.tlsGilstate.Locate(p.rm, p.bias)
+	if err == nil && pending != nil {
+		info, err = pending.VarInfo(libcInfo.DTVInfo)
+	}
+	if err != nil {
+		log.Debugf("Python: _Py_tss_gilstate not located: %v", err)
+		// Not yet relocated, or DTV info still missing
+		temporary := errors.Is(err, tls.ErrUnresolved) || errors.Is(err, tls.ErrNeedDTV)
+		return support.TLSVarInfo{}, !temporary
+	}
+	return info, true
 }
 
 func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
@@ -709,33 +760,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	return nil
 }
 
-// getTLSOffsetFromAssembly extracts the TLS offset by analyzing the assembly code
-// of _PyThreadState_GetCurrent which directly accesses _Py_tss_tstate.
-// This works when the TLS variable exists but isn't exported in the symbol table.
-func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
-	funcName := "_PyThreadState_GetCurrent"
-	sym, code, err := ef.SymbolData(libpf.SymbolName(funcName), 512)
-	if err != nil {
-		return 0, fmt.Errorf("could not read %s: %v", funcName, err)
-	}
-
-	var offset int32
-	switch ef.Machine {
-	case elf.EM_AARCH64:
-		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
-	case elf.EM_X86_64:
-		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
-	default:
-		return 0, fmt.Errorf("unsupported architecture for assembly analysis: %v",
-			ef.Machine)
-	}
-
-	if err != nil {
-		return 0, fmt.Errorf("could not extract TLS offset from %s: %v", funcName, err)
-	}
-
-	return int64(offset), nil
-}
+// gilstateAccessor directly accesses _Py_tss_gilstate, which is not exported.
+const gilstateAccessor libpf.SymbolName = "PyGILState_GetThisThreadState"
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
@@ -831,7 +857,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
-	maxVer := pythonVer(3, 14)
+	maxVer := pythonVer(3, 15)
 	if version < minVer || version > maxVer {
 		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
 			major, minor,
@@ -845,12 +871,16 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 	}
 
-	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
-	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
+	// Python 3.15 replaced autoTSSkey with the thread-local _Py_tss_gilstate,
+	// which is located below.
+	if version < pythonVer(3, 15) {
+		// Calls first: PyThread_tss_get(autoTSSKey)
+		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
+		if autoTLSKey == libpf.SymbolValueInvalid {
+			return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
+		}
 	}
-	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
+	if version >= pythonVer(3, 7) && version < pythonVer(3, 15) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
 		// call directly pthread_getspecific. So we might be finding the address
 		// for "Py_tss_t" or "pthread_key_t" depending on call target.
@@ -868,20 +898,24 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
-	var staticTLSOffset int64
-	if version >= pythonVer(3, 13) {
-		var err error
-		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+	// The thread state is read from the gilstate, the thread state bound to
+	// the OS thread. Unlike the attached thread state (_Py_tss_tstate on 3.13+),
+	// it is not cleared when the thread releases the GIL, e.g. while running
+	// native code. Python 3.15+ keeps it in a thread-local variable instead of
+	// in pthread TSS.
+	var tlsGilstate *tls.Var
+	if version >= pythonVer(3, 15) {
+		v, err := tls.ResolveAccessor(ef, gilstateAccessor)
 		if err != nil {
-			log.Warnf("Failed to extract TLS offset: %v", err)
+			return nil, fmt.Errorf("failed to locate _Py_tss_gilstate: %v", err)
 		}
+		tlsGilstate = &v
 	}
 
 	pd := &pythonData{
-		version:         version,
-		autoTLSKey:      autoTLSKey,
-		staticTLSOffset: staticTLSOffset,
+		version:     version,
+		autoTLSKey:  autoTLSKey,
+		tlsGilstate: tlsGilstate,
 	}
 	vms := &pd.vmStructs
 
@@ -952,7 +986,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// they removed one level of indirection.
 		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
-	case pythonVer(3, 14):
+	case pythonVer(3, 14), pythonVer(3, 15):
 		// Python 3.14 underwent significant structural changes
 		// _PyInterpreterFrame structure:
 		//   - f_executable at offset 0 (instead of f_code)
@@ -964,7 +998,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.LastI = 56       // instr_ptr (changed from prev_instr)
 		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
 		vms.PyFrameObject.EntryMember = 74 // char owner
-		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
+		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_INTERPRETER
 		vms.PyThreadState.Frame = 72       // current_frame in _ts structure
 		// Current frame is not used anymore (removed in 3.13)
 		vms.PyCFrame.CurrentFrame = 0
