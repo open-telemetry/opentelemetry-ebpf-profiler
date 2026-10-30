@@ -8,6 +8,7 @@ tool (
 	github.com/jcchavezs/porto/cmd/porto
 	go.opentelemetry.io/collector/cmd/builder
 	go.opentelemetry.io/collector/cmd/mdatagen
+	golang.org/x/exp/cmd/apidiff
 	gotest.tools/gotestsum
 )
 
