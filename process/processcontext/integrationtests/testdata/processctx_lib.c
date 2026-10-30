@@ -51,9 +51,9 @@ int init_process_context(void) {
 
 void init_thread_context(size_t attrs_data_size) {
   otel_thread_ctx_v1 =
-      malloc(sizeof(otel_thread_ctx_v1_t) + attrs_data_size);
+      calloc(1, sizeof(otel_thread_ctx_v1_t) + attrs_data_size);
   if (otel_thread_ctx_v1 == NULL) {
-    perror("malloc");
+    perror("calloc");
     exit(EXIT_FAILURE);
   }
 }

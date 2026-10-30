@@ -609,6 +609,19 @@ typedef struct __attribute__((packed)) SpanTraceInfo {
   SpanID span_id;
 } SpanTraceInfo;
 
+// Thread context buffer an instrumented process publishes through the
+// otel_thread_ctx_v1 thread-local, per OTEP #4947. The attribute payload
+// follows it.
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  TraceID trace_id;
+  SpanID span_id;
+  // 0 while the writer is mid-update.
+  u8 valid;
+  u8 _reserved;
+  // Payload length in bytes.
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 typedef struct GolangLabel {
   u8 key[16];
   u8 val[48];
@@ -625,6 +638,12 @@ typedef struct GolangLabel {
 
 // Maximum size used for Go labels.
 #define MAX_GO_LABEL_DATA_SZ sizeof(GolangLabel[MAX_GO_LABELS])
+
+// Maximum size used for thread context labels, matching the Go label budget.
+// OTEP #4947 recommends keeping the entire thread context record within 640 bytes,
+// so this budget accommodates the recommended attribute payload.
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md#thread-local-context-record
+#define MAX_THREAD_LABEL_DATA_SZ MAX_GO_LABEL_DATA_SZ
 
 // Number of bytes reserved for data after frames, currently the thread
 // label and Go label sections. Sized to fit one full set of Go labels, to guarantee
