@@ -15,7 +15,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -512,15 +511,10 @@ func TestCustomLabelsArePartOfSampleIdentity(t *testing.T) {
 
 type testSnapshotProvider struct {
 	profiles []samples.SnapshotProfile
-	meta     process.Meta
 }
 
 func (p *testSnapshotProvider) CollectSnapshots() []samples.SnapshotProfile {
 	return p.profiles
-}
-
-func (p *testSnapshotProvider) ProcessMetaForPID(libpf.PID) process.Meta {
-	return p.meta
 }
 
 // TestMergeSnapshotsIntoTree verifies that probe snapshot samples land in the
@@ -542,24 +536,36 @@ func TestMergeSnapshotsIntoTree(t *testing.T) {
 		Name:    "test-agent",
 		Version: "v1.0.0",
 	})
+	resourceKey := samples.ResourceKey{
+		PID:            42,
+		ExecutablePath: libpf.Intern("/bin/app"),
+		ContainerID:    libpf.Intern("container-1"),
+	}
+	envVars := map[libpf.String]libpf.String{
+		libpf.Intern("DEPLOYMENT_ENV"): libpf.Intern("staging"),
+	}
+	resourceAttrs := serviceAttrs("snapshot-service")
 	reporter.SetSnapshotProvider(&testSnapshotProvider{
 		profiles: []samples.SnapshotProfile{{
 			ProfileType: profileType,
 			Samples: []samples.SnapshotSample{{
-				PID:           42,
+				ResourceKey:   resourceKey,
+				EnvVars:       envVars,
+				ResourceAttrs: resourceAttrs,
 				TraceHash:     libpf.NewTraceHash(1, 2),
 				ContextValues: []uint64{4096, 7},
 			}},
 		}},
-		meta: process.Meta{Executable: libpf.Intern("/bin/app")},
 	})
 
 	ts := time.Unix(1700, 0)
 	tree := make(samples.TraceEventsTree)
 	reporter.mergeSnapshots(tree, ts)
 
-	rtp, ok := tree[samples.ResourceKey{PID: 42, ExecutablePath: libpf.Intern("/bin/app")}]
-	require.True(t, ok, "no resource entry for the snapshot's PID")
+	rtp, ok := tree[resourceKey]
+	require.True(t, ok, "no resource entry for the snapshot")
+	assert.Equal(t, envVars, rtp.EnvVars)
+	assert.Equal(t, resourceAttrs.Equivalent(), rtp.ResourceAttrs.Equivalent())
 	events := rtp.Events[profileType]
 	require.Len(t, events, 1)
 
@@ -567,4 +573,46 @@ func TestMergeSnapshotsIntoTree(t *testing.T) {
 	require.True(t, ok, "snapshot sample is not keyed by its trace hash")
 	assert.Equal(t, []int64{4096, 7}, ev.Values)
 	assert.Equal(t, []uint64{uint64(ts.UnixNano())}, ev.Timestamps)
+}
+
+func TestMergeSnapshotsPreservesEventResourceMetadata(t *testing.T) {
+	resourceKey := samples.ResourceKey{PID: 42}
+	snapshotEnvVars := map[libpf.String]libpf.String{
+		libpf.Intern("SOURCE"): libpf.Intern("snapshot"),
+	}
+	snapshotAttrs := serviceAttrs("snapshot-service")
+	provider := &testSnapshotProvider{
+		profiles: []samples.SnapshotProfile{{
+			ProfileType: profileTypeSampling,
+			Samples: []samples.SnapshotSample{{
+				ResourceKey:   resourceKey,
+				EnvVars:       snapshotEnvVars,
+				ResourceAttrs: snapshotAttrs,
+				TraceHash:     libpf.NewTraceHash(1, 2),
+				ContextValues: []uint64{1},
+			}},
+		}},
+	}
+	reporter := createTestBaseReporter(t, &Config{})
+	reporter.SetSnapshotProvider(provider)
+
+	// Simulate an event-driven sample having created this resource before the
+	// interval snapshot is merged. Its newer metadata remains authoritative.
+	eventEnvVars := map[libpf.String]libpf.String{
+		libpf.Intern("SOURCE"): libpf.Intern("event"),
+	}
+	eventAttrs := serviceAttrs("event-service")
+	tree := samples.TraceEventsTree{
+		resourceKey: {
+			EnvVars:       eventEnvVars,
+			ResourceAttrs: eventAttrs,
+			Events:        make(map[*samples.TypeMetadata]samples.SampleToEvents),
+		},
+	}
+	reporter.mergeSnapshots(tree, time.Unix(1700, 0))
+
+	rtp := tree[resourceKey]
+	assert.Equal(t, eventEnvVars, rtp.EnvVars)
+	assert.Equal(t, eventAttrs.Equivalent(), rtp.ResourceAttrs.Equivalent())
+	assert.Contains(t, rtp.Events, profileTypeSampling)
 }

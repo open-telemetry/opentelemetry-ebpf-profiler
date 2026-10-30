@@ -124,8 +124,19 @@ type SnapshotProfile struct {
 }
 
 // SnapshotSample is a single sample row produced by a SnapshotSource probe.
+// It carries its resource metadata so reporting does not need to query the
+// producer's process state at the collection boundary.
 type SnapshotSample struct {
-	PID           libpf.PID
+	// ResourceKey identifies the process resource that owns this sample.
+	ResourceKey ResourceKey
+	// EnvVars are the reportable process environment variables. Like event
+	// samples, the first values seen for a resource in an interval are used.
+	EnvVars map[libpf.String]libpf.String
+	// ResourceAttrs are the OTel resource attributes captured by the producer.
+	// They initialize resources with no event-driven samples in the interval;
+	// metadata already collected from events takes precedence.
+	ResourceAttrs attribute.Set
+
 	TraceHash     libpf.TraceHash
 	Frames        libpf.Frames
 	ContextValues []uint64
