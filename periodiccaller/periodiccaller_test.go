@@ -130,9 +130,6 @@ func TestPeriodicCaller(t *testing.T) {
 		"Start": func(ctx context.Context, cb func()) func() {
 			return Start(ctx, interval, cb)
 		},
-		"StartWithJitter": func(ctx context.Context, cb func()) func() {
-			return StartWithJitter(ctx, interval, 0.2, cb)
-		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
 			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
 				cb()
@@ -185,9 +182,6 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 	tests := map[string]func(context.Context, func()) func(){
 		"Start": func(ctx context.Context, cb func()) func() {
 			return Start(ctx, interval, cb)
-		},
-		"StartWithJitter": func(ctx context.Context, cb func()) func() {
-			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
 			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
