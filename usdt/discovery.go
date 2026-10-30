@@ -56,13 +56,13 @@ func attachmentPointsFromNotes(
 	points := make([]AttachmentPoint, 0, len(notes))
 	var discoveryErrs []error
 	for _, note := range notes {
-		location, err := adjustedSDTAddress(sectionBase, note.base, note.location)
+		elfAddress, err := adjustedSDTAddress(sectionBase, note.base, note.location)
 		if err != nil {
 			discoveryErrs = append(discoveryErrs, fmt.Errorf("adjust %s:%s location: %v",
 				note.provider, note.name, err))
 			continue
 		}
-		location, err = elfFileOffset(f, location, true)
+		location, err := elfFileOffset(f, elfAddress, true)
 		if err != nil {
 			discoveryErrs = append(discoveryErrs, fmt.Errorf("resolve %s:%s location: %v",
 				note.provider, note.name, err))
@@ -89,7 +89,10 @@ func attachmentPointsFromNotes(
 			Provider:        note.provider,
 			Name:            note.name,
 			Location:        location,
+			ELFAddress:      elfAddress,
 			SemaphoreOffset: semaphoreOffset,
+			Arguments:       note.arguments,
+			Machine:         f.Machine,
 		})
 	}
 	return points, errors.Join(discoveryErrs...)

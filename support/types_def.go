@@ -11,6 +11,7 @@ import (
 
 /*
 #include "./ebpf/types.h"
+#include "./ebpf/usdt_defs.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
 #include "./ebpf/luajit.h"
@@ -77,6 +78,37 @@ const (
 )
 
 const (
+	USDTMaxArguments = C.USDT_MAX_ARGUMENTS
+
+	USDTArgumentConstant            uint8 = C.USDT_ARGUMENT_CONSTANT
+	USDTArgumentRegister            uint8 = C.USDT_ARGUMENT_REGISTER
+	USDTArgumentRegisterDereference uint8 = C.USDT_ARGUMENT_REGISTER_DEREFERENCE
+
+	USDTAMD64PtRegsRAXOffset uint16 = C.USDT_AMD64_PT_REGS_RAX_OFFSET
+	USDTAMD64PtRegsRBXOffset uint16 = C.USDT_AMD64_PT_REGS_RBX_OFFSET
+	USDTAMD64PtRegsRCXOffset uint16 = C.USDT_AMD64_PT_REGS_RCX_OFFSET
+	USDTAMD64PtRegsRDXOffset uint16 = C.USDT_AMD64_PT_REGS_RDX_OFFSET
+	USDTAMD64PtRegsRSIOffset uint16 = C.USDT_AMD64_PT_REGS_RSI_OFFSET
+	USDTAMD64PtRegsRDIOffset uint16 = C.USDT_AMD64_PT_REGS_RDI_OFFSET
+	USDTAMD64PtRegsRBPOffset uint16 = C.USDT_AMD64_PT_REGS_RBP_OFFSET
+	USDTAMD64PtRegsRSPOffset uint16 = C.USDT_AMD64_PT_REGS_RSP_OFFSET
+	USDTAMD64PtRegsR8Offset  uint16 = C.USDT_AMD64_PT_REGS_R8_OFFSET
+	USDTAMD64PtRegsR9Offset  uint16 = C.USDT_AMD64_PT_REGS_R9_OFFSET
+	USDTAMD64PtRegsR10Offset uint16 = C.USDT_AMD64_PT_REGS_R10_OFFSET
+	USDTAMD64PtRegsR11Offset uint16 = C.USDT_AMD64_PT_REGS_R11_OFFSET
+	USDTAMD64PtRegsR12Offset uint16 = C.USDT_AMD64_PT_REGS_R12_OFFSET
+	USDTAMD64PtRegsR13Offset uint16 = C.USDT_AMD64_PT_REGS_R13_OFFSET
+	USDTAMD64PtRegsR14Offset uint16 = C.USDT_AMD64_PT_REGS_R14_OFFSET
+	USDTAMD64PtRegsR15Offset uint16 = C.USDT_AMD64_PT_REGS_R15_OFFSET
+	USDTAMD64PtRegsRIPOffset uint16 = C.USDT_AMD64_PT_REGS_RIP_OFFSET
+
+	USDTARM64PtRegsX0Offset     uint16 = C.USDT_ARM64_PT_REGS_X0_OFFSET
+	USDTARM64PtRegsRegisterSize uint16 = C.USDT_ARM64_PT_REGS_REGISTER_SIZE
+	USDTARM64PtRegsSPOffset     uint16 = C.USDT_ARM64_PT_REGS_SP_OFFSET
+	USDTARM64PtRegsPCOffset     uint16 = C.USDT_ARM64_PT_REGS_PC_OFFSET
+)
+
+const (
 	// StackDeltaBucket[Smallest|Largest] define the boundaries of the bucket sizes of the various
 	// nested stack delta maps.
 	StackDeltaBucketSmallest = C.STACK_DELTA_BUCKET_SMALLEST
@@ -105,6 +137,9 @@ type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
 type PIDNamespaceLayout C.PIDNamespaceLayout
+type USDTArgumentSpec C.USDTArgumentSpec
+type USDTSpec C.USDTSpec
+type USDTSpecKey C.USDTSpecKey
 type StackDelta C.StackDelta
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey

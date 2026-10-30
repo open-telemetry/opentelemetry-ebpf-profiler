@@ -191,6 +191,9 @@ type Tracer struct {
 	// samplesPerSecond holds the configured number of samples per second.
 	samplesPerSecond int
 
+	// mapScaleFactor is the configured scaling factor for eBPF map sizes.
+	mapScaleFactor int
+
 	// probabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	probabilisticInterval time.Duration
 
@@ -393,6 +396,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		intervals:              cfg.Intervals,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
 		samplesPerSecond:       cfg.SamplesPerSecond,
+		mapScaleFactor:         cfg.MapScaleFactor,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
@@ -772,8 +776,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" {
-			// sched_times is owned by the off-CPU probe and created there on demand.
+		if mapName == "sched_times" || mapName == "usdt_specs" {
+			// Probe-owned maps are created by their consuming probes on demand.
 			continue
 		}
 		if mapName == obiSpanTracesMap {

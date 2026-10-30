@@ -70,6 +70,37 @@ const (
 )
 
 const (
+	USDTMaxArguments = 0xc
+
+	USDTArgumentConstant            uint8 = 0x0
+	USDTArgumentRegister            uint8 = 0x1
+	USDTArgumentRegisterDereference uint8 = 0x2
+
+	USDTAMD64PtRegsRAXOffset uint16 = 0x50
+	USDTAMD64PtRegsRBXOffset uint16 = 0x28
+	USDTAMD64PtRegsRCXOffset uint16 = 0x58
+	USDTAMD64PtRegsRDXOffset uint16 = 0x60
+	USDTAMD64PtRegsRSIOffset uint16 = 0x68
+	USDTAMD64PtRegsRDIOffset uint16 = 0x70
+	USDTAMD64PtRegsRBPOffset uint16 = 0x20
+	USDTAMD64PtRegsRSPOffset uint16 = 0x98
+	USDTAMD64PtRegsR8Offset  uint16 = 0x48
+	USDTAMD64PtRegsR9Offset  uint16 = 0x40
+	USDTAMD64PtRegsR10Offset uint16 = 0x38
+	USDTAMD64PtRegsR11Offset uint16 = 0x30
+	USDTAMD64PtRegsR12Offset uint16 = 0x18
+	USDTAMD64PtRegsR13Offset uint16 = 0x10
+	USDTAMD64PtRegsR14Offset uint16 = 0x8
+	USDTAMD64PtRegsR15Offset uint16 = 0x0
+	USDTAMD64PtRegsRIPOffset uint16 = 0x80
+
+	USDTARM64PtRegsX0Offset     uint16 = 0x0
+	USDTARM64PtRegsRegisterSize uint16 = 0x8
+	USDTARM64PtRegsSPOffset     uint16 = 0xf8
+	USDTARM64PtRegsPCOffset     uint16 = 0x100
+)
+
+const (
 	StackDeltaBucketSmallest = 0x8
 	StackDeltaBucketLargest  = 0x17
 
@@ -121,6 +152,22 @@ type PIDNamespaceLayout struct {
 	Upid_nr_offset            uint32
 	Upid_ns_offset            uint32
 	Pid_namespace_inum_offset uint32
+}
+type USDTArgumentSpec struct {
+	Value_offset    uint64
+	Register_offset uint16
+	Kind            uint8
+	X_pad           [5]uint8
+}
+type USDTSpec struct {
+	Arguments [12]USDTArgumentSpec
+	Count     uint8
+	X_pad     [7]uint8
+}
+type USDTSpecKey struct {
+	Pid     uint32
+	X_pad   uint32
+	Address uint64
 }
 type StackDelta struct {
 	AddrLow    uint16

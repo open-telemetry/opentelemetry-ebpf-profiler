@@ -24,6 +24,7 @@ const (
 type sdtNote struct {
 	provider  string
 	name      string
+	arguments string
 	location  uint64
 	base      uint64
 	semaphore uint64
@@ -79,13 +80,18 @@ func parseSDTDescriptor(desc []byte) (sdtNote, error) {
 	if !ok {
 		return sdtNote{}, errors.New("SDT note provider is not terminated")
 	}
-	name, _, ok := bytes.Cut(rest, []byte{0})
+	name, rest, ok := bytes.Cut(rest, []byte{0})
 	if !ok {
 		return sdtNote{}, errors.New("SDT note name is not terminated")
+	}
+	arguments, _, ok := bytes.Cut(rest, []byte{0})
+	if !ok {
+		return sdtNote{}, errors.New("SDT note arguments are not terminated")
 	}
 	return sdtNote{
 		provider:  string(provider),
 		name:      string(name),
+		arguments: string(arguments),
 		location:  binary.LittleEndian.Uint64(desc[0:8]),
 		base:      binary.LittleEndian.Uint64(desc[8:16]),
 		semaphore: binary.LittleEndian.Uint64(desc[16:24]),
