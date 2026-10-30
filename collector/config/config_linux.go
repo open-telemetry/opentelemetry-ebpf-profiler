@@ -20,7 +20,7 @@ import (
 
 const (
 	// 1TB of executable address space
-	MaxArgMapScaleFactor = 8
+	maxArgMapScaleFactor = 8
 
 	minFrameCacheSize = 1024
 	maxFrameCacheSize = 1024 * 1024
@@ -109,10 +109,10 @@ func (cfg *Config) Validate() error {
 			cfg.FrameCacheSize, minFrameCacheSize, maxFrameCacheSize)
 	}
 
-	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
+	if cfg.MapScaleFactor > maxArgMapScaleFactor {
 		return fmt.Errorf(
 			"eBPF map scaling factor %d exceeds limit (max: %d)",
-			cfg.MapScaleFactor, MaxArgMapScaleFactor,
+			cfg.MapScaleFactor, maxArgMapScaleFactor,
 		)
 	}
 
