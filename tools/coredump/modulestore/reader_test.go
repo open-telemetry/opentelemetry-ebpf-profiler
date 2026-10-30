@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 )
 
 type nopCloser struct{}
@@ -17,11 +19,13 @@ func (nopCloser) Close() error { return nil }
 
 func TestModuleReaderReadStat(t *testing.T) {
 	data := []byte("0123456789abcdef")
+	cache, err := readatbuf.New(bytes.NewReader(data), 8, 4)
+	require.NoError(t, err)
 	m := &ModuleReader{
-		ReaderAt: bytes.NewReader(data),
-		Closer:   nopCloser{},
-		name:     "module",
-		size:     uint(len(data)),
+		ViewAtReader: cache,
+		Closer:       nopCloser{},
+		name:         "module",
+		size:         uint(len(data)),
 	}
 
 	buf := make([]byte, 5)

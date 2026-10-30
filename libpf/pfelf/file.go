@@ -35,6 +35,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -42,8 +43,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -52,10 +53,10 @@ const (
 	// parsed sections (e.g. notes and debug link)
 	maxBytesSmallSection = 4 * 1024
 
-	// maxBytesLargeSection is the maximum section size for large libpf
-	// parsed sections (e.g. symbol tables and string tables; libxul
-	// has about 4MB .dynstr)
-	maxBytesLargeSection = 16 * 1024 * 1024
+	// defaultPageSize and defaultCachePages configure the page cache
+	// wrapping raw sources (e.g. os.File): 16 pages of 4 kB.
+	defaultPageSize   = 4 * 1024
+	defaultCachePages = 16
 
 	// notYetProcessed is an internal placeholder to mark not yet parsed data.
 	notYetProcessed = "\x01"
@@ -92,14 +93,15 @@ var (
 
 // File represents an open ELF file
 type File struct {
-	// closer is called internally when resources for this File are to be released
-	closer io.Closer
+	// elfReader is the ReadAt implementation used for this File. It is
+	// always a ViewAtReader: files are memory mapped if possible (stable
+	// zero-copy views), already-cached sources are borrowed, and raw
+	// sources are wrapped in a page cache.
+	elfReader libpf.ViewAtReader
 
-	// elfReader is the ReadAt implementation used for this File
-	elfReader io.ReaderAt
-
-	// mmapReader is the mmap reader for this File if available
-	mmapReader *mmap.ReaderAt
+	// resources holds the reference-counted owned resources of this File.
+	// It is nil when the File borrows the reader from the caller.
+	resources *fileResources
 
 	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
 	loadData []*Prog
@@ -193,16 +195,18 @@ type gnuHashHeader struct {
 type Prog struct {
 	elf.ProgHeader
 
-	// elfReader is the same ReadAt as used for the File
-	elfReader io.ReaderAt
+	// elfReader is the same ViewAtReader as used for the File
+	elfReader libpf.ViewAtReader
 }
 
 // Section represents a section header, and data associated with it
 type Section struct {
 	elf.SectionHeader
 
-	// elfReader is the same ReadAt as used for the File
-	elfReader io.ReaderAt
+	InternedName libpf.String
+
+	// elfReader is the same ViewAtReader as used for the File
+	elfReader libpf.ViewAtReader
 }
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
@@ -214,14 +218,66 @@ func Open(name string) (*File, error) {
 	return newFile(f, f, 0, false)
 }
 
-// Close closes the File.
-func (f *File) Close() (err error) {
-	if f.mmapReader != nil {
-		f.mmapReader.Close()
+// fileResources is a reference-counted holder for the owned resources of a
+// File. Take increments the reference count, and the returned Closer releases
+// it; the underlying reader is closed when the last reference is dropped.
+// This lets long-lived users (e.g. Gopclntab) keep the underlying reader
+// readable after the File itself has been closed.
+type fileResources struct {
+	// refCount is the number of references. The owned resources are
+	// released when it drops to zero.
+	refCount atomic.Int32
+	// closer is the owned underlying reader. It is nil after it has been
+	// closed.
+	closer io.Closer
+	// cache is the page cache owned by the File, or nil. It is invalidated
+	// when the last reference is dropped.
+	cache *readatbuf.Reader
+}
+
+// newFileResources creates the reference-counted holder for the owned
+// resources, with the File's own reference taken.
+func newFileResources(closer io.Closer, cache *readatbuf.Reader) *fileResources {
+	res := &fileResources{closer: closer, cache: cache}
+	res.refCount.Store(1)
+	return res
+}
+
+// Take takes a reference on the owned resources, keeping them usable past
+// the File's Close. The returned Closer releases this reference.
+func (r *fileResources) Take() io.Closer {
+	r.refCount.Add(1)
+	return r
+}
+
+// Close drops a reference, and releases the owned resources when the last
+// reference is dropped.
+func (r *fileResources) Close() error {
+	if r.refCount.Add(-1) > 0 {
+		return nil
 	}
-	if f.closer != nil {
-		err = f.closer.Close()
-		f.closer = nil
+	if r.cache != nil {
+		st := r.cache.Statistics()
+		log.Debugf("ELF cache statistics: hits %d, misses %d, evictions %d",
+			st.Hits, st.Misses, st.Evictions)
+		r.cache.InvalidateCache()
+		r.cache = nil
+	}
+	if r.closer == nil {
+		return nil
+	}
+	c := r.closer
+	r.closer = nil
+	return c.Close()
+}
+
+// Close closes the File. If the caller has taken references on the File via
+// Take, the owned resources are released only when the last reference has
+// been released.
+func (f *File) Close() (err error) {
+	if f.resources != nil {
+		err = f.resources.Close()
+		f.resources = nil
 	}
 	return err
 }
@@ -296,13 +352,36 @@ func NewFileFromFS(f fs.File) (*File, error) {
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
+	// Normalize the source to a ViewAtReader. Memory map os.File sources
+	// by default: mapping views are naturally stable and zero-copy.
+	// Sources that already provide views (modulestore chunk caches,
+	// out-of-tree mappings) are borrowed as-is; remaining raw sources are
+	// wrapped in a small page cache so that random access reads do not hit
+	// the kernel for every read.
+	var elfReader libpf.ViewAtReader
+	var ownedCache *readatbuf.Reader
+	if cache, ok := r.(*readatbuf.Reader); ok {
+		elfReader = cache
+	} else if view, ok := r.(libpf.ViewAtReader); ok {
+		elfReader = view
+	}
+	if elfReader == nil {
+		var err error
+		if ownedCache, err = readatbuf.New(r, defaultPageSize, defaultCachePages); err != nil {
+			return nil, err
+		}
+		elfReader = ownedCache
+	}
+
 	f := &File{
-		elfReader:     r,
+		elfReader:     elfReader,
 		InsideCore:    loadAddress != 0,
-		closer:        closer,
 		debuglinkPath: notYetProcessed,
 		notesError:    errNotProcessed,
 		golangVersion: strNotProcessed,
+	}
+	if closer != nil || ownedCache != nil {
+		f.resources = newFileResources(closer, ownedCache)
 	}
 	success := false
 	defer func() {
@@ -312,7 +391,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	}()
 
 	hdr := &f.elfHeader
-	if _, err := r.ReadAt(pfunsafe.FromPointer(hdr), 0); err != nil {
+	if _, err := f.elfReader.ReadAt(pfunsafe.FromPointer(hdr), 0); err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(hdr.Ident[0:4], []byte{0x7f, 'E', 'L', 'F'}) {
@@ -336,13 +415,8 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	}
 
 	progs := make([]elf.Prog64, hdr.Phnum)
-	if _, err := r.ReadAt(pfunsafe.FromSlice(progs), int64(hdr.Phoff)); err != nil {
+	if _, err := f.elfReader.ReadAt(pfunsafe.FromSlice(progs), int64(hdr.Phoff)); err != nil {
 		return nil, err
-	}
-
-	if osFile, ok := r.(*os.File); ok {
-		// Attempt to mmap the file if possible
-		f.mmapReader, _ = mmap.OpenFile(osFile)
 	}
 
 	f.Progs = make([]Prog, hdr.Phnum)
@@ -361,7 +435,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			Memsz:  ph.Memsz,
 			Align:  ph.Align,
 		}
-		p.elfReader = f.getReader()
+		p.elfReader = f.elfReader
 
 		if p.Type == elf.PT_LOAD {
 			if p.Vaddr < virtualBase {
@@ -407,7 +481,9 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 		switch p.Type {
 		case elf.PT_DYNAMIC:
-			rdr := pfbufio.NewReader(r, int64(p.Off), int64(p.Filesz))
+			rdr := pfbufio.Reader{}
+			rdr.InitFromView(f.elfReader, int64(p.Off), int64(p.Filesz))
+			defer rdr.Release()
 
 			var dyn elf.Dyn64
 			var bias int64
@@ -444,7 +520,6 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
-			rdr.Release()
 		case elf.PT_INTERP:
 			f.isExecutable = true
 		}
@@ -466,37 +541,30 @@ func getString(section []byte, start int) (string, bool) {
 	return string(section[start : start+slen]), true
 }
 
-// NoMmapCloser is a no-op io.Closer which is returned from Take() when
+// NoOpCloser is a no-op io.Closer which is returned from Take() when
 // the File is not memory mapped.
-type NoMmapCloser libpf.Void
+type NoOpCloser libpf.Void
 
 // Close implements io.Closer interface.
-func (NoMmapCloser) Close() error {
+func (NoOpCloser) Close() error {
 	return nil
 }
 
-// Take takes a reference on the backing mmapped data. This allows callers to
-// keep slices returned by Section.Data() and Prog.Data() after File has been
-// GCd. The returned Close() will release the reference on data.
+// Take takes a reference on the owned resources of this File, keeping the
+// underlying reader open and readable past the File's Close. This allows
+// callers to keep slices returned by Section.Data() and Prog.Data() after
+// File has been GCd. The returned Close() releases this reference.
 func (f *File) Take() io.Closer {
-	if f.mmapReader != nil {
-		return f.mmapReader.Take()
+	if f.resources != nil {
+		return f.resources.Take()
 	}
-	return NoMmapCloser{}
+	return NoOpCloser{}
 }
 
-// getReader returns the mmap reader if available, or otherwise the underlying
-// reader (typically os.File).
-func (f *File) getReader() io.ReaderAt {
-	if f.mmapReader != nil {
-		return f.mmapReader
-	}
-	return f.elfReader
-}
-
-// Underlying returns the underlying io.ReaderAt interface to access the ELF
-// file directly.
-func (f *File) Underlying() io.ReaderAt {
+// Underlying returns the underlying reader used for this File. It always
+// implements libpf.ViewAtReader: either a borrowed zero-copy capable source,
+// or the page cache wrapping a raw source.
+func (f *File) Underlying() libpf.ViewAtReader {
 	return f.elfReader
 }
 
@@ -544,23 +612,23 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
-		s.elfReader = f.getReader()
+		s.elfReader = f.elfReader
 	}
 
 	// Load the section name string table
 	strsh := f.Sections[hdr.Shstrndx]
-	strtab, err := strsh.Data(maxBytesLargeSection)
-	if err != nil {
-		return err
-	}
+	strshEnd := int64(strsh.Offset + strsh.FileSize)
 	for i := range f.Sections {
 		sh := &f.Sections[i]
-		var ok bool
-		sh.Name, ok = getString(strtab, int(sections[i].Name))
-		if !ok {
+		offset := int64(strsh.Offset) + int64(sections[i].Name)
+		// Empty section names are valid (e.g. the null section at index 0).
+		name, err := libpf.InternFromView(f.elfReader, offset, strshEnd)
+		if err != nil {
 			return fmt.Errorf("bad section name index (section %d, index %d/%d)",
-				i, sections[i].Name, len(strtab))
+				i, sections[i].Name, strsh.FileSize)
 		}
+		sh.InternedName = name
+		sh.Name = name.String()
 	}
 
 	return nil
@@ -615,8 +683,10 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 	if ph := f.ProgByVirtualAddress(uint64(addr)); ph != nil {
 		offset := addr - int64(ph.Vaddr)
 		if offset+int64(sz) <= int64(ph.Filesz) {
-			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-				return mapping.Subslice(int(ph.Off)+int(offset), sz)
+			// The view is pinned, so it stays valid even if it outlives
+			// further reads on the File, mirroring the mmap semantics.
+			if view, err := ph.elfReader.PinAt(int64(ph.Off)+offset, int64(sz)); err == nil {
+				return view[:sz], nil
 			}
 		}
 		if sz > maxSize {
@@ -666,7 +736,7 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 			continue
 		}
 
-		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+		rdr.InitFromView(f.elfReader, int64(notes.Off), int64(notes.Filesz))
 		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
@@ -708,7 +778,7 @@ func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bo
 		}
 		visited = true
 
-		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
+		rdr.InitFromView(f.elfReader, int64(section.Offset), int64(section.Size))
 		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
@@ -891,16 +961,10 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 	}
 
 	strtabSection := &f.Sections[symtabSection.Link]
-	if strtabSection.Size > maxBytesLargeSection {
-		return false, fmt.Errorf("string table too big (%d bytes)", strtabSection.Size)
-	}
+	strtabEnd := int64(strtabSection.Offset + strtabSection.FileSize)
 
-	strtabData, err := strtabSection.Data(uint(strtabSection.Size))
-	if err != nil {
-		return false, fmt.Errorf("failed to read string table: %w", err)
-	}
-
-	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
+	rdr := pfbufio.Reader{}
+	rdr.InitFromView(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
 	defer rdr.Release()
 
 	rela := &elf.Rela64{}
@@ -923,11 +987,13 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
 
-		symStr, ok := getString(strtabData, int(sym.Name))
-		if !ok {
-			return false, errors.New("failed to get relocation name string")
-		}
-
+		// Symbol names are read from zero-copy views of the string table.
+		// The relocation stream window is pinned, so the lookups through
+		// the same source cannot invalidate it. Names are capped to a
+		// plausible length to bound corrupted tables.
+		symStr, _ := libpf.StringFromView(f.elfReader,
+			int64(strtabSection.Offset)+int64(sym.Name),
+			strtabEnd)
 		if !visitor(*rela, symStr, relType) {
 			return false, nil
 		}
@@ -945,7 +1011,8 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 		return "", 0, ErrNoDebugLink
 	}
 
-	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
+	rdr := pfbufio.Reader{}
+	rdr.InitFromView(f.elfReader, int64(s.Offset), int64(s.Size))
 	defer rdr.Release()
 
 	d, err := rdr.ReadN(int(s.Size))
@@ -1042,11 +1109,13 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
+	// The view is pinned, so it stays valid even if it outlives further
+	// reads on the File, mirroring the mmap semantics.
+	if view, err := ph.elfReader.PinAt(int64(ph.Off), int64(ph.Filesz)); err == nil {
+		return view[:ph.Filesz], nil
 	}
 
-	// Fallback option if the file is not mmapped.
+	// Fallback: copy the data from the source.
 	if ph.Filesz > uint64(maxSize) {
 		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
 	}
@@ -1078,26 +1147,19 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return nil, errors.New("compressed sections not supported")
 	}
 
-	if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
+	// The view is pinned, so it stays valid even if it outlives further
+	// reads on the File, mirroring the mmap semantics.
+	if view, err := sh.elfReader.PinAt(int64(sh.Offset), int64(sh.FileSize)); err == nil {
+		return view[:sh.FileSize], nil
 	}
 
-	// Fallback option if the file is not mmapped.
+	// Fallback: copy the data from the source.
 	if sh.FileSize > uint64(maxSize) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
 	}
 	p := make([]byte, sh.FileSize)
 	_, err := sh.ReadAt(p, 0)
 	return p, err
-}
-
-// SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
-func (f *File) SetDontNeed() {
-	if f.mmapReader != nil {
-		if err := f.mmapReader.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
-		}
-	}
 }
 
 // ReadAt reads bytes from given virtual address
@@ -1284,13 +1346,11 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		return fmt.Errorf("failed to read %v strtab: link %v out of range",
 			name, symTab.Link)
 	}
-	strTab := f.Sections[symTab.Link]
-	strs, err := strTab.Data(maxBytesLargeSection)
-	if err != nil {
-		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
-	}
+	strtab := f.Sections[symTab.Link]
+	strtabEnd := int64(strtab.Offset + strtab.FileSize)
 
-	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
+	rdr := pfbufio.Reader{}
+	rdr.InitFromView(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
 	defer rdr.Release()
 
 	sym := &elf.Sym64{}
@@ -1301,9 +1361,15 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 			}
 			break
 		}
-		if name, ok := getString(strs, int(sym.Name)); ok {
+		// Symbol names are read from zero-copy views of the string table.
+		// The symbol table stream window is pinned, so the lookups through
+		// the same source cannot invalidate it. Names are capped to a
+		// plausible length to bound corrupted tables.
+		symName, err := libpf.StringFromView(f.elfReader,
+			int64(strtab.Offset)+int64(sym.Name), strtabEnd)
+		if err == nil && symName != "" {
 			if !visitor(libpf.Symbol{
-				Name:    libpf.SymbolName(name),
+				Name:    libpf.SymbolName(symName),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
 				Info:    sym.Info,
@@ -1421,7 +1487,8 @@ func (f *File) parseGoBuildinfo() error {
 		return errNoGoBuildinfo
 	}
 
-	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
+	rdr := pfbufio.Reader{}
+	rdr.InitFromView(f.Underlying(), off, sz)
 	defer rdr.Release()
 
 	for {

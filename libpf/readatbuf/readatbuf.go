@@ -22,6 +22,10 @@ type page struct {
 	data []byte
 	// eof determines whether we encountered an EOF when reading the page originally.
 	eof bool
+	// pins is the number of outstanding PinAt views aliasing this page.
+	// Pages with pins are dropped to the GC on eviction instead of being
+	// pooled, keeping the outstanding views valid.
+	pins int
 }
 
 // Statistics contains statistics about cache efficiency.
@@ -37,6 +41,12 @@ type Reader struct {
 	cache    *lru.LRU[uint, page]
 	pageSize uint
 	stats    Statistics
+
+	// viewPage is the page index of the most recently handed out view, or
+	// ^uint(0) if no view is outstanding. Evicting this page must not
+	// return its buffer to the pool, as an outstanding view may still
+	// alias it.
+	viewPage uint
 }
 
 func HashUInt(v uint) uint32 {
@@ -57,6 +67,7 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 	reader = &Reader{
 		inner:    inner,
 		pageSize: pageSize,
+		viewPage: ^uint(0),
 	}
 
 	reader.cache, err = lru.New[uint, page](uint32(cacheSize), HashUInt)
@@ -64,8 +75,15 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 		return nil, fmt.Errorf("failed to create internal cache: %w", err)
 	}
 
-	reader.cache.SetOnEvict(func(_ uint, page page) {
+	reader.cache.SetOnEvict(func(pageIdx uint, page page) {
 		reader.stats.Evictions++
+		if page.pins > 0 || reader.viewPage == pageIdx {
+			// The page is aliased by an outstanding view: forget the pin
+			// and drop the buffer to the GC instead of pooling it.
+			reader.viewPage = ^uint(0)
+			page.data = nil
+			return
+		}
 		libpf.PutBuffer(page.data)
 		page.data = nil
 	})
@@ -133,6 +151,76 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 	}
 
 	return int(writeOffset), nil
+}
+
+// ViewAt implements the libpf.ViewAtReader interface.
+func (reader *Reader) ViewAt(offs, minLen int64) ([]byte, error) {
+	return reader.view(offs, minLen, false)
+}
+
+func (reader *Reader) view(offs, minLen int64, pin bool) ([]byte, error) {
+	if offs < 0 {
+		return nil, fmt.Errorf("negative offset value %d given", offs)
+	}
+	if minLen <= 0 {
+		minLen = 1
+	}
+
+	// Fail without any I/O if the range would straddle a page boundary, so
+	// that the cache does not get polluted by unsatisfiable requests.
+	skip := uint(offs) % reader.pageSize
+	if skip+uint(minLen) > reader.pageSize {
+		return nil, libpf.ErrNotContiguous
+	}
+
+	pageIdx := uint(offs) / reader.pageSize
+	data, eof, err := reader.getOrReadPage(pageIdx)
+	if err != nil {
+		return nil, err
+	}
+	if eof && skip+uint(minLen) > uint(len(data)) {
+		return nil, io.EOF
+	}
+
+	// The previous transient view is contractually invalid from now on; pin
+	// the page backing the new view so that its buffer is not pooled on
+	// eviction.
+	reader.viewPage = pageIdx
+	if pin {
+		reader.addPin(pageIdx)
+	}
+	return data[skip:], nil
+}
+
+// PinAt returns a view like ViewAt, but explicitly pins the backing page:
+// the view stays valid, and the page will not be pooled on eviction, until
+// UnpinAt is called with an offset within the same page. Multiple pins on
+// one page are reference counted. A page that is evicted while pinned is
+// dropped to the GC, and a later re-read of the same page index creates a
+// new incarnation: UnpinAt only affects the current one.
+func (reader *Reader) PinAt(offs, minLen int64) ([]byte, error) {
+	return reader.view(offs, minLen, true)
+}
+
+// UnpinAt removes one pin from the page containing offs, added by PinAt.
+// It is a no-op if the page is not cached or carries no pins.
+func (reader *Reader) UnpinAt(offs int64) {
+	if offs < 0 {
+		return
+	}
+	pageIdx := uint(offs) / reader.pageSize
+	if p, ok := reader.cache.Get(pageIdx); ok && p.pins > 0 {
+		p.pins--
+		reader.cache.Add(pageIdx, p)
+	}
+}
+
+// addPin increments the pin count of a cached page.
+func (reader *Reader) addPin(pageIdx uint) {
+	if p, ok := reader.cache.Get(pageIdx); ok {
+		p.pins++
+		reader.cache.Add(pageIdx, p)
+	}
 }
 
 func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err error) {

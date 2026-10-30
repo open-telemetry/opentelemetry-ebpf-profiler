@@ -107,17 +107,22 @@ func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, int, error) {
 //	0x00000000000c22a8 <+24>:	ldr	x28, [x0, x27]
 //	0x00000000000c22ac <+28>:	ret
 func extractTLSGOffset(f *pfelf.File, pclntab *elfunwindinfo.Gopclntab) (int32, error) {
-	symbolName := "runtime.load_g.abi0"
-	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
-	if err != nil {
+	syms := []libpf.Symbol{
+		{Name: "runtime.load_g.abi0"},
+		{Name: "runtime.load_g"},
+	}
+	if err := pclntab.LookupSymbols(syms); err != nil {
+		return 0, err
+	}
+	sym := &syms[0]
+	if sym.Address == 0 {
 		// Use runtime.load_g as backup, if we can not identify
 		// runtime.load_g.abi0. This can happen, if runtime.load_g.abi0
 		// is inlined into runtime.load_g.
-		symbolName = "runtime.load_g"
-		sym, err = pclntab.LookupSymbol(libpf.SymbolName(symbolName))
-		if err != nil {
-			return 0, err
-		}
+		sym = &syms[1]
+	}
+	if sym.Address == 0 {
+		return 0, libpf.ErrSymbolNotFound
 	}
 
 	pc := int64(sym.Address)
@@ -157,5 +162,5 @@ func extractTLSGOffset(f *pfelf.File, pclntab *elfunwindinfo.Gopclntab) (int32, 
 			}
 		}
 	}
-	return 0, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
+	return 0, fmt.Errorf("symbol '%s': %w", sym.Name, errDecodeSymbol)
 }

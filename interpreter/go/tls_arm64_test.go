@@ -51,13 +51,15 @@ func TestExtractRuntimeIsCgo(t *testing.T) {
 			require.NoError(t, err)
 			defer pclntab.Close()
 
-			sym, err := pclntab.LookupSymbol(libpf.SymbolName("runtime.load_g.abi0"))
-			if err != nil {
-				sym, err = pclntab.LookupSymbol(libpf.SymbolName("runtime.load_g"))
+			syms := []libpf.Symbol{{Name: "runtime.load_g.abi0"}}
+			require.NoError(t, pclntab.LookupSymbols(syms))
+			if syms[0].Address == 0 {
+				syms = []libpf.Symbol{{Name: "runtime.load_g"}}
+				require.NoError(t, pclntab.LookupSymbols(syms))
 			}
-			require.NoError(t, err)
+			require.NotZero(t, syms[0].Address)
 
-			pc := int64(sym.Address)
+			pc := int64(syms[0].Address)
 			b, err := f.VirtualMemory(pc, 32, 32)
 			require.NoError(t, err)
 
