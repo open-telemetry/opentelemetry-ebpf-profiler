@@ -129,8 +129,7 @@ func appendEventValues(dst []int64, meta *samples.TraceEventMeta) ([]int64, erro
 	return values, nil
 }
 
-// SetSnapshotProvider configures the source of probe-produced snapshots and
-// their process resource metadata.
+// SetSnapshotProvider configures the source of probe-produced snapshots.
 func (b *baseReporter) SetSnapshotProvider(provider SnapshotProvider) {
 	b.snapshotProvider = provider
 }
@@ -184,26 +183,24 @@ func (b *baseReporter) mergeSnapshots(tree samples.TraceEventsTree, ts time.Time
 	}
 }
 
-// snapshotEventsFor returns the SampleToEvents map for row's process and profile
-// type, creating the resource and profile-type entries if this is the first
-// snapshot sample for them.
+// snapshotEventsFor returns the SampleToEvents map for row's resource and
+// profile type, creating the entries if this is the first sample for them.
+// Event-driven resource metadata collected earlier in the interval takes
+// precedence; snapshot metadata initializes resources that have no events.
 func (b *baseReporter) snapshotEventsFor(tree samples.TraceEventsTree,
 	profileType *samples.TypeMetadata, row samples.SnapshotSample,
 ) samples.SampleToEvents {
-	key := samples.ResourceKey{PID: int64(row.PID)}
-	meta := b.snapshotProvider.ProcessMetaForPID(row.PID)
-	key.ExecutablePath = meta.Executable
-	key.ContainerID = meta.ContainerID
-
-	rtp, ok := tree[key]
+	rtp, ok := tree[row.ResourceKey]
 	if !ok {
 		rtp = samples.ResourceToProfiles{
-			Events: make(map[*samples.TypeMetadata]samples.SampleToEvents),
+			EnvVars:       row.EnvVars,
+			ResourceAttrs: row.ResourceAttrs,
+			Events:        make(map[*samples.TypeMetadata]samples.SampleToEvents),
 		}
-		tree[key] = rtp
 	}
 	if _, ok := rtp.Events[profileType]; !ok {
 		rtp.Events[profileType] = make(samples.SampleToEvents)
 	}
+	tree[row.ResourceKey] = rtp
 	return rtp.Events[profileType]
 }

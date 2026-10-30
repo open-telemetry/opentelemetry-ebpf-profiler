@@ -228,13 +228,6 @@ func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
 }
 
-// ProcessMetaForPID returns the process metadata needed to attribute snapshot
-// profiles to their executable and container resources.
-func (t *Tracer) ProcessMetaForPID(pid libpf.PID) process.Meta {
-	meta, _ := t.processManager.MetaForPID(pid)
-	return meta
-}
-
 // signalDone closes the done channel to indicate an unrecoverable error.
 // It is safe to call multiple times.
 func (t *Tracer) signalDone() {

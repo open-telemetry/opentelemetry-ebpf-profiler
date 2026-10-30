@@ -104,8 +104,8 @@ func (c *Controller) Start(ctx context.Context) error {
 	c.tracer = trc
 	log.Info("eBPF tracer loaded")
 
-	// Wire probe snapshot sources and process metadata into the reporter before
-	// starting its collection loop.
+	// Wire probe snapshot sources into the reporter before starting its
+	// collection loop.
 	if snapshotReporter, ok := c.reporter.(reporter.SnapshotReporter); ok {
 		snapshotReporter.SetSnapshotProvider(trc)
 	} else {

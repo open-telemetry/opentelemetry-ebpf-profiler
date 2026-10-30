@@ -590,7 +590,7 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Process first seen: gather and enrich metadata.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobar")})
 	require.Equal(1, enricherCalls)
-	meta, _ := pm.MetaForPID(pid)
+	meta, _ := pm.metaForPID(pid)
 	require.Equal("foobar", meta.ExtraMeta[key])
 
 	// Unchanged executable: don't refetch metadata, don't enrich.
@@ -600,6 +600,6 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	// Executable changed: refetch metadata and enrich.
 	pm.SynchronizeProcess(&testProcess{pid: pid, exe: libpf.Intern("foobarbaz")})
 	require.Equal(2, enricherCalls)
-	meta, _ = pm.MetaForPID(pid)
+	meta, _ = pm.metaForPID(pid)
 	require.Equal("foobarbaz", meta.ExtraMeta[key])
 }
