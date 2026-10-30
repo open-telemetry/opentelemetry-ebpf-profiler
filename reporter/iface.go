@@ -33,6 +33,19 @@ type TraceReporter interface {
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
+// SnapshotProvider supplies profiles produced from probe state at each
+// collection interval and resolves their process resource metadata.
+type SnapshotProvider interface {
+	CollectSnapshots() []samples.SnapshotProfile
+	ProcessMetaForPID(libpf.PID) process.Meta
+}
+
+// SnapshotReporter is an optional reporter capability for accepting snapshots
+// from a SnapshotProvider.
+type SnapshotReporter interface {
+	SetSnapshotProvider(SnapshotProvider)
+}
+
 type ExecutableMetadata struct {
 	// MappingFile is the reference to mapping file data.
 	MappingFile libpf.FrameMappingFile
