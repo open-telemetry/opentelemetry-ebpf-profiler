@@ -498,7 +498,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.filetabOffset >= g.pctabOffset ||
 		g.pctabOffset >= g.pclnOffset ||
 		g.pclnOffset >= dataLen ||
-		(int64(g.numFuncs)+1)*int64(g.funcMapSize) > int64(len(data))-int64(g.pclnOffset) {
+		uint64(g.numFuncs)+1 > uint64(dataLen-g.pclnOffset)/uint64(g.funcMapSize) {
 		return nil, fmt.Errorf("corrupt header (%x < %x < %x < %x < %x)",
 			g.funcnameOffset, g.cuOffset, g.filetabOffset, g.pctabOffset, g.pclnOffset)
 	}
