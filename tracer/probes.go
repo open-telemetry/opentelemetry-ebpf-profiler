@@ -22,15 +22,9 @@ import (
 type ProbeContext struct {
 	maps             map[string]*cebpf.Map
 	sysVars          SysConfigVars
-	mapScaleFactor   int
 	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
-}
-
-// MapScaleFactor returns the configured scaling factor for eBPF map sizes.
-func (c *ProbeContext) MapScaleFactor() int {
-	return c.mapScaleFactor
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -441,10 +435,9 @@ type Probe interface {
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	probeCtx := &ProbeContext{
-		maps:           t.ebpfMaps,
-		sysVars:        t.sysConfigVars,
-		mapScaleFactor: t.mapScaleFactor,
-		reg:            t.origins,
+		maps:    t.ebpfMaps,
+		sysVars: t.sysConfigVars,
+		reg:     t.origins,
 		registerAttacher: func(a pm.ProbeAttacher) error {
 			// Per-process probes need resynchronization when executable mappings are added.
 			if err := t.ensureMmapEventMonitor(); err != nil {

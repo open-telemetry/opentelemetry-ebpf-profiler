@@ -337,7 +337,8 @@ func TestAllTracers(t *testing.T) {
 			require.NoError(t, err)
 			defer tr.Close()
 
-			heapProbe := heap.New()
+			heapProbe, err := heap.New(heap.Config{})
+			require.NoError(t, err)
 			require.NoError(t, tr.Enable(t.Context(), heapProbe))
 			defer func() {
 				require.NoError(t, heapProbe.Unload())
