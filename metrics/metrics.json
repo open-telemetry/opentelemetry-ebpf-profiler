@@ -2284,5 +2284,40 @@
     "name": "ThreadContextSchemaRejected",
     "field": "agent.threadctx.schema_rejected",
     "id": 312
+  },
+  {
+    "description": "Number of times updating an element in stackDeltaFPRanges failed",
+    "type": "counter",
+    "name": "StackDeltaFPRangesUpdate",
+    "field": "agent.errors.stack_delta_fp_ranges_update",
+    "id": 313
+  },
+  {
+    "description": "Number of times batch updating elements in stackDeltaFPRanges failed",
+    "type": "counter",
+    "name": "StackDeltaFPRangesBatchUpdate",
+    "field": "agent.errors.stack_delta_fp_ranges_batch_update",
+    "id": 314
+  },
+  {
+    "description": "Number of times deleting an element from stackDeltaFPRanges failed",
+    "type": "counter",
+    "name": "StackDeltaFPRangesDelete",
+    "field": "agent.errors.stack_delta_fp_ranges_delete",
+    "id": 315
+  },
+  {
+    "description": "Number of times batch deleting elements from stackDeltaFPRanges failed",
+    "type": "counter",
+    "name": "StackDeltaFPRangesBatchDelete",
+    "field": "agent.errors.stack_delta_fp_ranges_batch_delete",
+    "id": 316
+  },
+  {
+    "description": "Current size of the stack delta frame pointer ranges LPM trie",
+    "type": "gauge",
+    "name": "NumStackDeltaFPRanges",
+    "field": "agent.stack_delta_fp_ranges.size",
+    "id": 317
   }
 ]

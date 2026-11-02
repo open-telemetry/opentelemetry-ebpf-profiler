@@ -74,6 +74,10 @@ const (
 const (
 	BitWidthPID  = C.BIT_WIDTH_PID
 	BitWidthPage = C.BIT_WIDTH_PAGE
+
+	BitWidthFPRangePad     = C.BIT_WIDTH_FP_RANGE_PAD
+	BitWidthFileID         = C.BIT_WIDTH_FILE_ID
+	BitWidthStackDeltaPage = C.BIT_WIDTH_STACK_DELTA_PAGE
 )
 
 const (
@@ -106,6 +110,8 @@ type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
 type PIDNamespaceLayout C.PIDNamespaceLayout
 type StackDelta C.StackDelta
+type StackDeltaFPInfo C.StackDeltaFPInfo
+type StackDeltaFPRange C.StackDeltaFPRange
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey
 type SystemAnalysis C.SystemAnalysis

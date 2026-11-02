@@ -94,6 +94,31 @@ func __bpf_probe_read_user_with_test_fault(
 // we are accessing one of nested maps in the exe_id_to_X_stack_deltas maps
 var stackDeltaInnerMap = C.malloc(1)
 
+// keepTopBitsBE returns the big endian value with all but its keepBits most significant bits
+// cleared.
+func keepTopBitsBE(be uint64, keepBits uint32) uint64 {
+	if keepBits >= 64 {
+		return be
+	}
+	var mask uint64
+	if keepBits != 0 {
+		mask = ^uint64(0) << (64 - keepBits)
+	}
+	return bits.ReverseBytes64(bits.ReverseBytes64(be) & mask)
+}
+
+// maskFPRangeKey clears the StackDeltaFPRange key data bits beyond prefixLen, the way the
+// kernel's LPM trie compares keys. The data starts with the explicit pad, so its bits count
+// towards the prefix like the fileID and page bits, and every key has a zero pad to mask.
+func maskFPRangeKey(key C.StackDeltaFPRange, prefixLen uint32) C.StackDeltaFPRange {
+	key.prefixLen = C.u32(prefixLen)
+	dataBits := prefixLen - min(prefixLen, support.BitWidthFPRangePad)
+	fileIDBits := min(dataBits, support.BitWidthFileID)
+	key.fileID = C.__be64(keepTopBitsBE(uint64(key.fileID), fileIDBits))
+	key.page = C.__be64(keepTopBitsBE(uint64(key.page), dataBits-fileIDBits))
+	return key
+}
+
 //export __bpf_map_lookup_elem
 func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointer) unsafe.Pointer {
 	ctx := ebpfContextMap[id]
@@ -129,6 +154,19 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		}
 	case unsafe.Pointer(&C.stack_delta_page_to_info):
 		return ctx.stackDeltaPageToInfo[*(*C.StackDeltaPageKey)(keyptr)]
+	case unsafe.Pointer(&C.stack_delta_fp_ranges):
+		// The kernel matches everything after prefixLen as one big endian bit string.
+		// Walk the prefix down over the whole key data, not the page field alone, so
+		// that a layout mismatch shows up here and not only on a real kernel.
+		key := *(*C.StackDeltaFPRange)(keyptr)
+		for prefixLen := uint32(key.prefixLen); ; prefixLen-- {
+			if val, ok := ctx.stackDeltaFPRanges[maskFPRangeKey(key, prefixLen)]; ok {
+				return val
+			}
+			if prefixLen == 0 {
+				break
+			}
+		}
 	case unsafe.Pointer(&C.exe_id_to_8_stack_deltas), unsafe.Pointer(&C.exe_id_to_9_stack_deltas),
 		unsafe.Pointer(&C.exe_id_to_10_stack_deltas), unsafe.Pointer(&C.exe_id_to_11_stack_deltas),
 		unsafe.Pointer(&C.exe_id_to_12_stack_deltas), unsafe.Pointer(&C.exe_id_to_13_stack_deltas),

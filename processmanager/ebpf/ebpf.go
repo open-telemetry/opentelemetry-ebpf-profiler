@@ -57,6 +57,7 @@ type ebpfMapsImpl struct {
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
 	StackDeltaPageToInfo  *cebpf.Map `name:"stack_delta_page_to_info"`
+	StackDeltaFPRanges    *cebpf.Map `name:"stack_delta_fp_ranges"`
 	PidPageToMappingInfo  *cebpf.Map `name:"pid_page_to_mapping_info"`
 	UnwindInfoArray       *cebpf.Map `name:"unwind_info_array"`
 	ReportedPIDs          *cebpf.Map `name:"reported_pids"`
@@ -526,26 +527,23 @@ func (impl *ebpfMapsImpl) DeleteExeIDToStackDeltas(fileID host.FileID, mapID uin
 
 // UpdateStackDeltaPages adds fileID/page combinations with given information to the eBPF map.
 // Existing entries for these fileID/page keys are overwritten.
-func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-	mapID uint16, firstPageAddr uint64,
+func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID,
+	pages []ebpfapi.StackDeltaPage, mapID uint16,
 ) error {
-	firstDelta := uint32(0)
-	keys := make([]support.StackDeltaPageKey, len(numDeltasPerPage))
-	values := make([]support.StackDeltaPageInfo, len(numDeltasPerPage))
+	keys := make([]support.StackDeltaPageKey, len(pages))
+	values := make([]support.StackDeltaPageInfo, len(pages))
 
 	// Prepare the key/value combinations that will be loaded.
-	for pageNumber, numDeltas := range numDeltasPerPage {
-		pageAddr := firstPageAddr + uint64(pageNumber)<<support.StackDeltaPageBits
-		keys[pageNumber] = support.StackDeltaPageKey{
+	for i, page := range pages {
+		keys[i] = support.StackDeltaPageKey{
 			FileID: uint64(fileID),
-			Page:   pageAddr,
+			Page:   page.PageAddr,
 		}
-		values[pageNumber] = support.StackDeltaPageInfo{
-			FirstDelta: firstDelta,
-			NumDeltas:  numDeltas,
+		values[i] = support.StackDeltaPageInfo{
+			FirstDelta: page.FirstDelta,
+			NumDeltas:  page.NumDeltas,
 			MapID:      mapID,
 		}
-		firstDelta += uint32(numDeltas)
 	}
 
 	// The kernel never reads attr->batch.flags for batch updates, and only
@@ -589,8 +587,120 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 		FileID: uint64(fileID),
 		Page:   page,
 	}
-	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete,
-		impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
+	err := impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key))
+	if errors.Is(err, cebpf.ErrKeyNotExist) {
+		// A rolled back load and a resumed teardown both hand over keys that were
+		// never inserted, so a page that is already gone is not a map failure.
+		return nil
+	}
+	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete, err)
+}
+
+// getStackDeltaFPRange initializes a StackDeltaFPRange instance from a fileID and lpm.Prefix.
+func getStackDeltaFPRange(fileID host.FileID, prefix lpm.Prefix) support.StackDeltaFPRange {
+	// The LPM trie expects the fileID and page in big endian format.
+	return support.StackDeltaFPRange{
+		FileID:    bits.ReverseBytes64(uint64(fileID)),
+		Page:      bits.ReverseBytes64(prefix.Key),
+		PrefixLen: support.BitWidthFPRangePad + support.BitWidthFileID + prefix.Length,
+	}
+}
+
+// UpdateStackDeltaFPRanges maps the given page ranges of fileID to a single unwind info. On
+// error it rolls back what it inserted and returns the prefixes it could not reclaim.
+func (impl *ebpfMapsImpl) UpdateStackDeltaFPRanges(fileID host.FileID, prefixes []lpm.Prefix,
+	unwindInfo uint16,
+) ([]lpm.Prefix, error) {
+	if len(prefixes) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]support.StackDeltaFPRange, len(prefixes))
+	values := make([]support.StackDeltaFPInfo, len(prefixes))
+	for i, prefix := range prefixes {
+		keys[i] = getStackDeltaFPRange(fileID, prefix)
+		values[i] = support.StackDeltaFPInfo{UnwindInfo: unwindInfo}
+	}
+
+	if impl.hasLPMTrieBatchOperations {
+		_, err := impl.StackDeltaFPRanges.BatchUpdate(
+			ptrCastMarshaler[support.StackDeltaFPRange](keys),
+			ptrCastMarshaler[support.StackDeltaFPInfo](values),
+			nil)
+		if err == nil {
+			return nil, nil
+		}
+		// The batch keeps what it inserted before the failing element, and its count
+		// is reliable for some errors only, so remove every attempted key.
+		failed, _ := impl.deleteStackDeltaFPRangesSingle(fileID, prefixes)
+		return failed, impl.trackMapError(metrics.IDStackDeltaFPRangesBatchUpdate, err)
+	}
+
+	for i := range keys {
+		if err := impl.StackDeltaFPRanges.Update(unsafe.Pointer(&keys[i]),
+			unsafe.Pointer(&values[i]), cebpf.UpdateAny); err != nil {
+			failed, _ := impl.deleteStackDeltaFPRangesSingle(fileID, prefixes[:i])
+			return failed, impl.trackMapError(metrics.IDStackDeltaFPRangesUpdate, err)
+		}
+	}
+	return nil, nil
+}
+
+// DeleteStackDeltaFPRanges removes the elements specified by prefixes for fileID and returns
+// the prefixes that are still in the trie.
+func (impl *ebpfMapsImpl) DeleteStackDeltaFPRanges(fileID host.FileID, prefixes []lpm.Prefix) (
+	[]lpm.Prefix, error,
+) {
+	if len(prefixes) == 0 {
+		return nil, nil
+	}
+
+	// BatchDelete may return early, so a single Delete pass finishes the job. Its result
+	// is reported instead of the batch error, which the batch metric counts already.
+	if impl.hasLPMTrieBatchOperations &&
+		impl.deleteStackDeltaFPRangesBatch(fileID, prefixes) == nil {
+		return nil, nil
+	}
+	return impl.deleteStackDeltaFPRangesSingle(fileID, prefixes)
+}
+
+// deleteStackDeltaFPRangesSingle removes the prefixes one by one and returns those that may
+// still be in the trie.
+func (impl *ebpfMapsImpl) deleteStackDeltaFPRangesSingle(fileID host.FileID,
+	prefixes []lpm.Prefix,
+) (failed []lpm.Prefix, combinedErrors error) {
+	cKey := &support.StackDeltaFPRange{}
+	for _, prefix := range prefixes {
+		*cKey = getStackDeltaFPRange(fileID, prefix)
+		err := impl.StackDeltaFPRanges.Delete(unsafe.Pointer(cKey))
+		if err == nil || errors.Is(err, cebpf.ErrKeyNotExist) {
+			continue
+		}
+		_ = impl.trackMapError(metrics.IDStackDeltaFPRangesDelete, err)
+		combinedErrors = errors.Join(combinedErrors, err)
+		failed = append(failed, prefix)
+	}
+	return failed, combinedErrors
+}
+
+// deleteStackDeltaFPRangesBatch removes the given prefixes in one batch. A non-nil error
+// means the batch stopped early, so the caller has to finish the job one key at a time.
+func (impl *ebpfMapsImpl) deleteStackDeltaFPRangesBatch(fileID host.FileID,
+	prefixes []lpm.Prefix,
+) error {
+	cKeys := make([]support.StackDeltaFPRange, 0, len(prefixes))
+	for _, prefix := range prefixes {
+		cKeys = append(cKeys, getStackDeltaFPRange(fileID, prefix))
+	}
+
+	_, err := impl.StackDeltaFPRanges.BatchDelete(
+		ptrCastMarshaler[support.StackDeltaFPRange](cKeys), nil)
+	if errors.Is(err, cebpf.ErrKeyNotExist) {
+		// A rolled back load can hand the batch a key that was never inserted, which
+		// is not a map failure.
+		return err
+	}
+	return impl.trackMapError(metrics.IDStackDeltaFPRangesBatchDelete, err)
 }
 
 // UpdatePidPageMappingInfo updates the pid and page combination with a corresponding fileID and

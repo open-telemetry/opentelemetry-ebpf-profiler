@@ -739,7 +739,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	defer restoreRlimit()
 
 	// Redefine the maximum number of map entries for selected eBPF maps.
-	adaption := make(map[string]uint32, 4)
+	adaption := make(map[string]uint32, 5)
 
 	const (
 		// The following sizes X are used as 2^X, and determined empirically.
@@ -747,11 +747,14 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		pidPageMappingInfoSize   = 20
 		stackDeltaPageToInfoSize = 16
 		exeIDToStackDeltasSize   = 16
+		stackDeltaFPRangesSize   = stackDeltaPageToInfoSize
 	)
 
 	adaption["pid_page_to_mapping_info"] = 1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
 
 	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
+
+	adaption["stack_delta_fp_ranges"] = 1 << uint32(stackDeltaFPRangesSize+cfg.MapScaleFactor)
 
 	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case).
 	// As CPU hot-plugging during runtime is currently not supported use the number of online CPUs

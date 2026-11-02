@@ -11,7 +11,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -25,7 +25,7 @@ type EbpfHandler interface {
 	RemoveReportedPID(pid libpf.PID)
 
 	// UpdateUnwindInfo writes UnwindInfo to given unwind info array index
-	UpdateUnwindInfo(index uint16, info stackdeltatypes.UnwindInfo) error
+	UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo) error
 
 	// UpdateExeIDToStackDeltas defines a function that updates the eBPF map exe_id_to_stack_deltas
 	// for host.FileID with the elements of StackDeltaEBPF. It returns the mapID used.
@@ -37,12 +37,23 @@ type EbpfHandler interface {
 
 	// UpdateStackDeltaPages defines a function that updates the mapping in a eBPF map from
 	// a FileID and page to its stack delta lookup information.
-	UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-		mapID uint16, firstPageAddr uint64) error
+	UpdateStackDeltaPages(fileID host.FileID, pages []StackDeltaPage, mapID uint16) error
 
 	// DeleteStackDeltaPage defines a function that removes the element specified by fileID and page
 	// from the eBPF map.
 	DeleteStackDeltaPage(fileID host.FileID, page uint64) error
+
+	// UpdateStackDeltaFPRanges defines a function that maps the given page ranges of fileID to
+	// a single unwind info. get_stack_delta() hands it back with a zero address difference, so
+	// the unwind info has to carry support.DeltaCommandFlag and resolve without a per-address
+	// delta. On error it rolls back the prefixes it inserted and returns those it could not
+	// reclaim, for the caller to keep.
+	UpdateStackDeltaFPRanges(fileID host.FileID, prefixes []lpm.Prefix, unwindInfo uint16) (
+		[]lpm.Prefix, error)
+
+	// DeleteStackDeltaFPRanges removes the elements specified by prefixes for fileID. It
+	// returns the prefixes still in the map, so that a caller can keep count of its content.
+	DeleteStackDeltaFPRanges(fileID host.FileID, prefixes []lpm.Prefix) ([]lpm.Prefix, error)
 
 	// UpdatePidPageMappingInfo defines a function that updates the eBPF map
 	// pid_page_to_mapping_info with the given pidAndPage and fileIDAndOffset encoded values
@@ -60,6 +71,8 @@ type EbpfHandler interface {
 	// on LPM trie maps.
 	SupportsLPMTrieBatchOperations() bool
 }
+
+type StackDeltaPage = sdtypes.StackDeltaPage
 
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) (key uint64, value support.OffsetRange, err error) {

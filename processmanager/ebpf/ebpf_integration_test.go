@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -114,9 +115,11 @@ func TestUpdateStackDeltaPagesPartialFailure(t *testing.T) {
 		errCounter:           make(map[metrics.MetricID]int64),
 	}
 
-	numDeltasPerPage := make([]uint16, 8)
-	err = impl.UpdateStackDeltaPages(host.FileID(0x1234),
-		numDeltasPerPage, 7, 0)
+	pages := make([]ebpfapi.StackDeltaPage, 8)
+	for i := range pages {
+		pages[i].PageAddr = uint64(i) << support.StackDeltaPageBits
+	}
+	err = impl.UpdateStackDeltaPages(host.FileID(0x1234), pages, 7)
 	require.ErrorIs(t, err, unix.E2BIG)
 
 	// The cleanup must have removed every inserted key.

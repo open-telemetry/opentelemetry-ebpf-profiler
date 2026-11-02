@@ -67,6 +67,10 @@ const (
 const (
 	BitWidthPID  = 0x20
 	BitWidthPage = 0x40
+
+	BitWidthFPRangePad     = 0x20
+	BitWidthFileID         = 0x40
+	BitWidthStackDeltaPage = 0x40
 )
 
 const (
@@ -125,6 +129,15 @@ type PIDNamespaceLayout struct {
 type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16
+}
+type StackDeltaFPInfo struct {
+	UnwindInfo uint16
+}
+type StackDeltaFPRange struct {
+	PrefixLen uint32
+	Pad       uint32
+	FileID    uint64
+	Page      uint64
 }
 type StackDeltaPageInfo struct {
 	FirstDelta uint32

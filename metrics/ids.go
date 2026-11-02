@@ -710,6 +710,21 @@ const (
 	// Number of processes whose published thread-context label schema was rejected
 	IDThreadContextSchemaRejected = 312
 
+	// Number of times updating an element in stackDeltaFPRanges failed
+	IDStackDeltaFPRangesUpdate = 313
+
+	// Number of times batch updating elements in stackDeltaFPRanges failed
+	IDStackDeltaFPRangesBatchUpdate = 314
+
+	// Number of times deleting an element from stackDeltaFPRanges failed
+	IDStackDeltaFPRangesDelete = 315
+
+	// Number of times batch deleting elements from stackDeltaFPRanges failed
+	IDStackDeltaFPRangesBatchDelete = 316
+
+	// Current size of the stack delta frame pointer ranges LPM trie
+	IDNumStackDeltaFPRanges = 317
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 313
+	IDMax = 318
 )

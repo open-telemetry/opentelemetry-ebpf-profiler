@@ -202,29 +202,67 @@ func (emc *ebpfMapsCoredump) DeleteExeIDToStackDeltas(fileID host.FileID,
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-	mapID uint16, firstPageAddr uint64,
+func (emc *ebpfMapsCoredump) UpdateStackDeltaPages(fileID host.FileID,
+	pages []pmebpf.StackDeltaPage, mapID uint16,
 ) error {
 	ctx := emc.ctx
-	firstDelta := uint32(0)
 
-	for pageNumber, numDeltas := range numDeltasPerPage {
-		pageAddr := firstPageAddr + uint64(pageNumber)<<support.StackDeltaPageBits
+	for _, page := range pages {
 		key := C.StackDeltaPageKey{
 			fileID: C.u64(fileID),
-			page:   C.u64(pageAddr),
+			page:   C.u64(page.PageAddr),
 		}
+		// Free the value of an overwritten entry, as release() would not see it again.
+		// Freeing an absent key is a no-op.
+		C.free(ctx.stackDeltaPageToInfo[key])
 		value := C.malloc(C.sizeof_StackDeltaPageInfo)
 		*(*C.StackDeltaPageInfo)(value) = C.StackDeltaPageInfo{
-			firstDelta: C.u32(firstDelta),
-			numDeltas:  C.u16(numDeltas),
+			firstDelta: C.u32(page.FirstDelta),
+			numDeltas:  C.u16(page.NumDeltas),
 			mapID:      C.u16(mapID),
 		}
-		firstDelta += uint32(numDeltas)
 		ctx.stackDeltaPageToInfo[key] = value
 	}
 
 	return nil
+}
+
+func (emc *ebpfMapsCoredump) UpdateStackDeltaFPRanges(fileID host.FileID, prefixes []lpm.Prefix,
+	unwindInfo uint16,
+) ([]lpm.Prefix, error) {
+	ctx := emc.ctx
+	for _, prefix := range prefixes {
+		key := stackDeltaFPRangeKey(fileID, prefix)
+		// As in UpdateStackDeltaPages, an overwritten value would otherwise be lost.
+		C.free(ctx.stackDeltaFPRanges[key])
+		value := C.malloc(C.sizeof_StackDeltaFPInfo)
+		*(*C.StackDeltaFPInfo)(value) = C.StackDeltaFPInfo{unwindInfo: C.u16(unwindInfo)}
+		ctx.stackDeltaFPRanges[key] = value
+	}
+	return nil, nil
+}
+
+func (emc *ebpfMapsCoredump) DeleteStackDeltaFPRanges(fileID host.FileID,
+	prefixes []lpm.Prefix,
+) ([]lpm.Prefix, error) {
+	ctx := emc.ctx
+	for _, prefix := range prefixes {
+		key := stackDeltaFPRangeKey(fileID, prefix)
+		if value, ok := ctx.stackDeltaFPRanges[key]; ok {
+			C.free(value)
+			delete(ctx.stackDeltaFPRanges, key)
+		}
+	}
+	return nil, nil
+}
+
+// stackDeltaFPRangeKey builds the LPM trie key the eBPF code expects, in big endian.
+func stackDeltaFPRangeKey(fileID host.FileID, prefix lpm.Prefix) C.StackDeltaFPRange {
+	return C.StackDeltaFPRange{
+		fileID:    C.__be64(bits.ReverseBytes64(uint64(fileID))),
+		page:      C.__be64(bits.ReverseBytes64(prefix.Key)),
+		prefixLen: C.u32(support.BitWidthFPRangePad + support.BitWidthFileID + prefix.Length),
+	}
 }
 
 func (emc *ebpfMapsCoredump) DeleteStackDeltaPage(fileID host.FileID, page uint64) error {

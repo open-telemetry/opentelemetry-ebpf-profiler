@@ -68,6 +68,23 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   DEBUG_PRINT("Look up stack delta for %lx:%lx", exe_id, offset);
   StackDeltaPageInfo *info = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
   if (!info) {
+    // Pages whose unwind info is constant across a range are not stored per page. Fall back
+    // to the range map before declaring the lookup failed.
+    StackDeltaFPRange rangeKey = {};
+    rangeKey.prefixLen = BIT_WIDTH_FP_RANGE_PAD + BIT_WIDTH_FILE_ID + BIT_WIDTH_STACK_DELTA_PAGE;
+    rangeKey.fileID    = __builtin_bswap64(exe_id);
+    rangeKey.page      = __builtin_bswap64(offset >> STACK_DELTA_PAGE_BITS);
+
+    StackDeltaFPInfo *rangeInfo = bpf_map_lookup_elem(&stack_delta_fp_ranges, &rangeKey);
+    if (rangeInfo) {
+      // The range resolves to one command, so there is no delta to search for.
+      *addrDiff   = 0;
+      *unwindInfo = rangeInfo->unwindInfo;
+      DEBUG_PRINT(
+        "Stack delta range for %lx:%lx, unwindInfo %d", exe_id, offset, (int)rangeInfo->unwindInfo);
+      return ERR_OK;
+    }
+
     DEBUG_PRINT("Failure to look up stack delta page fileID %lx, page %lx", exe_id, offset);
     state->error_metric = metricID_UnwindNativeErrLookupTextSection;
     return ERR_NATIVE_LOOKUP_TEXT_SECTION;

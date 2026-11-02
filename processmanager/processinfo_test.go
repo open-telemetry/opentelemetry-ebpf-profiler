@@ -113,12 +113,26 @@ func (h *testEbpfHandler) DeleteExeIDToStackDeltas(host.FileID, uint16) error {
 	return nil
 }
 
-func (h *testEbpfHandler) UpdateStackDeltaPages(host.FileID, []uint16, uint16, uint64) error {
+func (h *testEbpfHandler) UpdateStackDeltaPages(host.FileID, []pmebpf.StackDeltaPage,
+	uint16,
+) error {
 	return nil
 }
 
 func (h *testEbpfHandler) DeleteStackDeltaPage(host.FileID, uint64) error {
 	return nil
+}
+
+func (h *testEbpfHandler) UpdateStackDeltaFPRanges(host.FileID, []lpm.Prefix, uint16) (
+	[]lpm.Prefix, error,
+) {
+	return nil, nil
+}
+
+func (h *testEbpfHandler) DeleteStackDeltaFPRanges(host.FileID, []lpm.Prefix) (
+	[]lpm.Prefix, error,
+) {
+	return nil, nil
 }
 
 func (h *testEbpfHandler) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
