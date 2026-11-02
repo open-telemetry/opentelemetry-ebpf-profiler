@@ -272,7 +272,9 @@ type Config struct {
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
 	// MaxConcurrentProgLoads caps how many eBPF programs are loaded and verified
-	// concurrently. A value of 0 selects DefaultMaxConcurrentProgLoads.
+	// concurrently. Since the memory used during verification is accounted to the
+	// profiler's memory cgroup, lowering this value can prevent OOM kills at startup
+	// when the limit is tight. A value of 0 selects DefaultMaxConcurrentProgLoads.
 	MaxConcurrentProgLoads int
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	ProbabilisticInterval time.Duration
