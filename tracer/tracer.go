@@ -1342,16 +1342,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, err
 	}
 
+	goLabelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label")
+	if err != nil {
+		return nil, err
+	}
 	if payload, err := vd.decodeBytes(ptr.Thread_label_end, "thread label"); err != nil {
 		return nil, err
 	} else if len(payload) > 0 {
 		decoder := t.processManager.ThreadLabelDecoderForPID(trace.PID)
 		trace.CustomLabels = t.threadLabels.resolve(payload, decoder)
 	}
-	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
-		return nil, err
-	} else if len(labelData) > 0 {
-		trace.CustomLabels = t.customLabels.decode(labelData, trace.CustomLabels)
+	// Merge Go labels last so they take precedence on duplicate keys.
+	if len(goLabelData) > 0 {
+		trace.CustomLabels = t.customLabels.decode(goLabelData, trace.CustomLabels)
 	}
 	return trace, nil
 }

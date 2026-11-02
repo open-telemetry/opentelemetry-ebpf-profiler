@@ -236,8 +236,9 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  // A thread with no active span publishes zero IDs, which must not clobber the
-  // OTel span IDs set earlier in unwind_stop.
+  // Thread context overrides the IDs set by maybe_add_otel_span_trace_id.
+  // Replace both IDs when either is nonzero. When both are zero, indicating no
+  // active span, preserve the previously collected IDs.
   if (
     thread_context_buf.trace_id.as_int.hi | thread_context_buf.trace_id.as_int.lo |
     thread_context_buf.span_id.as_int) {
@@ -252,8 +253,7 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     attrs_data_size = MAX_THREAD_LABEL_DATA_SZ;
   }
   if (attrs_data_size != 0) {
-    // A fixed reservation keeps the destination bounded for the verifier.
-    void *attrs_data = reserve_variable_data(trace, MAX_THREAD_LABEL_DATA_SZ, 0);
+    void *attrs_data = reserve_variable_data(trace, attrs_data_size, 0);
     if (!attrs_data) {
       return;
     }
@@ -265,7 +265,7 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     commit_variable_data(trace, attrs_data_size);
   }
 
-  // Keep the exact payload end, then align the next section for Go labels.
+  // Keep the exact payload end before aligning the total trace size.
   trace->thread_label_end = end_variable_data(trace, 1);
   increment_metric(metricID_UnwindThreadContextReadSuccesses);
 
@@ -531,9 +531,10 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
-  // Overrides the IDs set above, unless its own are zero.
-  maybe_add_thread_context_info(trace);
   maybe_add_golang_labels(record);
+  // Thread context overrides both IDs from maybe_add_otel_span_trace_id unless
+  // both thread context IDs are zero.
+  maybe_add_thread_context_info(trace);
   send_trace(ctx, trace);
 
   return 0;

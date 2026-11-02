@@ -523,8 +523,8 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->context_value_end = 0;
   trace->kernel_frame_end  = 0;
   trace->frame_data_end    = 0;
-  trace->thread_label_end  = 0;
   trace->golang_label_end  = 0;
+  trace->thread_label_end  = 0;
   trace->variable_data_end = 0;
   trace->num_frames        = 0;
   trace->pid               = 0;
