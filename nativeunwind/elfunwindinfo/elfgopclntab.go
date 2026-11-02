@@ -139,8 +139,8 @@ type pcval struct {
 	quantum uint8
 }
 
-// PclntabHeaderSize returns the minimal pclntab header size.
-func PclntabHeaderSize() int {
+// pclntabHeaderSize returns the minimal pclntab header size.
+func pclntabHeaderSize() int {
 	return int(unsafe.Sizeof(pclntabHeader{}))
 }
 
@@ -275,7 +275,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, int64, error) {
 		}
 
 		// Skip segments that are too small anyway.
-		if p.Filesz < uint64(PclntabHeaderSize()) {
+		if p.Filesz < uint64(pclntabHeaderSize()) {
 			continue
 		}
 
@@ -285,7 +285,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, int64, error) {
 			return nil, 0, err
 		}
 
-		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
+		for i := 1; i < len(data)-pclntabHeaderSize(); i += 8 {
 			// Search for something looking like a valid pclntabHeader header
 			// Ignore the first byte on bytes.Index (differs on magicGo1_XXX)
 			n := bytes.Index(data[i:], signature)
@@ -425,7 +425,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	}
 	defer ef.SetDontNeed()
 
-	hdrSize := uintptr(PclntabHeaderSize())
+	hdrSize := uintptr(pclntabHeaderSize())
 	dataLen := uintptr(len(data))
 	if dataLen < hdrSize {
 		return nil, fmt.Errorf(".gopclntab is too short (%v)", len(data))
