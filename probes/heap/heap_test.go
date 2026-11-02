@@ -16,8 +16,40 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
+func newTestProbe(t *testing.T) *Probe {
+	t.Helper()
+	probe, err := New(Config{})
+	if err != nil {
+		t.Fatalf("New() returned %v", err)
+	}
+	return probe
+}
+
+func TestConfig(t *testing.T) {
+	cfg := NewFactory().CreateDefaultConfig().(*Config)
+	if cfg.MapScaleFactor != defaultMapScaleFactor {
+		t.Fatalf("default map scale factor = %d, want %d",
+			cfg.MapScaleFactor, defaultMapScaleFactor)
+	}
+	if _, err := New(Config{MapScaleFactor: maxMapScaleFactor + 1}); err == nil {
+		t.Fatal("New() accepted an excessive map scale factor")
+	}
+}
+
+func TestAttachmentKeyUsesOnDiskIdentity(t *testing.T) {
+	mapping := &process.RawMapping{Device: 1, Inode: 2}
+	key := attachmentKeyFor(mapping, "alloc", 42)
+
+	if got := attachmentKeyFor(&process.RawMapping{Device: 1, Inode: 2}, "alloc", 42); got != key {
+		t.Fatalf("same inode produced different keys: got %+v, want %+v", got, key)
+	}
+	if got := attachmentKeyFor(&process.RawMapping{Device: 1, Inode: 3}, "alloc", 42); got == key {
+		t.Fatalf("different inodes produced the same key: %+v", got)
+	}
+}
+
 func TestUnloadIsIdempotent(t *testing.T) {
-	probe := New()
+	probe := newTestProbe(t)
 	if err := probe.Unload(); err != nil {
 		t.Fatalf("first Unload() returned %v", err)
 	}
@@ -45,7 +77,7 @@ func (l *blockingAttachmentLink) Close() error {
 }
 
 func TestDetachDoesNotBlockUnloadWhileClosingLink(t *testing.T) {
-	probe := New()
+	probe := newTestProbe(t)
 	pid := libpf.PID(123)
 	key := attachmentKey{name: "alloc", offset: 42}
 	lnk := &blockingAttachmentLink{
@@ -109,7 +141,7 @@ func TestPendingAttachmentCleanup(t *testing.T) {
 
 	for name, cleanup := range tests {
 		t.Run(name, func(t *testing.T) {
-			probe := New()
+			probe := newTestProbe(t)
 			pid := libpf.PID(123)
 			key := attachmentKey{name: "alloc", offset: 42}
 			probe.attachments[pid] = map[attachmentKey]*attachment{

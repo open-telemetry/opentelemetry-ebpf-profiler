@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	"go.opentelemetry.io/ebpf-profiler/usdt"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
@@ -35,9 +36,17 @@ const (
 )
 
 type attachmentKey struct {
-	fileID libpf.FileID
+	odfi   util.OnDiskFileIdentifier
 	name   string
 	offset uint64
+}
+
+func attachmentKeyFor(mapping *process.RawMapping, name string, offset uint64) attachmentKey {
+	return attachmentKey{
+		odfi:   mapping.GetOnDiskFileIdentifier(),
+		name:   name,
+		offset: offset,
+	}
 }
 
 type attachment struct {
@@ -48,9 +57,10 @@ type attachment struct {
 
 // Probe implements tracer.Probe and processmanager.ProbeAttacher for USDT heap profiling.
 type Probe struct {
-	discoverer *usdt.Discoverer
-	programs   map[string]*cebpf.Program
-	usdtSpecs  *cebpf.Map
+	discoverer     *usdt.Discoverer
+	programs       map[string]*cebpf.Program
+	usdtSpecs      *cebpf.Map
+	mapScaleFactor uint
 
 	mu          sync.Mutex
 	unloaded    bool
@@ -61,10 +71,14 @@ type Probe struct {
 }
 
 // New creates a heap probe.
-func New() *Probe {
-	return &Probe{
-		attachments: make(map[libpf.PID]map[attachmentKey]*attachment),
+func New(cfg Config) (*Probe, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
+	return &Probe{
+		attachments:    make(map[libpf.PID]map[attachmentKey]*attachment),
+		mapScaleFactor: cfg.MapScaleFactor,
+	}, nil
 }
 
 // probeVirtualAddress translates a file offset to its runtime virtual address.
@@ -149,7 +163,7 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 		return fmt.Errorf("building collection spec: %w", err)
 	}
 	// Probe-owned maps bypass the tracer's normal map-size adaptation.
-	coll.Maps["usdt_specs"].MaxEntries <<= uint32(pctx.MapScaleFactor())
+	coll.Maps["usdt_specs"].MaxEntries <<= uint32(hp.mapScaleFactor)
 
 	// Set origin ID in RODATA so the eBPF program emits the correct value.
 	if v, ok := coll.Variables[allocOriginVar]; ok {
@@ -264,7 +278,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 				point.Provider, point.Name, point.Location, err)
 			continue
 		}
-		key := attachmentKey{fileID: fileID, name: point.Name, offset: point.Location}
+		key := attachmentKeyFor(mapping, point.Name, point.Location)
 		// ProcessManager PIDs originate from the translated pid_events path,
 		// matching get_pid_tgid_leader() in the firing BPF program.
 		specKey := support.USDTSpecKey{
