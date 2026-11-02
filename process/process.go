@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -65,22 +64,6 @@ type systemProcess struct {
 }
 
 var _ Process = &systemProcess{}
-
-var bufPool sync.Pool
-
-// mappingParseBufferSize defines the initial buffer size used to store lines from
-// /proc/PID/maps during parsing of mappings.
-
-const mappingParseBufferSize = 256
-
-func init() {
-	bufPool = sync.Pool{
-		New: func() any {
-			buf := make([]byte, mappingParseBufferSize)
-			return &buf
-		},
-	}
-}
 
 // New returns an object with Process interface accessing it
 func New(pid, tid libpf.PID) Process {
@@ -134,8 +117,10 @@ func (sp *systemProcess) GetProcessMeta(enrichers []MetaEnricher) Meta {
 
 // parseContainerID parses cgroup v1 and v2 container IDs
 func parseContainerID(cgroupFile io.Reader) (libpf.String, error) {
+	buf := libpf.GetBuffer(4096)
+	defer libpf.PutBuffer(buf)
+
 	scanner := bufio.NewScanner(cgroupFile)
-	buf := make([]byte, 512)
 	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
 	// We can do that and also set a maximum allocation size on the following call.
 	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
@@ -306,19 +291,10 @@ func trimMappingPath(path string) string {
 func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
 	scanner := bufio.NewScanner(mapsFile)
-	scanBuf := bufPool.Get().(*[]byte)
-	if scanBuf == nil {
-		return 0, errors.New("failed to get memory from sync pool")
-	}
-	defer func() {
-		// Reset memory and return it for reuse.
-		for j := 0; j < len(*scanBuf); j++ {
-			(*scanBuf)[j] = 0x0
-		}
-		bufPool.Put(scanBuf)
-	}()
+	scanBuf := libpf.GetBuffer(4096)
+	defer libpf.PutBuffer(scanBuf)
 
-	scanner.Buffer(*scanBuf, 8192)
+	scanner.Buffer(scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
 		var addrs [2]string

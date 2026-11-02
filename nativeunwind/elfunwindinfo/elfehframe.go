@@ -159,7 +159,7 @@ type ehFrameHdr struct {
 
 // reader provides read access to the Exception Frame section and the virtual address base.
 type reader struct {
-	*pfbufio.Reader
+	pfbufio.Reader
 
 	machine    elf.Machine
 	debugFrame bool
@@ -840,15 +840,13 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 		return cie, nil
 	}
 
-	rdr := pfbufio.NewReader(r.Outer())
-	defer pfbufio.PutReader(rdr)
-
 	cr := &reader{
-		Reader:     rdr,
 		machine:    r.machine,
 		debugFrame: r.debugFrame,
 		vaddr:      r.vaddr,
 	}
+	defer cr.Release()
+	cr.Init(r.Outer())
 	cr.Seek(ciePos, io.SeekStart)
 	cr.SetBufferSize(256) // CIE entry is typically 20-80 bytes
 
@@ -988,13 +986,12 @@ func readEhframe(ef *pfelf.File) (elfRegion, error) {
 	// Cap read-ahead to header with two pointers (don't read the search table)
 	var hdr ehFrameHdr
 	hdrLength := int64(unsafe.Sizeof(hdr) + 2*8)
-	rdr := pfbufio.NewReader(ef.Underlying(), header.offset, hdrLength)
-	defer pfbufio.PutReader(rdr)
 	r := reader{
-		Reader:  rdr,
 		machine: ef.Machine,
 		vaddr:   header.vaddr,
 	}
+	r.Init(ef.Underlying(), header.offset, hdrLength)
+	defer r.Release()
 
 	// Read and parse the header
 	if _, err := r.Read(pfunsafe.FromPointer(&hdr)); err != nil {
@@ -1032,17 +1029,15 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, frames elfRegion, debugFrame bo
 	}
 
 	// Walk the section, and process each CIE and FDE it contains
-	rdr := pfbufio.NewReader(ef.Underlying(), frames.offset, frames.length)
-	defer pfbufio.PutReader(rdr)
-
 	r := &reader{
-		Reader:     rdr,
 		machine:    ef.Machine,
 		debugFrame: debugFrame,
 		vaddr:      frames.vaddr,
 	}
+	defer r.Release()
+	r.Init(ef.Underlying(), frames.offset, frames.length)
 
-	for rdr.Remaining() > 0 {
+	for r.Remaining() > 0 {
 		id := r.Tell()
 		n, ciePos, err := r.parseLengthAndMarker()
 		if err != nil {

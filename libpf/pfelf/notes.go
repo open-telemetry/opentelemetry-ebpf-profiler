@@ -112,10 +112,10 @@ func alignNoteSize(size int) int {
 
 func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 	rdr := pfbufio.NewReader(r, 0, 1<<63-1)
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	var buildId string
-	err := visitNotes(rdr, func(note uint64, desc []byte) bool {
+	err := visitNotes(&rdr, func(note uint64, desc []byte) bool {
 		if note == NoteGnuBuildId {
 			buildId = hex.EncodeToString(desc)
 			return false

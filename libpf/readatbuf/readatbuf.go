@@ -12,6 +12,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 )
 
@@ -32,11 +33,10 @@ type Statistics struct {
 
 // Reader implements buffering for random access reads via the `ReaderAt` interface.
 type Reader struct {
-	inner        io.ReaderAt
-	cache        *lru.LRU[uint, page]
-	pageSize     uint
-	stats        Statistics
-	sparePageBuf []byte
+	inner    io.ReaderAt
+	cache    *lru.LRU[uint, page]
+	pageSize uint
+	stats    Statistics
 }
 
 func HashUInt(v uint) uint32 {
@@ -66,11 +66,8 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 
 	reader.cache.SetOnEvict(func(_ uint, page page) {
 		reader.stats.Evictions++
-		// For EOF pages, the slice might have been truncated. However, all slices were originally
-		// allocated with page size. Thus, we can expand them back to their original size. Perhaps
-		// counter-intuitively, Go's slice bounds-checking doesn't limit by the length, but by the
-		// capacity.
-		reader.sparePageBuf = page.data[:pageSize]
+		libpf.PutBuffer(page.data)
+		page.data = nil
 	})
 
 	return
@@ -147,15 +144,7 @@ func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err er
 
 	reader.stats.Misses++
 
-	var buffer []byte
-	if reader.sparePageBuf != nil {
-		// If present, reuse the spare page from previous evictions.
-		buffer = reader.sparePageBuf
-		reader.sparePageBuf = nil
-	} else {
-		// Otherwise, allocate a fresh one.
-		buffer = make([]byte, reader.pageSize)
-	}
+	buffer := libpf.GetBuffer(int(reader.pageSize))
 
 	// Read from the underlying reader.
 	n, err := reader.inner.ReadAt(buffer, int64(pageIdx*reader.pageSize))
@@ -166,11 +155,13 @@ func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err er
 			buffer = buffer[:n]
 			eof = true
 		} else {
+			libpf.PutBuffer(buffer)
 			return nil, false, err
 		}
 	}
 
 	if !eof && uint(n) < reader.pageSize {
+		libpf.PutBuffer(buffer)
 		return nil, false, errors.New("failed to read whole page")
 	}
 

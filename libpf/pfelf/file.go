@@ -448,7 +448,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
-			pfbufio.PutReader(rdr)
+			rdr.Release()
 		case elf.PT_INTERP:
 			f.isExecutable = true
 		}
@@ -661,8 +661,8 @@ func (f *File) ReadSymbolData(sym *libpf.Symbol, maxSize uint) ([]byte, error) {
 // The visitor must make copies of the 'data' it keeps after return.
 // It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	for i := range f.Progs {
 		notes := &f.Progs[i]
@@ -671,7 +671,7 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 		}
 
 		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -700,8 +700,8 @@ func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bo
 		return err
 	}
 
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	visited := false
 	for i := range f.Sections {
@@ -713,7 +713,7 @@ func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bo
 		visited = true
 
 		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -905,7 +905,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	rela := &elf.Rela64{}
 	sym := &elf.Sym64{}
@@ -950,7 +950,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	d, err := rdr.ReadN(int(s.Size))
 	if err != nil {
@@ -1295,7 +1295,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	sym := &elf.Sym64{}
 	for {
@@ -1426,7 +1426,7 @@ func (f *File) parseGoBuildinfo() error {
 	}
 
 	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	for {
 		offset, err := rdr.SearchSlice(goBuildInfoMagic)
@@ -1459,7 +1459,7 @@ func (f *File) parseGoBuildinfo() error {
 		if err != nil {
 			return errNoGoBuildinfo
 		}
-		ver, err := decodeString(rdr)
+		ver, err := decodeString(&rdr)
 		if err != nil {
 			return err
 		}

@@ -216,7 +216,9 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	}
 	vms := &i.d.vmStructs
 
-	var buf [hekLenLimit]byte
+	// Temporary scratch space for reading
+	buf := libpf.GetBuffer(65536)
+	defer libpf.PutBuffer(buf)
 
 	// Read the Hash Element Key (HEK) length and readahead bytes in
 	// attempt to avoid second system call to read the target string.
@@ -226,13 +228,13 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	if err := i.rm.Read(addr, buf[:hekInitialRead]); err != nil {
 		return libpf.NullString, err
 	}
-	hekLen := npsr.Uint32(buf[:], vms.hek.hek_len)
+	hekLen := npsr.Uint32(buf, vms.hek.hek_len)
 
 	// For our better understanding and future improvement we track the maximum value we get for
 	// hekLen and report it.
 	util.AtomicUpdateMaxUint32(&i.hekLen, hekLen)
 
-	if hekLen > hekLenLimit-uint32(vms.hek.hek_key) {
+	if hekLen > uint32(len(buf))-uint32(vms.hek.hek_key) {
 		return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
 	}
 

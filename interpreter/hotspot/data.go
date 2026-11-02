@@ -421,8 +421,8 @@ func (i *hotspotInstance) UsesAnonymousMappings() bool {
 //
 //nolint:lll
 func locateJvmciVMStructs(ef *pfelf.File) (libpf.Address, error) {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	rodata := ef.Section(".rodata")
 	if rodata == nil {
