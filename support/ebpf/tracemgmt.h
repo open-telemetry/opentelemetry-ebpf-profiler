@@ -637,6 +637,11 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
 static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u16 alloc_sz, u16 reserve_sz)
 {
   u16 index = trace->variable_data_end;
+  // Older verifiers need a constant bound before comparing against a variable
+  // allocation size.
+  if (index > sizeof(trace->variable_data)) {
+    return NULL;
+  }
   if (index > sizeof(trace->variable_data) - alloc_sz - reserve_sz) {
     return NULL;
   }
