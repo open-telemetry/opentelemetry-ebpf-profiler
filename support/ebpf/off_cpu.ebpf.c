@@ -12,7 +12,7 @@ struct kprobe_progs_t {
 
 // sched_times keeps track of sched_switch call times.
 struct sched_times_t {
-  __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, u64);         // pid_tgid
   __type(value, u64);       // CLOCK_MONOTONIC time in ns
   __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
@@ -103,12 +103,12 @@ int finish_task_switch(struct pt_regs *ctx)
   // tracepoint__sched_switch.
   u64 mono_ts = bpf_ktime_get_ns();
 
+  // diff stores the nanoseconds that the trace was off-cpu for.
+  u64 diff = mono_ts - *start_ts;
+
   // Remove entry from the map so the stack for the same pid_tgid does not get unwound and
   // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
   bpf_map_delete_elem(&sched_times, &pid_tgid);
-
-  // diff stores the nanoseconds that the trace was off-cpu for.
-  u64 diff = mono_ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
   PerCPURecord *record = prepare_trace(origin_id_off_cpu, pid, tid, group_leader, ts);
