@@ -125,7 +125,7 @@ func ExtractTLSSlot(code []byte, codeAddress uint64) (slot uint64, disp int64, e
 			mem, memOk := op.Args[1].(x86asm.Mem)
 			if called && off != 0 && dstOk && memOk && mem.Segment == 0 && mem.Index == 0 &&
 				mem.Base != 0 && regMappingFor(mem.Base).idx == off {
-				disp += mem.Disp
+				disp += int64(int32(mem.Disp))
 				offReg = regMappingFor(dst).idx
 			}
 		case x86asm.ADD, x86asm.SUB:
@@ -151,7 +151,7 @@ func ExtractTLSSlot(code []byte, codeAddress uint64) (slot uint64, disp int64, e
 				if mem.Index != 0 || (mem.Segment == x86asm.FS) != viaDescriptor {
 					return 0, 0, fmt.Errorf("unexpected access to TLS call result: %v", op)
 				}
-				return slot, disp + mem.Disp, nil
+				return slot, disp + int64(int32(mem.Disp)), nil
 			}
 			// Pattern 1: FS-relative access with the offset from the GOT
 			// Example: MOV 0x2ecd(RIP), rax; MOV rax, FS:(rax)
