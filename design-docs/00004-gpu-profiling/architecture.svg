@@ -69,7 +69,7 @@
   <text x="406" y="144" class="d-t">Capture the stack</text>
   <text x="406" y="162" class="d-s">at each GPU call,</text>
   <text x="406" y="177" class="d-s">like a CPU sample</text>
-  <text x="394" y="252" class="d-m">event: KERNEL, COPY, …</text>
+  <text x="394" y="252" class="d-m">event: KERNEL, FILL, …</text>
   <rect x="390" y="260" width="210" height="64" rx="9" class="d-neu"/>
   <text x="406" y="286" class="d-t">Forward GPU timings</text>
   <text x="406" y="304" class="d-s">as the producer reports them</text>
