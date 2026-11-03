@@ -81,8 +81,11 @@ compiled into it that costs nothing until a tool attaches to it.
 
 **An eBPF program.** The profiler attaches a small program to this probe, once
 for each producer library, and Linux runs it in every process that loads the
-library. When the application makes a GPU call, it captures the stack, exactly
-like a CPU sample. When GPU work finishes, it forwards the producer's
+library. The profiler finds producer libraries in the processes it scans, and
+the `gpu` extension can also be given their paths, to attach to them as soon as
+it starts: every process that loads one then reports its GPU work from its first
+call. When the application makes a GPU call, the program captures the stack,
+exactly like a CPU sample. When GPU work finishes, it forwards the producer's
 description of the work.
 
 **The profiler.** It pairs each piece of finished GPU work with the stack of
@@ -134,7 +137,9 @@ kernels of a CUDA graph share one call id and land on the same stack.
 After a process exits, the profiler keeps what it knows about it until the
 first report at least 5 seconds later, for work still in flight. What it keeps
 fits in tables of fixed size: 131,072 launches, 16,384 stacks, 4,096 processes,
-and 65,536 pieces of work waiting for their stack.
+16,384 GPU indexes, and 65,536 pieces of work waiting for their stack. Each
+report also holds a fixed number of samples per process at most: work beyond it
+is added to a single sample of the process, without a stack.
 
 ## The contract between producer and profiler
 
@@ -144,10 +149,11 @@ on a small contract, a C header in this repository,
 never see it.
 
 The contract is a single USDT probe, `otel_gpu_v1:event`, which passes a
-pointer to an event and returns nothing. An event starts with a fixed 16-byte
-header, which the eBPF program reads, followed by a payload of variable size,
-which only the profiler reads. The header is fixed because decoding protobuf in
-eBPF is costly; the payload is protobuf so it can grow without breaking older
+pointer to an event and returns nothing, and a table of the process's GPUs that
+the producer exports. An event starts with a fixed 16-byte header, which the
+eBPF program reads, followed by a payload of variable size, which only the
+profiler reads. The header is fixed because decoding protobuf in eBPF is
+costly; the payload is protobuf so it can grow without breaking older
 profilers:
 
 ```c
@@ -158,15 +164,22 @@ struct otel_gpu_event {
   uint16_t payload_size;   // how many bytes of payload follow
   uint8_t  payload[4096];  // a Payload message, encoded as protobuf
 };
+
+// The GPUs of the process, up to 64, exported as otel_gpu_v1_gpus. The UUID
+// of GPU index i is uuid[i - 1]; the producer sets bit i - 1 of ready once it
+// wrote it, so the profiler never reads a UUID half written.
+struct otel_gpu_v1_gpus {
+  uint64_t ready;          // one bit per UUID written
+  char     uuid[64][48];   // NUL-terminated
+};
 ```
 
 ```proto
 // What happened. The profiler ignores events of kinds it does not know.
 enum Kind {
-  // The application asked the GPU to do something, such as running a kernel
-  // or copying memory. Fired on the application's own thread: the profiler
-  // records the thread's stack here, so it can later show which code caused
-  // the work. Has no payload.
+  // The application asked the GPU to do something. Fired on the
+  // application's own thread: the profiler records the thread's stack here,
+  // so it can later show which code caused the work. Has no payload.
   LAUNCH = 1;
 
   // The next kinds report work the GPU finished for a call. The profiler adds
@@ -174,52 +187,87 @@ enum Kind {
 
   // The GPU ran a kernel, which is a function that runs on the GPU.
   KERNEL = 2;
-  // The GPU copied memory.
-  COPY = 3;
   // The GPU filled memory with a value.
-  FILL = 4;
+  FILL = 3;
+  // The GPU copied memory, from the CPU's memory (H, host) or the GPU's (D,
+  // device) to either. Copies from or to CUDA arrays count as the GPU's.
+  COPY_HTOD = 4;
+  COPY_DTOH = 5;
+  COPY_DTOD = 6;
+  COPY_HTOH = 7;
+
+  // Tells the profiler which GPU an index stands for in this process, with
+  // gpu and gpu_index. Sent once per GPU, with correlation_id 0.
+  DEVICE = 8;
+}
+
+// The runtime that reported the work, which gives the frame type of the
+// frames the profiler adds for it.
+enum Runtime {
+  CUDA = 1;
+  ROCM = 2;
 }
 
 // The payload of an event. Every field is optional: a producer sets the ones
 // that apply to the kind, and the profiler ignores fields it does not know.
 message Payload {
-  // The UUID of the GPU that did the work, such as GPU-… or MIG-… on NVIDIA.
+  // The UUID of a GPU, for DEVICE events and work sent as the process exits.
   string gpu = 1;
-  // What the work was, as the table below lists for each kind.
+  // The kernel's name as the compiler wrote it, for KERNEL events.
   string name = 2;
   // The names the application gave to the work in progress when it made the
-  // call, such as "train_step", from the innermost outwards.
+  // call, from the innermost outwards.
   repeated string ranges = 3;
   // How long the GPU worked, in nanoseconds.
   uint64 duration_ns = 4;
   // How many bytes were copied or filled.
   uint64 bytes = 5;
+  // The runtime that reported the work.
+  Runtime runtime = 6;
+  // The GPU that did the work, or that a DEVICE event names, by its index in
+  // the process's GPU table, from 1.
+  uint32 gpu_index = 7;
 }
 ```
 
-The `name` of an event depends on its kind. Producers of every vendor use the
-same names for the same things, so that their profiles compare:
-
-| Kind | `name` | Examples |
-| --- | --- | --- |
-| `KERNEL` | The kernel's name, as the compiler wrote it | `ampere_sgemm_128x64_nn` |
-| `COPY` | Where the data went: H is the CPU's memory, D the GPU's, A a CUDA array | `HtoD`, `DtoH`, `DtoD`, `HtoA` |
-| `FILL` | None | |
+Copy directions are kinds of their own, so that producers of every vendor
+report them the same way, and only kernels have a name.
 
 The header is little endian, as both supported architectures are. The payload
 is a `Payload` message in the protobuf wire format, which a producer can write
 without any library: the contract header comes with small functions that append
 a string or a number. Strings travel inside the event, so a producer need not
-keep them alive. A producer keeps each payload within 4 KiB, writing names last
-and cutting them short, so that the other fields always fit; in PyTorch
-training and ollama inference, no payload was larger than 1,700 bytes.
+keep them alive. A producer keeps each payload within 4 KiB, so that the other
+fields always fit: it leaves out ranges that do not fit whole, and writes the
+kernel name last, cutting it short if needed. On an NVIDIA T4, the payloads of
+PyTorch training with ranges averaged 165 bytes, at most 385, half of it ranges
+and most of the rest kernel names; those of ollama inference, without ranges,
+averaged 87 bytes, nearly all kernel name. The largest seen, on an NVIDIA L4,
+was 1,700 bytes. An event that claims a larger payload than 4 KiB is broken,
+and the profiler drops it.
 
-The profiler matches work with its call by the low 32 bits of
-`correlation_id`, which must therefore not repeat within a few seconds in a
-process. Each event of the work carries the sample weight of its call too, so
-work whose stack never arrives still counts as often as its call stands for.
+The profiler matches work with its call by `correlation_id`, which must
+therefore not repeat within a few seconds in a process. Work that no host call
+started, such as kernels launched by other kernels, is sent with
+`correlation_id` 0 and the same kinds as any other work: the profiler counts it
+for the process, without a stack and without waiting for one. A persistent
+kernel, which runs for the whole job and schedules its own work, is a single
+`KERNEL` event when it ends, on the stack of the call that launched it. Each
+event of the work carries the sample weight of its call too, so work whose stack
+never arrives still counts as often as its call stands for.
 
-Three rules keep both sides in step:
+Work names its GPU by a small index rather than by its UUID, which would add
+some 40 bytes to every event. The producer exports a table of its GPUs' UUIDs,
+`otel_gpu_v1_gpus` above, among its library's dynamic symbols, and publishes a
+GPU there before the first event that names it. The profiler reads the table
+from the process's memory when it attaches and when it meets an index it does
+not know, as it reads memory to unwind stacks. So events never depend on
+earlier ones: a profiler that attaches late, or next to another one, or that
+missed events, still knows every GPU. For a process that exits before the
+profiler reads its table, the producer also sends a `DEVICE` event once per
+GPU, and the events of work it sends as the process exits carry the UUID too.
+
+Four rules keep both sides in step:
 
 - The producer reports nothing while no profiler is attached. Linux raises a
   counter on a USDT probe while a tool is attached to it (a
@@ -229,9 +277,11 @@ Three rules keep both sides in step:
   time without a stack.
 - The header fixes the CPU register that carries the event pointer, `rax` on
   x86-64 and `x0` on arm64, so the profiler never has to work out where a
-  compiler put it. The profiler refuses probes that pass it any other way. A
-  producer fires the probe from a single function, since each place firing it
-  is one more uprobe to attach.
+  compiler put it. The profiler refuses probes that pass it any other way.
+- A producer fires the probe from a single function, which the compiler must
+  neither inline nor copy, for example with `__attribute__((noipa))`: each
+  place firing the probe is one more uprobe to attach. The profiler refuses a
+  library that fires it from more than one place.
 - Incompatible changes ship as a new version of the contract, `otel_gpu_v2`,
   as described below.
 
@@ -247,10 +297,9 @@ The contract carries its version in its name, so that it can change without
 breaking producers or profilers already deployed.
 
 Most changes keep the version: adding a field to the payload, since the
-profiler skips fields it does not know; adding a kind, since the profiler
-ignores kinds it does not know; and adding a name, such as a new copy
-direction, which the profiler shows as it is. The kinds that could come next
-are listed under Later in the plan.
+profiler skips fields it does not know; and adding a kind, such as a new copy
+direction, since the profiler ignores kinds it does not know. The kinds that
+could come next are listed under Later in the plan.
 
 Changing the header, or the meaning of a kind or of a field, ships as
 `otel_gpu_v2`: a provider of its own, in a header whose C names differ from
@@ -277,17 +326,19 @@ Capturing a stack costs a few microseconds, about as much as a CPU sample, while
 training and inference jobs can launch thousands of kernels per second on one
 thread. So the producer samples the calls it reports.
 
-Each thread counts its own calls, separately for kernel launches, CUDA graph
-launches and memory operations. If a thread made C calls of one
-kind in the last second, and the target rate is R calls per second, each call
-is reported with probability 1/N and counts N times, where N is C divided by R,
-rounded down, plus one. The producer passes N as `sample_weight` in the call's
-`LAUNCH` event and in the events of its work, and the profiler multiplies
-the GPU time and bytes of the call by it. A thread launching 10,000 kernels a
-second, for example, has about 1 launch in 51 reported, each counting 51 times.
+Each process counts its calls, separately for kernel launches, CUDA graph
+launches and memory operations, across all its threads, so that a process with
+many threads is not reported more often than one with a single thread. If a
+process made C calls of one kind in the last second, and the target rate is R
+calls per second, each call is reported with probability 1/N and counts N times,
+where N is C divided by R, rounded down, plus one. The producer passes N as
+`sample_weight` in the call's `LAUNCH` event and in the events of its work, and
+the profiler multiplies the GPU time and bytes of the call by it. A process
+launching 10,000 kernels a second, for example, has about 1 launch in 51
+reported, each counting 51 times.
 
 Totals stay right on average, and the cost of stacks is capped: by default 200
-calls per second per thread and kind, 20 for CUDA graph launches. A call that
+calls per second per process and kind, 20 for CUDA graph launches. A call that
 is not sampled fires nothing. While the profiler is attached, CUPTI still
 records every kernel and copy; the figures below include that cost.
 
@@ -301,13 +352,17 @@ With these defaults on an NVIDIA A10G, PyTorch training ran 2.4% slower with
 the profiler attached and 0.1% slower with the producer alone, and ollama
 inference 4.4% and 1.3% slower. On an NVIDIA L4, PyTorch training ran 3.6% and
 1.4% slower. On an NVIDIA T4G, an arm64 machine, it ran 1.7% slower with the
-profiler attached, and the producer alone cost nothing measurable.
+profiler attached, and the producer alone cost nothing measurable. These
+figures were measured with sampling per thread. With sampling per process, on
+an NVIDIA T4, PyTorch training with ranges ran 1.9% slower with the profiler
+attached and 1.1% slower with the producer alone, and ollama inference 1.7%
+slower and no slower.
 
-The profiler itself, during that training on the L4, used 0.8% more of a CPU
-core with GPU profiling than without, and 123 MiB more memory at its peak. Of
-that, a 16 MiB ring buffer carries GPU events, and the ring buffer of probe
-stacks is as large as the one of CPU samples, which grows with the number of
-CPUs: 32 MiB on this 48-CPU machine.
+The profiler itself used 0.8% to 2.5% more of a CPU core with GPU profiling than
+without in these runs, and 115 to 158 MiB more memory at its peak. Of that, a
+16 MiB ring buffer carries GPU events, and the ring buffer of probe stacks is as
+large as the one of CPU samples, which grows with the number of CPUs: 32 MiB on
+these 48-CPU machines.
 
 ## What gets reported
 
@@ -321,22 +376,28 @@ activity is its own profile:
 | `gpu_mem_time` | nanoseconds | time of copies and fills | the call's |
 | `gpu_mem_bytes` | bytes | bytes copied or filled | the call's |
 
-A `gpu_launches` sample has the application's stack at the call. A sample of
-GPU work starts, at the leaf, with frames the profiler adds, marked by a new
-frame type, `gpu`. The first names the work, from its kind and name: the
-kernel for `KERNEL`, `memcpy:` and the name for `COPY` such as `memcpy:HtoD`,
-or `memset` for `FILL`; `[unknown kernel]` and `memcpy:unknown` when it has no
-name. Kernel names are demangled without parameter and template lists, so that
-one kernel keeps one name; a name cut short that no longer demangles is shown
-as it came. Then come the application's ranges from the innermost outwards, as
-`range:` frames, then the application's stack at the call, whose first frames
-are those of the producer and of the vendor's runtime.
+The names and units will follow what
+[opentelemetry-proto#794](https://github.com/open-telemetry/opentelemetry-proto/issues/794)
+settles on.
+
+A `gpu_launches` sample has the application's stack at the call. A sample of GPU
+work starts, at the leaf, with frames the profiler adds, whose frame type is the
+runtime that reported the work: `cuda`, which the semantic conventions define,
+or `rocm`, which they do not yet. The first names the work: the kernel for
+`KERNEL`, or `[unknown kernel]` when it has no name; `memcpy:` and the direction
+for copies, such as `memcpy:HtoD`; or `memset` for `FILL`. Kernel names are
+demangled without parameter and template lists, so that one kernel keeps one
+name; a name cut short that no longer demangles is shown as it came. Then come
+the application's ranges from the innermost outwards, as `range:` frames, then
+the application's stack at the call, whose first frames are those of the
+producer and of the vendor's runtime.
 
 Samples of GPU work carry no thread or CPU, since GPU work runs on neither.
-Instead, they carry the UUID of the GPU that did the work, as the `gpu.uuid`
-attribute, so work that one process spreads over several GPUs can be told
-apart, and matched with the GPU's health metrics. They are stamped with the
-time of the report that holds them, not with the time the work ran.
+Instead, they carry the UUID of the GPU that did the work as `hw.id`, which
+identifies a GPU in the `hw.gpu.*` metrics too, with `hw.type` set to `gpu`:
+work that one process spreads over several GPUs can be told apart, and joined
+with the GPU's metrics. They are stamped with the time of the report that holds
+them, not with the time the work ran.
 
 ![Flame graph of GPU kernel time of a PyTorch training job](example-profile.svg)
 
@@ -360,7 +421,12 @@ readability.*
   a library.
 - The profiler copies each event, at most 4 KiB of payload after its header,
   and decodes the payload as protobuf, which bounds every field by the size of
-  the event. A producer can only change its own process's samples.
+  the event. Values multiplied by the sample weight are clamped rather than
+  overflowing.
+- A producer can only change its own process's samples. Sampling bounds what a
+  producer that follows the contract sends, but one that ignores it could
+  still fill the ring buffer that all processes share, and make them lose
+  events.
 - The producer runs inside the application, with its permissions, and needs
   no more.
 
@@ -380,7 +446,15 @@ readability.*
   it, when it loads a producer library the profiler is already attached to.
   Those stacks are dropped, and the work of the calls is reported without a
   stack, with its weight, as is work whose stack the profiler could not keep
-  up with.
+  up with. Without configured paths, the first process to load a producer
+  library sends nothing until the profiler scans its mappings, which it does
+  once it samples the process on a CPU: the work of a process that ends before
+  then is not reported.
+- Linux raises the counter of a probe just before the probe is in place, so an
+  event fired at that moment is lost. A lost `DEVICE` event is made up for by
+  the GPU table.
+- Work of a process that exits before the profiler reads its GPU table, and
+  whose `DEVICE` event was lost, is reported without `hw.id`.
 - A producer whose probe breaks the contract is refused, and the profiler logs
   why.
 - When the producer cannot trace, for example because another tool holds
@@ -388,43 +462,44 @@ readability.*
 
 ## Limitations
 
-- Each GPU vendor needs its own producer; this proposal comes with ones for
-  NVIDIA and AMD\*.
+- Each GPU vendor needs its own producer, while the profiler stays vendor
+  neutral; this proposal comes with ones for NVIDIA and AMD\*.
 - Only processes that load the producer are profiled, and the producer can only
-  be loaded when a process starts.
+  be loaded when a process starts. A process started with it is profiled even
+  if the profiler starts later: the producer waits, and reports once the
+  profiler attaches.
 - CUPTI serves one tool per process, the first one to ask for it, and the
   producer asks as soon as CUDA starts. Next to the producer, PyTorch's
   profiler records no GPU activity and logs why; a tool that asked before CUDA
   started keeps CUPTI, and the producer then disables itself and logs why.
 - Ranges need the application to name its work, such as PyTorch under
-  `emit_nvtx()`, and NVIDIA's NVTX library to be pointed at CUPTI through
-  `NVTX_INJECTION64_PATH`.
-- The NVIDIA producer does not report copies between GPUs, and it cuts range
-  names at 127 bytes, keeping at most 64 nested ranges and 1 KiB of their
-  names.
+  `emit_nvtx()`, and NVIDIA's NVTX library to be pointed through
+  `NVTX_INJECTION64_PATH` at the CUPTI library that the application loads.
+- The NVIDIA producer does not report copies between GPUs, nor kernels
+  launched by other kernels, which CUPTI did not report in tests with CUDA 12.
+  It cuts range names at 127 bytes, keeping at most 64 nested ranges and 1 KiB
+  of their names.
 
 # Plan
 
-The work lands as one pull request per item, in this order.
+The work lands in this order, with one pull request per bullet of step 2, and
+one per other step.
 
 1. **This document.**
 
 2. **Groundwork in the profiler.** The GPU probe needs these changes, but each
    one stands on its own:
-   - `usdt`: expose the argument descriptor of each probe, such as `8@%rax`, so
-     that the GPU probe can refuse producers that pass the event pointer in any
-     other register.
-   - `libpf`: a `gpu` frame type, for the frames that the profiler makes
-     itself, such as kernel names and ranges, which belong to no language.
+   - `usdt`: decode the argument descriptors of probes, such as `8@%rax`, as
+     [#2014](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2014)
+     does, so that the GPU probe can refuse producers that pass the event
+     pointer in any other register.
+   - `libpf`: frame types for the frames that the profiler makes itself:
+     `cuda`, which the semantic conventions define, and `rocm`.
    - `tracer`, `reporter`: let a probe add samples that it sums up itself, such
-     as GPU time per stack, to each report, with sample attributes of its own,
-     such as `gpu.uuid`. Today every sample comes from a trace sent by eBPF.
-     Samples of a process that exited before the report keep its metadata.
-   - `tracer`: fix a crash when a probe is enabled on a running profiler.
-     Enabling a probe adds its trace handlers to maps that trace handling reads
-     at the same time, without a lock, which Go aborts with `concurrent map
-     read and map write`. The handlers are now replaced by an updated copy
-     instead of changed in place.
+     as GPU time per stack, to each report, as
+     [#2015](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2015)
+     does, with sample attributes of their own, such as `hw.id`, which it does
+     not yet.
    - `processmanager`: attach a probe to a process only once eBPF knows the
      process's memory mappings. A probe can fire as soon as it is attached, and
      until then its stacks cannot be unwound.
@@ -436,27 +511,30 @@ The work lands as one pull request per item, in this order.
      out CPU samples. The buffer takes kernel memory only when probes are
      configured.
 
-3. **Stacks of GPU calls**, in a new package, `probes/gpu`, which is turned on
+3. **Reference producers**, under `tools/`: `cupti-producer` for NVIDIA and
+   `rocm-producer`\* for AMD. They do not depend on the profiler, and their
+   data has to exist before the profiler can consume it.
+
+4. **Stacks of GPU calls**, in a new package, `probes/gpu`, which is turned on
    as the `gpu` collector extension, like `offcpu`:
    - the contract header, `otel_gpu_v1_usdt.h`;
    - find the `otel_gpu_v1:event` probe in the libraries that processes load,
      and attach to it once per library, for all the processes that load it;
+   - optionally, attach at start to producer libraries given by path in the
+     extension's configuration;
    - capture the stack at each `LAUNCH` event, and report it in the
      `gpu_launches` profile, multiplied by the sample weight.
 
-4. **GPU time:**
+5. **GPU time:**
    - eBPF: forward every other event, header and payload, through a ring
      buffer of the GPU probe's own;
-   - `probes/gpu`: decode the payloads, pair `KERNEL`, `COPY` and `FILL`
-     events with the stacks of step 3 by process and call id, and report
-     `gpu_kernel_time`, `gpu_mem_time` and `gpu_mem_bytes`, multiplied by the
-     sample weight.
+   - `probes/gpu`: decode the payloads, pair the events of GPU work with the
+     stacks of step 4 by process and call id, resolve their GPU indexes from
+     the GPU table and `DEVICE` events, and report `gpu_kernel_time`,
+     `gpu_mem_time` and `gpu_mem_bytes`, multiplied by the sample weight.
 
-5. **Named ranges:** `probes/gpu` adds the ranges of each event as `range:`
+6. **Named ranges:** `probes/gpu` adds the ranges of each event as `range:`
    frames, between the work and the application's stack.
-
-6. **Reference producers**, under `tools/`: `cupti-producer` for NVIDIA and
-   `rocm-producer`\* for AMD.
 
 Later, new kinds of events could report more, each needing a producer change
 and a new profile, but no new version of the contract:
@@ -470,14 +548,9 @@ and a new profile, but no new version of the contract:
 
 # Open Questions
 
-- Should `gpu` become a value of
+- Should `rocm` be proposed as a value of
   [`profile.frame.type`](https://opentelemetry.io/docs/specs/semconv/registry/attributes/profile/#profile-frame-type)
-  in the semantic conventions?
-- Should `gpu.uuid` become a semantic convention, or reuse an existing hardware
-  attribute such as `hw.id`?
-- Should the profile names and units be standardized in the semantic
-  conventions, and should copy directions and ranges be frame types or
-  attributes instead of `memcpy:` and `range:` prefixes in frame names?
+  in the semantic conventions, next to `cuda`?
 - Where should the reference producers live: in this repository under
   `tools/`, or in a repository of their own?
 
