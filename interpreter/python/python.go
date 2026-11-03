@@ -760,7 +760,9 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	return nil
 }
 
-// gilstateAccessor directly accesses _Py_tss_gilstate, which is not exported.
+// gilstateAccessor reaches the thread state bound to the OS thread. It reads
+// the autoTSSkey up to Python 3.14, and the non-exported thread-local
+// _Py_tss_gilstate from 3.15 on.
 const gilstateAccessor libpf.SymbolName = "PyGILState_GetThisThreadState"
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
@@ -875,7 +877,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// which is located below.
 	if version < pythonVer(3, 15) {
 		// Calls first: PyThread_tss_get(autoTSSKey)
-		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
+		autoTLSKey, err = decodeStub(ef, pyruntimeAddr, gilstateAccessor)
 		if autoTLSKey == libpf.SymbolValueInvalid {
 			return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
 		}

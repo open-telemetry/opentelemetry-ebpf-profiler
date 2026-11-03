@@ -14,6 +14,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
+// tpidrEL0 is how arm64asm renders the thread pointer system register, which
+// it has no name for.
+const tpidrEL0 = "S3_3_C13_C0_2"
+
 // branchTarget represents a branch target to be analyzed
 type branchTarget struct {
 	addr  uint64
@@ -70,8 +74,8 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 				continue
 			}
 
-			// Check for MRS Xn, TPIDR_EL0 (system register S3_3_C13_C0_2)
-			if inst.Op == aa.MRS && inst.Args[1].String() == "S3_3_C13_C0_2" {
+			// Check for MRS Xn, TPIDR_EL0
+			if inst.Op == aa.MRS && inst.Args[1].String() == tpidrEL0 {
 				reg, ok := Xreg2num(inst.Args[0])
 				if !ok {
 					continue
@@ -147,6 +151,29 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 	return 0, fmt.Errorf("found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset")
 }
 
+// noReg marks a tlsSlotScan register field that currently tracks nothing.
+const noReg = -1
+
+// tlsSlotScan holds the state that ExtractTLSSlot carries from one instruction
+// to the next while it walks a TLS access sequence.
+type tlsSlotScan struct {
+	// capture matches the slot address wherever the code materializes it
+	capture *expression.ImmediateCapture
+	// slot is the slot address seen at the call site
+	slot uint64
+	// disp sums the immediates added to the call result
+	disp int64
+	// tpReg is the register an MRS read the thread pointer into
+	tpReg int
+	// resReg is the register still holding the call result
+	resReg int
+	// called records that the descriptor resolver or __tls_get_addr ran
+	called bool
+	// viaGetAddr means the call returned the variable's address instead of
+	// its offset from the thread pointer
+	viaGetAddr bool
+}
+
 // ExtractTLSSlot finds the GOT slot or TLS descriptor that ARM64 code in a
 // shared library uses to reach a TLS variable. Supported sequences:
 //  1. Initial-exec: ADRP/LDR of the GOT slot, MRS TPIDR_EL0, then LDR or ADD
@@ -158,122 +185,171 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 // Besides the slot address, it returns the sum of immediates added to the
 // call result.
 func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err error) {
-	capture := expression.NewImmediateCapture("slot")
+	s := tlsSlotScan{
+		capture: expression.NewImmediateCapture("slot"),
+		tpReg:   noReg,
+		resReg:  noReg,
+	}
 	it := NewInterpreterWithCodeAt(code, expression.Imm(baseAddr))
-	tpReg := -1
-	called := false
-	// The call returns the variable's address instead of its TP offset
-	viaGetAddr := false
-	offReg := -1
 
 	for {
 		// Registers before Step overwrites the destination
 		regs := it.Regs
-		inst, err := it.Step()
-		if err != nil {
+		inst, stepErr := it.Step()
+		if stepErr != nil {
 			break
 		}
-		off := offReg
-		if called && writesFirstOperand(inst.Op) {
-			if dst, ok := Xreg2num(inst.Args[0]); ok && dst == offReg {
-				offReg = -1
-			}
-		}
+		res := s.takeResultReg(inst)
+
+		var done bool
+		var matchErr error
 		switch inst.Op {
 		case aa.MRS:
-			// arm64asm has no name for TPIDR_EL0
-			if inst.Args[1].String() == "S3_3_C13_C0_2" {
-				if reg, ok := Xreg2num(inst.Args[0]); ok {
-					tpReg = reg
-				}
-			}
+			s.matchThreadPointer(inst)
 		case aa.BL:
-			if called {
-				return 0, 0, errors.New("unexpected call after TLS slot lookup")
-			}
-			// Pattern 3: BL __tls_get_addr with the tls_index in X0
-			if regs.Get(X0).Match(capture) {
-				slot = capture.CapturedValue()
-				called = true
-				viaGetAddr = true
-				offReg = 0
-			}
+			// Pattern 3 hands the tls_index to __tls_get_addr in X0
+			matchErr = s.matchCall(&regs, true)
 		case aa.BLR:
-			if called {
-				return 0, 0, errors.New("unexpected call after TLS slot lookup")
-			}
-			// Pattern 2: BLR Xr with the descriptor in X0. The resolver only
-			// clobbers X0 and X30, so tpReg survives the call.
-			if regs.Get(X0).Match(capture) {
-				slot = capture.CapturedValue()
-				called = true
-				offReg = 0
-			}
+			// Pattern 2 hands the descriptor to the resolver in X0
+			matchErr = s.matchCall(&regs, false)
 		case aa.LDR:
-			// LDR Xd, [Xn, #imm] through the __tls_get_addr result
-			if mem, ok := inst.Args[1].(aa.MemImmediate); ok && viaGetAddr {
-				base, baseOk := Xreg2num(mem.Base)
-				if !baseOk || base != off {
-					continue
-				}
-				imm, immOk := DecodeImmediate(mem)
-				if mem.Mode != aa.AddrOffset || !immOk {
-					return 0, 0, fmt.Errorf("unsupported access to TLS call result: %v", inst)
-				}
-				return slot, disp + imm, nil
-			}
-			// LDR Xd, [Xt, Xn]
-			mem, ok := inst.Args[1].(aa.MemExtend)
-			if !ok {
-				continue
-			}
-			base, baseOk := Xreg2num(mem.Base)
-			index, indexOk := Xreg2num(mem.Index)
-			if !baseOk || !indexOk || base != tpReg {
-				continue
-			}
-			if called && !viaGetAddr && index == off {
-				return slot, disp, nil
-			}
-			if regs.GetArm(mem.Index).Match(expression.Mem8(capture)) {
-				return capture.CapturedValue(), 0, nil
-			}
+			done, matchErr = s.matchLoad(&regs, inst, res)
 		case aa.ADD:
-			dst, dstOk := Xreg2num(inst.Args[0])
-			left, leftOk := Xreg2num(inst.Args[1])
-			if !dstOk || !leftOk {
-				continue
-			}
-			right, rightOk := Xreg2num(inst.Args[2])
-			if !rightOk {
-				// ADD X0, X0, #imm after the descriptor call
-				if called && left == off {
-					imm, ok := addImmediate(inst.Args[2])
-					if !ok {
-						return 0, 0, fmt.Errorf("unsupported ADD on TLS offset: %v", inst)
-					}
-					disp += imm
-					offReg = dst
-				}
-				continue
-			}
-			// ADD Xd, Xt, Xn
-			if called && !viaGetAddr &&
-				(left == tpReg && right == off || left == off && right == tpReg) {
-				return slot, disp, nil
-			}
-			if left == tpReg && regs.Get(X0+Reg(right)).Match(expression.Mem8(capture)) {
-				return capture.CapturedValue(), 0, nil
-			}
+			done, matchErr = s.matchAdd(&regs, inst, res)
+		}
+		if matchErr != nil {
+			return 0, 0, matchErr
+		}
+		if done {
+			return s.slot, s.disp, nil
 		}
 	}
-	if viaGetAddr {
-		return 0, 0, errors.New("could not follow the address returned by the TLS call")
+	return 0, 0, s.unresolved()
+}
+
+// takeResultReg returns the register holding the call result as it was before
+// inst, and stops tracking it if inst overwrites it.
+func (s *tlsSlotScan) takeResultReg(inst aa.Inst) int {
+	prev := s.resReg
+	if s.called && writesFirstOperand(inst.Op) {
+		if dst, ok := Xreg2num(inst.Args[0]); ok && dst == s.resReg {
+			s.resReg = noReg
+		}
 	}
-	if called {
-		return 0, 0, errors.New("could not follow the offset returned by the TLS descriptor call")
+	return prev
+}
+
+// matchThreadPointer notes the register an MRS reads the thread pointer into.
+func (s *tlsSlotScan) matchThreadPointer(inst aa.Inst) {
+	if inst.Args[1].String() != tpidrEL0 {
+		return
 	}
-	return 0, 0, errors.New("could not find a GOT-based TLS access")
+	if reg, ok := Xreg2num(inst.Args[0]); ok {
+		s.tpReg = reg
+	}
+}
+
+// matchCall captures the slot address that a call to __tls_get_addr or to a
+// TLS descriptor resolver takes in X0. Both clobber only X0 and X30, so the
+// thread pointer register survives the call.
+func (s *tlsSlotScan) matchCall(regs *Registers, viaGetAddr bool) error {
+	if s.called {
+		return errors.New("unexpected call after TLS slot lookup")
+	}
+	if !regs.Get(X0).Match(s.capture) {
+		return nil
+	}
+	s.slot = s.capture.CapturedValue()
+	s.called = true
+	s.viaGetAddr = viaGetAddr
+	s.resReg = 0
+	return nil
+}
+
+// matchLoad follows an LDR that dereferences either the address __tls_get_addr
+// returned, or the thread pointer indexed by a TP-relative offset.
+func (s *tlsSlotScan) matchLoad(regs *Registers, inst aa.Inst, res int) (bool, error) {
+	// LDR Xd, [Xn, #imm] through the __tls_get_addr result
+	if mem, ok := inst.Args[1].(aa.MemImmediate); ok && s.viaGetAddr {
+		base, baseOk := Xreg2num(mem.Base)
+		if !baseOk || base != res {
+			return false, nil
+		}
+		imm, immOk := DecodeImmediate(mem)
+		if mem.Mode != aa.AddrOffset || !immOk {
+			return false, fmt.Errorf("unsupported access to TLS call result: %v", inst)
+		}
+		s.disp += imm
+		return true, nil
+	}
+	// LDR Xd, [Xt, Xn]
+	mem, ok := inst.Args[1].(aa.MemExtend)
+	if !ok {
+		return false, nil
+	}
+	base, baseOk := Xreg2num(mem.Base)
+	index, indexOk := Xreg2num(mem.Index)
+	if !baseOk || !indexOk || base != s.tpReg {
+		return false, nil
+	}
+	// The descriptor call left the offset in the index register
+	if s.called && !s.viaGetAddr && index == res {
+		return true, nil
+	}
+	// Initial-exec takes the offset straight out of the GOT slot
+	if regs.GetArm(mem.Index).Match(expression.Mem8(s.capture)) {
+		s.slot = s.capture.CapturedValue()
+		s.disp = 0
+		return true, nil
+	}
+	return false, nil
+}
+
+// matchAdd folds an immediate into the displacement, or ends the sequence
+// where a TP-relative offset is added to the thread pointer.
+func (s *tlsSlotScan) matchAdd(regs *Registers, inst aa.Inst, res int) (bool, error) {
+	dst, dstOk := Xreg2num(inst.Args[0])
+	left, leftOk := Xreg2num(inst.Args[1])
+	if !dstOk || !leftOk {
+		return false, nil
+	}
+	right, rightOk := Xreg2num(inst.Args[2])
+	if !rightOk {
+		// ADD X0, X0, #imm after the descriptor call
+		if s.called && left == res {
+			imm, ok := addImmediate(inst.Args[2])
+			if !ok {
+				return false, fmt.Errorf("unsupported ADD on TLS offset: %v", inst)
+			}
+			s.disp += imm
+			s.resReg = dst
+		}
+		return false, nil
+	}
+	// ADD Xd, Xt, Xn with the offset the descriptor call returned
+	if s.called && !s.viaGetAddr &&
+		(left == s.tpReg && right == res || left == res && right == s.tpReg) {
+		return true, nil
+	}
+	// Initial-exec takes the offset straight out of the GOT slot
+	if left == s.tpReg && regs.Get(X0+Reg(right)).Match(expression.Mem8(s.capture)) {
+		s.slot = s.capture.CapturedValue()
+		s.disp = 0
+		return true, nil
+	}
+	return false, nil
+}
+
+// unresolved names the stage of the sequence the scan did not get past.
+func (s *tlsSlotScan) unresolved() error {
+	switch {
+	case s.viaGetAddr:
+		return errors.New("could not follow the address returned by the TLS call")
+	case s.called:
+		return errors.New("could not follow the offset returned by the TLS descriptor call")
+	default:
+		return errors.New("could not find a GOT-based TLS access")
+	}
 }
 
 // writesFirstOperand is false for stores, compares and branches.
