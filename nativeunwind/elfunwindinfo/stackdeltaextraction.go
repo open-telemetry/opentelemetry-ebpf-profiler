@@ -18,7 +18,7 @@ const (
 	// FDEs are in .debug_frame or external debug file. This controls how many
 	// basic blocks are needed to not follow .gnu_debuglink. E.g. musl on arm64
 	// has 19 basic blocks from .eh_frame, and the rest are in the debug file.
-	numBlocksToOmitDebugLink = 20
+	numBlocksToOmitDebugLink = 32
 )
 
 // extractionFilter is used to filter in .eh_frame data when a better source
