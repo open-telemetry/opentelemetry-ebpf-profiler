@@ -523,8 +523,8 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->context_value_end = 0;
   trace->kernel_frame_end  = 0;
   trace->frame_data_end    = 0;
-  trace->thread_label_end  = 0;
   trace->golang_label_end  = 0;
+  trace->thread_label_end  = 0;
   trace->variable_data_end = 0;
   trace->num_frames        = 0;
   trace->pid               = 0;
@@ -637,6 +637,11 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
 static inline EBPF_INLINE void *reserve_variable_data(Trace *trace, u16 alloc_sz, u16 reserve_sz)
 {
   u16 index = trace->variable_data_end;
+  // Older verifiers need a constant bound before comparing against a variable
+  // allocation size.
+  if (index > sizeof(trace->variable_data)) {
+    return NULL;
+  }
   if (index > sizeof(trace->variable_data) - alloc_sz - reserve_sz) {
     return NULL;
   }
