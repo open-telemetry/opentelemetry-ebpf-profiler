@@ -43,18 +43,16 @@ func TestOriginRegistryRegisterValidates(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var r originRegistry
-			id, err := r.Register(tc.metadata)
+			id, err := r.Register(&OriginEntry{Meta: tc.metadata})
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
-				meta, hooks := r.lookup(1)
-				assert.Nil(t, meta)
-				assert.Nil(t, hooks)
+				assert.Nil(t, r.lookup(1))
 				return
 			}
 			require.NoError(t, err)
-			meta, hooks := r.lookup(id)
-			assert.Same(t, tc.metadata, meta)
-			assert.NotNil(t, hooks)
+			entry := r.lookup(id)
+			assert.Same(t, tc.metadata, entry.Meta)
+			assert.NotNil(t, entry.Hooks)
 		})
 	}
 }
@@ -67,12 +65,27 @@ func TestOriginRegistryRegisterWithHooks(t *testing.T) {
 	hooks := &traceHandlerHooksStub{}
 
 	var r originRegistry
-	id, err := r.RegisterWithHooks(metadata, hooks)
+	id, err := r.Register(&OriginEntry{Meta: metadata, Hooks: hooks})
 	require.NoError(t, err)
 
-	meta, gotHooks := r.lookup(id)
-	assert.Same(t, metadata, meta)
-	assert.Same(t, hooks, gotHooks)
+	entry := r.lookup(id)
+	assert.Same(t, metadata, entry.Meta)
+	assert.Same(t, hooks, entry.Hooks)
+}
+
+func TestOriginRegistryRegisterDefaultsHooks(t *testing.T) {
+	metadata := &samples.TypeMetadata{
+		SampleTypes:  []samples.SampleType{{Type: "a", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
+	}
+
+	var r originRegistry
+	id, err := r.Register(&OriginEntry{Meta: metadata})
+	require.NoError(t, err)
+
+	entry := r.lookup(id)
+	assert.Same(t, metadata, entry.Meta)
+	assert.Equal(t, StubTraceHandlerHooks{}, entry.Hooks)
 }
 
 type traceHandlerHooksStub struct{}

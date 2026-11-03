@@ -285,7 +285,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kin
 		return nil, fmt.Errorf("invalid probe kind: %d", kind)
 	}
 
-	originID, err := c.reg.Register(meta)
+	originID, err := c.reg.Register(&OriginEntry{Meta: meta})
 	if err != nil {
 		return nil, fmt.Errorf("registering collect trampoline origin: %w", err)
 	}
@@ -377,7 +377,7 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 }
 
 // TraceHandlerHooks is a set of trace handler hooks that may be attached to a
-// freshly registered origin ID via ProbeRegistrar.RegisterWithHooks. It
+// freshly registered origin ID via ProbeRegistrar.Register. It
 // allows probes to intercept traces with a matching origin either before
 // symbolization (e.g. heap free events that need only update a tracker and
 // should never be symbolized or reported) or after symbolization and
@@ -397,12 +397,11 @@ type TraceHandlerHooks interface {
 }
 
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
-// Each call to Register or RegisterWithHooks allocates a unique ID backed by
-// the supplied metadata. Trace handler hooks attached via RegisterWithHooks
-// make the tracer dispatch traces emitted with that origin to them.
+// Each call to Register allocates a unique ID backed by the supplied
+// OriginEntry. Trace handler hooks attached to the entry make the tracer
+// dispatch traces emitted with that origin to them.
 type ProbeRegistrar interface {
-	Register(meta *samples.TypeMetadata) (uint16, error)
-	RegisterWithHooks(meta *samples.TypeMetadata, hooks TraceHandlerHooks) (uint16, error)
+	Register(entry *OriginEntry) (uint16, error)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.

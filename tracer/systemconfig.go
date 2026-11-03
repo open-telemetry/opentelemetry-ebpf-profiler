@@ -842,17 +842,19 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 // eBPF programs can produce and writes each ID into the corresponding
 // RODATA variable.
 func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
-	sampling, err := origins.Register(&samples.TypeMetadata{
-		SampleTypes: []samples.SampleType{{
-			Type: "samples",
-			Unit: "count",
-			Period: &samples.Period{
-				Type:  "cpu",
-				Unit:  "nanoseconds",
-				Value: 1e9 / int64(cfg.SamplesPerSecond),
-			},
-		}},
-		AppendValues: samples.AppendFirstContextValue,
+	sampling, err := origins.Register(&OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes: []samples.SampleType{{
+				Type: "samples",
+				Unit: "count",
+				Period: &samples.Period{
+					Type:  "cpu",
+					Unit:  "nanoseconds",
+					Value: 1e9 / int64(cfg.SamplesPerSecond),
+				},
+			}},
+			AppendValues: samples.AppendFirstContextValue,
+		},
 	})
 	if err != nil {
 		return err
