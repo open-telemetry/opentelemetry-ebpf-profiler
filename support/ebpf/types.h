@@ -612,6 +612,19 @@ typedef struct __attribute__((packed)) SpanTraceInfo {
   SpanID span_id;
 } SpanTraceInfo;
 
+// Thread context buffer an instrumented process publishes through the
+// otel_thread_ctx_v1 thread-local, per OTEP #4947. The attribute payload
+// follows it.
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  TraceID trace_id;
+  SpanID span_id;
+  // 0 while the writer is mid-update.
+  u8 valid;
+  u8 _reserved;
+  // Payload length in bytes.
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 typedef struct GolangLabel {
   u8 key[16];
   u8 val[48];
@@ -629,17 +642,30 @@ typedef struct GolangLabel {
 // Maximum size used for Go labels.
 #define MAX_GO_LABEL_DATA_SZ sizeof(GolangLabel[MAX_GO_LABELS])
 
-// Number of bytes reserved for data after frames, currently the thread
-// label and Go label sections. Sized to fit one full set of Go labels, to guarantee
-// a reasonable set of labels even if all of frame data is used.
-#define MAX_FRAME_TRAILER_DATA_SZ MAX_GO_LABEL_DATA_SZ
+// Maximum size used for thread context labels.
+// OTEP #4947 recommends keeping the entire thread context record within 640 bytes,
+// so this budget accommodates the recommended attribute payload.
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md#thread-local-context-record
+#define MAX_THREAD_LABEL_DATA_SZ 640
+
+// Bytes reserved after frames, shared by thread context and Go labels. Usually,
+// a process should have only one of these label sources. The reserve is the
+// larger of their limits, guaranteeing one full payload from either source
+// even when frame data is full. Both sections can also use unused frame-data
+// space, so both usually fit when present.
+// unwind_stop writes Go labels first, since Go usually hosts the process.
+// Thread context labels use the remaining space and are omitted if their
+// payload, capped at MAX_THREAD_LABEL_DATA_SZ, does not fit.
+#define MAX_FRAME_TRAILER_DATA_SZ                                                                  \
+  (MAX_GO_LABEL_DATA_SZ > MAX_THREAD_LABEL_DATA_SZ ? MAX_GO_LABEL_DATA_SZ                          \
+                                                   : MAX_THREAD_LABEL_DATA_SZ)
 
 // The variable data portion of trace layout as:
 //   u64          context_value[];
 //   u64          kernel_frame[];
 //   u64          frame_data[];
-//   u8           thread_labels[];
 //   GolangLabel  golang_labels[];
+//   u8           thread_labels[];
 // The length of each dynamic portion is determined by the subsequent
 // Trace.*_end pointers. The _end pointers are byte aligned for accurate
 // length, but subsequent section start is aligned to 64-bits. Zero means absent.
@@ -676,8 +702,8 @@ typedef struct Trace {
   u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;
-  u16 thread_label_end;
   u16 golang_label_end;
+  u16 thread_label_end;
   u16 variable_data_end;
 
   // The number of (variable length) frames present.

@@ -211,14 +211,6 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
-	// preTraceHandlers maps origin ID to pre-trace handlers registered for
-	// that origin. Only traces with a matching origin are dispatched.
-	preTraceHandlers map[uint16][]PreTraceHandler
-
-	// postTraceHandlers maps origin ID to post-trace handlers registered for
-	// that origin. Only traces with a matching origin are dispatched.
-	postTraceHandlers map[uint16][]PostTraceHandler
-
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -398,8 +390,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
-		preTraceHandlers:       make(map[uint16][]PreTraceHandler),
-		postTraceHandlers:      make(map[uint16][]PostTraceHandler),
 	}
 	tracer.mmapEventOnce = sync.OnceValue(func() error {
 		return tracer.startMmapEventMonitor(tracer.lifecycleCtx)
@@ -1342,16 +1332,19 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		return nil, err
 	}
 
+	goLabelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label")
+	if err != nil {
+		return nil, err
+	}
 	if payload, err := vd.decodeBytes(ptr.Thread_label_end, "thread label"); err != nil {
 		return nil, err
 	} else if len(payload) > 0 {
 		decoder := t.processManager.ThreadLabelDecoderForPID(trace.PID)
 		trace.CustomLabels = t.threadLabels.resolve(payload, decoder)
 	}
-	if labelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label"); err != nil {
-		return nil, err
-	} else if len(labelData) > 0 {
-		trace.CustomLabels = t.customLabels.decode(labelData, trace.CustomLabels)
+	// Merge Go labels last so they take precedence on duplicate keys.
+	if len(goLabelData) > 0 {
+		trace.CustomLabels = t.customLabels.decode(goLabelData, trace.CustomLabels)
 	}
 	return trace, nil
 }
@@ -1552,22 +1545,20 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	// Pre-handlers gated by origin may consume traces before symbolization.
-	for _, h := range t.preTraceHandlers[bpfTrace.Origin] {
-		if !h.PreHandleTrace(bpfTrace) {
-			t.tracePool.Put(bpfTrace)
-			return
-		}
+	// Handlers registered with the trace origin may consume traces before
+	// symbolization.
+	entry := t.origins.lookup(bpfTrace.Origin)
+	if entry == nil || !entry.Hooks.PreHandleTrace(bpfTrace) {
+		t.tracePool.Put(bpfTrace)
+		return
 	}
 
-	origin := bpfTrace.Origin
-	trace := t.processManager.HandleTrace(bpfTrace, t.origins.lookup(origin))
+	trace := t.processManager.HandleTrace(bpfTrace, entry.Meta)
 	t.tracePool.Put(bpfTrace)
 
-	// Post-handlers gated by origin receive the symbolized result.
-	for _, h := range t.postTraceHandlers[origin] {
-		h.PostHandleTrace(trace)
-	}
+	// Handlers registered with the trace origin receive the symbolized
+	// result after symbolization and reporting.
+	entry.Hooks.PostHandleTrace(trace)
 }
 
 // originRegistry is the tracer-wide registry origin IDs are assigned from
@@ -1578,33 +1569,57 @@ type originRegistry struct {
 	// lastID is the most recently assigned origin ID.
 	lastID atomic.Uint32
 
-	// types maps a trace origin (uint16) to its *samples.TypeMetadata.
-	types sync.Map
+	// entries maps a trace origin (uint16) to its *OriginEntry.
+	entries sync.Map
 }
 
-// Register hands out a fresh origin ID and stores metadata for it, keyed by
+// OriginEntry bundles the profile type metadata and the trace handler hooks
+// registered for a single origin ID. It is passed to
+// ProbeRegistrar.Register, which assigns a fresh origin ID to the entry.
+type OriginEntry struct {
+	// Meta is the profile type metadata for the origin. It must be set.
+	Meta *samples.TypeMetadata
+
+	// Hooks receive traces emitted with the origin's ID. If Hooks is nil,
+	// no-op stubs are registered, and traces with the origin are processed
+	// normally.
+	Hooks TraceHandlerHooks
+}
+
+// StubTraceHandlerHooks provides no-op TraceHandlerHooks implementations. It
+// can be embedded by probe implementations that only need to override a
+// subset of the hooks. It is also used for origins registered without hooks.
+type StubTraceHandlerHooks struct{}
+
+func (StubTraceHandlerHooks) PreHandleTrace(*libpf.EbpfTrace) bool { return true }
+func (StubTraceHandlerHooks) PostHandleTrace(*libpf.Trace)         {}
+
+// Register hands out a fresh origin ID and stores the entry for it, keyed by
 // that ID.
-func (r *originRegistry) Register(metadata *samples.TypeMetadata) (uint16, error) {
-	if len(metadata.SampleTypes) == 0 {
+func (r *originRegistry) Register(entry *OriginEntry) (uint16, error) {
+	if len(entry.Meta.SampleTypes) == 0 {
 		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
 	}
-	if metadata.AppendValues == nil {
+	if entry.Meta.AppendValues == nil {
 		return 0, fmt.Errorf("origin registry entry needs AppendValues")
 	}
 	if last := r.lastID.Load(); last >= math.MaxUint16 {
 		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
 	}
+	if entry.Hooks == nil {
+		entry.Hooks = StubTraceHandlerHooks{}
+	}
 	id := uint16(r.lastID.Add(1))
-	r.types.Store(id, metadata)
+	r.entries.Store(id, entry)
 	return id, nil
 }
 
-// lookup returns the profile type metadata registered for origin, or nil if
+// lookup returns the OriginEntry registered for origin. It returns nil if
 // origin is unknown.
-func (r *originRegistry) lookup(origin uint16) *samples.TypeMetadata {
-	v, ok := r.types.Load(origin)
+func (r *originRegistry) lookup(origin uint16) *OriginEntry {
+	v, ok := r.entries.Load(origin)
 	if !ok {
 		return nil
 	}
-	return v.(*samples.TypeMetadata)
+	return v.(*OriginEntry)
 }

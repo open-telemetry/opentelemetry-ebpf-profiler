@@ -169,8 +169,9 @@ func CompressInto(in io.Reader, out io.Writer, chunkSize uint64) error {
 
 // Reader allows random access reads within zstpak files. Created via the `Open` method.
 type Reader struct {
-	file   *os.File
-	footer *footer
+	file    *os.File
+	footer  *footer
+	decoder *zstd.Decoder
 }
 
 // Open a zstpak file for random access reading.
@@ -190,9 +191,15 @@ func Open(path string) (*Reader, error) {
 		return nil, err
 	}
 
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create decoder: %w", err)
+	}
+
 	return &Reader{
-		file:   file,
-		footer: hdr,
+		file:    file,
+		footer:  hdr,
+		decoder: decoder,
 	}, nil
 }
 
@@ -256,12 +263,7 @@ func (reader *Reader) getDecompressedChunk(start, length uint64) ([]byte, error)
 		return nil, fmt.Errorf("failed to read chunk data: %w", err)
 	}
 
-	dec, err := zstd.NewReader(nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create decoder: %w", err)
-	}
-
-	decompressed, err := dec.DecodeAll(compressedChunk, nil)
+	decompressed, err := reader.decoder.DecodeAll(compressedChunk, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress chunk: %w", err)
 	}

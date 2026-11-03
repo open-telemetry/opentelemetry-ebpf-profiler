@@ -34,9 +34,11 @@ func TestLoadBpfTraceContextValueOrder(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tr := &Tracer{tracePool: newTracePool(), origins: &originRegistry{}}
-			origin, err := tr.origins.Register(&samples.TypeMetadata{
-				SampleTypes:  []samples.SampleType{{Type: "samples", Unit: "count"}},
-				AppendValues: samples.AppendFirstContextValue,
+			origin, err := tr.origins.Register(&OriginEntry{
+				Meta: &samples.TypeMetadata{
+					SampleTypes:  []samples.SampleType{{Type: "samples", Unit: "count"}},
+					AppendValues: samples.AppendFirstContextValue,
+				},
 			})
 			require.NoError(t, err)
 

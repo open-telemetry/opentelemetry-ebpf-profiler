@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -42,14 +43,52 @@ func TestOriginRegistryRegisterValidates(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			var r originRegistry
-			id, err := r.Register(tc.metadata)
+			id, err := r.Register(&OriginEntry{Meta: tc.metadata})
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				assert.Nil(t, r.lookup(1))
 				return
 			}
 			require.NoError(t, err)
-			assert.Same(t, tc.metadata, r.lookup(id))
+			entry := r.lookup(id)
+			assert.Same(t, tc.metadata, entry.Meta)
+			assert.NotNil(t, entry.Hooks)
 		})
 	}
 }
+
+func TestOriginRegistryRegisterWithHooks(t *testing.T) {
+	metadata := &samples.TypeMetadata{
+		SampleTypes:  []samples.SampleType{{Type: "a", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
+	}
+	hooks := &traceHandlerHooksStub{}
+
+	var r originRegistry
+	id, err := r.Register(&OriginEntry{Meta: metadata, Hooks: hooks})
+	require.NoError(t, err)
+
+	entry := r.lookup(id)
+	assert.Same(t, metadata, entry.Meta)
+	assert.Same(t, hooks, entry.Hooks)
+}
+
+func TestOriginRegistryRegisterDefaultsHooks(t *testing.T) {
+	metadata := &samples.TypeMetadata{
+		SampleTypes:  []samples.SampleType{{Type: "a", Unit: "count"}},
+		AppendValues: samples.AppendFirstContextValue,
+	}
+
+	var r originRegistry
+	id, err := r.Register(&OriginEntry{Meta: metadata})
+	require.NoError(t, err)
+
+	entry := r.lookup(id)
+	assert.Same(t, metadata, entry.Meta)
+	assert.Equal(t, StubTraceHandlerHooks{}, entry.Hooks)
+}
+
+type traceHandlerHooksStub struct{}
+
+func (*traceHandlerHooksStub) PreHandleTrace(*libpf.EbpfTrace) bool { return true }
+func (*traceHandlerHooksStub) PostHandleTrace(*libpf.Trace)         {}

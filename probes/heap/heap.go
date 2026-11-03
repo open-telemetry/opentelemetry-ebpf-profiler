@@ -94,13 +94,15 @@ func appendAllocValues(dst []int64, meta *samples.TraceEventMeta) []int64 {
 func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
 	// Register origin ID. The eBPF program reads this from RODATA.
 	var err error
-	hp.originAlloc, err = reg.Register(&samples.TypeMetadata{
-		SampleTypes: []samples.SampleType{
-			{Type: "alloc_space", Unit: "bytes"},
-			{Type: "alloc_objects", Unit: "count"},
+	hp.originAlloc, err = reg.Register(&tracer.OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes: []samples.SampleType{
+				{Type: "alloc_space", Unit: "bytes"},
+				{Type: "alloc_objects", Unit: "count"},
+			},
+			ReportValues: true,
+			AppendValues: appendAllocValues,
 		},
-		ReportValues: true,
-		AppendValues: appendAllocValues,
 	})
 	if err != nil {
 		return fmt.Errorf("registering heap alloc origin: %w", err)
