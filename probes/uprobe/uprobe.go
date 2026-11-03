@@ -83,9 +83,11 @@ func New(cfg Config) (tracer.Probe, error) {
 // the probe as a per-process attacher so that SynchronizeProcess drives per-PID
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
-		AppendValues: samples.AppendFirstContextValue,
+	originID, err := reg.Register(&tracer.OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
+			AppendValues: samples.AppendFirstContextValue,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)
