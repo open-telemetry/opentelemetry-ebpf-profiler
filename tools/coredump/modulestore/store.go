@@ -89,6 +89,7 @@ func (store *Store) InsertModuleLocally(localPath string) (id ID, isNew bool, er
 	if err != nil {
 		return ID{}, false, fmt.Errorf("failed to open local file: %w", err)
 	}
+	defer in.Close()
 
 	id, err = calculateModuleID(in)
 	if err != nil {
@@ -199,6 +200,7 @@ func (store *Store) UploadModule(id ID) error {
 	if err != nil {
 		return fmt.Errorf("failed to open local file: %w", err)
 	}
+	defer file.Close()
 
 	hasher := sha256.New()
 	if _, err = io.Copy(hasher, file); err != nil {
