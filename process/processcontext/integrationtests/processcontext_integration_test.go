@@ -70,10 +70,11 @@ func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.M
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
 
-// capturedEvent pairs a TraceEventMeta with the labels decoded from the
-// thread context.
+// capturedEvent pairs a TraceEventMeta with the trace frames and the labels
+// decoded from the thread context.
 type capturedEvent struct {
 	meta   *samples.TraceEventMeta
+	frames libpf.Frames
 	labels map[libpf.String]libpf.String
 }
 
@@ -87,7 +88,7 @@ func newCaptureReporter() *captureReporter {
 
 func (r *captureReporter) ReportTraceEvent(trace *libpf.Trace,
 	meta *samples.TraceEventMeta) error {
-	r.eventCh <- capturedEvent{meta: meta, labels: trace.CustomLabels}
+	r.eventCh <- capturedEvent{meta: meta, frames: trace.Frames, labels: trace.CustomLabels}
 	return nil
 }
 
@@ -108,17 +109,23 @@ func Test_ProcessContext(t *testing.T) {
 	allCPUs := []int{}
 
 	tests := map[string]struct {
-		exeName string
-		args    []string
-		env     []string
+		exeName        string
+		args           []string
+		env            []string
+		waitForPublish bool
 	}{
 		"glibc_exe": {exeName: "processctx_exe_glibc"},
-		// Publishes the process context after a delay, so the profiler discovers
-		// the PID before the publication and the prctl monitor must trigger a
-		// resync to pick up the OTEL_CTX mapping.
+		// Wait for a sample before publishing, so the profiler discovers the PID
+		// first and the prctl monitor must trigger a resync to find OTEL_CTX.
 		"glibc_exe_delayed_publish": {
-			exeName: "processctx_exe_glibc",
-			env:     []string{"OTEL_PROCESS_CTX_PUBLISH_DELAY_MS=200"},
+			exeName:        "processctx_exe_glibc",
+			waitForPublish: true,
+		},
+		// The prctl is rejected before the kernel reads the name, as without
+		// CONFIG_ANON_VMA_NAME, so the monitor must rely on the context header.
+		"glibc_exe_delayed_publish_prctl_rejected": {
+			exeName:        "processctx_exe_glibc_prctl_rejected",
+			waitForPublish: true,
 		},
 		// dlopen'd libraries are reached through the DTV, whose layout differs
 		// between libcs. Access models are covered in tls/tls_integration_test.go.
@@ -179,41 +186,56 @@ func Test_ProcessContext(t *testing.T) {
 
 			cmd := exec.CommandContext(ctx, filepath.Join(exeDir, tc.exeName), tc.args...)
 			cmd.Stderr = os.Stderr
-			if len(tc.env) > 0 {
-				cmd.Env = append(os.Environ(), tc.env...)
+			cmd.Env = append(os.Environ(), tc.env...)
+			var publishFile string
+			if tc.waitForPublish {
+				publishFile = filepath.Join(t.TempDir(), "publish")
+				cmd.Env = append(cmd.Env, "OTEL_PROCESS_CTX_PUBLISH_FILE="+publishFile)
 			}
 			require.NoError(t, cmd.Start())
 
 			wg := sync.WaitGroup{}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				err := cmd.Wait()
 				select {
 				case <-ctx.Done():
-					t.Log("Test program cancelled (run complete)")
+					t.Log("Test program canceled (run complete)")
 				default:
 					// require.* must run on the test goroutine, so fail here
 					// and cancel to unblock the main loop.
 					t.Errorf("test program exited unexpectedly: %v", err)
 					cancel()
 				}
+			})
+			defer func() {
+				cancel()
+				wg.Wait()
 			}()
 
 			timeout := time.NewTimer(10 * time.Second)
 			defer timeout.Stop()
 
 			// Tracked separately, as a sample can land before either is published.
-			gotResource, gotLabels := false, false
+			gotResource, gotLabels, published := false, false, false
 			var traceID libpf.TraceID
 			var spanID libpf.SpanID
 		Loop:
 			for !gotResource || !gotLabels {
 				select {
+				case <-ctx.Done():
+					break Loop
 				case <-timeout.C:
 					break Loop
 				case ev := <-rep.eventCh:
 					if ev.meta.PID != libpf.PID(cmd.Process.Pid) {
+						continue
+					}
+					if tc.waitForPublish && !published {
+						if !hasFrameInFile(ev.frames, tc.exeName) {
+							continue
+						}
+						require.NoError(t, os.WriteFile(publishFile, nil, 0o600))
+						published = true
 						continue
 					}
 					if !gotResource && attributesMatch(ev.meta.ResourceAttrs,
@@ -229,8 +251,7 @@ func Test_ProcessContext(t *testing.T) {
 					}
 				}
 			}
-			cancel()
-			wg.Wait()
+			require.Equal(t, tc.waitForPublish, published, "process not sampled before publication")
 			require.True(t, gotResource, "process context not received")
 			require.True(t, gotLabels, "thread context labels not received")
 			require.Equal(t, expectedTraceID, traceID)
@@ -238,6 +259,19 @@ func Test_ProcessContext(t *testing.T) {
 			t.Log("Exiting test case")
 		})
 	}
+}
+
+// hasFrameInFile reports whether a frame resolved to fileName, proving the
+// initial mappings scan completed. A resync queued during it may still find a
+// later publication.
+func hasFrameInFile(frames libpf.Frames, fileName string) bool {
+	for _, f := range frames {
+		m := f.Value().Mapping
+		if m.Valid() && m.Value().File.Value().FileName.String() == fileName {
+			return true
+		}
+	}
+	return false
 }
 
 // attributesMatch reports whether every key in want is present in attrs with
