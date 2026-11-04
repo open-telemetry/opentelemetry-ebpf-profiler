@@ -37,6 +37,9 @@ Run `make test` to run the full test suite. If you want to run package tests
 directly with `go test`, first run `make test-deps` to generate the required
 test fixtures.
 
+To run the integration tests on CI kernels in QEMU, see
+[support/README.md](support/README.md#testing-on-ci-kernels).
+
 
 ## Pull Requests
 
