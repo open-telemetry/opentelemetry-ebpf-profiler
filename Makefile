@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
-	integration-test-binaries \
+	integration-test-binaries integration-tests integration-tests-all \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
@@ -158,6 +158,13 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+
+# Run on one kernel, or every CI kernel for TARGET_ARCH.
+integration-tests: integration-test-binaries
+	bash ./support/run-kernel-tests.sh "$(TARGET_ARCH)" "$(KERNEL_VERSION)"
+
+integration-tests-all: integration-test-binaries
+	bash ./support/run-kernel-tests.sh "$(TARGET_ARCH)" --all
 
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
