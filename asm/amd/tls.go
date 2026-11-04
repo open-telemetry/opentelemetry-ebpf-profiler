@@ -16,10 +16,11 @@ import (
 
 // ExtractTLSOffset scans through x86_64 assembly code looking for MOV instructions
 // that access Thread Local Storage (TLS) via the FS segment register.
-// It handles three common patterns:
+// It handles four common patterns:
 //  1. Direct FS-relative addressing: MOV reg, FS:[offset]
 //  2. Register-based addressing: MOV $offset, reg; MOV reg, FS:(reg)
 //  3. RIP-relative addressing: MOV 0x...(RIP), reg; MOV reg, FS:(reg)
+//  4. Thread pointer in a register: MOV reg, FS:[0]; MOV reg, [reg+offset]
 //
 // The function returns the TLS offset found, or an error if no valid pattern is detected.
 // For RIP-relative addressing, the file parameter can be provided to resolve memory references.
@@ -29,6 +30,7 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 	it := NewInterpreterWithCodeAt(code, e.Imm(codeAddress))
 
 	for {
+		regs := it.Regs
 		op, err := it.Step()
 		if err != nil {
 			break
@@ -37,12 +39,31 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 			continue
 		}
 		mem, ok := op.Args[1].(x86asm.Mem)
-		if !ok || mem.Segment != x86asm.FS {
+		if !ok {
+			continue
+		}
+		if mem.Segment != x86asm.FS {
+			// Pattern 4: A load through a register holding the thread pointer,
+			// which the linker leaves behind when it relaxes a general-dynamic
+			// access to local-exec. The FS prefix stays on the thread pointer
+			// read alone, so the offset has to come from the load address.
+			if mem.Base == 0 || mem.Index != 0 {
+				continue
+			}
+			at := e.Add(regs.GetX86(mem.Base), immFromDisp(mem.Disp))
+			if at.Match(e.Add(threadPointer(), offset)) {
+				return validateTLSOffset(int32(offset.CapturedValue()))
+			}
 			continue
 		}
 		// Pattern 1: Direct FS-relative addressing
 		// Example: MOV rax, FS:[0xfffffffffffffff8]
 		if mem.Base == 0 {
+			if mem.Disp == 0 && mem.Index == 0 {
+				// FS:[0] is the thread pointer itself and not a variable. The
+				// access through the register it lands in carries the offset.
+				continue
+			}
 			return validateTLSOffset(int32(mem.Disp))
 		}
 		// Pattern 2 & 3: Register-based or RIP-relative addressing
@@ -50,7 +71,7 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 		// or: MOV 0x40b9af9(RIP), rcx; MOV rax, FS:(rcx)
 		// The interpreter handles RIP-relative addressing transparently,
 		// resolving it to a virtual memory address.
-		actual := it.Regs.GetX86(mem.Base)
+		actual := regs.GetX86(mem.Base)
 		if actual.Match(offset) {
 			return validateTLSOffset(int32(offset.CapturedValue()))
 		}
@@ -70,6 +91,12 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 		}
 	}
 	return 0, fmt.Errorf("could not find FS-relative MOV instruction with valid TLS offset")
+}
+
+// threadPointer is a read of FS:[0], which holds a copy of the thread pointer
+// so that code can obtain it without a segment-relative access of its own.
+func threadPointer() e.Expression {
+	return e.MemWithSegment8(x86asm.FS, e.Imm(0))
 }
 
 // ExtractTLSSlot scans through x86_64 assembly code looking for TLS accesses

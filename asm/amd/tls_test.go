@@ -39,6 +39,23 @@ func TestExtractTLSOffset(t *testing.T) {
 			expected: -8,
 		},
 		{
+			// PyGILState_GetThisThreadState from python/bin/python3.15 in Astral's
+			// optimized release (the bytes below include the complete function):
+			// https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-unknown-linux-musl-install_only.tar.gz
+			name: "Astral Python 3.15.2 x86_64 musl relaxed TLS",
+			code: []byte{
+				0x55,             // PUSH RBP
+				0x48, 0x89, 0xe5, // MOV RBP, RSP
+				// DATA16 DATA16 DATA16 MOV RAX, FS:[0]
+				0x66, 0x66, 0x66, 0x64, 0x48, 0x8b, 0x04, 0x25, 0x00, 0x00, 0x00, 0x00,
+				0x48, 0x8b, 0x80, 0xe8, 0xff, 0xff, 0xff, // MOV RAX, [RAX-0x18]
+				0x5d, // POP RBP
+				0xc3, // RET
+			},
+			baseAddr: 0xfa8fa0,
+			expected: -0x18,
+		},
+		{
 			name: "Python 3.13 x86_64 direct FS access with negative offset",
 			code: []byte{
 				0xf3, 0x0f, 0x1e, 0xfa, // endbr64
@@ -142,23 +159,6 @@ func TestExtractTLSSlot(t *testing.T) {
 		disp          int64
 		expectedError string
 	}{
-		{
-			// PyGILState_GetThisThreadState from python/bin/python3.15 in Astral's
-			// optimized release (the bytes below include the complete function):
-			// https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-x86_64-unknown-linux-musl-install_only.tar.gz
-			name: "Astral Python 3.15.2 x86_64 musl relaxed TLS",
-			code: []byte{
-				0x55,             // PUSH RBP
-				0x48, 0x89, 0xe5, // MOV RBP, RSP
-				// DATA16 DATA16 DATA16 MOV RAX, FS:[0]
-				0x66, 0x66, 0x66, 0x64, 0x48, 0x8b, 0x04, 0x25, 0x00, 0x00, 0x00, 0x00,
-				0x48, 0x8b, 0x80, 0xe8, 0xff, 0xff, 0xff, // MOV RAX, [RAX-0x18]
-				0x5d, // POP RBP
-				0xc3, // RET
-			},
-			baseAddr: 0xfa8fa0,
-			expected: -0x18,
-		},
 		{
 			// _PyThreadState_GetCurrent from Debian's libpython3.13.so.1.0.
 			name: "Python 3.13 shared x86_64 local-dynamic via __tls_get_addr",

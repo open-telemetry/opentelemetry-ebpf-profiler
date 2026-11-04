@@ -34,6 +34,41 @@ func TestExtractTLSOffset(t *testing.T) {
 			expected: 56,
 		},
 		{
+			// PyGILState_GetThisThreadState from python/bin/python3.15 in Astral's
+			// optimized release (the bytes below include the complete function):
+			// https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-aarch64-unknown-linux-gnu-install_only.tar.gz
+			name: "Astral Python 3.15.2 ARM64 glibc relaxed TLS",
+			code: []byte{
+				0xfd, 0x7b, 0xbf, 0xa9, // STP X29, X30, [SP, #-16]!
+				0xfd, 0x03, 0x00, 0x91, // MOV X29, SP
+				0x00, 0x00, 0xa0, 0xd2, // MOVZ X0, #0, LSL #16
+				0x00, 0x05, 0x80, 0xf2, // MOVK X0, #0x28
+				0x1f, 0x20, 0x03, 0xd5, // NOP
+				0x1f, 0x20, 0x03, 0xd5, // NOP
+				0x48, 0xd0, 0x3b, 0xd5, // MRS X8, TPIDR_EL0
+				0x00, 0x69, 0x60, 0xf8, // LDR X0, [X8, X0]
+				0xfd, 0x7b, 0xc1, 0xa8, // LDP X29, X30, [SP], #16
+				0xc0, 0x03, 0x5f, 0xd6, // RET
+			},
+			baseAddr: 0x12004e8,
+			expected: 0x28,
+		},
+		{
+			// The high half of the offset must not drop out of a relaxed
+			// access, which would leave the low half looking like a usable
+			// offset on its own.
+			name: "Astral style relaxed TLS with out of range offset",
+			code: []byte{
+				0x20, 0x00, 0xa0, 0xd2, // MOVZ X0, #0x1, LSL #16
+				0x00, 0x05, 0x80, 0xf2, // MOVK X0, #0x28
+				0x48, 0xd0, 0x3b, 0xd5, // MRS X8, TPIDR_EL0
+				0x00, 0x69, 0x60, 0xf8, // LDR X0, [X8, X0]
+				0xc0, 0x03, 0x5f, 0xd6, // RET
+			},
+			baseAddr:      0x1000,
+			expectedError: "found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset",
+		},
+		{
 			name: "Python 3.13 ARM64 MRS followed by ADD",
 			code: []byte{
 				// MRS X0, TPIDR_EL0  (S3_3_C13_C0_2)
@@ -236,26 +271,6 @@ func TestExtractTLSSlot(t *testing.T) {
 		disp          int64
 		expectedError string
 	}{
-		{
-			// PyGILState_GetThisThreadState from python/bin/python3.15 in Astral's
-			// optimized release (the bytes below include the complete function):
-			// https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.15.2%2B20261026-aarch64-unknown-linux-gnu-install_only.tar.gz
-			name: "Astral Python 3.15.2 ARM64 glibc relaxed TLS",
-			code: []byte{
-				0xfd, 0x7b, 0xbf, 0xa9, // STP X29, X30, [SP, #-16]!
-				0xfd, 0x03, 0x00, 0x91, // MOV X29, SP
-				0x00, 0x00, 0xa0, 0xd2, // MOVZ X0, #0, LSL #16
-				0x00, 0x05, 0x80, 0xf2, // MOVK X0, #0x28
-				0x1f, 0x20, 0x03, 0xd5, // NOP
-				0x1f, 0x20, 0x03, 0xd5, // NOP
-				0x48, 0xd0, 0x3b, 0xd5, // MRS X8, TPIDR_EL0
-				0x00, 0x69, 0x60, 0xf8, // LDR X0, [X8, X0]
-				0xfd, 0x7b, 0xc1, 0xa8, // LDP X29, X30, [SP], #16
-				0xc0, 0x03, 0x5f, 0xd6, // RET
-			},
-			baseAddr: 0x12004e8,
-			expected: 0x28,
-		},
 		{
 			// _PyThreadState_GetCurrent from Debian's libpython3.13.so.1.0.
 			// The descriptor resolver is called through BLR with the

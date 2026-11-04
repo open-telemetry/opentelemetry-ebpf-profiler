@@ -148,7 +148,56 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 	if !foundMRS {
 		return 0, fmt.Errorf("could not find MRS TPIDR_EL0 instruction")
 	}
+	// The scan above only follows an offset that an ADD or LDR encodes as an
+	// immediate. Where the offset sits in a register instead, recovering it
+	// takes the interpreter.
+	if offset, err := extractRelaxedTLSOffset(code, baseAddr); err == nil {
+		return offset, nil
+	}
 	return 0, fmt.Errorf("found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset")
+}
+
+// extractRelaxedTLSOffset decodes a local-exec access that indexes the thread
+// pointer with a register. The linker leaves this behind when it relaxes a
+// general-dynamic access, replacing the call to __tls_get_addr with a MOVZ and
+// MOVK pair that materializes the TP-relative offset.
+func extractRelaxedTLSOffset(code []byte, baseAddr uint64) (int32, error) {
+	capture := expression.NewImmediateCapture("offset")
+	it := NewInterpreterWithCodeAt(code, expression.Imm(baseAddr))
+	tpReg := noReg
+
+	for {
+		// A load can read through the register it writes, so the index is
+		// taken from the state from before the step.
+		regs := it.Regs
+		inst, err := it.Step()
+		if err != nil {
+			break
+		}
+		switch inst.Op {
+		case aa.MRS:
+			if inst.Args[1].String() != tpidrEL0 {
+				continue
+			}
+			if reg, ok := Xreg2num(inst.Args[0]); ok {
+				tpReg = reg
+			}
+		case aa.LDR:
+			// A scaled index would multiply the offset, so only the plain
+			// form carries it unchanged.
+			mem, ok := inst.Args[1].(aa.MemExtend)
+			if !ok || mem.Amount != 0 {
+				continue
+			}
+			if base, ok := Xreg2num(mem.Base); !ok || base != tpReg {
+				continue
+			}
+			if regs.GetArm(mem.Index).Match(capture) {
+				return validateTLSOffset(int32(capture.CapturedValue()))
+			}
+		}
+	}
+	return 0, errors.New("no TP-relative offset held in a register")
 }
 
 // noReg marks a tlsSlotScan register field that currently tracks nothing.
@@ -363,18 +412,15 @@ func writesFirstOperand(op aa.Op) bool {
 	return true
 }
 
-// addImmediate is like DecodeImmediate, but applies LSL #12.
+// addImmediate is like DecodeImmediate, but applies the shift an ADD encodes
+// along with its immediate.
 func addImmediate(arg aa.Arg) (int64, bool) {
 	switch val := arg.(type) {
 	case aa.Imm:
 		return int64(val.Imm), true
 	case aa.ImmShift:
-		var imm, shift int64
-		if n, _ := fmt.Sscanf(val.String(), "#%v, LSL #%d", &imm, &shift); n == 2 {
-			return imm << shift, true
-		}
-		if n, _ := fmt.Sscanf(val.String(), "#%v", &imm); n == 1 {
-			return imm, true
+		if imm, shift, ok := immShift(val); ok {
+			return int64(imm << shift), true
 		}
 	}
 	return 0, false
