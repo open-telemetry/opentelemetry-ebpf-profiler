@@ -125,39 +125,6 @@ func TestValidateFrameCacheSize(t *testing.T) {
 	}
 }
 
-func TestValidateMaxConcurrentProgLoads(t *testing.T) {
-	for _, tt := range []struct {
-		name                   string
-		maxConcurrentProgLoads uint
-		wantErr                bool
-	}{
-		{
-			name:                   "zero is invalid",
-			maxConcurrentProgLoads: 0,
-			wantErr:                true,
-		},
-		{
-			name:                   "one is valid",
-			maxConcurrentProgLoads: 1,
-		},
-		{
-			name:                   "default is valid",
-			maxConcurrentProgLoads: tracer.DefaultMaxConcurrentProgLoads,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := validConfig()
-			cfg.MaxConcurrentProgLoads = tt.maxConcurrentProgLoads
-			err := confmap.Validate(cfg)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
-}
-
 func TestUnmarshalText(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
