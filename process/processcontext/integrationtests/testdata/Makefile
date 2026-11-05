@@ -21,6 +21,7 @@ MUSL_GCC  ?= $(ARCH)-linux-musl-gcc
 
 BINARIES := \
 	processctx_exe_glibc \
+	processctx_exe_glibc_prctl_rejected \
 	libprocessctx_glibc.so libprocessctx_musl.so \
 	processctx_dlopen_glibc processctx_dlopen_musl
 
@@ -35,6 +36,9 @@ clean:
 # for the same reason, which rules out a static binary, having no .dynsym.
 processctx_exe_glibc: processctx.c processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(GCC) -mtls-dialect=$(TLS_DIALECT) -rdynamic -o $@ $< processctx_lib.c otel_process_ctx.c
+
+processctx_exe_glibc_prctl_rejected: processctx.c processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h prctl_rejected.c
+	$(GCC) -mtls-dialect=$(TLS_DIALECT) -rdynamic -Wl,--wrap=prctl -o $@ $< processctx_lib.c otel_process_ctx.c prctl_rejected.c
 
 libprocessctx_glibc.so: processctx_lib.c processctx_lib.h otel_process_ctx.c otel_process_ctx.h
 	$(GCC) -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -o $@ $< otel_process_ctx.c
