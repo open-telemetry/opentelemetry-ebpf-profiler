@@ -4,3 +4,5 @@ helloworld.stripped.pie
 helloworld.arm64
 helloworld.linkexternal
 helloworld.linkexternal.stripped
+libdebuglink.so
+libdebuglink.so.debug

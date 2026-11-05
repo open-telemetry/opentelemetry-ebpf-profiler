@@ -76,9 +76,11 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("kprobe already loaded")
 	}
 
-	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
-		AppendValues: samples.AppendFirstContextValue,
+	originID, err := reg.Register(&tracer.OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
+			AppendValues: samples.AppendFirstContextValue,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("registering probe origin: %w", err)

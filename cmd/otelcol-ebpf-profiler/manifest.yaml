@@ -14,19 +14,19 @@ dist:
   output_path: ./cmd/otelcol-ebpf-profiler
 
 extensions:
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202640
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202645
     import: go.opentelemetry.io/ebpf-profiler/probes/heap
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202640
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202645
     import: go.opentelemetry.io/ebpf-profiler/probes/kprobe
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202640
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202645
     import: go.opentelemetry.io/ebpf-profiler/probes/offcpu
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202640
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202645
     import: go.opentelemetry.io/ebpf-profiler/probes/uprobe
   - gomod: github.com/open-telemetry/opentelemetry-collector-contrib/extension/pprofextension v0.164.1
 
 receivers:
   - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.164.0
-  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202640
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202645
     import: go.opentelemetry.io/ebpf-profiler/collector
 
 exporters:

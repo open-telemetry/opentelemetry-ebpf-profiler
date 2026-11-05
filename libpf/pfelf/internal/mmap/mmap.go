@@ -76,7 +76,9 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 
 // Subslice returns a subset of the mmapped backed data.
 func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
-	if offset+length > r.Len() {
+	// Compare without overflowing: corrupt ELF headers can carry huge or
+	// negative values that would wrap around in a plain offset+length sum.
+	if offset < 0 || length < 0 || offset > r.Len() || length > r.Len()-offset {
 		return nil, fmt.Errorf("requested data %x-%x exceeds %x: %w",
 			offset, offset+length, r.Len(), io.EOF)
 	}
