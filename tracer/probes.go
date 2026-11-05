@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	cebpf "github.com/cilium/ebpf"
 
@@ -418,6 +419,17 @@ type Probe interface {
 	Unload() error
 }
 
+// SnapshotSource is an optional interface that Probe implementations may satisfy
+// to produce additional profiles at each report interval. This allows probes to
+// emit data that isn't tied to individual traces (e.g. live/inuse heap snapshots
+// aggregated from alloc/free correlation).
+//
+// The tracer checks whether a Probe satisfies SnapshotSource after Enable and, if
+// so, includes it in the periodic collection performed by CollectSnapshots.
+type SnapshotSource interface {
+	ProduceSnapshots() []samples.SnapshotProfile
+}
+
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
@@ -453,5 +465,26 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
+	if ss, ok := p.(SnapshotSource); ok {
+		sources := t.snapshotSources.WLock()
+		*sources = append(*sources, ss)
+		t.snapshotSources.WUnlock(&sources)
+	}
+
 	return nil
+}
+
+// CollectSnapshots invokes all registered SnapshotSource probes and returns
+// their combined profiles. Called by the reporter once per collection interval.
+func (t *Tracer) CollectSnapshots() []samples.SnapshotProfile {
+	// Copy the registered sources so probe code runs without holding the lock.
+	sources := t.snapshotSources.RLock()
+	snapshotSources := slices.Clone(*sources)
+	t.snapshotSources.RUnlock(&sources)
+
+	var profiles []samples.SnapshotProfile
+	for _, ss := range snapshotSources {
+		profiles = append(profiles, ss.ProduceSnapshots()...)
+	}
+	return profiles
 }

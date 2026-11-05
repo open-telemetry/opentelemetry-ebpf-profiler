@@ -33,6 +33,18 @@ type TraceReporter interface {
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
+// SnapshotProvider supplies self-contained profiles produced from probe state
+// at each collection interval.
+type SnapshotProvider interface {
+	CollectSnapshots() []samples.SnapshotProfile
+}
+
+// SnapshotReporter is an optional reporter capability for accepting snapshots
+// from a SnapshotProvider.
+type SnapshotReporter interface {
+	SetSnapshotProvider(SnapshotProvider)
+}
+
 type ExecutableMetadata struct {
 	// MappingFile is the reference to mapping file data.
 	MappingFile libpf.FrameMappingFile
