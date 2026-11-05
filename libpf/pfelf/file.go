@@ -972,11 +972,13 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 
 		// Symbol names are read from zero-copy views of the string table.
 		// The relocation stream window is pinned, so the lookups through
-		// the same source cannot invalidate it. Names are capped to a
-		// plausible length to bound corrupted tables.
-		symStr, _ := libpf.StringFromView(f.elfReader,
-			int64(strtabSection.Offset)+int64(sym.Name),
-			strtabEnd)
+		// the same source cannot invalidate it. A missing string
+		// termination indicates a corrupt string table, and aborts.
+		symStr, err := libpf.StringFromView(f.elfReader,
+			int64(strtabSection.Offset)+int64(sym.Name), strtabEnd)
+		if err != nil {
+			return false, fmt.Errorf("failed to read relocation symbol name: %w", err)
+		}
 		if !visitor(*rela, symStr, relType) {
 			return false, nil
 		}
@@ -1359,11 +1361,14 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		}
 		// Symbol names are read from zero-copy views of the string table.
 		// The symbol table stream window is pinned, so the lookups through
-		// the same source cannot invalidate it. Names are capped to a
-		// plausible length to bound corrupted tables.
+		// the same source cannot invalidate it. A missing string
+		// termination indicates a corrupt string table, and aborts.
 		symName, err := libpf.StringFromView(f.elfReader,
 			int64(strtab.Offset)+int64(sym.Name), strtabEnd)
-		if err == nil && symName != "" {
+		if err != nil {
+			return fmt.Errorf("failed to read symbol name from %v: %w", name, err)
+		}
+		if symName != "" {
 			if !visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(symName),
 				Address: libpf.SymbolValue(sym.Value),

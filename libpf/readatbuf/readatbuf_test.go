@@ -122,15 +122,16 @@ func TestViewAtMatchesReadAt(t *testing.T) {
 	}
 }
 
-func TestViewAtPinProtectsFromEviction(t *testing.T) {
-	// A page aliased by an outstanding view must not be pooled on eviction:
-	// even if the cache evicts it, the view stays valid, and the data is
-	// re-read on the next access.
+func TestPinAtProtectsFromEviction(t *testing.T) {
+	// A page aliased by an outstanding pinned view must not be pooled on
+	// eviction: even if the cache evicts it, the view stays valid, and the
+	// data is re-read on the next access. Transient views from ViewAt have
+	// no such guarantee: they are invalidated by the next read operation.
 	file := testsupport.GenerateTestInputFile(255, 2048)
 	r, err := readatbuf.New(bytes.NewReader(file), 64, 1)
 	require.NoError(t, err)
 
-	view, err := r.ViewAt(0, 1)
+	view, h, err := r.PinAt(0, 1)
 	require.NoError(t, err)
 	require.Equal(t, file[:64], view)
 
@@ -141,10 +142,11 @@ func TestViewAtPinProtectsFromEviction(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// The view must still hold the original, unmodified data.
+	// The pinned view must still hold the original, unmodified data.
 	require.Equal(t, file[:64], view)
 
-	// The cache must remain transparent.
+	// The cache must remain transparent after unpinning.
+	r.Unpin(h)
 	again, err := r.ViewAt(0, 1)
 	require.NoError(t, err)
 	require.Equal(t, file[:64], again)
@@ -209,14 +211,45 @@ func TestPinHandleReuse(t *testing.T) {
 	r.Unpin(0)
 }
 
+func TestPinAtTooManyPins(t *testing.T) {
+	// There is a fixed number of pin record slots: pinning more views
+	// simultaneously than that fails with ErrTooManyPins, and unpinning
+	// frees a slot for reuse.
+	file := testsupport.GenerateTestInputFile(255, 4096)
+	r, err := readatbuf.New(bytes.NewReader(file), 64, 8)
+	require.NoError(t, err)
+
+	var handles []libpf.PinHandle
+	for page := range 4 {
+		_, h, err := r.PinAt(int64(page)*64, 1)
+		require.NoError(t, err)
+		handles = append(handles, h)
+	}
+
+	_, _, err = r.PinAt(4*64, 1)
+	require.ErrorIs(t, err, readatbuf.ErrTooManyPins)
+
+	// Freeing one slot allows pinning again, with a different handle.
+	r.Unpin(handles[0])
+	_, h, err := r.PinAt(4*64, 1)
+	require.NoError(t, err)
+	require.NotEqual(t, handles[0], h)
+
+	// The stale handle must not release the new pin.
+	r.Unpin(handles[0])
+	for _, h := range handles[1:] {
+		r.Unpin(h)
+	}
+	r.Unpin(h)
+}
+
 func TestPinSlotNotRecycledTwice(t *testing.T) {
 	// A pin record detached by eviction must not match the same page index
 	// again: otherwise a page that is evicted, re-read and evicted again
-	// would push its record slot into the free list twice, and two later
-	// pins would clobber each other's records (one pin would silently lose
-	// its protection). Uses the pooled 4 KiB page size, so an unpinned
-	// eviction hands the buffer back to the pool and corrupts an aliased
-	// view when reused.
+	// would get its record detached twice, and a later pin on that page
+	// would be silently released by the stale generation. Uses the pooled
+	// 4 KiB page size, so an unpinned eviction hands the buffer back to the
+	// pool and corrupts an aliased view when reused.
 	file := testsupport.GenerateTestInputFile(255, 64*4096)
 	r, err := readatbuf.New(bytes.NewReader(file), 4096, 2)
 	require.NoError(t, err)
@@ -225,7 +258,7 @@ func TestPinSlotNotRecycledTwice(t *testing.T) {
 	_, h1, err := r.PinAt(0, 1)
 	require.NoError(t, err)
 
-	// Evict page 0 (detaches its pin record and recycles the slot).
+	// Evict page 0 (detaches its pin record and marks the slot unused).
 	_, err = r.ReadAt(buf, 4096)
 	require.NoError(t, err)
 	_, err = r.ReadAt(buf, 2*4096)

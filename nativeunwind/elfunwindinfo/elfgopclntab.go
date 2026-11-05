@@ -788,7 +788,7 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 	return nil
 }
 
-func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
+func resolveCUStrategies(r libpf.ViewAtReader, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
 	rdr := pfbufio.Reader{}
 	defer rdr.Release()
@@ -825,7 +825,7 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	return cuStrategy, nil
 }
 
-func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
+func resolveFunctionUnwindInfo(r libpf.ViewAtReader, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
 	rdr := pfbufio.Reader{}
 	defer rdr.Release()
 

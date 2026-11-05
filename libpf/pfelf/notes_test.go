@@ -17,14 +17,14 @@ import (
 )
 
 func TestGetBuildIDFromNotesFile(t *testing.T) {
-	r := bytes.NewReader([]byte("\x04\x00\x00\x00\x14\x00\x00\x00\x03\x00\x00\x00GNU\x00_notorious_build_id_"))
+	r := libpf.NewBytesView([]byte("\x04\x00\x00\x00\x14\x00\x00\x00\x03\x00\x00\x00GNU\x00_notorious_build_id_"))
 	buildID, err := getBuildIDFromNotesFile(r)
 	require.NoError(t, err)
 	assert.Equal(t, hex.EncodeToString([]byte("_notorious_build_id_")), buildID)
 }
 
 func TestGetBuildIDFromNotesFileReturnsErrNoBuildID(t *testing.T) {
-	r := bytes.NewReader(testELFNote("LINUX", 0, []byte("not a build ID")))
+	r := libpf.NewBytesView(testELFNote("LINUX", 0, []byte("not a build ID")))
 	buildID, err := getBuildIDFromNotesFile(r)
 	require.ErrorIs(t, err, ErrNoBuildID)
 	assert.Empty(t, buildID)

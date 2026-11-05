@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 )
 
 func TestReader_BasicRead(t *testing.T) {
 	data := []byte("0123456789abcdefghij")
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -36,7 +37,7 @@ func TestReader_SearchSlice(t *testing.T) {
 	data := make([]byte, 10000)
 	pattern := []byte("TARGET_DATA_HERE")
 	copy(data[5000:], pattern)
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -51,7 +52,7 @@ func TestReader_SearchSlice(t *testing.T) {
 
 func TestReader_ReadByteAndDiscard(t *testing.T) {
 	data := []byte("Hello World")
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -74,7 +75,7 @@ func TestReader_ReadByteAndDiscard(t *testing.T) {
 
 func TestReader_EOF(t *testing.T) {
 	data := []byte("Short")
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -88,7 +89,7 @@ func TestReader_EOF(t *testing.T) {
 
 func TestReader_ReadString(t *testing.T) {
 	data := []byte("part1,part2,part3")
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -104,7 +105,7 @@ func TestReadSlice_CrossBoundary(t *testing.T) {
 	b := bytes.Repeat([]byte("b"), 100)
 	comma := []byte(",")
 	data := slices.Concat(a, comma, b, comma)
-	source := bytes.NewReader(data)
+	source := libpf.NewBytesView(data)
 
 	r := NewReader(source, 0, int64(len(data)))
 	defer r.Release()
@@ -222,14 +223,6 @@ func TestReader_InitFromView(t *testing.T) {
 		defer r.Release()
 		require.True(t, r.zeroCopy)
 		require.Equal(t, data[64:128], readAll(t, &r))
-	})
-
-	t.Run("NonViewSource", func(t *testing.T) {
-		r := Reader{}
-		r.InitFromView(bytes.NewReader(data), 0, 64)
-		defer r.Release()
-		require.False(t, r.zeroCopy)
-		require.Equal(t, data[:64], readAll(t, &r))
 	})
 }
 
@@ -436,6 +429,9 @@ func TestReader_PinnedWindowSurvivesSourceLookups(t *testing.T) {
 }
 
 func TestReader_InitFromViewUnpinsOnRelease(t *testing.T) {
+	// Release must unpin the borrowed view: the source tracks a fixed
+	// number of pins, so leaked pins would eventually exhaust it, and
+	// InitFromView would silently fall back to an owned buffer.
 	data := make([]byte, 4096)
 	for i := range data {
 		data[i] = byte(i % 251)
@@ -443,24 +439,18 @@ func TestReader_InitFromViewUnpinsOnRelease(t *testing.T) {
 	cached, err := readatbuf.New(bytes.NewReader(data), 128, 4)
 	require.NoError(t, err)
 
-	r := Reader{}
-	r.InitFromView(cached, 0, 128)
-	require.True(t, r.zeroCopy)
-
-	// While pinned, the view survives forced evictions.
-	r.Release()
-
-	// After Release the pin is gone: the cache is transparent again.
-	view, err := cached.ViewAt(0, 1)
-	require.NoError(t, err)
-	require.Equal(t, data[:128], view)
+	for range 5 {
+		r := Reader{}
+		r.InitFromView(cached, 0, 128)
+		require.True(t, r.zeroCopy)
+		r.Release()
+	}
 }
 
 func TestReader_StraddleReadAfterZeroCopySeek(t *testing.T) {
 	// A read that straddles the end of a borrowed zero-copy view must
-	// preserve the unconsumed bytes: the copy-out into an owned buffer
-	// places them at the start, so the in-place move must not run again
-	// (it would copy uninitialized pooled memory over the preserved data).
+	// preserve the unconsumed bytes: fill() drains them into an owned
+	// buffer, and continues reading from the source after the view.
 	data := make([]byte, 4096+128)
 	for i := range data {
 		data[i] = byte(i % 251)
@@ -486,8 +476,197 @@ func TestReader_StraddleReadAfterZeroCopySeek(t *testing.T) {
 	require.Equal(t, int64(4000), seekPos)
 
 	// The remaining 96 bytes in the view are unconsumed when the straddle
-	// read of 120 bytes triggers the copy-out path.
+	// read of 120 bytes triggers the rewind.
 	require.Equal(t, data[4000:4120], readN(120))
+}
+
+// regionReader serves views bounded to fixed-size regions, like a page
+// cache with huge pages: a view never straddles a region boundary, and
+// views can be longer than the reader's read-ahead buffer.
+type regionReader struct {
+	data   []byte
+	region int64
+}
+
+func (f *regionReader) ReadAt(p []byte, off int64) (int, error) {
+	if off < 0 || off >= int64(len(f.data)) {
+		return 0, io.EOF
+	}
+	n := copy(p, f.data[off:])
+	if n < len(p) {
+		return n, io.EOF
+	}
+	return n, nil
+}
+
+func (f *regionReader) ViewAt(offs, minLen int64) ([]byte, error) {
+	if offs < 0 || offs >= int64(len(f.data)) {
+		return nil, io.EOF
+	}
+	if minLen <= 0 {
+		minLen = 1
+	}
+	regionStart := offs - offs%f.region
+	if offs-regionStart+minLen > f.region {
+		return nil, libpf.ErrNotContiguous
+	}
+	if int64(len(f.data))-offs < minLen {
+		return nil, io.EOF
+	}
+	end := min(int64(len(f.data)), regionStart+f.region)
+	return f.data[offs:end], nil
+}
+
+func (f *regionReader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
+	view, err := f.ViewAt(offs, minLen)
+	return view, 0, err
+}
+
+func (f *regionReader) Unpin(h libpf.PinHandle) {}
+
+func TestReader_LongViewReadSliceLimit(t *testing.T) {
+	// A source serving views larger than the read-ahead buffer: the whole
+	// borrowed view is kept uncapped, but ReadSlice caps the fill it
+	// requests: when the unconsumed data already fills the read-ahead
+	// buffer without the delimiter, it gives up with ErrBufferTooSmall
+	// instead of requesting a fill that could not carry the tail.
+	data := make([]byte, 300000)
+	for i := range data {
+		data[i] = byte(i%251 + 1) // no zero bytes
+	}
+	source := &regionReader{data: data, region: 128 * 1024}
+
+	r := Reader{}
+	r.InitSlideView(source, 0, int64(len(data)))
+	defer r.Release()
+
+	readN := func(n int) []byte {
+		out := make([]byte, n)
+		_, err := io.ReadFull(&r, out)
+		require.NoError(t, err)
+		return out
+	}
+
+	// Fill the first (uncapped, 128KiB) view and consume a part of it.
+	require.Equal(t, data[0:16], readN(16))
+	require.True(t, r.zeroCopy)
+	require.Equal(t, 128*1024, r.nbuf)
+
+	// A read without the delimiter in the rest of the view: the whole
+	// unconsumed window is reported with ErrBufferTooSmall, without
+	// requesting a fill that could not carry it.
+	s, err := r.ReadString(0)
+	require.ErrorIs(t, err, ErrBufferTooSmall)
+	require.Equal(t, string(data[16:128*1024]), s)
+
+	// The stream continues seamlessly after the limit.
+	require.Equal(t, data[128*1024:128*1024+100], readN(100))
+}
+
+func TestReader_FillRefusesOverrun(t *testing.T) {
+	// fill() must refuse to serve when the unconsumed buffered data does
+	// not leave room to read in the owned buffer: the callers (Peek,
+	// ReadSlice, SearchSlice) are required to limit their fills. Fills
+	// that fit accumulate read-ahead in chunks of the configured buffer
+	// size, regardless of how small it is.
+	data := make([]byte, 300000)
+	for i := range data {
+		data[i] = byte(i%251 + 1)
+	}
+	source := &regionReader{data: data, region: 128 * 1024}
+
+	r := Reader{}
+	r.InitSlideView(source, 0, int64(len(data)))
+	defer r.Release()
+
+	// Borrow the uncapped 128KiB view and consume a bit of it.
+	out := make([]byte, 16)
+	_, err := io.ReadFull(&r, out)
+	require.NoError(t, err)
+	require.True(t, r.zeroCopy)
+
+	// A fill now would have to carry 131056 unconsumed bytes: they do not
+	// leave room to read in the owned buffer, and are refused.
+	err = r.fill()
+	require.ErrorIs(t, err, ErrBufferTooSmall)
+
+	// With the unconsumed bytes reduced below the owned buffer size, a
+	// fill succeeds and accumulates one read-ahead chunk, even with a
+	// buffer size shrunk mid-stream.
+	_, err = r.Discard(100 * 1024)
+	require.NoError(t, err)
+	r.SetBufferSize(1024)
+	require.NoError(t, r.fill())
+	require.Equal(t, data[102416:132096], r.buf[:29680])
+
+	// Peek assembles reads larger than the configured buffer size from
+	// the accumulated owned buffer.
+	out, err = r.Peek(40000)
+	require.NoError(t, err)
+	require.Equal(t, data[102416:142416], out)
+
+	// Requests beyond the owned buffer capacity are refused.
+	_, err = r.Peek(100 * 1024)
+	require.ErrorIs(t, err, ErrBufferTooSmall)
+}
+
+func TestReader_PeekSmallViewAccumulates(t *testing.T) {
+	// A ViewAt window at a page boundary can be just a few bytes: Peek
+	// must assemble reads larger than the configured buffer size by
+	// draining the small views into the owned buffer.
+	data := make([]byte, 16384)
+	for i := range data {
+		data[i] = byte(i % 251)
+	}
+	cached, err := readatbuf.New(bytes.NewReader(data), 4096, 4)
+	require.NoError(t, err)
+
+	r := Reader{}
+	r.InitSlideView(cached, 0, int64(len(data)))
+	defer r.Release()
+	r.SetBufferSize(1024)
+
+	// Seek 96 bytes before the first page boundary: the borrowed window
+	// covers only those bytes, and Peek(2000) has to accumulate across
+	// views into the owned buffer.
+	_, err = r.Seek(4000, io.SeekStart)
+	require.NoError(t, err)
+	out, err := r.Peek(2000)
+	require.NoError(t, err)
+	require.Equal(t, data[4000:6000], out)
+
+	// The stream continues seamlessly after the peek.
+	out2 := make([]byte, 100)
+	_, err = io.ReadFull(&r, out2)
+	require.NoError(t, err)
+	require.Equal(t, data[4000:4100], out2)
+}
+
+func TestReader_SearchSliceLongPattern(t *testing.T) {
+	// A pattern longer than the read-ahead buffer cannot be found across
+	// buffer boundaries: SearchSlice refuses it up front with
+	// ErrBufferTooSmall instead of silently missing matches.
+	data := make([]byte, 400*1024)
+	for i := range data {
+		data[i] = byte(i%251 + 1) // no 0xfc bytes
+	}
+	source := &regionReader{data: data, region: 128 * 1024}
+
+	r := Reader{}
+	r.InitSlideView(source, 0, int64(len(data)))
+	defer r.Release()
+
+	pattern := bytes.Repeat([]byte{0xfc}, 100*1024)
+	_, err := r.SearchSlice(pattern)
+	require.ErrorIs(t, err, ErrBufferTooSmall)
+
+	// A pattern of exactly the read-ahead size is still accepted, and is
+	// found when it is fully within one borrowed view.
+	pattern = bytes.Repeat([]byte{0xfc}, 64*1024)
+	copy(data[60000:], pattern)
+	offs, err := r.SearchSlice(pattern)
+	require.NoError(t, err)
+	require.Equal(t, int64(60000), offs)
 }
 
 func TestReader_ShortSlideViewAtPageBoundary(t *testing.T) {

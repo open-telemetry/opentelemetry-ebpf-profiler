@@ -43,6 +43,14 @@ type Statistics struct {
 	Evictions uint64
 }
 
+// maxPins is the fixed number of pin records. Pinning more views
+// simultaneously than this fails with ErrTooManyPins.
+const maxPins = 4
+
+// ErrTooManyPins is returned by PinAt if the maximum number of
+// simultaneously outstanding pinned views would be exceeded.
+var ErrTooManyPins = errors.New("too many outstanding pins")
+
 // Reader implements buffering for random access reads via the `ReaderAt` interface.
 type Reader struct {
 	inner    io.ReaderAt
@@ -50,16 +58,10 @@ type Reader struct {
 	pageSize uint
 	stats    Statistics
 
-	// viewPage is the page index of the most recently handed out view, or
-	// ^uint(0) if no view is outstanding. Evicting this page must not
-	// return its buffer to the pool, as an outstanding view may still
-	// alias it.
-	viewPage uint
-
-	// pins tracks the outstanding PinAt views, one record per pin. Free
-	// slots are recycled; the generation counters detect stale handles.
-	pins []pinRecord
-	free []int
+	// pins tracks the outstanding PinAt views, one record per slot. A
+	// pageIdx of ^uint(0) marks an unused slot. The generation counters
+	// detect stale handles.
+	pins [maxPins]pinRecord
 }
 
 func HashUInt(v uint) uint32 {
@@ -80,7 +82,10 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 	reader = &Reader{
 		inner:    inner,
 		pageSize: pageSize,
-		viewPage: ^uint(0),
+	}
+	// Mark all pin slots unused. The zero pageIdx would be a valid index.
+	for i := range reader.pins {
+		reader.pins[i].pageIdx = ^uint(0)
 	}
 
 	reader.cache, err = lru.New[uint, page](uint32(cacheSize), HashUInt)
@@ -90,21 +95,18 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 
 	reader.cache.SetOnEvict(func(pageIdx uint, page page) {
 		reader.stats.Evictions++
-		pinned := reader.viewPage == pageIdx
+		pinned := false
 		for i := range reader.pins {
 			if reader.pins[i].pageIdx == pageIdx {
 				// The page is aliased by a pinned view: detach the
 				// record (the buffer is dropped to the GC, keeping
-				// the outstanding view valid) and recycle the slot.
+				// the outstanding view valid) and mark the slot unused.
 				pinned = true
 				reader.pins[i].pageIdx = ^uint(0)
 				reader.pins[i].gen++
-				reader.free = append(reader.free, i)
 			}
 		}
 		if pinned {
-			reader.viewPage = ^uint(0)
-			page.data = nil
 			return
 		}
 		libpf.PutBuffer(page.data)
@@ -206,7 +208,9 @@ func (reader *Reader) view(offs, minLen int64) ([]byte, error) {
 	}
 
 	// The previous transient view is contractually invalid from now on.
-	reader.viewPage = pageIdx
+	// Eviction of this page can only be triggered by a subsequent API call
+	// (ReadAt, ViewAt or PinAt), which invalidates the view by contract, so
+	// its buffer can be pooled normally on eviction.
 	return data[skip:], nil
 }
 
@@ -216,13 +220,17 @@ func (reader *Reader) view(offs, minLen int64) ([]byte, error) {
 // exactly once with Unpin. A page that is evicted while pinned is dropped
 // to the GC, and a later re-read of the same page index creates a new
 // incarnation: Unpin of a stale handle does not affect it.
+// ErrTooManyPins is returned if maxPins views are already pinned.
 func (reader *Reader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
 	view, err := reader.view(offs, minLen)
 	if err != nil {
 		return nil, 0, err
 	}
-	pageIdx := uint(offs) / reader.pageSize
-	return view, reader.addPin(pageIdx), nil
+	h, err := reader.addPin(uint(offs) / reader.pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	return view, h, nil
 }
 
 // Unpin releases one pin, identified by a handle returned by PinAt.
@@ -230,29 +238,26 @@ func (reader *Reader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error)
 func (reader *Reader) Unpin(h libpf.PinHandle) {
 	slot := int(uint32(h))
 	gen := uint32(h >> 32)
-	if slot >= len(reader.pins) || reader.pins[slot].gen != gen {
+	if slot >= maxPins || reader.pins[slot].gen != gen {
 		return
 	}
-	// Invalidate the handle and recycle the record slot.
+	// Invalidate the handle and mark the record slot unused.
 	reader.pins[slot].pageIdx = ^uint(0)
 	reader.pins[slot].gen++
-	reader.free = append(reader.free, slot)
 }
 
-// addPin registers a pin on a cached page and returns its handle.
-func (reader *Reader) addPin(pageIdx uint) libpf.PinHandle {
-	var slot int
-	var gen uint32 = 1
-	if n := len(reader.free); n > 0 {
-		slot = reader.free[n-1]
-		reader.free = reader.free[:n-1]
-		gen = reader.pins[slot].gen + 1
-	} else {
-		slot = len(reader.pins)
-		reader.pins = append(reader.pins, pinRecord{})
+// addPin registers a pin on a cached page and returns its handle. It fails
+// with ErrTooManyPins if all pin record slots are in use.
+func (reader *Reader) addPin(pageIdx uint) (libpf.PinHandle, error) {
+	for slot := range reader.pins {
+		if reader.pins[slot].pageIdx != ^uint(0) {
+			continue
+		}
+		gen := reader.pins[slot].gen + 1
+		reader.pins[slot] = pinRecord{pageIdx: pageIdx, gen: gen}
+		return libpf.PinHandle(uint64(gen)<<32 | uint64(uint32(slot))), nil
 	}
-	reader.pins[slot] = pinRecord{pageIdx: pageIdx, gen: gen}
-	return libpf.PinHandle(uint64(gen)<<32 | uint64(uint32(slot)))
+	return 0, ErrTooManyPins
 }
 
 func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err error) {
