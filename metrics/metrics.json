@@ -2284,5 +2284,12 @@
     "name": "ThreadContextSchemaRejected",
     "field": "agent.threadctx.schema_rejected",
     "id": 312
+  },
+  {
+    "description": "Number of times updating an element in usdt_specs failed",
+    "type": "counter",
+    "name": "USDTSpecsUpdate",
+    "field": "agent.errors.usdt_specs_update",
+    "id": 313
   }
 ]
