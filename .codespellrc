@@ -1,0 +1,10 @@
+# https://github.com/codespell-project/codespell
+[codespell]
+builtin = clear,rare,informal
+check-filenames =
+check-hidden =
+ignore-words = .codespellignore
+ignore-regex = \b[a-z]+[A-Z][a-zA-Z0-9]*\b|\b[a-z_]+_[a-z_]+\b|\b0x[0-9a-fA-F]+\b|^\s*(package|import|use|include|#include)\s
+interactive = 0
+skip = .git,.golangci.yml,AUTHORS.md,go.mod,go.sum,LICENSES,tools.mod,tools.sum
+uri-ignore-words-list = *

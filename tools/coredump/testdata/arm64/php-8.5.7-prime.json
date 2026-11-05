@@ -1,0 +1,208 @@
+{
+  "coredump-ref": "e8df78de2ad9d62bc5fdb6ca193e3e1c3f476477f2e0a42585a18eb4750e7331",
+  "threads": [
+    {
+      "lwp": 4187,
+      "frames": [
+        "php+0x6add90",
+        "is_prime+13 in /agent/tools/coredump/testsources/php/prime.php:16",
+        "<top-level>+33 in /agent/tools/coredump/testsources/php/prime.php:34",
+        "php+0x6ed047",
+        "php+0x6eab07",
+        "php+0x758787",
+        "php+0x5d815f",
+        "php+0x75a60f",
+        "php+0x1a909f",
+        "libc.so.6+0x2225b",
+        "libc.so.6+0x2233b",
+        "php+0x1a91af"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "729c2c3578b96763a2e7148ad5a26f0136958025dff0f309e4267f09b9f61a4a",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libkeyutils.so.1.10"
+    },
+    {
+      "ref": "deb1db5877ee7535d8434003404b4a4e181ab660a9e5370ba66c4b8e759e1111",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libkrb5.so.3.3"
+    },
+    {
+      "ref": "8858b931d041b74a8ce9dcb16d9912eb431c4f55b97ca2e58646a1c1bd991852",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "81f40d719e01fc7241e60eb8295aca2109cb15197c9080fa6d26175f6defc897",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libnettle.so.8.10"
+    },
+    {
+      "ref": "eb19d11db503c6f38963d3e46cd09046bdb2f7680ecb5eb9170f21196363bf5c",
+      "local-path": "/usr/local/bin/php"
+    },
+    {
+      "ref": "f0527ef7efeaf85fc2f5855d68fddb63bf7b3b90f1228c6b49fb6020b0dca490",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libffi.so.8.1.4"
+    },
+    {
+      "ref": "6664704a1baa3f6541a7a3af752ab2c008256d56438f70ba18acc59aee3978c7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libp11-kit.so.0.4.1"
+    },
+    {
+      "ref": "26bda6bd707b57c7d02bb6331adda65906950d4ef8ad7ed82901a7cf81a4d44f",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libunistring.so.5.2.0"
+    },
+    {
+      "ref": "3ac5116be503e51a11954f9b4dff0932319368501eb26be8ff06f0618eac624e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libbrotlidec.so.1.1.0"
+    },
+    {
+      "ref": "2a2afe82ea68df8ab5a5804a8e0fa5f75b23f9a44aaa48836df94bf7a57a106f",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libonig.so.5.4.0"
+    },
+    {
+      "ref": "988693d804594db1e63130a6aaee5d86b1acefb1de7f0cfb798be9cde604da00",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libxml2.so.2.9.14"
+    },
+    {
+      "ref": "c4c52c0df6f3809f1b85927a85f322d102cffebb6b517b44b37048f6fd620c01",
+      "local-path": "/usr/lib/aarch64-linux-gnu/gconv/gconv-modules.cache"
+    },
+    {
+      "ref": "87376cef9c124257cec7fc0b5eac1b4c8535f597c6ebae70ad9334385cfb14d3",
+      "local-path": "/usr/lib/aarch64-linux-gnu/liblber.so.2.0.200"
+    },
+    {
+      "ref": "57cda9469aa613f8ab25b21af56867d5a01d19c0a91fda6965aa6501ea98cfcf",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libtinfo.so.6.5"
+    },
+    {
+      "ref": "9a325944115b36e74077786b29531963d96cd55cd6c82f11750a352cdb58fab0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "41eaf42757798c29d7dd13f519f76a91cd06847a068ed29a7912b343b60c48b3",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libreadline.so.8.2"
+    },
+    {
+      "ref": "1257597210f43630e7c8a745ae95127e96b93a43515ac5163cab459ddc1664b3",
+      "local-path": "/usr/lib/locale/C.utf8/LC_CTYPE"
+    },
+    {
+      "ref": "6ce57885b9ff21ba3fa902c1c515050230d8d6703f12f9a7d1e3d4e27279966e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libidn2.so.0.4.0"
+    },
+    {
+      "ref": "265157c5541d3cc73f5bb5cf43e8a58e996a25211d716a9ab2ba65b1a787633a",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libkrb5support.so.0.1"
+    },
+    {
+      "ref": "6a3258ad8e42f54f4333b8a5b6c671922a4482d261a89f75114b0de3ef565013",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcom_err.so.2.1"
+    },
+    {
+      "ref": "c1e6ec0bd6437fd85a64bc1f6dc22ec290aa40f963ba39662a8ab8971197a096",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libsodium.so.23.3.0"
+    },
+    {
+      "ref": "077a32bb1d3d9b50d74d03aec2758c6ef94a422f28baab5fa6f3c04f1a0bc69e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libbrotlicommon.so.1.1.0"
+    },
+    {
+      "ref": "a31e5c7b7308548443f210a8350056b9f1059b7189ced9c9a4a4c140e65ec964",
+      "local-path": "/usr/lib/aarch64-linux-gnu/liblzma.so.5.8.1"
+    },
+    {
+      "ref": "a8afb2d1f4a0c5e14c0fc82f794ec839eafe29738907aa92895410f57630bbe2",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "8bfeedd24d410b345ac39c26dfa9970609fe0ca6738a20fd6ac154a232aec152",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libsasl2.so.2.0.25"
+    },
+    {
+      "ref": "560c04722d04d0331b0eeda8a249491139ba46bf0e294897ebceb04993380596",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgnutls.so.30.40.3"
+    },
+    {
+      "ref": "88e96dec88023455a09c1907ea7f79bb346c97ac80b11efecaf7a55629cfd6e4",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libssh2.so.1.0.1"
+    },
+    {
+      "ref": "1279c4edfbfb08878b5b7fb40d392c1bdc9b30100d9b7a019d4aefaf10d2046c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libzstd.so.1.5.7"
+    },
+    {
+      "ref": "5902020ce5251a5b3014a99fe784f260d979d45eb30bcf7eff8da7a955f661f7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libargon2.so.1"
+    },
+    {
+      "ref": "6fe00acadf8119ff245855e5dcc7f26c6c0ffaf4bfa2baa88feab58f23727d65",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "e2871d8144d45e6650db5c0758793c0fc11a22aff1ed5680731e885a56707819",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libssl.so.3"
+    },
+    {
+      "ref": "472da9d258c3e3ded1b7a7063bcf8df1da97d7d46030973e1fa5e116f497172f",
+      "local-path": "/usr/local/lib/php/extensions/no-debug-non-zts-20250925/sodium.so"
+    },
+    {
+      "ref": "cb9756963306434c0fbe3351ded4041a5cc6e6ce37efc175de1093e13b3747fc",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libresolv.so.2"
+    },
+    {
+      "ref": "20a6aa3d1526507a1886366b37471d48c63b9bd4065e4fd1f64159fc84a14c08",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libtasn1.so.6.6.4"
+    },
+    {
+      "ref": "582cac0f86e9eb52b4f10e1927c79b23310482c0e0323d201b1d11a1fd9d1db8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpsl.so.5.3.4"
+    },
+    {
+      "ref": "cbee84479172acd6a667a58de811d9039eb03a6d1f6fce543fa9c7c9c3c07e46",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libnghttp2.so.14.28.3"
+    },
+    {
+      "ref": "82319f388b327a204047d2de787decbd9f592f81e23984d4a1b166306e69667c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libnghttp3.so.9.2.6"
+    },
+    {
+      "ref": "9865b5990181843284595a2c290e5aa9e1df1b3ee438ce7fc6cdc2ec1c411985",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libsqlite3.so.0.8.6"
+    },
+    {
+      "ref": "1d8b77f28b7cec0329dca107a28fb0a850193b1dcce59be68fa0b06b514548cc",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "52aab346adb8506ce39846ead65f99ee398142865a4185fd5a9a0aa8504b2d74",
+      "local-path": "/usr/lib/aarch64-linux-gnu/librtmp.so.1"
+    },
+    {
+      "ref": "c69705fed4898799589787aaef047eacbc0138e43cb03300be9f4f834a0ee094",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypto.so.3"
+    },
+    {
+      "ref": "950c7c9c2da1d5ebaae583a6c4da6b9b41bbbee6a4a8f848a868c0e106fe9335",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libk5crypto.so.3.1"
+    },
+    {
+      "ref": "047d4fde470f4664a0e84ce80c84c9b03672948214be50f51f3915070c9ca4b6",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libhogweed.so.6.10"
+    },
+    {
+      "ref": "52130bdf6f1abdd8b476193cfd532d8c9f3a6d57eeabe06e4edb65b1711be83c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libldap.so.2.0.200"
+    },
+    {
+      "ref": "967b9c108b49481f6cc1358d675a6c1b16754254c84c421c43a5814010e2a215",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgssapi_krb5.so.2.2"
+    },
+    {
+      "ref": "ec33bd7992b40410a4f0154217c6acfae984966484b9fa6360a25e4074219bd0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcurl.so.4.8.0"
+    }
+  ]
+}

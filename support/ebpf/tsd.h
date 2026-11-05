@@ -1,0 +1,143 @@
+#pragma once
+#include "bpfdefs.h"
+
+// tpbase_offset is declared in native_stack_trace.ebpf.c
+extern u64 tpbase_offset;
+
+// tsd_read reads from the Thread Specific Data location associated with the provided key.
+static inline EBPF_INLINE int
+tsd_read(const TSDInfo *tsi, const void *tsd_base, u32 key, void **out)
+{
+  const void *tsd_addr = tsd_base + tsi->offset;
+  if (key >= tsi->keyLimit) {
+    goto err;
+  }
+  u32 index = key;
+  if (tsi->blockEntries) {
+    u32 block = index / tsi->blockEntries;
+    // specific[0] points to the inline block. Later blocks are allocated on demand.
+    tsd_addr += block * sizeof(void *);
+    if (bpf_probe_read_user(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
+      goto err;
+    }
+    if (!tsd_addr) {
+      *out = NULL;
+      return 0;
+    }
+    tsd_addr += tsi->dataOffset;
+    index %= tsi->blockEntries;
+  } else if (tsi->indirect) {
+    // Read the memory pointer that contains the per-TSD key data
+    if (bpf_probe_read_user(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
+      goto err;
+    }
+  }
+
+  tsd_addr += index * tsi->multiplier;
+
+  DEBUG_PRINT("readTSD key %u from address 0x%lx", key, (u64)tsd_addr);
+  if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
+    goto err;
+  }
+  return 0;
+
+err:
+  DEBUG_PRINT("Failed to read TSD from 0x%lx", (u64)tsd_addr);
+  increment_metric(metricID_UnwindErrBadTSDAddr);
+  return -1;
+}
+
+// TLSReadResult is the outcome of tls_read_var. TLS_READ_ABSENT is not a
+// failure: the thread has no block for the module yet.
+typedef enum TLSReadResult {
+  TLS_READ_OK     = 0,
+  TLS_READ_ERR    = -1,
+  TLS_READ_ABSENT = -2,
+} TLSReadResult;
+
+// tls_var_valid reports whether the descriptor is ready for a TLS lookup.
+static inline EBPF_INLINE bool tls_var_valid(const TLSVarInfo *var)
+{
+  return var->valid;
+}
+
+// tls_read_var reads the pointer-sized value of the thread-local variable var
+// locates, in static or dynamic TLS. tsd_base comes from tsd_get_base, whose
+// failure each caller reports its own way.
+// The caller must verify tls_var_valid(var) before calling this function.
+static inline EBPF_INLINE TLSReadResult
+tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
+{
+  if (var->dtv_pos == 0) {
+    const void *tls_addr = tsd_base + var->tls_offset;
+    DEBUG_PRINT("readTLS static at 0x%lx", (u64)tls_addr);
+    if (bpf_probe_read_user(out, sizeof(*out), tls_addr)) {
+      return TLS_READ_ERR;
+    }
+    return TLS_READ_OK;
+  }
+
+  // Indirect on both glibc and musl: TP+dtv_offset holds a pointer to the DTV,
+  // which is allocated apart from the thread control block.
+  const void *dtv;
+  if (bpf_probe_read_user(&dtv, sizeof(dtv), tsd_base + var->dtv_offset)) {
+    goto err;
+  }
+
+  // DTV layout: [generation, module1_block, module2_block, ...], entries 8
+  // bytes on musl and 16 on glibc, which dtv_pos already accounts for.
+  void *tls_block;
+  if (bpf_probe_read_user(&tls_block, sizeof(tls_block), dtv + var->dtv_pos)) {
+    goto err;
+  }
+
+  // glibc leaves new DTV slots zero until this thread refreshes its DTV, then
+  // TLS_DTV_UNALLOCATED until the module's block is allocated. Neither state
+  // is a read failure.
+  // These unrefreshed-DTV cases affect glibc only; musl populates DTVs eagerly.
+  // This is only a partial fix: the DTV index is not checked against its length,
+  // which glibc stores in dtv[-1].counter.
+  // Stale entries after module ID reuse also remain possible, but are unlikely:
+  // they require dlclose/dlopen while a thread retains its old DTV.
+  if (!tls_block || tls_block == (void *)-1) {
+    DEBUG_PRINT("TLS block unallocated for this thread");
+    return TLS_READ_ABSENT;
+  }
+
+  if (bpf_probe_read_user(out, sizeof(*out), tls_block + var->tls_offset)) {
+    goto err;
+  }
+
+  DEBUG_PRINT("readTLS via DTV, dtv_pos 0x%x, offset 0x%x", var->dtv_pos, (u32)var->tls_offset);
+  return TLS_READ_OK;
+
+err:
+  DEBUG_PRINT("Failed to read TLS via DTV at dtv_pos 0x%x", var->dtv_pos);
+  increment_metric(metricID_UnwindErrBadDTVRead);
+  return TLS_READ_ERR;
+}
+
+// tsd_get_base looks up the base address for TSD variables (TPBASE).
+static inline EBPF_INLINE int tsd_get_base(void **tsd_base)
+{
+#ifdef TESTING_COREDUMP
+  *tsd_base = (void *)__cgo_ctx->tp_base;
+  return 0;
+#else
+  struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+
+  // We need to read task->thread.fsbase (on x86_64), but we can't do so because
+  // we might have been compiled with different kernel headers, so the struct layout
+  // is likely to be different.
+  // tpbase_offset is populated with the offset of `fsbase` or equivalent field
+  // relative to a `task_struct`, so we use that instead.
+  void *tpbase_ptr = ((char *)task) + tpbase_offset;
+  if (bpf_probe_read_kernel(tsd_base, sizeof(void *), tpbase_ptr)) {
+    DEBUG_PRINT("Failed to read tpbase value");
+    increment_metric(metricID_UnwindErrBadTPBaseAddr);
+    return -1;
+  }
+
+  return 0;
+#endif
+}

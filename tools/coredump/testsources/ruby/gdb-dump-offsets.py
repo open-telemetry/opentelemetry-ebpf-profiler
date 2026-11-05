@@ -1,0 +1,113 @@
+"""
+gdb python script for dumping the Ruby vmStruct offsets.
+"""
+
+def no_member_to_none(fn):
+    """Decorator translating errors about missing field or structs to `None`."""
+    def wrap(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except gdb.error as e:
+            if 'no member named' in str(e):
+                return None
+            if 'struct type named' in str(e):
+                return None
+            raise
+    return wrap
+
+@no_member_to_none
+def offset_of(ty, field):
+    return int(gdb.parse_and_eval(f'(uintptr_t)(&((struct {ty}*)0)->{field})'))
+
+@no_member_to_none
+def size_of(ty, *, ns='struct'):
+    return int(gdb.parse_and_eval(f'sizeof({ns} {ty})'))
+
+@no_member_to_none
+def size_of_field(ty, field):
+    return int(gdb.parse_and_eval(f'sizeof(((struct {ty}*)0)->{field})'))
+
+
+fields = {
+    'execution_context_struct.vm_stack': offset_of('rb_execution_context_struct', 'vm_stack'),
+    'execution_context_struct.vm_stack_size': offset_of('rb_execution_context_struct', 'vm_stack_size'),
+    'execution_context_struct.cfp': offset_of('rb_execution_context_struct', 'cfp'),
+    'execution_context_struct.thread_ptr': offset_of('rb_execution_context_struct', 'thread_ptr'),
+
+    # For determining if we are in GC
+    'thread_struct.vm': offset_of('rb_thread_struct', 'vm'),
+    # objspace was namespaced under gc in 3.4.0, check both locations
+    'vm_struct.objspace': offset_of('rb_vm_struct', 'objspace'),
+    'vm_struct.gc_objspace': offset_of('rb_vm_struct', 'gc.objspace'),
+    'objspace.flags': offset_of('rb_objspace', 'flags'),
+    'objspace.size_of_flags': size_of_field('rb_objspace', 'flags'),
+
+    'control_frame_struct.pc': offset_of('rb_control_frame_struct', 'pc'),
+    'control_frame_struct.iseq': offset_of('rb_control_frame_struct', 'iseq'),
+    'control_frame_struct.ep': offset_of('rb_control_frame_struct', 'ep'),
+    'control_frame_struct.size_of_control_frame_struct': size_of('rb_control_frame_struct'),
+
+    'iseq_struct.body': offset_of('rb_iseq_struct', 'body'),
+
+    'iseq_constant_body.iseq_type': offset_of('rb_iseq_constant_body', 'type'),
+    'iseq_constant_body.size': offset_of('rb_iseq_constant_body', 'iseq_size'),
+    'iseq_constant_body.encoded': offset_of('rb_iseq_constant_body', 'iseq_encoded'),
+    'iseq_constant_body.local_iseq': offset_of('rb_iseq_constant_body', 'local_iseq'),
+    'iseq_constant_body.location': offset_of('rb_iseq_constant_body', 'location'),
+    'iseq_constant_body.insn_info_body': offset_of('rb_iseq_constant_body', 'insns_info.body'),
+    'iseq_constant_body.insn_info_size': offset_of('rb_iseq_constant_body', 'insns_info.size'),
+    'iseq_constant_body.succ_index_table': offset_of('rb_iseq_constant_body', 'insns_info.succ_index_table'),
+    'iseq_constant_body.size_of_iseq_constant_body': size_of('rb_iseq_constant_body'),
+
+    'iseq_location_struct.pathobj': offset_of('rb_iseq_location_struct', 'pathobj'),
+    'iseq_location_struct.base_label': offset_of('rb_iseq_location_struct', 'base_label'),
+    'iseq_location_struct.label': offset_of('rb_iseq_location_struct', 'label'),
+    'iseq_location_struct.size_of_iseq_location_struct': size_of('rb_iseq_location_struct'),
+
+    'iseq_insn_info_entry.position': offset_of('iseq_insn_info_entry', 'position'),
+    'iseq_insn_info_entry.size_of_position': size_of_field('iseq_insn_info_entry', 'position'),
+    'iseq_insn_info_entry.line_no': offset_of('iseq_insn_info_entry', 'line_no'),
+    'iseq_insn_info_entry.size_of_line_no': size_of_field('iseq_insn_info_entry', 'line_no'),
+    'iseq_insn_info_entry.size_of_iseq_insn_info_entry': size_of('iseq_insn_info_entry'),
+
+    'rbasic_struct.klass': offset_of('RBasic', 'klass'),
+
+    'rstring_struct.as_ary': offset_of('RString', 'as.embed.ary'),
+    'rstring_struct.as_heap_ptr': offset_of('RString', 'as.heap.ptr'),
+
+    'rarray_struct.as_ary': offset_of('RArray', 'as.ary'),
+    'rarray_struct.as_heap_ptr': offset_of('RArray', 'as.heap.ptr'),
+    'rarray_struct.size_of_rarray': size_of('RArray'),
+
+    'succ_index_table_struct.small_block_ranks': offset_of('succ_dict_block', 'small_block_ranks'),
+    'succ_index_table_struct.block_bits': offset_of('succ_dict_block', 'bits'),
+    'succ_index_table_struct.succ_part': offset_of('succ_index_table', 'succ_part'),
+    'succ_index_table_struct.size_of_succ_dict_block': size_of('succ_dict_block'),
+    'size_of_immediate_table': size_of_field('succ_index_table', 'imm_part') * 9 // 8,
+
+    'size_of_value': size_of('VALUE', ns=''),
+
+    'rb_ractor_struct.running_ec': offset_of('rb_ractor_struct', 'threads.running_ec'),
+
+    'rb_method_entry_struct.flags': offset_of('rb_method_entry_struct', 'flags'),
+    'rb_method_entry_struct.defined_class': offset_of('rb_method_entry_struct', 'defined_class'),
+    'rb_method_entry_struct.def': offset_of('rb_method_entry_struct', 'def'),
+    'rb_method_entry_struct.owner': offset_of('rb_method_entry_struct', 'owner'),
+
+    'rclass_and_rb_classext_t.classext': offset_of('RClass_and_rb_classext_t', 'classext'),
+    'rb_classext_struct.classpath': offset_of('rb_classext_struct', 'classpath'),
+    'rb_classext_struct.as.singleton_class.attached_object': offset_of('rb_classext_struct', 'as.singleton_class.attached_object'),
+
+    'rb_method_definition_struct.method_type': offset_of('rb_method_definition_struct', 'type'),
+    'rb_method_definition_struct.body': offset_of('rb_method_definition_struct', 'body'),
+    'rb_method_definition_struct.original_id': offset_of('rb_method_definition_struct', 'original_id'),
+
+    'rb_method_iseq_struct.iseqptr': offset_of('rb_method_iseq_struct', 'iseqptr'),
+    'last_op_id': int(gdb.parse_and_eval(f'(int)tLAST_OP_ID'))
+}
+
+for field, value in fields.items():
+    if value is None:
+        print(f"vms.{field}: <field not present>")
+    else:
+        print(f"vms.{field}: dec={value} hex=0x{value:x}")

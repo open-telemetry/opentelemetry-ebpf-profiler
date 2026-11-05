@@ -1,0 +1,38 @@
+#####################################################
+#
+# List of approvers for this repository
+#
+#####################################################
+#
+# Learn about membership in OpenTelemetry community:
+#  https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md
+#
+#
+# Learn about CODEOWNERS file format:
+#  https://help.github.com/en/articles/about-code-owners
+#
+# NOTE: When adding or removing a user from this file, maintainers must also
+# add or remove that user from the ebpf-profiler-contributors team:
+#  https://github.com/orgs/open-telemetry/teams/ebpf-profiler-contributors
+# Team membership is required to receive the proper GitHub notifications.
+#
+
+* @open-telemetry/ebpf-profiler-maintainers @open-telemetry/ebpf-profiler-approvers
+
+#####################################################
+#
+# List of BEAM interpreter code owners
+#
+#####################################################
+
+interpreter/beam/ @open-telemetry/ebpf-profiler-approvers @GregMefford
+support/ebpf/beam_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @GregMefford
+
+#####################################################
+#
+# List of Ruby interpreter code owners
+#
+#####################################################
+
+interpreter/ruby/ @open-telemetry/ebpf-profiler-approvers @dalehamel
+support/ebpf/ruby_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @dalehamel

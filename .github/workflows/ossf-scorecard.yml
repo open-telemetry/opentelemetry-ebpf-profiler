@@ -1,0 +1,19 @@
+name: OSSF Scorecard
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "31 6 * * 4" # once a week
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    permissions:
+      contents: read # for actions/checkout
+      id-token: write # for Scorecard to publish results
+      security-events: write # for the SARIF upload to code scanning
+    uses: open-telemetry/shared-workflows/.github/workflows/scorecard.yml@efc55838c9769c5476e0a5cf7183a8c5b4ae70a5 # v0.24.0

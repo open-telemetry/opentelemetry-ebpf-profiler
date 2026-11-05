@@ -1,0 +1,385 @@
+// This file contains helpers for reading Go runtime structures from eBPF programs.
+
+#pragma once
+#include "bpfdefs.h"
+#include "tracemgmt.h"
+#include "tsd.h"
+#include "types.h"
+
+typedef struct GoRuntimeCtx {
+  u64 g;
+  u64 m;
+  u64 m_g0;
+  u64 m_gsignal;
+  u64 m_curg;
+} GoRuntimeCtx;
+
+static inline EBPF_INLINE u64 go_get_g_register(UNUSED UnwindState *state)
+{
+#if defined(__aarch64__)
+  // On aarch64 for !iscgo programs the g is only stored in r28 register.
+  // We want to retrieve g from r28 when available.
+  // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
+  return state->r28;
+#else
+  return 0;
+#endif
+}
+
+// go_get_g_ptr reads the current goroutine pointer from thread-local storage
+// when the TLS offset is known. On arm64 falls back to r28 when TLS is unavailable.
+static inline EBPF_INLINE u64 go_get_g_ptr(struct GoRuntimeOffsets *offs, UnwindState *state)
+{
+  u64 g_register = go_get_g_register(state);
+
+  if (offs->tls_offset == 0) {
+    DEBUG_PRINT("go: TLS offset for g pointer missing; using register fallback if available");
+    return g_register;
+  }
+
+  u64 g_addr     = 0;
+  void *tls_base = NULL;
+  if (tsd_get_base(&tls_base) < 0) {
+    DEBUG_PRINT("go: failed to get tsd base; using register fallback if available");
+    return g_register;
+  }
+  DEBUG_PRINT("go: read tsd_base at 0x%lx, g offset: %d", (u64)tls_base, offs->tls_offset);
+
+  if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
+    DEBUG_PRINT(
+      "go: failed to read g_addr, tls_base(%lx); using register fallback if available",
+      (u64)tls_base);
+  }
+
+  return g_addr ? g_addr : g_register;
+}
+
+// go_get_m_ptr reads the machine/OS thread pointer for the current goroutine.
+// It does so by reading the goroutine pointer then following the g.m pointer.
+static inline EBPF_INLINE void *go_get_m_ptr(struct GoRuntimeOffsets *offs, UnwindState *state)
+{
+  u64 g_addr = go_get_g_ptr(offs, state);
+  if (!g_addr) {
+    return NULL;
+  }
+
+  DEBUG_PRINT("go: reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
+  void *m_ptr_addr;
+  if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
+    DEBUG_PRINT("go: failed m_ptr_addr");
+    return NULL;
+  }
+  DEBUG_PRINT("go: m_ptr_addr 0x%lx", (u64)m_ptr_addr);
+  return m_ptr_addr;
+}
+
+static inline EBPF_INLINE ErrorCode go_validate_runtime_offsets(GoRuntimeOffsets *offs)
+{
+  if (offs->m_offset == 0) {
+    DEBUG_PRINT("go runtime: missing offsets");
+    return ERR_GO_NO_OFFSETS;
+  }
+  return ERR_OK;
+}
+
+// go_runtime_load_ctx reads g, g.m, and the runtime.m prefix into ctx.
+static inline EBPF_INLINE ErrorCode go_runtime_load_ctx(
+  struct GoRuntimeOffsets *offs, UnwindState *state, u8 *scratch, GoRuntimeCtx *ctx)
+{
+  ctx->g = go_get_g_ptr(offs, state);
+  if (!ctx->g) {
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  u64 m_ptr = 0;
+  if (bpf_probe_read_user(&m_ptr, sizeof(m_ptr), (void *)(ctx->g + offs->m_offset))) {
+    DEBUG_PRINT("go runtime: failed to read g.m");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  if (!m_ptr) {
+    DEBUG_PRINT("go runtime: g.m is nil");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  const u64 max_off = sizeof(((GoUnwindScratchSpace *)0)->buf) - sizeof(u64);
+  u64 curg          = offs->curg;
+  u64 gsignal       = offs->m_gsignal;
+  if (curg > max_off || gsignal > max_off) {
+    DEBUG_PRINT("go runtime: m offsets exceed scratch");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  u64 prefix_size = curg + sizeof(u64);
+
+  if (bpf_probe_read_user(scratch, (u32)prefix_size, (void *)m_ptr)) {
+    DEBUG_PRINT("go runtime: failed to read m prefix");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  ctx->m         = m_ptr;
+  ctx->m_g0      = *(u64 *)(scratch + 0);
+  ctx->m_gsignal = *(u64 *)(scratch + gsignal);
+  ctx->m_curg    = *(u64 *)(scratch + curg);
+  return ERR_OK;
+}
+
+// go_unwind_morestack recovers the caller frame when the unwinder is inside
+// runtime.morestack.
+//
+// morestack switches to g0 and zeroes the frame pointer before calling newstack,
+// so the FP chain is cut. It first saves the caller's sp/pc/bp into the user
+// goroutine's gobuf, which is where the caller frame is recovered from:
+// https://github.com/golang/go/blob/7b60d06739/src/runtime/asm_amd64.s#L680
+//
+// gobuf layout (sp, pc, g, ctxt, [ret,] lr, bp):
+// https://github.com/golang/go/blob/go1.25.0/src/runtime/runtime2.go#L309
+// sp and pc are read at fixed offsets from the start of gobuf; bp moves between
+// releases and comes from GoRuntimeOffsets.
+static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, UnwindState *state)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  ErrorCode err          = go_validate_runtime_offsets(offs);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+  u8 *scratch      = (u8 *)record->goUnwindScratch.buf;
+  GoRuntimeCtx ctx = {};
+
+  err = go_runtime_load_ctx(offs, state, scratch, &ctx);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+  if (!ctx.m_curg) {
+    // This m has no user goroutine attached: it parked on g0 after handing the g
+    // off (newstack -> goschedImpl -> schedule). There is no saved context to
+    // unwind to, so end the stack cleanly instead of reporting a read error: a
+    // zero PC makes get_next_unwinder_after_native_frame() emit
+    // ERR_NATIVE_ZERO_PC.
+    DEBUG_PRINT("morestack: m.curg is nil, terminal frame");
+    state->pc = 0;
+    return ERR_OK;
+  }
+
+  // Ensure gobuf fields are in a valid state.
+  if (ctx.g == ctx.m_curg) {
+    DEBUG_PRINT("morestack: pre-gosave g==curg");
+    state->pc = 0;
+    return ERR_OK;
+  }
+
+  // The read is anchored at curg, so one read of the g prefix covers the curg.m
+  // check and the g.sched fields. bp is the last of them, so the read is sized
+  // from it. max_off is the highest offset a u64 can be read from, so a bound of
+  // "off > max_off" already accounts for the 8 bytes read there.
+  const u32 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u32 m_off         = offs->m_offset;
+  u32 sp_off        = offs->sched_sp_off;
+  u32 pc_off        = offs->sched_pc_off;
+  u32 bp_off        = offs->sched_bp_off;
+  if (m_off > max_off || sp_off > max_off || pc_off > max_off || bp_off > max_off) {
+    DEBUG_PRINT("morestack: unusable g offsets");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  if (bpf_probe_read_user(scratch, bp_off + sizeof(u64), (void *)ctx.m_curg)) {
+    DEBUG_PRINT("morestack: failed to read curg gobuf");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  u64 curg_m = *((u64 *)(scratch + m_off));
+  // Safety guard to ensure m.curg still points at a g bound to this m before we
+  // trust gobuf. morestack does not call dropg, so this holds for the goroutine
+  // that grew its stack.
+  if (curg_m != ctx.m) {
+    DEBUG_PRINT("morestack: stale curg (curg.m != m)");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+
+  state->sp = *((u64 *)(scratch + sp_off));
+  state->pc = *((u64 *)(scratch + pc_off));
+  state->fp = *((u64 *)(scratch + bp_off));
+  // gobuf.pc is the address morestack will return to, that is the return address
+  // of the call into it, so the frame is a non-leaf one.
+  unwinder_mark_nonleaf_frame(state);
+
+  DEBUG_UNWIND_STATE(state);
+
+  // The recovered frame is stopped in the stack check that runs ahead of its
+  // prologue, so it has neither pushed its return address nor set up its own
+  // frame pointer: gobuf.bp is already its caller's. Unwinding it by its own
+  // stack delta would therefore land in the caller's caller and drop a frame.
+  // Emit it here and step straight to its caller instead.
+  // resolve_unwind_mapping() describes the frame from the current state->pc, so it
+  // and the push have to happen before that is moved on to the caller.
+  int unwinder;
+  err = resolve_unwind_mapping(record, &unwinder);
+  if (err != ERR_OK) {
+    return err;
+  }
+  if (unwinder != PROG_UNWIND_NATIVE) {
+    // Go can reach other runtimes through cgo, so the caller is not guaranteed to
+    // be native code. Pushing a native frame for it would mislabel the frame.
+    DEBUG_PRINT("morestack: caller is not native code (unwinder %d)", unwinder);
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  err = push_native(
+    state,
+    &record->trace,
+    state->text_section_id,
+    state->text_section_offset,
+    /*return_address=*/true);
+  if (err != ERR_OK) {
+    return err;
+  }
+
+#if defined(__aarch64__)
+  // The return address never reached the stack; morestack saved it into gobuf.lr.
+  // Calls do not push, so state->sp is already the caller's.
+  u64 lr_off = offs->sched_lr_off;
+  if (lr_off > max_off) {
+    DEBUG_PRINT("morestack: unusable g offsets");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  state->pc = *((u64 *)(scratch + lr_off));
+#else
+  // The call pushed the return address, and gobuf.sp points at it.
+  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp)) {
+    DEBUG_PRINT("morestack: failed to read caller return address");
+    return ERR_GO_RUNTIME_LOAD_FAILURE;
+  }
+  state->sp += sizeof(u64);
+#endif
+  // state->fp is gobuf.bp, which already is this frame's frame pointer.
+  unwinder_mark_nonleaf_frame(state);
+  DEBUG_PRINT("morestack: caller sp 0x%lx, pc 0x%lx", state->sp, state->pc);
+  return ERR_OK;
+}
+
+#if defined(__aarch64__)
+
+// go_asmcgocall_is_nosave mirrors the nosave tests in runtime.asmcgocall
+// https://github.com/golang/go/blob/339c903a75c3fe936fb4ed6c355d15e6081d6af3/src/runtime/asm_arm64.s#L960
+//
+// The FP chain is valid on the nosave path.
+// Returns true if the caller should unwind with a frame pointer.
+static inline EBPF_INLINE bool go_asmcgocall_is_nosave(const GoRuntimeCtx *ctx)
+{
+  // CBZ g, nosave
+  // https://github.com/golang/go/blob/cc85462b3d23193e4861813ea85e254cfe372403/src/runtime/asm_arm64.s#L939
+  if (!ctx->g) {
+    DEBUG_PRINT("asmcgocall: fp fallback (nosave g==nil)");
+    return true;
+  }
+
+  // MOVD	m_gsignal(R8), R3
+  // CMP R3, g
+  // https://github.com/golang/go/blob/339c903a75c3fe936fb4ed6c355d15e6081d6af3/src/runtime/asm_arm64.s#L974
+  if (ctx->g == ctx->m_gsignal) {
+    DEBUG_PRINT("asmcgocall: fp fallback (nosave g==m.gsignal)");
+    return true;
+  }
+
+  // MOVD	m_g0(R8), R3
+  // CMP	R3, g
+  // https://github.com/golang/go/blob/339c903a75c3fe936fb4ed6c355d15e6081d6af3/src/runtime/asm_arm64.s#L977
+  if (ctx->g == ctx->m_g0) {
+    // Post-gosave also has g==m.g0 when gosave_systemstack_switch switched tls to m.g0.
+    // curg!=g distinguishes it from asm nosave.
+    if (ctx->m_curg != 0 && ctx->m_curg != ctx->g) {
+      DEBUG_PRINT("asmcgocall: post-gosave (g==m.g0, curg is user g)");
+      return false;
+    }
+    DEBUG_PRINT("asmcgocall: fp fallback (nosave g==m.g0)");
+    return true;
+  }
+  return false;
+}
+
+// go_unwind_asmcgocall recovers the caller frame when the unwinder is
+// inside runtime.asmcgocall on aarch64.
+static inline EBPF_INLINE ErrorCode go_unwind_asmcgocall(PerCPURecord *record, UnwindState *state)
+{
+  increment_metric(metricID_UnwindGoAsmcgocallAttempts);
+
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  ErrorCode err          = go_validate_runtime_offsets(offs);
+  if (err != ERR_OK) {
+    increment_metric(metricID_UnwindGoAsmcgocallUnwindFailure);
+    return err;
+  }
+
+  u8 *scratch      = (u8 *)record->goUnwindScratch.buf;
+  GoRuntimeCtx ctx = {};
+
+  err = go_runtime_load_ctx(offs, state, scratch, &ctx);
+  // ctx.g == 0 is a valid nosave path handled in go_asmcgocall_is_nosave.
+  if (err != ERR_OK && ctx.g) {
+    goto unwind_failure_err;
+  }
+
+  if (go_asmcgocall_is_nosave(&ctx)) {
+    goto unwind_fp;
+  }
+
+  if (!ctx.m_curg) {
+    DEBUG_PRINT("asmcgocall: m.curg is nil");
+    goto unwind_failure;
+  }
+
+  // asmcgocall does not call dropg, so m.curg keeps pointing at the user g for
+  // the whole call. Only tls is switched to m.g0 after gosave_systemstack_switch.
+  //
+  // We are in the pre-gosave path so the fp chain is valid.
+  // Safety guard to check that the running goroutine is the same as curg to avoid reading stale
+  // data.
+  if (ctx.g == ctx.m_curg) {
+    DEBUG_PRINT("asmcgocall: fp fallback (pre-gosave g==curg)");
+    goto unwind_fp;
+  }
+
+  // Post-gosave because g == m.g0 happens after gosave_systemstack_switch switched tls to m.g0.
+  // The read is anchored at curg, so one read of the g prefix covers both the curg.m check
+  // and g.sched.bp.
+  const u32 max_off = sizeof(record->goUnwindScratch.buf) - sizeof(u64);
+  u32 m_off         = offs->m_offset;
+  u32 bp_off        = offs->sched_bp_off;
+  if (m_off > max_off || bp_off > max_off) {
+    DEBUG_PRINT("asmcgocall: unusable g offsets");
+    goto unwind_failure;
+  }
+  if (bpf_probe_read_user(scratch, bp_off + sizeof(u64), (void *)ctx.m_curg)) {
+    DEBUG_PRINT("asmcgocall: failed to read curg gobuf");
+    goto unwind_failure;
+  }
+
+  u64 curg_m = *((u64 *)(scratch + m_off));
+  // Safety guard to ensure m.curg still point at a g bound to this m before we trust gobuf.
+  if (curg_m != ctx.m) {
+    DEBUG_PRINT("asmcgocall: stale curg (curg.m != m)");
+    goto unwind_failure;
+  }
+
+  u64 saved_bp = *((u64 *)(scratch + bp_off));
+  if (!saved_bp) {
+    DEBUG_PRINT("asmcgocall: gobuf bp not populated");
+    goto unwind_failure;
+  }
+
+  state->fp  = saved_bp;
+  state->lr  = 0;
+  state->r28 = ctx.m_curg;
+  // asmcgocall PC is a marker. unwind one frame to the caller.
+unwind_fp:
+  if (!unwinder_unwind_frame_pointer(state)) {
+    DEBUG_PRINT("asmcgocall: fp unwind failed");
+    goto unwind_failure;
+  }
+  increment_metric(metricID_UnwindGoAsmcgocallSuccess);
+  return ERR_OK;
+unwind_failure:
+  err = ERR_GO_ASMCGOCALL_UNWIND_FAILURE;
+unwind_failure_err:
+  increment_metric(metricID_UnwindGoAsmcgocallUnwindFailure);
+  return err;
+}
+#endif // __aarch64__

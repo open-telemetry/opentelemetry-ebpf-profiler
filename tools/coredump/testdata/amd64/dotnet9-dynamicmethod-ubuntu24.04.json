@@ -1,0 +1,283 @@
+{
+  "coredump-ref": "798082716937a733079a17173bd5a1c45566d73f9ba2803b009ac3433a792e27",
+  "threads": [
+    {
+      "lwp": 1,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "libcoreclr.so+0x66ba81",
+        "libcoreclr.so+0x66b689",
+        "libcoreclr.so+0x670998",
+        "libcoreclr.so+0x2ccc77",
+        "libcoreclr.so+0x3196da",
+        "System.Threading.Thread.Sleep+0 in System.Private.CoreLib.dll:0",
+        "Program.Main+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x4c4703",
+        "libcoreclr.so+0x30140b",
+        "libcoreclr.so+0x1e8263",
+        "libcoreclr.so+0x1e86db",
+        "libcoreclr.so+0x211d13",
+        "libcoreclr.so+0x1d44df",
+        "libhostpolicy.so+0x2e380",
+        "libhostpolicy.so+0x2f478",
+        "libhostfxr.so+0x206b4",
+        "libhostfxr.so+0x1f6ac",
+        "libhostfxr.so+0x19621",
+        "dotnet+0x7a6c",
+        "dotnet+0x7d8e",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "dotnet+0x6e38"
+      ]
+    },
+    {
+      "lwp": 16,
+      "frames": [
+        "libc.so.6+0x11bbca",
+        "libSystem.Native.so+0x1481e",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 15,
+      "frames": [
+        "libc.so.6+0xfa655",
+        "libSystem.Native.so+0xedb0",
+        "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
+        "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "OwnerDynamicMethod+0 in dynamicmethod.dll:0",
+        "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x4c4703",
+        "libcoreclr.so+0x300cf4",
+        "libcoreclr.so+0x3169b1",
+        "libcoreclr.so+0x2ceef7",
+        "libcoreclr.so+0x2cf3ac",
+        "libcoreclr.so+0x316acb",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 14,
+      "frames": [
+        "libc.so.6+0xfa655",
+        "libSystem.Native.so+0xedb0",
+        "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
+        "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "ModuleDynamicMethod+0 in dynamicmethod.dll:0",
+        "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x4c4703",
+        "libcoreclr.so+0x300cf4",
+        "libcoreclr.so+0x3169b1",
+        "libcoreclr.so+0x2ceef7",
+        "libcoreclr.so+0x2cf3ac",
+        "libcoreclr.so+0x316acb",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 13,
+      "frames": [
+        "libc.so.6+0xfa655",
+        "libSystem.Native.so+0xedb0",
+        "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
+        "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "AnonymousDynamicMethod+0 in :0",
+        "Program/<>c__DisplayClass1_1.<Main>b__0+0 in dynamicmethod.dll:0",
+        "libcoreclr.so+0x4c4703",
+        "libcoreclr.so+0x300cf4",
+        "libcoreclr.so+0x3169b1",
+        "libcoreclr.so+0x2ceef7",
+        "libcoreclr.so+0x2cf3ac",
+        "libcoreclr.so+0x316acb",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 11,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9bd6d",
+        "libcoreclr.so+0x66ba24",
+        "libcoreclr.so+0x66b689",
+        "libcoreclr.so+0x670261",
+        "libcoreclr.so+0x670512",
+        "libcoreclr.so+0x33d400",
+        "libcoreclr.so+0x33d56e",
+        "libcoreclr.so+0x2ceef7",
+        "libcoreclr.so+0x2cf3fc",
+        "libcoreclr.so+0x33d7a7",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 10,
+      "frames": [
+        "libc.so.6+0x98e51",
+        "libc.so.6+0x9b8cc",
+        "libcoreclr.so+0x66ba81",
+        "libcoreclr.so+0x66b689",
+        "libcoreclr.so+0x670261",
+        "libcoreclr.so+0x670512",
+        "libcoreclr.so+0x56d9ac",
+        "libcoreclr.so+0x56d827",
+        "libcoreclr.so+0x56d524",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 9,
+      "frames": [
+        "libc.so.6+0x11b315",
+        "libcoreclr.so+0x57507e",
+        "libcoreclr.so+0x570096",
+        "libcoreclr.so+0x56f204",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 8,
+      "frames": [
+        "libc.so.6+0x11b5fd",
+        "libcoreclr.so+0x57568b",
+        "libcoreclr.so+0x4ef84a",
+        "libcoreclr.so+0x4f45a5",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    },
+    {
+      "lwp": 7,
+      "frames": [
+        "libc.so.6+0x11b5fd",
+        "libcoreclr.so+0x66e10f",
+        "libcoreclr.so+0x66d772",
+        "libcoreclr.so+0x6772ad",
+        "libc.so.6+0x9cb83",
+        "libc.so.6+0x129b63"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "f94d35d4fa7f80ca86f0a8f33d5cf486f4690cd512c7895e3a3698e26bdb428c",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/libclrjit.so"
+    },
+    {
+      "ref": "90bf88a4e79295b28b011971f0c6f1c03de0dabaf22daf2e9fd9e7f80e69e7d5",
+      "local-path": "/app/dynamicmethod.dll"
+    },
+    {
+      "ref": "27a53d8eeb092a9704246c90f94809dd7a3ad5a06f1775bb42e23da06bd4619b",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/libhostpolicy.so"
+    },
+    {
+      "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "a27ffa9bf233d61a5f02ddb0cf770dd6579021afc1aa8aec0fb58ee4a965281a",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "292d5f5af2e7360b3e18c56591a4960115373ecf40627660f9149b6c68a33f80",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "cd4df4f3c7b83673d61189bf2eaebd33ca4f2853ab9772b8a25e025ef99b1e81",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "f0c9838e1593ad6c595aa666f0b1a1604da60a5ca4ad2d5a19affe8d4d713bfb",
+      "local-path": "/usr/share/dotnet/dotnet"
+    },
+    {
+      "ref": "27066676928f16c12eed4a277975b4574c66c643c98e990b3a97eae333540774",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Threading.dll"
+    },
+    {
+      "ref": "4521f79b1000958db43b9e70da2b09538866df0b427f305e8909ff695c02a571",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Console.dll"
+    },
+    {
+      "ref": "8281cbcdb1214d9097862c54852d248db95080677a9db3b529052320621467f2",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Runtime.InteropServices.dll"
+    },
+    {
+      "ref": "5ea202ee88456982b3011f10ee91cc779264284547d4fb8699fbe64e495ed033",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Reflection.Primitives.dll"
+    },
+    {
+      "ref": "5408817ddcce6275f14ca8e267682eabbe00fa65d7744227e55f927100b8cee4",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Reflection.Emit.ILGeneration.dll"
+    },
+    {
+      "ref": "c6e6288545e24b0b3cfbf33320bda9236521625d8c3d628f3444f1ed40e5c7c5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/librt.so.1"
+    },
+    {
+      "ref": "9e2b590b5c8f18d450a8dcfaf3dc3ccbd641b6abf5aa981774d14bdd8789012f",
+      "local-path": "/usr/share/dotnet/host/fxr/9.0.19/libhostfxr.so"
+    },
+    {
+      "ref": "d469b6a78d45449d20efa64516c9e216fffa2c86bc449c1e79b18478bef5cd72",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Private.CoreLib.dll"
+    },
+    {
+      "ref": "ce0db316625f0f5eaeb52defb84226e327c004f8ab4e892d7c114853f2a5f6fb",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Threading.Thread.dll"
+    },
+    {
+      "ref": "6e8c68e82e30eb135c29302f7b74b30bec286ae68d5787b557a37a3b497a763a",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Reflection.Emit.Lightweight.dll"
+    },
+    {
+      "ref": "0d24796a4d82ec309be23cb87f982bb5f39352e7e63890ca998428b69f6f2378",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/System.Runtime.dll"
+    },
+    {
+      "ref": "748880745ae2b241993292c553a74f57b9787a265ce453e6e43ba2ada10f4aef",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/Microsoft.Win32.Primitives.dll"
+    },
+    {
+      "ref": "824b32a2fac187de867e3511ecc3160e5536c9d3d34f4ae07b52d1447ed4d4a9",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/libcoreclr.so"
+    },
+    {
+      "ref": "8db37cf3f2169f59a0f07ef1fea308c35656668c64c8ff294e1860f4121eb161",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "e9c4b28d340e415b8137480ec442662f981e1399386c5931dae0e886e3639e91",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "0130de6875b2196ebf9ce402ce5e1ea61350f5526d68b9e4b6d97579abb31522",
+      "local-path": "/usr/share/dotnet/shared/Microsoft.NETCore.App/9.0.19/libSystem.Native.so"
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+.PHONY: all all-common clean ebpf generate generate-collector test test-deps \
+	test-junit test-luajit-offsets protobuf docker-image agent license-check license-save \
+	integration-test-binaries \
+	codespell lint format format-ebpf format-go pprof-execs \
+	processctx-execs tlsvar-execs host-integration-tests \
+	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
+	otel-from-tree otel-from-lib
+
+SHELL := /usr/bin/env bash
+
+# Detect native architecture and translate to GOARCH.
+NATIVE_ARCH := $(shell uname -m)
+ifeq ($(NATIVE_ARCH),x86_64)
+NATIVE_ARCH := amd64
+else ifneq (,$(filter $(NATIVE_ARCH),aarch64 arm64))
+NATIVE_ARCH := arm64
+else
+$(error Unsupported architecture: $(NATIVE_ARCH))
+endif
+
+# Valid values are: amd64, arm64.
+TARGET_ARCH ?= $(NATIVE_ARCH)
+ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64
+else ifeq ($(TARGET_ARCH),amd64)
+ARCH_PREFIX := x86_64
+else
+$(error Unsupported architecture: $(TARGET_ARCH))
+endif
+
+export TARGET_ARCH
+export CGO_ENABLED = 0
+export GOARCH = $(TARGET_ARCH)
+export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
+
+BRANCH = $(shell git branch --show-current)
+
+GO_TAGS := osusergo,netgo
+# Some github action test job matrix entries pass GO_FLAGS=-race
+GO_FLAGS ?=
+EBPF_FLAGS :=
+
+GO_TOOLS := -modfile=internal/tools/go.mod
+
+MAKEFLAGS += -j$(shell nproc)
+
+JUNIT_OUT_DIR ?= /tmp/testresults
+
+all: otelcol-ebpf-profiler
+
+# Removes the go build cache and binaries in the current project
+clean:
+	@go clean -cache -i
+	@$(MAKE) -s -C support/ebpf clean
+	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
+	@$(MAKE) -C tls/testdata clean
+	@chmod -Rf u+w go/ || true
+	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
+	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
+	@cargo clean
+
+generate:
+	GOARCH=$(NATIVE_ARCH) go generate ./...
+	(cd support && ./generate.sh)
+
+ebpf: generate
+	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
+
+generate-collector:
+	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
+		--skip-compilation=true \
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml
+
+otelcol-ebpf-profiler: ebpf generate-collector
+	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
+
+# Sets opentelemetry collector modules to be pulled from local source tree.
+# This command allows you to make changes to your local checkout of otel core and build
+# the collector against those changes without having to push to github.
+# The workflow is:
+#
+# 1. Hack on changes in core (assumed to be checked out in ../opentelemetry-collector from this directory)
+# 2. Run `make otel-from-tree` (only need to run it once to remap go modules)
+# 3. You can now build collector and it will use your local otel core changes.
+# 4. Before committing/pushing your changes, undo by running `make otel-from-lib`.
+otel-from-tree: generate-collector
+	./cmd/otelcol-ebpf-profiler/otel-from-tree.sh
+
+# Removes local opentelemetry-collector replaces from manifest.yaml.
+# (Undoes otel-from-tree.)
+otel-from-lib:
+	./cmd/otelcol-ebpf-profiler/otel-from-lib.sh
+
+rust-targets:
+	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
+
+rust-components: rust-targets
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
+
+rust-tests: rust-targets
+	cargo test
+
+lint: generate vanity-import-check pprof-execs
+	$(MAKE) lint -C support/ebpf
+	go tool $(GO_TOOLS) golangci-lint config verify
+	# tools/coredump tests require CGO_ENABLED
+	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+
+format: format-go format-ebpf
+
+format-go:
+	go tool $(GO_TOOLS) golangci-lint fmt
+
+format-ebpf:
+	$(MAKE) format -C support/ebpf
+
+vanity-import-check:
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+
+vanity-import-fix:
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+
+test: generate ebpf test-deps
+	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+# Lives in its own module to keep heavy dependencies (testcontainers,
+# Docker, etc.) out of the main go.mod.
+test-luajit-offsets: generate
+	go test -C ./tools/luajitoffsets $(GO_FLAGS) -tags luajit_offsets_test ./...
+
+test-junit: generate ebpf test-deps
+	mkdir -p $(JUNIT_OUT_DIR)
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+TESTDATA_DIRS:= \
+	nativeunwind/elfunwindinfo/testdata \
+	libpf/pfelf/testdata \
+	reporter/testdata
+
+GOLABELS_TESTDATA_TARGETS := pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
+
+test-deps: $(GOLABELS_TESTDATA_TARGETS)
+	$(foreach testdata_dir, $(TESTDATA_DIRS), \
+		($(MAKE) -C "$(testdata_dir)") || exit ; \
+	)
+
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+
+processctx-execs:
+	$(MAKE) -C process/processcontext/integrationtests/testdata
+
+tlsvar-execs:
+	$(MAKE) -C tls/testdata
+
+# Host-only: the qemu initramfs cannot load shared libraries, which the
+# lib/dlopen testdata variants will need.
+host-integration-tests: processctx-execs tlsvar-execs
+	go test -exec sudo -v -tags host_integration ./process/processcontext/integrationtests/
+	go test -v -tags host_integration ./tls/
+
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
+
+pprof_1_23:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_1_24:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_1_24_cgo:
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+pprof_1_24_cgo_pie:
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+pprof_stable:
+	CGO_ENABLED=0 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_stable_buildinfo_cgo:
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_stable_cgo:
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+pprof_stable_cgo_pie:
+	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+integration-test-binaries: generate ebpf pprof-execs
+	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
+		(go test -ldflags='-extldflags=-static' -trimpath -c \
+			-tags $(GO_TAGS),static_build,integration \
+			-o ./support/$(subst /,_,$(test_name)).test \
+			./$(test_name)) || exit ; \
+	)
+
+docker-image:
+	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
+
+agent:
+	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
+
+# Allowed licenses follow the CNCF allowlist:
+# https://github.com/cncf/foundation/blob/main/policies-guidance/allowed-third-party-license-policy.md
+# github.com/hashicorp/go-version (MPL-2.0) is ignored: it's an indirect
+# dependency pulled in by go.opentelemetry.io/collector/featuregate, not
+# something this project imports directly.
+license-check:
+	go tool $(GO_TOOLS) go-licenses check \
+		--allowed_licenses=Apache-2.0,0BSD,BSD-2-Clause,BSD-2-Clause-FreeBSD,BSD-3-Clause,MIT,MIT-0,ISC,OpenSSL,PSF-2.0,Python-2.0,Python-2.0.1,PostgreSQL,UPL-1.0,X11,Zlib \
+		--ignore github.com/hashicorp/go-version \
+		./...
+
+license-save:
+	go tool $(GO_TOOLS) go-licenses save --force ./... --save_path=LICENSES
+
+codespell:
+	@codespell

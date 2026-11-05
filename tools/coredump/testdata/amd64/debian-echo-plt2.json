@@ -1,0 +1,29 @@
+{
+  "coredump-ref": "8f89a4d0c0f9e552e9a67ebf6151262b8c0f8c97899257c301f3ee46ac7403ae",
+  "threads": [
+    {
+      "lwp": 3914,
+      "frames": [
+        "echo+0x203b",
+        "echo+0x235e",
+        "libc.so.6+0x27249",
+        "libc.so.6+0x27304",
+        "echo+0x2900"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "a049fb47554c6cde2ee452e5d87f6386abb63af7cdcae9cd0dc99fc80e0bcf35",
+      "local-path": "/usr/bin/echo"
+    },
+    {
+      "ref": "593bb1d5355658e645f36e6b1f49832691b24e177209765914e4cce51499dbb4",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "bff8750fe719e6000791b88b11747dce8772c37118d0b2348044b70819d13835",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    }
+  ]
+}

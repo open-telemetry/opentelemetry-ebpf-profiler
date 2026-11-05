@@ -1,0 +1,30 @@
+package support
+
+import (
+	"testing"
+	"unsafe"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestSizeOfCGoStruct(t *testing.T) {
+	tests := []struct {
+		// Name of Go wrapper struct
+		name  string
+		input uintptr
+		want  uintptr
+	}{
+		{name: "PHPProcInfo", input: unsafe.Sizeof(PHPProcInfo{}),
+			want: sizeof_PHPProcInfo},
+		{name: "RubyProcInfo", input: unsafe.Sizeof(RubyProcInfo{}),
+			want: sizeof_RubyProcInfo},
+		{name: "ThreadContextProcInfo", input: unsafe.Sizeof(ThreadContextProcInfo{}),
+			want: sizeof_ThreadContextProcInfo},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equalf(t, tt.want, tt.input,
+				"unsafe.Sizeof(%v{}) = %v, want %v", tt.name, tt.input, tt.want)
+		})
+	}
+}

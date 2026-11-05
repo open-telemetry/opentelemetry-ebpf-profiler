@@ -1,0 +1,95 @@
+{
+  "coredump-ref": "1bae7d343778a31cc6ccd7a1249e58a79abebf9e6d1d53d8cb105d1693d6090d",
+  "threads": [
+    {
+      "lwp": 6414,
+      "frames": [
+        "runtime.pcvalue+0 in /usr/local/go/src/runtime/symtab.go:1032",
+        "runtime.(*unwinder).resolveInternal+0 in /usr/local/go/src/runtime/traceback.go:326",
+        "runtime.(*unwinder).initAt+0 in /usr/local/go/src/runtime/traceback.go:225",
+        "runtime.callers.func1+0 in /usr/local/go/src/runtime/traceback.go:1100",
+        "runtime.systemstack+0 in /usr/local/go/src/runtime/asm_arm64.s:297",
+        "runtime.callers+0 in /usr/local/go/src/runtime/traceback.go:1102",
+        "main.main+0 in /home/tintin/ebpf/tools/coredump/testsources/go/systemstack/main.go:16",
+        "runtime.main+0 in /usr/local/go/src/internal/runtime/atomic/types.go:194",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 6422,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.templateThread+0 in /usr/local/go/src/runtime/lock_spinbit.go:152",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    },
+    {
+      "lwp": 6420,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1936",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    },
+    {
+      "lwp": 6419,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 6418,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3283",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4128",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 6417,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3283",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4128",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 6416,
+      "frames": [
+        "runtime.usleep+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:138",
+        "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6251",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1429e0cd0849978b68f09b3a32ef4da047b3fb2932813cc58b707b68a1678998",
+      "local-path": "/home/tintin/ebpf/test-systemstack"
+    }
+  ]
+}

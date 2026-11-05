@@ -1,0 +1,212 @@
+{
+  "coredump-ref": "03324a72334b886d2682ce4eaaab34bf69c064b0a0d043190e55de0c8073c9ec",
+  "threads": [
+    {
+      "lwp": 9633,
+      "frames": [
+        "php+0x77e2fc",
+        "PrimeChecker::isPrime+11 in /agent/tools/coredump/testsources/php/class_method.php:16",
+        "<top-level>+29 in /agent/tools/coredump/testsources/php/class_method.php:30",
+        "php+0x7c2242",
+        "php+0x7c0292",
+        "php+0x82a83f",
+        "php+0x6bdc12",
+        "php+0x82c811",
+        "php+0x25cd0a",
+        "libc.so.6+0x29ca7",
+        "libc.so.6+0x29d64",
+        "php+0x25e110"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "85e2e494494f4f50c4b6d2b4ae90e885da1bfdefd52c4cc5767fd10abff62505",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libsodium.so.23.3.0"
+    },
+    {
+      "ref": "1257597210f43630e7c8a745ae95127e96b93a43515ac5163cab459ddc1664b3",
+      "local-path": "/usr/lib/locale/C.utf8/LC_CTYPE"
+    },
+    {
+      "ref": "2663d9bdca20ba67d2d72f1d4c24b6fd0a3e97d5ee23e7b739788176cf904380",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libhogweed.so.6.10"
+    },
+    {
+      "ref": "14c4418a06c5c2e30f5fb57bc8add93762236ae17898c6708984cf15e680ca71",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0.8.6"
+    },
+    {
+      "ref": "fae58327d2557631217a0c2f97db3da6bf9bfcd80a221d8d6d285acc0040df00",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3"
+    },
+    {
+      "ref": "ce44b7a7cbb6acc82d27b4f05b7613559058655ff51125b49bc3d9acef6d9666",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libssl.so.3"
+    },
+    {
+      "ref": "e4ae39be74740511cf8e49e80fdfc16aeee7b822ee313793da1b78ce148ba05f",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libp11-kit.so.0.4.1"
+    },
+    {
+      "ref": "37ecaa050c23fee92d563eec8701164505ef880c00a513cbd6d1d03beeb8fa29",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libnghttp3.so.9.2.6"
+    },
+    {
+      "ref": "b35963d122e850c48dc42be640731f4a48c963938229c8b0b159d7d2b7f2fd3e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/liblzma.so.5.8.1"
+    },
+    {
+      "ref": "1f68d40835767b14cbbad5d3146dbc4ea372e916391b7387a35cbf6d8b179460",
+      "local-path": "/usr/local/lib/php/extensions/no-debug-non-zts-20250925/sodium.so"
+    },
+    {
+      "ref": "7b0b0de90d8d3d4f07b99738c0285c6a0dbb6611d774ca44e7ea53a19a01ea68",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.1.0"
+    },
+    {
+      "ref": "4b14edde42e7cbeefd8a6d88d035e096f2e6412a535388bb1d073a1c196e2822",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgnutls.so.30.40.3"
+    },
+    {
+      "ref": "e8f34e65087f24f296fa7a65a8c65383f4a7e2b532c46e40463d4e59a206c20a",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libldap.so.2.0.200"
+    },
+    {
+      "ref": "299cdc741f1dd0834a49d5cb44f3da26b1960bb110c1f521a084400d9b603cbf",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libidn2.so.0.4.0"
+    },
+    {
+      "ref": "207268890b5be3043575c97af4e08c8326a12321a8a83e7278681b6b6f7d5ea8",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libnghttp2.so.14.28.3"
+    },
+    {
+      "ref": "30c61ab012a4241bed033725a09b61f5fdd3bb7df95ee852d0b096520524c7af",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "607cfc87376433e81a612f2463d778793207e852db6e36cbc95498968d9531c8",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libxml2.so.2.9.14"
+    },
+    {
+      "ref": "7d4c54c51f62085d79a4c96c7ad52f680f1f2e6d38ff7c8b8fa18d57f89df130",
+      "local-path": "/usr/lib/x86_64-linux-gnu/librtmp.so.1"
+    },
+    {
+      "ref": "6d567d53e895273ca14a1f9dc164fc6c8d39aed2f60aa46a733c2784228915f3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "52c227df9d53248238602c1ddaccd2c8ddc4cc6a61aa45d7c425af590b8806a5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache"
+    },
+    {
+      "ref": "3f93968591811eb3972c3467c69c2968dd9cb2b51f7b7bb48de22ba8e17d13fd",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libsasl2.so.2.0.25"
+    },
+    {
+      "ref": "dc4828400674492839b630c001db424cd38e5cecfcf46dbf705a637647e04bea",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcom_err.so.2.1"
+    },
+    {
+      "ref": "ca319704dd4f58b5b3fc8510738850f03f18940544ba04bebf2fa8a23a798346",
+      "local-path": "/usr/lib/x86_64-linux-gnu/liblber.so.2.0.200"
+    },
+    {
+      "ref": "54d25da8307ee6e33854261304a6ef50e95a205cc042458569e4cd74340ebb19",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libonig.so.5.4.0"
+    },
+    {
+      "ref": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "922024ec5a23f7de1095b1cff2f6cbfb377b5d58cd51fd0ec2e8fe35427653e2",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libffi.so.8.1.4"
+    },
+    {
+      "ref": "d41dd4adacf5a35df426461dd8a92d7bdd5ba29bb61a1c3531bec0ada386f8dd",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libresolv.so.2"
+    },
+    {
+      "ref": "e5d5a7450d08eff7d4bbcaac75ef2b94d3447c81a1b2ddf3ab85d2de4709a9a8",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkeyutils.so.1.10"
+    },
+    {
+      "ref": "d15e1585c6c267296459570c8ac217ca9123044bcd4e896d2f686b32333445d2",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "06530583d5927000480f4214d80d0213fec3d34cc448527f932a6eceb50cefef",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.1.0"
+    },
+    {
+      "ref": "4013e7651ac68f547d8333517def25b2366c97eec7de7f06e105dbf3444ffebf",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtinfo.so.6.5"
+    },
+    {
+      "ref": "94b5c0be9d7f09f1b4550ff15422d2ac8a6392c3471c88b93ee0370698388097",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libargon2.so.1"
+    },
+    {
+      "ref": "a3334d88f3f6c6a25736667e0b39db0f68b4e7e6bf758a475aff681ddb33ad8b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libreadline.so.8.2"
+    },
+    {
+      "ref": "34ac695c167a593d3587bd88592d33d53e5dc4035984f84446100962f57376fd",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libnettle.so.8.10"
+    },
+    {
+      "ref": "d9a6975db1b66ed34bdc04195a92a77b7d29b8d6affe4c35c05d7eafe5424fef",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpsl.so.5.3.4"
+    },
+    {
+      "ref": "7182748572d6bec098366090537c164f86a5c20c403b109bdce63f1f13886632",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcurl.so.4.8.0"
+    },
+    {
+      "ref": "438c546d8e8cc48496bf3a95f753051afd9db66a629a74e31a9ded71586b56e0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "6155eb8e9481dcb75650fe047fc60f725085155526501898653e56fa30f99dda",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtasn1.so.6.6.4"
+    },
+    {
+      "ref": "f559f051ee5d39f151a57d79f2cde475c484030098b0c73f9f7035b421b187c4",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkrb5support.so.0.1"
+    },
+    {
+      "ref": "c4c3221d0350f882cee0430b58d5fb289a5776c684d3156964864c8a9719dff1",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libk5crypto.so.3.1"
+    },
+    {
+      "ref": "c4ab64e6bc2874a83e649e4439be752465da027a0041e2bb5343f81c80f0882d",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkrb5.so.3.3"
+    },
+    {
+      "ref": "9c200ec975ff24c0a259d4f6cf0d0fc1736d0c86da30fff3d499ad3d9a368b65",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libunistring.so.5.2.0"
+    },
+    {
+      "ref": "c290f761873ebeac539911010526e1c5db86218bfcb29672760da46841741de0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2"
+    },
+    {
+      "ref": "c11e380d0a66e2d4fc484684df0ccd585041d93a640c67f1d751d6593326a560",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libssh2.so.1.0.1"
+    },
+    {
+      "ref": "27f07c9a49c2c956bcfb64cd4712976586a66facbf15fc7f09bc37413b5f2b21",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
+    },
+    {
+      "ref": "fa430b8f298f817a266046af84a77533185ad6fc4406c7d3787b5a0a0c207826",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "216ef08177feb82b00da0ec4adafdc2ae047e0a4faa24adede407570a9090abc",
+      "local-path": "/usr/local/bin/php"
+    }
+  ]
+}

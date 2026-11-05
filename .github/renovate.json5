@@ -1,0 +1,77 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:best-practices',
+    'helpers:pinGitHubActionDigestsToSemver',
+  ],
+  postUpdateOptions: [
+    'gomodTidyAll',
+  ],
+  ignorePaths: [
+    'LICENSES/**',
+  ],
+  ocb: {
+    managerFilePatterns: [
+      '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
+    ],
+  },
+  packageRules: [
+    {
+      groupName: 'Go dependencies',
+      matchManagers: [
+        'gomod',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
+    },
+    {
+      groupName: 'Docker related dependencies',
+      matchManagers: [
+        'buildpacks',
+        'devcontainer',
+        'docker-compose',
+        'dockerfile',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
+    },
+    {
+      groupName: 'GitHub Actions',
+      matchManagers: [
+        'github-actions',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
+    },
+    {
+      groupName: 'Rust dependencies',
+      matchManagers: [
+        'cargo',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+    },
+    {
+      groupName: 'OCB (manifest) dependencies',
+      matchManagers: [
+        'ocb',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+    },
+  ],
+  ignoreDeps: [
+    'golangci/golangci-lint-action',
+  ],
+  labels: [
+    'dependencies',
+  ],
+}

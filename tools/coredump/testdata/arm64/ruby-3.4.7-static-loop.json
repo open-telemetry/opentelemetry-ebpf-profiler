@@ -1,0 +1,89 @@
+{
+  "coredump-ref": "fcefaded8c9fdf2d69eb6edfa8fa7caa58a70b2b5875923a0ed8effb691727cc",
+  "threads": [
+    {
+      "lwp": 1384196,
+      "frames": [
+        "Object#is_prime+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:14",
+        "ruby+0x2021d0",
+        "ruby+0x206b6f",
+        "ruby+0x1198c3",
+        "ruby+0x1f6acb",
+        "ruby+0x1fa6c3",
+        "ruby+0x213907",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:14",
+        "Object#sum_of_primes+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:24",
+        "block (2 levels) in <main>+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:34",
+        "ruby+0x20239f",
+        "ruby+0x206b6f",
+        "ruby+0x11982b",
+        "ruby+0x1f493b",
+        "ruby+0x1fa6c3",
+        "ruby+0x213907",
+        "Range#each+0 in <cfunc>:0",
+        "block in <main>+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:33",
+        "Kernel#loop+0 in <internal:kernel>:168",
+        "<main>+0 in /Users/dalehamel/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:32",
+        "ruby+0x20230b",
+        "ruby+0x3cdef",
+        "ruby+0x3f0c3",
+        "ruby+0x399cf",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "ruby+0x39a6f"
+      ]
+    },
+    {
+      "lwp": 1384198,
+      "frames": [
+        "libc.so.6+0xebe34",
+        "ruby+0x1af363",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xebb0b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "a896f19dbc725967448640f79f14b7a7793da4b99c62e441b64775a1bb00f31b",
+      "local-path": "/opt/rubies/ruby-3.4.7/bin/ruby"
+    },
+    {
+      "ref": "fd8ac7acb6b107b40b31f1fdded22ef4543c60ff9195e847fd27587f032ed5f7",
+      "local-path": "/opt/rubies/ruby-3.4.7/lib/ruby/3.4.0/aarch64-linux/monitor.so"
+    },
+    {
+      "ref": "ef7faa5b266a3c40c1e40be004a5d6f27e16cf2787ef43cc2070d1feb2eee1ad",
+      "local-path": "/opt/rubies/ruby-3.4.7/lib/ruby/3.4.0/aarch64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "2fd7c8f96a208532befb77cec1cfee8a08217a97b77d8eed382537fa6cc6e72c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "b41cebf0be70f869bf60228cb5761f875ced865b0f4016f544d82f7a9ded28b0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "f572bd122e2b3b14d2f9d8d4345e1351fd9fbf26f9402e3e42ef36b65f833411",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "4510e7c51844a966dce56e46504aea552b5b27a48eeb9c7b45eb3ac93274e771",
+      "local-path": "/opt/rubies/ruby-3.4.7/lib/ruby/3.4.0/aarch64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "ac92dc80c7d902e3852986e858ba682a981c15a12ec0e163bd4d56dde9b3dd6e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "39b6701812ed7135f28df49352b3f6664c7a9f56880a3fe50c1b87cd7681db9b",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "170380b4e7ab28ec86eb090b48df90f84089392cb72fecd5067e5b7a4dc5239f",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.3"
+    }
+  ]
+}

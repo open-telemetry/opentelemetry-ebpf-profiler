@@ -1,0 +1,446 @@
+// This file contains the code and map definitions for the Dotnet tracer
+//
+// Core unwinding of frames is simple, as all the generated code uses frame pointers,
+// and all the interesting data is directly accessible via FP.
+//
+// See the host agent interpreter/dotnet/ for more references.
+
+#include "bpfdefs.h"
+#include "tracemgmt.h"
+#include "types.h"
+
+// The number of dotnet frames to unwind per frame-unwinding eBPF program.
+#define DOTNET_FRAMES_PER_PROGRAM 6
+
+// The number of dotnet10+ frames to unwind per frame-unwinding eBPF program.
+#define DOTNET10_FRAMES_PER_PROGRAM 9
+
+// The maximum dotnet frame length used in heuristic to validate FP
+#define DOTNET_MAX_FRAME_LENGTH 8192
+
+// Keep in sync with dotnet interpreter code
+#define DOTNET_CODE_JIT       0x1f
+#define DOTNET_CODE_FLAG_LEAF 0x80
+
+typedef ErrorCode (*find_code_start_f)(PerCPURecord *record, u64 pc, u64 *code_start);
+
+// Nibble map tunables
+// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblemapmacros.h
+#define DOTNET_CODE_ALIGN             4UL
+#define DOTNET_CODE_NIBBLES_PER_ENTRY 8UL  // 8nibbles * 4 bits/nibble = 32bit word
+#define DOTNET_CODE_BYTES_PER_NIBBLE  32UL // one nibble maps to 32 bytes of code
+#define DOTNET_CODE_BYTES_PER_ENTRY   (DOTNET_CODE_BYTES_PER_NIBBLE * DOTNET_CODE_NIBBLES_PER_ENTRY)
+
+// Find method code header using a dotnet coreclr "NibbleMap"
+// Currently this technically could require an unbounded for loop to scan through the nibble map.
+// The make things work in the eBPF the number of elements we parse are limited by the scratch
+// buffer size. This needs to be in eBPF for the methods which may be Garbage Collected (typically
+// short runtime generated IL code). If we start seeing "code too large" errors, we can also do
+// this same lookup from the Host Agent because most generated code (especially large pieces) are
+// currently not Garbage Collected by the runtime. Though, we have submitted also an enhancement
+// request to fix the nibble map format to something sane, and this might get implemented.
+// see: https://github.com/dotnet/runtime/issues/93550
+static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc, u64 *code_start)
+{
+  // This is an ebpf optimized implementation of EEJitManager::FindMethodCode()
+  // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/codeman.cpp#L4115
+  // The support code setups the page mapping so that:
+  //   text_section_base = pHp->mapBase (base address of the JIT area)
+  //   text_section_id   = pHp->pHdrMap (pointer to the nibble map)
+  const UnwindState *state          = &record->state;
+  DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
+  const u64 map_elements            = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
+  u64 pc_base                       = state->text_section_bias;
+  u64 pc_delta                      = pc - pc_base;
+  u64 map_start                     = state->text_section_id;
+
+  DEBUG_PRINT(
+    "dotnet:  --> find code start for %lx: pc_base %lx, map_start %lx",
+    pc_delta,
+    pc_base,
+    map_start);
+  pc_delta &= ~(DOTNET_CODE_ALIGN - 1);
+
+  // Read the nibble map data
+
+  // Calculate read to offset based on map_start so that end of scratch->map corresponds to pc_delta
+  s64 offs = map_elements - pc_delta / DOTNET_CODE_BYTES_PER_ENTRY - 1;
+  if (offs < 0) {
+    // We can read full scratch buffer, adjust map_start so that last entry read corresponds
+    // pc_delta
+    map_start +=
+      pc_delta / DOTNET_CODE_BYTES_PER_ENTRY * sizeof(u32) - sizeof(scratch->map) / 2 + sizeof(u32);
+    offs = 0;
+  }
+  offs %= map_elements;
+  if (bpf_probe_read_user(&scratch->map[offs], sizeof(scratch->map) / 2, (void *)map_start)) {
+    goto bad_code_header;
+  }
+
+  // Determine if the first map entry contains the start region
+  u64 pos = map_elements;
+  u32 val = scratch->map[--pos];
+  DEBUG_PRINT("dotnet:  --> find code start for %lx: first entry %x", pc_delta, val);
+  val >>= 28 - ((pc_delta / DOTNET_CODE_BYTES_PER_NIBBLE) % DOTNET_CODE_NIBBLES_PER_ENTRY) * 4;
+  if (val != 0) {
+    // Adjust pc_delta to beginning of the positioned nibble of 'val'
+    pc_delta &= ~(DOTNET_CODE_BYTES_PER_NIBBLE - 1);
+  } else {
+    // Adjust delta to end of previous map entry
+    pc_delta &= ~(DOTNET_CODE_BYTES_PER_ENTRY - 1);
+    pc_delta -= DOTNET_CODE_BYTES_PER_NIBBLE;
+    val = scratch->map[--pos];
+    DEBUG_PRINT("dotnet:  --> find code start for %lx: second entry %x", pc_delta, val);
+
+    // Find backwards the first non-zero entry as it marks function start
+    // This is unrolled several times, so it needs to be minimal in size.
+    // And currently this is the major limit for DOTNET_FRAMES_PER_PROGRAM.
+    u64 orig_pos = pos;
+    if (val == 0) {
+      // pos is fixed to map_elements-2 at this point, and is even.
+      // convert it from u32 to u64 offset
+      u64 pos64 = (map_elements - 2) / 2;
+      u64 val64 = scratch->map64[--pos64];
+
+      // the loop iterations is number of u64 elements minus two:
+      // - the last element special handled earlier
+      // - the second last element which is preloaded immediately above
+      for (u64 i = 0; i < map_elements / 2 - 2; i++) {
+        if (val64 != 0) {
+          break;
+        }
+        val64 = scratch->map64[--pos64];
+      }
+      // convert u64 offset back to u32 offset
+      pos = pos64 * 2;
+      // use the upper half entry if it is non-zero
+      if (val64 >> 32 != 0) {
+        val64 >>= 32;
+        pos++;
+      }
+      val = (u32)val64;
+    }
+
+    // Adjust pc_delta based on how many iterations were done
+    u64 pc_skipped = DOTNET_CODE_BYTES_PER_ENTRY * (orig_pos - pos);
+    if (pc_delta < pc_skipped) {
+      DEBUG_PRINT("dotnet: nibble map search went below pc_base");
+      goto bad_code_header;
+    }
+    pc_delta -= pc_skipped;
+    DEBUG_PRINT(
+      "dotnet:  --> find code start for %lx: skipped %lu, entry %x", pc_delta, orig_pos - pos, val);
+    if (val == 0) {
+      increment_metric(metricID_UnwindDotnetErrCodeTooLarge);
+      return ERR_DOTNET_CODE_TOO_LARGE;
+    }
+  }
+
+  // Decode the code start info from the entry
+  for (u64 i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
+    u8 nybble = val & 0xf;
+    if (nybble != 0) {
+      *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
+      DEBUG_PRINT("dotnet:  --> pc_delta = %lx, val=%x, ret=%lx", pc_delta, nybble, *code_start);
+      return ERR_OK;
+    }
+    val >>= 4;
+    pc_delta -= DOTNET_CODE_BYTES_PER_NIBBLE;
+  }
+
+bad_code_header:
+  DEBUG_PRINT("dotnet: not found");
+  increment_metric(metricID_UnwindDotnetErrCodeHeader);
+  return ERR_DOTNET_CODE_HEADER;
+}
+
+// Dotnet 10 nibble map constants and functions converted to macroes from:
+// https://github.com/dotnet/runtime/blob/v10.0.2/src/coreclr/inc/nibblemapmacros.h
+#define DOTNET10_LOG2_NIBBLE_SIZE       2
+#define DOTNET10_LOG2_CODE_ALIGN        2
+#define DOTNET10_LOG2_NIBBLES_PER_DWORD 3
+#define DOTNET10_LOG2_BYTES_PER_BUCKET  (DOTNET10_LOG2_CODE_ALIGN + DOTNET10_LOG2_NIBBLES_PER_DWORD)
+#define DOTNET10_NIBBLE_MASK            0xfu
+#define DOTNET10_NIBBLE_SIZE            4
+#define DOTNET10_NIBBLES_PER_DWORD      (2 * sizeof(u32)) // 8 (4-bit) nibbles per dword
+#define DOTNET10_NIBBLES_PER_DWORD_MASK (DOTNET10_NIBBLES_PER_DWORD - 1) // 7
+#define DOTNET10_BYTES_PER_BUCKET                                                                  \
+  (DOTNET10_NIBBLES_PER_DWORD * (1 << DOTNET10_LOG2_CODE_ALIGN))       // 32 bytes per bucket
+#define DOTNET10_MASK_BYTES_PER_BUCKET (DOTNET10_BYTES_PER_BUCKET - 1) // 31
+
+#define DOTNET10_IS_POINTER(val) ((val & DOTNET10_NIBBLE_MASK) > 8)
+#define DOTNET10_DECODE_POINTER(val)                                                               \
+  ((val & ~DOTNET10_NIBBLE_MASK) + (((val & DOTNET10_NIBBLE_MASK) - 9) << 2))
+
+#define DOTNET10_POS2SHIFTCOUNT(x)                                                                 \
+  (u32)(                                                                                           \
+    32 - DOTNET10_NIBBLE_SIZE -                                                                    \
+    (((x) & DOTNET10_NIBBLES_PER_DWORD_MASK) << DOTNET10_LOG2_NIBBLE_SIZE))
+#define DOTNET10_ADDR2POS(x) ((x) >> DOTNET10_LOG2_BYTES_PER_BUCKET)
+#define DOTNET10_ADDR2OFFS(x)                                                                      \
+  (u32)((((x) & DOTNET10_MASK_BYTES_PER_BUCKET) >> DOTNET10_LOG2_CODE_ALIGN) + 1)
+#define DOTNET10_POSOFF2ADDR(pos, of)                                                              \
+  (((pos) << DOTNET10_LOG2_BYTES_PER_BUCKET) + (((of)-1) << DOTNET10_LOG2_CODE_ALIGN))
+
+static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 pc, u64 *code_start)
+{
+  // This is an ebpf optimized version of EECodeGenManager::FindMethodCode.
+  // https://github.com/dotnet/runtime/blob/v10.0.2/src/coreclr/vm/codeman.cpp#L4434
+  const UnwindState *state          = &record->state;
+  DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
+  u64 map_start                     = state->text_section_id;
+  u64 pc_base                       = state->text_section_bias;
+  u64 pc_delta                      = pc - pc_base;
+
+  // map pc_delta to the nibble map position
+  size_t startPos = DOTNET10_ADDR2POS(pc_delta);
+
+  // #1 lookup DWORD representing current PC (and the preceding if possible)
+  u32 *map_dst    = &scratch->map[1];
+  scratch->map[0] = 0;
+  if (startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) {
+    // not first entry: adjust to read th preceding and current PC entry
+    map_start += sizeof(u32) * ((startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) - 1);
+    map_dst = &scratch->map[0];
+  }
+  if (bpf_probe_read_user(map_dst, sizeof(u32[2]), (void *)map_start)) {
+    goto bad_code_header;
+  }
+
+  u32 val = scratch->map[1];
+  if (val) {
+    // #2 if DWORD is a pointer, calculate code start from it
+    DEBUG_PRINT("dotnet10: --> pc_delta %lx: first entry %x", pc_delta, val);
+    if (DOTNET10_IS_POINTER(val)) {
+      goto decode_pointer;
+    }
+
+    // #3 check if corresponding nibble is initialized and points to an equal or earlier address
+    val >>= DOTNET10_POS2SHIFTCOUNT(startPos);
+    u8 offset = DOTNET10_ADDR2OFFS(pc_delta); // this is the offset inside the bucket + 1
+    u8 nibble = val & DOTNET10_NIBBLE_MASK;
+    if (nibble && nibble <= offset) {
+      goto decode_nibble;
+    }
+    // #4 other preceding nibbles
+    val >>= DOTNET10_NIBBLE_SIZE;
+    if (val) {
+      startPos--;
+      goto decode_nibble_map;
+    }
+  }
+
+  // #5.1 read previous DWORD
+  startPos = ((startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) << DOTNET10_LOG2_NIBBLES_PER_DWORD) - 1;
+  val      = scratch->map[0];
+  DEBUG_PRINT("dotnet10: --> pc_delta %lx: prev entry %x", pc_delta, val);
+  if (!val) {
+    goto bad_code_header;
+  }
+
+  // #5.2 either DWORD is a pointer
+  if (DOTNET10_IS_POINTER(val)) {
+  decode_pointer:
+    *code_start = pc_base + DOTNET10_DECODE_POINTER(val);
+    DEBUG_PRINT("dotnet10: --> find code start via pointer %lx", *code_start);
+    return ERR_OK;
+  }
+
+  // #5.4 or contains a nibble map
+decode_nibble_map:
+  for (u64 i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++) {
+    if (val & DOTNET10_NIBBLE_MASK) {
+      break;
+    }
+    val >>= DOTNET10_NIBBLE_SIZE;
+    startPos--;
+  }
+decode_nibble:
+  *code_start = pc_base + DOTNET10_POSOFF2ADDR(startPos, val & DOTNET10_NIBBLE_MASK);
+  DEBUG_PRINT("dotnet10: --> find code start via nibble %lx", *code_start);
+  return ERR_OK;
+
+bad_code_header:
+  DEBUG_PRINT("dotnet10: --> code start not found");
+  increment_metric(metricID_UnwindDotnetErrCodeHeader);
+  return ERR_DOTNET_CODE_HEADER;
+}
+
+// Record a Dotnet frame
+static EBPF_INLINE ErrorCode push_dotnet(
+  UnwindState *state, Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
+{
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  u64 *data =
+    push_frame(state, trace, FRAME_MARKER_DOTNET, FRAME_FLAG_PID_SPECIFIC | ra_flag, pc_offset, 1);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = code_header_ptr;
+  return ERR_OK;
+}
+
+// Unwind one dotnet frame
+static EBPF_INLINE ErrorCode
+unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
+{
+  UnwindState *state  = &record->state;
+  Trace *trace        = &record->trace;
+  u64 pc              = state->pc;
+  bool return_address = state->return_address;
+
+  // All dotnet frames have frame pointer. Check that the FP looks valid.
+  if (!unwinder_check_frame_size(state, DOTNET_MAX_FRAME_LENGTH)) {
+    increment_metric(metricID_UnwindDotnetErrBadFP);
+    return ERR_DOTNET_BAD_FP;
+  }
+
+  // Default to R2R/stub code_start.
+  u64 type            = state->text_section_id;
+  u64 code_start      = state->text_section_bias;
+  u64 code_header_ptr = pc;
+
+  if (type < 0x100 && (type & DOTNET_CODE_FLAG_LEAF)) {
+    // Stub frame that does not do calls.
+    // For arm this is unwind with LR, and for x86-64 unwind with RA only.
+#if defined(__aarch64__)
+    if (state->lr_invalid) {
+      DEBUG_PRINT("dotnet:  --> LR invalid");
+      increment_metric(metricID_UnwindDotnetErrBadFP);
+      return ERR_DOTNET_BAD_FP;
+    }
+    state->pc = state->lr;
+#else
+    if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp)) {
+      DEBUG_PRINT("dotnet:  --> bad stack pointer");
+      increment_metric(metricID_UnwindDotnetErrBadFP);
+      return ERR_DOTNET_BAD_FP;
+    }
+    state->sp += 8;
+#endif
+    unwinder_mark_nonleaf_frame(state);
+    type &= 0x7f;
+    goto push_frame;
+  }
+
+  // Unwind with frame pointer. On Linux the frame pointers are always on.
+  // https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/clr-abi.md#system-v-x86_64-support
+  // FIXME: Early prologue and epilogue may skip a frame. Seems prologue is fixed, consider
+  // using heuristic to handle prologue when the new frame is not yet pushed to stack.
+  if (!unwinder_unwind_frame_pointer(state)) {
+    DEBUG_PRINT("dotnet:  --> bad frame pointer");
+    increment_metric(metricID_UnwindDotnetErrBadFP);
+    return ERR_DOTNET_BAD_FP;
+  }
+  DEBUG_UNWIND_STATE(state);
+
+  if (type < 0x100) {
+    // Not a JIT frame. A R2R frame at this point.
+    type &= 0x7f;
+    goto push_frame;
+  }
+
+  // JIT generated code, locate code start
+  ErrorCode error = find_code_start(record, pc, &code_start);
+  if (error != ERR_OK) {
+    DEBUG_PRINT("dotnet:  --> code_start failed with %d", error);
+    // dotnet_find_code_start incremented the metric already
+    if (error != ERR_DOTNET_CODE_TOO_LARGE) {
+      return error;
+    }
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_TOO_LARGE);
+  }
+
+  // code_start points to beginning of the JIT generated code. This is preceded by a CodeHeader
+  // structure. The platforms we care define USE_INDIRECT_CODEHEADER, so the data is defined at:
+  // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/codeman.h#L246-L248
+  // This just reads the single pointer to the RealCodeHeader.
+  if (bpf_probe_read_user(
+        &code_header_ptr, sizeof(code_header_ptr), (void *)code_start - sizeof(u64))) {
+    DEBUG_PRINT("dotnet:  --> bad code header");
+    increment_metric(metricID_UnwindDotnetErrCodeHeader);
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
+  }
+
+  // Validate code_header_ptr looks like a valid userspace address as a
+  // defense-in-depth measure against reading stale or invalid data.
+  if (is_kernel_address(code_header_ptr) || code_header_ptr < 0x1000) {
+    DEBUG_PRINT("dotnet: invalid code_header_ptr 0x%lx, skipping frame", code_header_ptr);
+    increment_metric(metricID_UnwindDotnetErrCodeHeader);
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
+  }
+
+  type = DOTNET_CODE_JIT;
+
+push_frame:
+  DEBUG_PRINT(
+    "dotnet:  --> code_start = %lx, code_header = %lx, pc_offset = %lx",
+    code_start,
+    code_header_ptr,
+    pc - code_start);
+  error = push_dotnet(state, trace, (code_header_ptr << 5) + type, pc - code_start, return_address);
+  if (error) {
+    return error;
+  }
+
+  increment_metric(metricID_UnwindDotnetFrames);
+  return ERR_OK;
+}
+
+// unwind_dotnet is the entry point for tracing when invoked from the native tracer
+// or interpreter dispatcher. It does not reset the trace object and will append the
+// dotnet stack frames to the trace object for the current CPU.
+static EBPF_INLINE int unwind_dotnet_core(
+  struct pt_regs *ctx,
+  u8 unwinder_program,
+  u64 frames_per_program,
+  find_code_start_f find_code_start)
+{
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace    = &record->trace;
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+  DEBUG_PRINT("==== unwind_dotnet %d ====", trace->num_frames);
+
+  record->ratelimitAction = RATELIMIT_ACTION_FAST;
+  increment_metric(metricID_UnwindDotnetAttempts);
+
+  unwinder_analyze_frame_pointer(&record->state);
+
+  for (u64 i = 0; i < frames_per_program; i++) {
+    unwinder = PROG_UNWIND_STOP;
+
+    error = unwind_one_dotnet_frame(record, find_code_start);
+    if (error) {
+      break;
+    }
+
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != unwinder_program) {
+      break;
+    }
+  }
+
+exit:
+  record->state.unwind_error = error;
+  return tail_call(ctx, record, unwinder);
+}
+
+static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
+{
+  return unwind_dotnet_core(
+    ctx, PROG_UNWIND_DOTNET, DOTNET_FRAMES_PER_PROGRAM, dotnet_find_code_start);
+}
+MULTI_USE_FUNC(unwind_dotnet)
+
+static EBPF_INLINE int unwind_dotnet10(struct pt_regs *ctx)
+{
+  return unwind_dotnet_core(
+    ctx, PROG_UNWIND_DOTNET10, DOTNET10_FRAMES_PER_PROGRAM, dotnet10_find_code_start);
+}
+MULTI_USE_FUNC(unwind_dotnet10)

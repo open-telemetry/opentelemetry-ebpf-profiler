@@ -1,0 +1,442 @@
+// This file contains the code and map definitions for the V8 tracer
+//
+// Core unwinding of frames is simple, as all the generated code uses frame pointers,
+// and all the interesting data is directly accessible via FP. The only additional
+// task needed in EBPF code is to collect a Code* or SharedFunctionInfo* and potentially
+// the current bytecode offset when in interpreted mode. Rest of the processing can
+// be done from host agent.
+//
+// See the host agent interpreterv8.go for more references.
+
+#include "v8_tracer.h"
+#include "bpfdefs.h"
+#include "tracemgmt.h"
+#include "types.h"
+
+// The number of V8 frames to unwind per frame-unwinding eBPF program.
+#define V8_FRAMES_PER_PROGRAM 8
+
+// The maximum V8 frame length used in heuristic to validate FP
+#define V8_MAX_FRAME_LENGTH 8192
+
+// Map from V8 process IDs to a structure containing addresses of variables
+// we require in order to build the stack trace
+struct v8_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u32);
+  __type(value, V8ProcInfo);
+  __uint(max_entries, 1024);
+} v8_procs SEC(".maps");
+
+// Record a V8 frame
+static EBPF_INLINE ErrorCode push_v8(
+  UnwindState *state,
+  Trace *trace,
+  u8 frame_type,
+  u64 sfi,
+  u64 delta_or_marker,
+  u64 code,
+  bool return_address)
+{
+  const u64 sfi_and_type = sfi | frame_type;
+  DEBUG_PRINT(
+    "Pushing v8 frame sfi_and_type=%lx, delta_or_marker=%lx, code=%lx",
+    sfi_and_type,
+    delta_or_marker,
+    code);
+
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  u64 *data = push_frame(
+    state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, delta_or_marker, 2);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = sfi_and_type;
+  data[1] = code;
+  return ERR_OK;
+}
+
+// Verify a V8 tagged pointer
+static EBPF_INLINE uintptr_t v8_verify_pointer(uintptr_t maybe_pointer)
+{
+  if ((maybe_pointer & V8_HeapObjectTagMask) != V8_HeapObjectTag) {
+    return 0;
+  }
+  return maybe_pointer & ~V8_HeapObjectTagMask;
+}
+
+// Read and verify a V8 tagged pointer from given memory location.
+static EBPF_INLINE uintptr_t v8_read_object_ptr(uintptr_t addr)
+{
+  uintptr_t maybe_pointer;
+  if (bpf_probe_read_user(&maybe_pointer, sizeof(maybe_pointer), (void *)addr)) {
+    return 0;
+  }
+  return v8_verify_pointer(maybe_pointer);
+}
+
+// Verify and parse a V8 SMI  ("SMall Integer") value.
+// On 64-bit systems: SMI is the upper 32-bits of a 64-bit word, and the lowest bit is the tag.
+// Returns the SMI value, or def_value in case of errors.
+static EBPF_INLINE uintptr_t v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
+{
+  if ((maybe_smi & V8_SmiTagMask) != V8_SmiTag) {
+    return def_value;
+  }
+  return maybe_smi >> V8_SmiValueShift;
+}
+
+// Read the type tag of a Heap Object at given memory location.
+// Returns zero on error (valid object type IDs are non-zero).
+static EBPF_INLINE u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
+{
+  if (!addr) {
+    return 0;
+  }
+  uintptr_t map = v8_read_object_ptr(addr + vi->off_HeapObject_map);
+  u16 type;
+  if (!map || bpf_probe_read_user(&type, sizeof(type), (void *)(map + vi->off_Map_instancetype))) {
+    return 0;
+  }
+  return type;
+}
+
+// Unwind one V8 frame
+static EBPF_INLINE ErrorCode
+unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, u64 isolate_group, bool top)
+{
+  UnwindState *state = &record->state;
+  Trace *trace       = &record->trace;
+  u64 sp = state->sp, fp = state->fp, pc = state->pc;
+  V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
+
+  // All V8 frames have frame pointer. Check that the FP looks valid.
+  if (!unwinder_check_frame_size(state, V8_MAX_FRAME_LENGTH)) {
+    increment_metric(metricID_UnwindV8ErrBadFP);
+    return ERR_V8_BAD_FP;
+  }
+
+  // Read FP pointer data
+  if (bpf_probe_read_user(
+        scratch->fp_ctx, sizeof(scratch->fp_ctx), (void *)(fp - V8_FP_CONTEXT_SIZE))) {
+    DEBUG_PRINT("v8:  -> failed to read frame pointer context");
+    increment_metric(metricID_UnwindV8ErrBadFP);
+    return ERR_V8_BAD_FP;
+  }
+
+  // Make the verifier happy to access fpctx using the HA provided fp_* variables
+  if (
+    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(u64)) {
+    return ERR_UNREACHABLE;
+  }
+  u64 fp_marker          = *(u64 *)(scratch->fp_ctx + vi->fp_marker);
+  u64 fp_function        = *(u64 *)(scratch->fp_ctx + vi->fp_function);
+  u64 fp_bytecode_offset = *(u64 *)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  DEBUG_PRINT(
+    "v8 VALUES: marker: %lx, func: %lx, bytecode offset: %lx",
+    fp_marker,
+    fp_function,
+    fp_bytecode_offset);
+
+  // Data that will be sent to HA is in these variables.
+  u8 frame_type = V8_FRAME_TYPE_MARKER;
+  uintptr_t sfi = 0, delta_or_marker = 0, code = 0;
+
+  // Frames can be either be "standard", in which case they have a pointer to a context
+  // in `fp_marker` here, or non-standard, in which case they have a "marker" indicating their type.
+  // See e.g.
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L118-L118.
+  // Thus, look for the presence of a marker (logic given in
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frames.h#L218-L218); if
+  // there is one, we are in a special frame and can stop immediately.
+  //
+  // Before V8 5.8.261 the frame marker was a SMI. Now it has the tag, but it's not shifted fully.
+  // The special coding was done to reduce the frame marker push <immed64> to <immed32>.
+  if ((fp_marker & V8_SmiTagMask) == V8_SmiTag) {
+    // Shift with the tag length only (shift on normal SMI is different).
+    delta_or_marker = fp_marker >> V8_SmiTagShift;
+    DEBUG_PRINT("v8:  -> stub frame, tag %ld", delta_or_marker);
+    goto frame_done;
+  }
+
+  // We're not in a special frame, so we're probably in a JS frame;
+  // see
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L109-L109
+  // . Extract the JSFunction being executed
+  uintptr_t jsfunc = v8_verify_pointer(fp_function);
+  u16 jsfunc_tag   = v8_read_object_type(vi, jsfunc);
+  if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
+    DEBUG_PRINT(
+      "v8:  -> not a JSFunction: %x <= %x <= %x",
+      vi->type_JSFunction_first,
+      jsfunc_tag,
+      vi->type_JSFunction_last);
+    increment_metric(metricID_UnwindV8ErrBadJSFunc);
+    return ERR_V8_BAD_JS_FUNC;
+  }
+
+  // Read the SFI to identify the function.
+  sfi = v8_read_object_ptr(jsfunc + vi->off_JSFunction_shared);
+  if (v8_read_object_type(vi, sfi) != vi->type_SharedFunctionInfo) {
+    DEBUG_PRINT("v8:  -> no SharedFunctionInfo");
+    increment_metric(metricID_UnwindV8ErrBadJSFunc);
+    return ERR_V8_BAD_JS_FUNC;
+  }
+
+  // At this point we can at least report the SFI if other things fail.
+  frame_type = V8_FRAME_TYPE_NATIVE_SFI;
+
+  if (vi->leaptiering) {
+    // Under leaptiering the JSFunction no longer stores a Code pointer. Instead it
+    // holds a 32-bit JSDispatchHandle (at the same offset the Code pointer used to
+    // occupy) that indexes the per-IsolateGroup JSDispatchTable, whose entry encodes
+    // the current Code pointer.
+    if (!isolate_group) {
+      DEBUG_PRINT("v8: leaptiering: default isolate group not initialized");
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    u32 dispatch_handle = 0;
+    if (bpf_probe_read_user(
+          &dispatch_handle, sizeof(dispatch_handle), (void *)(jsfunc + vi->off_JSFunction_code))) {
+      DEBUG_PRINT("v8: leaptiering: failed to read dispatch handle, jsfunc = %lx", jsfunc);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The JSDispatchTable base pointer (SegmentedTable::base_) is the first field of
+    // the js_dispatch_table_ member embedded in the IsolateGroup.
+    uintptr_t table_base = 0;
+    if (bpf_probe_read_user(
+          &table_base,
+          sizeof(table_base),
+          (void *)(isolate_group + vi->js_dispatch_table_offset))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch table base, isolate group = %lx, offset = %x",
+        isolate_group,
+        vi->js_dispatch_table_offset);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    u32 index       = dispatch_handle >> V8_JSDISPATCH_HANDLE_SHIFT;
+    uintptr_t entry = table_base + (uintptr_t)index * V8_JSDISPATCH_ENTRY_SIZE;
+
+    uintptr_t encoded_word = 0;
+    if (bpf_probe_read_user(
+          &encoded_word,
+          sizeof(encoded_word),
+          (void *)(entry + V8_JSDISPATCH_ENCODED_WORD_OFFSET))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch entry, handle = %x, table base = %lx, entry = %lx",
+        dispatch_handle,
+        table_base,
+        entry);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The Code pointer occupies the high bits of the encoded word. V8 reuses the
+    // pointer's tag bit as the GC marking bit, so it may be 0 or 1 here; mask it
+    // off to get the untagged pointer (see JSDispatchEntry::GetCodePointer).
+    code = (encoded_word >> V8_JSDISPATCH_OBJECT_POINTER_SHIFT) & ~V8_HeapObjectTagMask;
+    DEBUG_PRINT(
+      "v8: leaptiering: handle = %x, entry = %lx, code = %lx", dispatch_handle, entry, code);
+  } else {
+    // Try to determine the Code object from JSFunction.
+    code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
+  }
+  u16 code_type = v8_read_object_type(vi, code);
+  if (code_type != vi->type_Code) {
+    // If the object type tag does not match, it might be some new functionality
+    // in the VM. Report the JSFunction for function name, but report no line
+    // number information. This allows to get a complete trace even if this one
+    // frame will have some missing information.
+    DEBUG_PRINT("v8: jsfunc = %lx, code = %lx, code_type = %x", jsfunc, code, code_type);
+    increment_metric(metricID_UnwindV8ErrBadCode);
+    goto frame_done;
+  }
+
+  // Read the Code blob type and size
+  if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void *)code)) {
+    DEBUG_PRINT("v8: failed to read code at %lx", code);
+    increment_metric(metricID_UnwindV8ErrBadCode);
+    goto frame_done;
+  }
+  // Make the verifier happy to access fpctx using the HA provided fp_* variables
+  if (
+    vi->off_Code_instruction_size > sizeof(scratch->code) - sizeof(u32) ||
+    vi->off_Code_flags > sizeof(scratch->code) - sizeof(u32)) {
+    return ERR_UNREACHABLE;
+  }
+
+  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
+  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+
+  // Detect interpreted frames. JSFunction::code() for interpreted functions
+  // returns the InterpreterEntryTrampoline builtin (CodeKind::BUILTIN), not
+  // CodeKind::INTERPRETED_FUNCTION, so we cannot identify them by CodeKind
+  // alone. Instead, check that the CodeKind is below BASELINE (ruling out
+  // baseline, maglev, and turbofan), and then test whether the bytecode offset
+  // slot holds a SMI -- which it does only for interpreted frames.
+  if (code_kind < vi->codekind_baseline) {
+    delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
+    if (delta_or_marker != 0) {
+      DEBUG_PRINT("v8:  -> interpreted, bytecode_delta %lx", delta_or_marker);
+      frame_type = V8_FRAME_TYPE_BYTECODE;
+      goto frame_done;
+    }
+  }
+
+  // Executing native (compiled) code. Determine the PC offset within the Code
+  // object's instruction area.
+  uintptr_t code_start;
+  if (vi->code_instructions_is_pointer) {
+    code_start = *(uintptr_t *)(scratch->code + vi->off_Code_instruction_start);
+  } else {
+    code_start = code + vi->off_Code_instruction_start;
+  }
+  u32 code_size = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
+
+  uintptr_t code_end = code_start + code_size;
+  DEBUG_PRINT("v8: func = %lx / sfi = %lx / code = %lx", jsfunc, sfi, code);
+  DEBUG_PRINT("v8:  -> instructions: %lx..%lx (%d)", code_start, code_end, code_size);
+
+  if (!(pc >= code_start && pc < code_end)) {
+    // PC is not inside the Code object's code area. This can happen due to:
+    // - on top frame when we are executing prologue/epilogue of called function,
+    //   in this case we can try to recover original PC from the stack
+    // - the JSFunction's Code object was changed due to On-Stack-Replacement or
+    //   or other deoptimization reasons. This case is currently not handled.
+
+    if (top && !state->return_address) {
+      u64 stk[3];
+      if (bpf_probe_read_user(stk, sizeof(stk), (void *)(sp - sizeof(stk)))) {
+        DEBUG_PRINT("v8:  --> bad stack pointer");
+        increment_metric(metricID_UnwindV8ErrBadFP);
+        return ERR_V8_BAD_FP;
+      }
+
+      s64 i;
+      for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
+        if (stk[i] >= code_start && stk[i] < code_end) {
+          break;
+        }
+      }
+      if (i < 0) {
+        // Not able to recover PC.
+        // TODO: investigate why this seems to happen occasionally
+        DEBUG_PRINT("v8:  --> outside code blob: stack top %lx %lx %lx", stk[2], stk[1], stk[0]);
+        goto frame_done;
+      }
+
+      // Recover the PC for the function which is in FP.
+      pc = stk[i];
+      DEBUG_PRINT("v8:  --> pc recovered from stack: %lx", pc);
+    } else {
+      DEBUG_PRINT("v8:  --> outside code blob (not topmost frame)");
+      goto frame_done;
+    }
+  }
+
+  // Code matches RIP, report it.
+  frame_type = V8_FRAME_TYPE_NATIVE_CODE;
+
+  // Send the CodeKind with the PC delta so the agent can validate its cached Code data
+  delta_or_marker = (pc - code_start) | ((u64)code_kind << V8_DATA_CODE_KIND_SHIFT);
+
+frame_done:;
+  ErrorCode error =
+    push_v8(state, trace, frame_type, sfi, delta_or_marker, code, state->return_address);
+  if (error) {
+    return error;
+  }
+
+  // Unwind with frame pointer
+  u64 *regs = (u64 *)&scratch->fp_ctx[V8_FP_CONTEXT_SIZE];
+  if (!unwinder_unwind_frame_pointer_regs(state, regs)) {
+    DEBUG_PRINT("v8:  --> bad frame pointer");
+    increment_metric(metricID_UnwindV8ErrBadFP);
+    return ERR_V8_BAD_FP;
+  }
+
+#if defined(__aarch64__)
+  // On aarch64 the frame pointer unwinding does not recover SP.
+  // Recover it for Entry frames which return to native code and
+  // for which the stack size is known.
+  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
+  if (frame_type == V8_FRAME_TYPE_MARKER && delta_or_marker == 1)
+    state->sp = fp + 20 * sizeof(u64);
+#endif
+
+  DEBUG_UNWIND_STATE(state);
+  increment_metric(metricID_UnwindV8Frames);
+  return ERR_OK;
+}
+
+// unwind_v8 is the entry point for tracing when invoked from the native tracer
+// or interpreter dispatcher. It does not reset the trace object and will append the
+// V8 stack frames to the trace object for the current CPU.
+static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
+{
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace = &record->trace;
+  u32 pid      = trace->pid;
+  DEBUG_PRINT("==== unwind_v8 %d ====", trace->num_frames);
+
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+  V8ProcInfo *vi  = bpf_map_lookup_elem(&v8_procs, &pid);
+  if (!vi) {
+    DEBUG_PRINT("v8: no V8ProcInfo for this pid");
+    error = ERR_V8_NO_PROC_INFO;
+    increment_metric(metricID_UnwindV8ErrNoProcInfo);
+    goto exit;
+  }
+  DEBUG_PRINT(
+    "v8 OFFSETS: marker: %x, func: %x, bytecode offset: %x",
+    vi->fp_marker,
+    vi->fp_function,
+    vi->fp_bytecode_offset);
+
+  increment_metric(metricID_UnwindV8Attempts);
+
+  unwinder_analyze_frame_pointer(&record->state);
+
+  // IsolateGroup::default_isolate_group_ is set in V8::Initialize(), so read it
+  // here instead of at attach time. It is zero until V8 has been initialized.
+  u64 isolate_group = 0;
+  if (
+    vi->leaptiering &&
+    bpf_probe_read_user(
+      &isolate_group, sizeof(isolate_group), (void *)vi->default_isolate_group_addr)) {
+    isolate_group = 0;
+  }
+
+  for (u64 i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
+    unwinder = PROG_UNWIND_STOP;
+
+    error = unwind_one_v8_frame(record, vi, isolate_group, i == 0);
+    if (error) {
+      break;
+    }
+
+    error = get_next_unwinder_after_native_frame(record, &unwinder);
+    if (error || unwinder != PROG_UNWIND_V8) {
+      break;
+    }
+  }
+
+exit:
+  record->state.unwind_error = error;
+  return tail_call(ctx, record, unwinder);
+}
+MULTI_USE_FUNC(unwind_v8)

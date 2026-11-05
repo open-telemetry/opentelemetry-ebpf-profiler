@@ -1,0 +1,14 @@
+# LICENSES/github.com/hashicorp/go-version contains an unmodified third-party
+# license snapshot, including upstream GitHub metadata that this repository
+# does not execute. These are the only files with these base names here; narrow
+# or remove these ignores if managed files with the same names are added.
+rules:
+  artipacked:
+    ignore:
+      - go-tests.yml
+  dependabot-cooldown:
+    ignore:
+      - dependabot.yml
+  excessive-permissions:
+    ignore:
+      - go-tests.yml

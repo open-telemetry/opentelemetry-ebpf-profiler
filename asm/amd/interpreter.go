@@ -1,0 +1,203 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
+
+import (
+	"fmt"
+	"io"
+	"math"
+
+	"golang.org/x/arch/x86/x86asm"
+
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
+)
+
+type CodeBlock struct {
+	Address expression.Expression
+	Code    []byte
+}
+
+type Interpreter struct {
+	Regs        Registers
+	code        []byte
+	codeAddress expression.Expression
+	pc          uint64
+}
+
+func NewInterpreterWithCode(code []byte) *Interpreter {
+	it := &Interpreter{code: code}
+	it.initRegs()
+	it.codeAddress = it.Regs.Get(RIP)
+	return it
+}
+
+func NewInterpreterWithCodeAt(code []byte, address expression.Expression) *Interpreter {
+	it := &Interpreter{code: code, codeAddress: address}
+	it.initRegs()
+	it.Regs.setX86asm(x86asm.RIP, address)
+	return it
+}
+
+func (i *Interpreter) PC() uint64 {
+	return i.pc
+}
+
+func (i *Interpreter) Loop() (x86asm.Inst, error) {
+	return i.LoopWithBreak(func(x86asm.Inst) bool { return false })
+}
+
+func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm.Inst, error) {
+	prev := x86asm.Inst{}
+	for {
+		op, err := i.Step()
+		if err != nil {
+			return prev, err
+		}
+		if breakLoop(op) {
+			return op, nil
+		}
+		prev = op
+	}
+}
+
+func (i *Interpreter) Step() (x86asm.Inst, error) {
+	if len(i.code) == 0 {
+		return x86asm.Inst{}, io.EOF
+	}
+	var inst x86asm.Inst
+	var err error
+	if ok, instLen := DecodeSkippable(i.code); ok {
+		inst = x86asm.Inst{Op: x86asm.NOP, Len: instLen}
+	} else {
+		inst, err = x86asm.Decode(i.code, 64)
+		if err != nil {
+			return inst, fmt.Errorf("at 0x%x : %v", i.pc, err)
+		}
+	}
+	i.pc += uint64(inst.Len)
+	i.code = i.code[inst.Len:]
+	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.codeAddress, expression.Imm(uint64(i.pc))))
+	switch inst.Op {
+	case x86asm.ADD, x86asm.SUB:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			left := i.Regs.GetX86(dst)
+			var right expression.Expression
+			switch src := inst.Args[1].(type) {
+			case x86asm.Imm:
+				right = expression.Imm(uint64(src))
+			case x86asm.Reg:
+				right = i.Regs.GetX86(src)
+			case x86asm.Mem:
+				right = expression.MemWithSegment(src.Segment, i.MemArg(src), inst.MemBytes)
+			}
+			if right != nil {
+				// SUB is ADD with the right operand negated (-1 * x). Multiply/Add fold
+				// the immediate case, so `sub reg, imm` cancels a later `+imm`. Note that
+				// symbolic cancellation doesn't happen, so X + (-1 * X) doesn't become 0.
+				if inst.Op == x86asm.SUB {
+					right = expression.Multiply(expression.Imm(^uint64(0)), right)
+				}
+				i.Regs.setX86asm(dst, expression.Add(left, right))
+			}
+		}
+	case x86asm.SHL:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			if src, imm := inst.Args[1].(x86asm.Imm); imm {
+				v := expression.Multiply(
+					i.Regs.GetX86(dst),
+					expression.Imm(uint64(math.Pow(2, float64(src)))),
+				)
+				i.Regs.setX86asm(dst, v)
+			}
+		}
+	case x86asm.MOV, x86asm.MOVZX, x86asm.MOVSXD, x86asm.MOVSX:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			switch src := inst.Args[1].(type) {
+			case x86asm.Imm:
+				i.Regs.setX86asm(dst, expression.Imm(uint64(src)))
+			case x86asm.Reg:
+				i.Regs.setX86asm(dst, i.Regs.GetX86(src))
+			case x86asm.Mem:
+				var v expression.Expression
+				if src.Base == x86asm.RIP {
+					// For RIP-relative, the address is RIP + displacement.
+					// RIP points to the already updated next instruction.
+					v = expression.Add(i.Regs.GetX86(x86asm.RIP), immFromDisp(src.Disp))
+				} else {
+					v = i.MemArg(src)
+				}
+				dataSizeBits := inst.DataSize
+
+				v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)
+				if inst.Op == x86asm.MOVSXD || inst.Op == x86asm.MOVSX {
+					v = expression.SignExtend(v, dataSizeBits)
+				} else {
+					v = expression.ZeroExtend(v, dataSizeBits)
+				}
+				i.Regs.setX86asm(dst, v)
+			}
+		}
+	case x86asm.XOR:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			if src, reg := inst.Args[1].(x86asm.Reg); reg {
+				if src == dst {
+					i.Regs.setX86asm(dst, expression.Imm(0))
+				}
+			}
+		}
+	case x86asm.AND:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			if src, imm := inst.Args[1].(x86asm.Imm); imm {
+				if src == 3 { // todo other cases
+					i.Regs.setX86asm(dst, expression.ZeroExtend(i.Regs.GetX86(dst), 2))
+				}
+			}
+		}
+	case x86asm.LEA:
+		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			if src, mem := inst.Args[1].(x86asm.Mem); mem {
+				v := i.MemArg(src)
+				i.Regs.setX86asm(dst, v)
+			}
+		}
+	default:
+	}
+	return inst, nil
+}
+
+// immFromDisp builds an immediate from an x86asm displacement. x86asm doesn't
+// sign-extend 32-bit displacements: they arrive zero-extended in
+// [0, math.MaxUint32], so recover the sign. A full 64-bit displacement (the
+// moffs64 absolute MOV form) is already the intended value and passes through.
+func immFromDisp(disp int64) expression.Expression {
+	if uint64(disp) <= math.MaxUint32 {
+		return expression.Imm(uint64(int32(disp)))
+	}
+	return expression.Imm(uint64(disp))
+}
+
+func (i *Interpreter) MemArg(src x86asm.Mem) expression.Expression {
+	vs := make([]expression.Expression, 0, 3)
+	if src.Disp != 0 {
+		vs = append(vs, immFromDisp(src.Disp))
+	}
+	if src.Base != 0 {
+		vs = append(vs, i.Regs.GetX86(src.Base))
+	}
+	if src.Index != 0 {
+		v := expression.Multiply(
+			i.Regs.GetX86(src.Index),
+			expression.Imm(uint64(src.Scale)),
+		)
+		vs = append(vs, v)
+	}
+	v := expression.Add(vs...)
+	return v
+}
+
+func (i *Interpreter) initRegs() {
+	for j := range len(i.Regs.regs) {
+		i.Regs.regs[j] = expression.Named(Reg(j).String())
+	}
+}

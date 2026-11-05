@@ -1,0 +1,186 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package times // import "go.opentelemetry.io/ebpf-profiler/times"
+
+import (
+	"context"
+	"math"
+	"runtime"
+	"sync/atomic"
+	"time"
+
+	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+)
+
+const (
+	// Number of timing samples to use when retrieving system boot time.
+	sampleSize = 5
+	// bootTimeUpdateThreshold is the minimum change in the measured boot time
+	// before the stored value is replaced. The true CLOCK_BOOTTIME to CLOCK_REALTIME
+	// offset only changes when the realtime clock is stepped, so any smaller
+	// difference between two measurements is syscall jitter. Applying it would
+	// shift later timestamps against earlier ones for no reason.
+	bootTimeUpdateThreshold = int64(time.Millisecond)
+	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
+	// gRPC auth error.
+	GRPCAuthErrorDelay = 10 * time.Minute
+	// GRPCConnectionTimeout defines the timeout for each established gRPC connection.
+	GRPCConnectionTimeout = 3 * time.Second
+	// GRPCOperationTimeout defines the timeout for each gRPC operation.
+	GRPCOperationTimeout = 5 * time.Second
+	// GRPCStartupBackoffTimeout defines the time between failed gRPC requests during startup
+	// phase.
+	GRPCStartupBackoffTimeout = 1 * time.Minute
+)
+
+// Compile time check for interface adherence
+var _ IntervalsAndTimers = (*Times)(nil)
+
+var (
+	// System boot time in nanoseconds since the epoch: a delta that, added
+	// to a CLOCK_BOOTTIME timestamp (KTime) converts it to time-since-epoch.
+	bootTimeUnixNano atomic.Int64
+)
+
+// Times hold all the intervals and timeouts that are used across the host agent in a central place
+// and comes with Getters to read them.
+type Times struct {
+	monitorInterval           time.Duration
+	tracePollInterval         time.Duration
+	reportInterval            time.Duration
+	grpcConnectionTimeout     time.Duration
+	grpcOperationTimeout      time.Duration
+	grpcStartupBackoffTimeout time.Duration
+	grpcAuthErrorDelay        time.Duration
+	pidCleanupInterval        time.Duration
+	probabilisticInterval     time.Duration
+	executableUnloadDelay     time.Duration
+}
+
+// IntervalsAndTimers is a meta-interface that exists purely to document its functionality.
+type IntervalsAndTimers interface {
+	// MonitorInterval defines the interval for PID event monitoring and metric collection.
+	MonitorInterval() time.Duration
+	// TracePollInterval defines the interval at which we read the trace perf event buffer.
+	TracePollInterval() time.Duration
+	// ReportInterval defines the interval at which collected data is sent to collection agent.
+	ReportInterval() time.Duration
+	// GRPCConnectionTimeout defines the timeout for each established gRPC connection.
+	GRPCConnectionTimeout() time.Duration
+	// GRPCOperationTimeout defines the timeout for each gRPC operation.
+	GRPCOperationTimeout() time.Duration
+	// GRPCStartupBackoffTime defines the time between failed gRPC requests during startup
+	// phase.
+	GRPCStartupBackoffTime() time.Duration
+	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
+	// gRPC auth error.
+	GRPCAuthErrorDelay() time.Duration
+	// PIDCleanupInterval defines the interval at which monitored PIDs are checked for
+	// liveness, and no longer living PIDs are cleaned up.
+	PIDCleanupInterval() time.Duration
+	// ProbabilisticInterval defines the interval for which probabilistic profiling will
+	// be enabled or disabled.
+	ProbabilisticInterval() time.Duration
+	// ExecutableUnloadDelay defines how long to wait after an executable is no longer used
+	// before unloading it from memory.
+	ExecutableUnloadDelay() time.Duration
+}
+
+func (t *Times) MonitorInterval() time.Duration { return t.monitorInterval }
+
+func (t *Times) TracePollInterval() time.Duration { return t.tracePollInterval }
+
+func (t *Times) ReportInterval() time.Duration { return t.reportInterval }
+
+func (t *Times) GRPCConnectionTimeout() time.Duration { return t.grpcConnectionTimeout }
+
+func (t *Times) GRPCOperationTimeout() time.Duration { return t.grpcOperationTimeout }
+
+func (t *Times) GRPCStartupBackoffTime() time.Duration { return t.grpcStartupBackoffTimeout }
+
+func (t *Times) GRPCAuthErrorDelay() time.Duration { return t.grpcAuthErrorDelay }
+
+func (t *Times) PIDCleanupInterval() time.Duration { return t.pidCleanupInterval }
+
+func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticInterval }
+
+func (t *Times) ExecutableUnloadDelay() time.Duration { return t.executableUnloadDelay }
+
+// StartRealtimeSync calculates the delta between CLOCK_BOOTTIME and the realtime
+// clock. Because CLOCK_BOOTTIME includes time spent in suspend, this delta only changes
+// when the realtime clock is stepped (NTP slewing does not affect the delta as it
+// applies uniformly to CLOCK_REALTIME and CLOCK_BOOTTIME). If syncInterval is greater
+// than zero, a goroutine repeats the calculation periodically to track such adjustments.
+func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
+	bootTimeUnixNano.Store(getBootTimeUnixNano())
+
+	if syncInterval > 0 {
+		periodiccaller.Start(ctx, syncInterval, func() {
+			measured := getBootTimeUnixNano()
+			delta := measured - bootTimeUnixNano.Load()
+			if delta < 0 {
+				delta = -delta
+			}
+			if delta >= bootTimeUpdateThreshold {
+				// Filter timing jitter due to syscall. See bootTimeUpdateThreshold.
+				bootTimeUnixNano.Store(measured)
+			}
+		})
+	}
+}
+
+// New returns a new Times instance.
+func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *Times {
+	return &Times{
+		grpcAuthErrorDelay:        GRPCAuthErrorDelay,
+		grpcConnectionTimeout:     GRPCConnectionTimeout,
+		grpcOperationTimeout:      GRPCOperationTimeout,
+		grpcStartupBackoffTimeout: GRPCStartupBackoffTimeout,
+		pidCleanupInterval:        5 * time.Minute,
+		tracePollInterval:         250 * time.Millisecond,
+		reportInterval:            reportInterval,
+		monitorInterval:           monitorInterval,
+		probabilisticInterval:     probabilisticInterval,
+		executableUnloadDelay:     5 * time.Minute,
+	}
+}
+
+// getBootTimeUnixNano returns system boot time in nanoseconds since the
+// epoch, temporarily locking the calling goroutine to its OS thread.
+func getBootTimeUnixNano() int64 {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	samples := make([]struct {
+		t1    time.Time
+		ktime int64
+		t2    time.Time
+	}, sampleSize)
+
+	for i := range samples {
+		// To avoid noise from scheduling / other delays, we perform a
+		// series of measurements and pick the one with the lowest delta.
+		samples[i].t1 = time.Now()
+		samples[i].ktime = int64(GetKTime())
+		samples[i].t2 = time.Now()
+	}
+
+	// Find the index with minimal time delta
+	md := int64(math.MaxInt64)
+	mi := 0
+	for i := range samples {
+		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta < md {
+			md = delta
+			mi = i
+		}
+	}
+	// The boot time clock was read somewhere between t1 and t2, so the midpoint
+	// is the unbiased estimate of the realtime instant it corresponds to.
+	// This should never be negative, as t1.UnixNano() >> ktime
+	return samples[mi].t1.UnixNano() + md/2 - samples[mi].ktime
+}

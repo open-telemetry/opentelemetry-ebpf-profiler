@@ -1,0 +1,27 @@
+name: 'Add code owners to a PR'
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] runs only trusted base-branch code to update PR metadata
+    types:
+      - opened
+      - synchronize
+      - ready_for_review
+
+permissions: read-all
+
+jobs:
+  add-owners-to-pr:
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-26.04
+    if: ${{ github.actor != 'dependabot[bot]' && github.repository_owner == 'open-telemetry' && github.event.pull_request.draft == false }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run add-codeowners-to-pr.sh
+        run: ./.github/workflows/scripts/add-codeowners-to-pr.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.number }}

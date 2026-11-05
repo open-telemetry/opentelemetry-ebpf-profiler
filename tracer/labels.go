@@ -1,0 +1,141 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
+
+import (
+	"sync/atomic"
+	"unicode/utf8"
+	"unsafe"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/support"
+)
+
+// customLabelValidator validates custom label keys and values extracted from
+// eBPF and tracks how many are dropped due to invalid UTF-8. The zero value is
+// ready to use. Methods take pointer receivers (atomic ops require an
+// addressable counter), so embed as a value field on a struct held by pointer.
+type customLabelValidator struct {
+	droppedInvalidName  atomic.Int64
+	droppedInvalidValue atomic.Int64
+}
+
+// validateKey enforces strict UTF-8 validity on a custom label key. Any invalid
+// byte (or an empty key) returns ok=false and bumps the drop counter, signaling
+// the caller to drop the label. A corrupted key would silently group unrelated
+// samples under a garbage name, so strictness is intentional here. The returned
+// slice aliases buf; copy or intern before the buffer is reused.
+func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
+	b := stringutil.CString(buf)
+	if len(b) == 0 || !utf8.Valid(b) {
+		v.droppedInvalidName.Add(1)
+		return nil, false
+	}
+	return b, true
+}
+
+// validateValue is lenient on a custom label value: fixed-width eBPF buffers
+// can clip a multi-byte rune in half, so on invalid trailing bytes we salvage
+// the longest valid UTF-8 prefix rather than discard the whole label. ok=false
+// (and bumping the drop counter) fires only when the salvage is empty, i.e.
+// the input was non-empty garbage rather than mid-rune truncation. The returned
+// slice aliases buf; copy or intern before the buffer is reused.
+func (v *customLabelValidator) validateValue(buf []byte) ([]byte, bool) {
+	b := stringutil.CString(buf)
+	pos := len(b)
+	if !utf8.Valid(b) {
+		// Walk forward; stop at the first invalid byte. This recovers the entire
+		// valid prefix of a mid-rune truncation in one pass.
+		pos = 0
+		for pos < len(b) {
+			r, size := utf8.DecodeRune(b[pos:])
+			if r == utf8.RuneError && size == 1 {
+				break
+			}
+			pos += size
+		}
+		if pos == 0 {
+			v.droppedInvalidValue.Add(1)
+			return nil, false
+		}
+	}
+	return b[:pos], true
+}
+
+// decode adds Go labels to labels, taking precedence on duplicate keys.
+func (v *customLabelValidator) decode(data []byte, labels map[libpf.String]libpf.String) map[libpf.String]libpf.String {
+	goLabels := unsafe.Slice(
+		(*support.GolangLabel)(unsafe.Pointer(unsafe.SliceData(data))),
+		len(data)/support.Sizeof_GolangLabel)
+	if labels == nil {
+		labels = make(map[libpf.String]libpf.String, len(goLabels))
+	}
+	for i := range goLabels {
+		keyBytes, ok := v.validateKey(goLabels[i].Key[:])
+		if !ok {
+			log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+			continue
+		}
+		valBytes, ok := v.validateValue(goLabels[i].Val[:])
+		if !ok {
+			log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", pfunsafe.ToString(keyBytes))
+			continue
+		}
+		labels[libpf.Intern(pfunsafe.ToString(keyBytes))] = libpf.Intern(pfunsafe.ToString(valBytes))
+	}
+	return labels
+}
+
+// getAndResetMetrics reports and resets the counters of custom labels dropped
+// due to an invalid name or value since the previous call.
+func (v *customLabelValidator) getAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDGoLabelsDroppedInvalidName,
+			Value: metrics.MetricValue(v.droppedInvalidName.Swap(0)),
+		},
+		{
+			ID:    metrics.IDGoLabelsDroppedInvalidValue,
+			Value: metrics.MetricValue(v.droppedInvalidValue.Swap(0)),
+		},
+	}
+}
+
+// threadLabelResolver decodes thread-context label payloads and counts what it drops.
+type threadLabelResolver struct {
+	// Samples whose thread-context labels were discarded for want of a decoder.
+	labelsNoDecoder atomic.Int64
+	// Entries the schema could not resolve, plus a truncated tail.
+	droppedEntriesUndecodable atomic.Int64
+}
+
+func (r *threadLabelResolver) getAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextLabelsNoDecoder,
+			Value: metrics.MetricValue(r.labelsNoDecoder.Swap(0)),
+		},
+		{
+			ID:    metrics.IDThreadContextDroppedEntriesUndecodable,
+			Value: metrics.MetricValue(r.droppedEntriesUndecodable.Swap(0)),
+		},
+	}
+}
+
+// resolve decodes an attribute payload against the schema its process published.
+func (r *threadLabelResolver) resolve(payload []byte,
+	decoder libpf.ThreadLabelDecoder) libpf.ThreadLabels {
+	// Key indices mean nothing without the published schema.
+	if decoder == nil {
+		r.labelsNoDecoder.Add(1)
+		return nil
+	}
+	labels, dropped := decoder.DecodeLabels(payload)
+	r.droppedEntriesUndecodable.Add(int64(dropped))
+	return labels
+}

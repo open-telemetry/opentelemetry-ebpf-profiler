@@ -1,0 +1,424 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
+
+import (
+	"iter"
+	"maps"
+	"path/filepath"
+	"slices"
+	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/otel/attribute"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+)
+
+const (
+	ExecutableCacheLifetime = 1 * time.Hour
+)
+
+// Generate generates a pdata request out of internal profiles data, to be
+// exported. The collectionStartTime and collectionEndTime define the time window
+// during which the profiler was actively collecting samples.
+func (p *Pdata) Generate(tree samples.TraceEventsTree,
+	agentName, agentVersion string,
+	collectionStartTime, collectionEndTime time.Time,
+) (pprofile.Profiles, error) {
+	profiles := pprofile.NewProfiles()
+	dic := profiles.Dictionary()
+
+	// Find oldest sample timestamp across all resources to handle buffered samples.
+	adjustedStartTime := collectionStartTime
+	for _, resourceToEvents := range tree {
+		for _, traceEvents := range resourceToEvents.Events {
+			for _, traceInfo := range traceEvents {
+				for _, ts := range traceInfo.Timestamps {
+					sampleTime := time.Unix(0, int64(ts))
+					if sampleTime.Before(adjustedStartTime) {
+						adjustedStartTime = sampleTime
+					}
+				}
+			}
+		}
+	}
+	if adjustedStartTime.Before(collectionStartTime) {
+		log.Debugf("Adjusted profile start time backward by %v to include oldest sample",
+			collectionStartTime.Sub(adjustedStartTime))
+	}
+	collectionStartTime = adjustedStartTime
+
+	// Temporary helpers that will build the various tables in ProfilesDictionary.
+	stringSet := make(orderedset.OrderedSet[string], 64)
+	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
+	mappingSet := make(orderedset.OrderedSet[libpf.FrameMapping], 64)
+	stackSet := make(orderedset.OrderedSet[stackInfo], 64)
+	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
+	linkSet := make(orderedset.OrderedSet[linkInfo], 64)
+
+	// By specification, the first element should be empty.
+	stringSet.Add("")
+	funcSet.Add(funcInfo{})
+	mappingSet.Add(libpf.FrameMapping{})
+	stackSet.Add(stackInfo{})
+	locationSet.Add(locationInfo{})
+	linkSet.Add(linkInfo{})
+
+	dic.LinkTable().AppendEmpty()
+	dic.MappingTable().AppendEmpty()
+	dic.StackTable().AppendEmpty()
+	dic.AttributeTable().AppendEmpty()
+	dic.LocationTable().AppendEmpty()
+
+	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
+
+	for resource, toEvents := range tree {
+		if len(toEvents.Events) == 0 {
+			continue
+		}
+
+		rp := profiles.ResourceProfiles().AppendEmpty()
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars,
+			toEvents.ResourceAttrs)
+		rp.SetSchemaUrl(semconv.SchemaURL)
+
+		sp := rp.ScopeProfiles().AppendEmpty()
+		sp.Scope().SetName(agentName)
+		sp.Scope().SetVersion(agentVersion)
+		sp.SetSchemaUrl(semconv.SchemaURL)
+
+		for profileType, events := range toEvents.Events {
+			if len(events) == 0 || len(profileType.SampleTypes) == 0 {
+				// Do not append empty profiles.
+				continue
+			}
+
+			// Every emitted profile shares the same event and sample structure.
+			// With more than one sample type, materialize one key order so cloned
+			// samples stay aligned while each profile selects its column from the
+			// flat event-major Values array. A single profile can iterate directly.
+			valueWidth := len(profileType.SampleTypes)
+			var keys []samples.SampleKey
+			order := maps.Keys(events)
+			if valueWidth > 1 {
+				keys = slices.Collect(order)
+				order = slices.Values(keys)
+			}
+
+			prof := sp.Profiles().AppendEmpty()
+			if err := p.setProfile(dic, attrMgr,
+				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
+				profileType, profileType.SampleTypes[0], 0, valueWidth,
+				events, order, prof, collectionStartTime, collectionEndTime); err != nil {
+				return profiles, err
+			}
+
+			// CopyTo deep-copies the sample into the additional profile because pdata
+			// samples cannot be shared between profiles. This reuses the resolved stack,
+			// links, timestamps, and attributes without repeating frame processing; the
+			// copied value slice's capacity is reused below for the selected value column.
+			for i := 1; i < valueWidth; i++ {
+				sampleType := profileType.SampleTypes[i]
+				dp := sp.Profiles().AppendEmpty()
+				p.initProfileMeta(stringSet, dp,
+					sampleType,
+					collectionStartTime, collectionEndTime)
+				src := prof.Samples()
+				for j, k := range keys {
+					s := dp.Samples().AppendEmpty()
+					src.At(j).CopyTo(s)
+					if profileType.ReportValues {
+						setSampleValues(s, events[k].Values, i, valueWidth)
+					}
+				}
+			}
+		}
+	}
+
+	// Populate the ProfilesDictionary tables.
+	funcTable := dic.FunctionTable()
+	funcTable.EnsureCapacity(len(funcSet))
+	for range funcSet {
+		funcTable.AppendEmpty()
+	}
+	for v, idx := range funcSet {
+		f := funcTable.At(int(idx))
+		f.SetNameStrindex(v.nameIdx)
+		f.SetFilenameStrindex(v.fileNameIdx)
+	}
+
+	stringTable := dic.StringTable()
+	stringTable.EnsureCapacity(len(stringSet))
+	for _, val := range stringSet.ToSlice() {
+		stringTable.Append(val)
+	}
+
+	return profiles, nil
+}
+
+// initProfileMeta sets a profile's metadata: the period and sample type from
+// sampleType, and the collection window.
+func (p *Pdata) initProfileMeta(
+	stringSet orderedset.OrderedSet[string],
+	profile pprofile.Profile,
+	sampleType samples.SampleType,
+	collectionStartTime, collectionEndTime time.Time,
+) {
+	if period := sampleType.Period; period != nil {
+		profile.SetPeriod(period.Value)
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(stringSet.Add(period.Type))
+		pt.SetUnitStrindex(stringSet.Add(period.Unit))
+	}
+	st := profile.SampleType()
+	st.SetTypeStrindex(stringSet.Add(sampleType.Type))
+	st.SetUnitStrindex(stringSet.Add(sampleType.Unit))
+	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
+	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
+}
+
+// setProfile sets the data an OTLP profile with all collected samples up to
+// this moment.
+func (p *Pdata) setProfile(
+	dic pprofile.ProfilesDictionary,
+	attrMgr *samples.AttrTableManager,
+	stringSet orderedset.OrderedSet[string],
+	funcSet orderedset.OrderedSet[funcInfo],
+	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
+	stackSet orderedset.OrderedSet[stackInfo],
+	locationSet orderedset.OrderedSet[locationInfo],
+	linkSet orderedset.OrderedSet[linkInfo],
+	profileType *samples.TypeMetadata,
+	sampleType samples.SampleType,
+	valueIndex, valueWidth int,
+	events samples.SampleToEvents,
+	// order is the iteration order over events; callers emitting more than one
+	// profile pass a fixed order so their samples stay index-aligned.
+	order iter.Seq[samples.SampleKey],
+	profile pprofile.Profile,
+	collectionStartTime, collectionEndTime time.Time,
+) error {
+	p.initProfileMeta(stringSet, profile,
+		sampleType,
+		collectionStartTime, collectionEndTime)
+
+	for sampleKey := range order {
+		traceInfo := events[sampleKey]
+		sample := profile.Samples().AppendEmpty()
+
+		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
+
+		if profileType.ReportValues {
+			setSampleValues(sample, traceInfo.Values, valueIndex, valueWidth)
+		}
+
+		if sampleKey.SpanID != libpf.InvalidSpanID &&
+			sampleKey.TraceID != libpf.InvalidTraceID {
+			link, ok := linkSet.AddWithCheck(linkInfo{
+				traceID: sampleKey.TraceID,
+				spanID:  sampleKey.SpanID,
+			})
+			if !ok {
+				l := dic.LinkTable().AppendEmpty()
+				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
+				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
+			}
+			sample.SetLinkIndex(link)
+		}
+
+		locationIndices := make([]int32, 0, len(traceInfo.Frames))
+		// Walk every frame of the trace.
+		for _, uniqueFrame := range traceInfo.Frames {
+			frame := uniqueFrame.Value()
+			locInfo := locationInfo{
+				address:   uint64(frame.AddressOrLineno),
+				frameType: frame.Type,
+			}
+
+			index, ok := mappingSet.AddWithCheck(frame.Mapping)
+			if !ok {
+				m := frame.Mapping.Value()
+				mf := m.File.Value()
+
+				mapping := dic.MappingTable().AppendEmpty()
+				mapping.SetMemoryStart(uint64(m.Start))
+				mapping.SetMemoryLimit(uint64(m.End))
+				mapping.SetFileOffset(m.FileOffset)
+				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
+
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDGNUKey,
+					mf.GnuBuildID)
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDGoKey,
+					mf.GoBuildID)
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDHtlhashKey,
+					mf.FileID.StringNoQuotes())
+			}
+			locInfo.mappingIndex = index
+
+			if frame.FunctionName != libpf.NullString || frame.SourceFile != libpf.NullString {
+				// Store interpreted frame information as a Line message
+				locInfo.hasLine = true
+				locInfo.lineNumber = int64(frame.SourceLine)
+				locInfo.columnNumber = int64(frame.SourceColumn)
+				fi := funcInfo{
+					nameIdx:     stringSet.Add(frame.FunctionName.String()),
+					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
+				}
+				locInfo.functionIndex = funcSet.Add(fi)
+			}
+
+			idx, exists := locationSet.AddWithCheck(locInfo)
+			if !exists {
+				// Add a new Location to the dictionary
+				loc := dic.LocationTable().AppendEmpty()
+				loc.SetAddress(locInfo.address)
+				loc.SetMappingIndex(locInfo.mappingIndex)
+				if locInfo.hasLine {
+					line := loc.Lines().AppendEmpty()
+					line.SetLine(locInfo.lineNumber)
+					line.SetColumn(locInfo.columnNumber)
+					line.SetFunctionIndex(locInfo.functionIndex)
+				}
+				attrMgr.AppendOptionalString(loc.AttributeIndices(),
+					semconv.ProfileFrameTypeKey, locInfo.frameType.String())
+			}
+			locationIndices = append(locationIndices, idx)
+		} // End per-frame processing
+
+		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
+			locationIndicesHash: hashLocationIndices(locationIndices),
+		})
+		if !exists {
+			// Add a new Stack to the dictionary
+			stack := dic.StackTable().AppendEmpty()
+			for _, locIdx := range locationIndices {
+				stack.LocationIndices().Append(locIdx)
+			}
+		}
+		sample.SetStackIndex(stackIdx)
+
+		for key, value := range traceInfo.Labels {
+			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
+			// reached an agreement, use the actual OTel SemConv attribute.
+			attrMgr.AppendOptionalString(
+				sample.AttributeIndices(),
+				attribute.Key("process.context.label."+key.String()),
+				value.String())
+		}
+
+		attrMgr.AppendOptionalString(sample.AttributeIndices(),
+			semconv.ThreadNameKey, sampleKey.Comm.String())
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.ThreadIDKey, sampleKey.TID)
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+
+		if p.ExtraSampleAttrProd != nil {
+			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)
+			sample.AttributeIndices().Append(extra...)
+		}
+	} // End sample processing
+
+	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
+
+	return nil
+}
+
+// setSampleValues replaces a sample's values with the value at index from
+// each width-sized event group.
+func setSampleValues(sample pprofile.Sample, values []int64, index, width int) {
+	dst := sample.Values()
+	if width == 1 {
+		dst.FromRaw(values)
+		return
+	}
+	dst.FromRaw(nil)
+	for i := index; i < len(values); i += width {
+		dst.Append(values[i])
+	}
+}
+
+func setResourceAttributes(dst pcommon.Map, resourceKey samples.ResourceKey,
+	envVars map[libpf.String]libpf.String, resourceAttrs attribute.Set) {
+	// container.id, process.pid, process.executable.{path,name}
+	dst.EnsureCapacity(resourceAttrs.Len() + len(envVars) + 4)
+	for iter := resourceAttrs.Iter(); iter.Next(); {
+		kv := iter.Attribute()
+		setAttributeValue(dst.PutEmpty(string(kv.Key)), kv.Value)
+	}
+	if resourceKey.ContainerID != libpf.NullString {
+		dst.PutStr(string(semconv.ContainerIDKey), resourceKey.ContainerID.String())
+	}
+
+	dst.PutInt(string(semconv.ProcessPIDKey), resourceKey.PID)
+
+	if resourceKey.ExecutablePath != libpf.NullString {
+		dst.PutStr(string(semconv.ProcessExecutablePathKey), resourceKey.ExecutablePath.String())
+		_, exeName := filepath.Split(resourceKey.ExecutablePath.String())
+		dst.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
+	}
+
+	for key, value := range envVars {
+		dst.PutStr("process.environment_variable."+key.String(), value.String())
+	}
+}
+
+// setAttributeValue writes src into dst. dst is already inserted in its
+// container, so a case that writes nothing yields an empty pcommon value.
+func setAttributeValue(dst pcommon.Value, src attribute.Value) {
+	switch src.Type() {
+	case attribute.BOOL:
+		dst.SetBool(src.AsBool())
+	case attribute.INT64:
+		dst.SetInt(src.AsInt64())
+	case attribute.FLOAT64:
+		dst.SetDouble(src.AsFloat64())
+	case attribute.STRING:
+		dst.SetStr(src.AsString())
+	case attribute.BYTESLICE:
+		dst.SetEmptyBytes().FromRaw(src.AsByteSlice())
+	case attribute.BOOLSLICE:
+		setSliceValue(dst, src.AsBoolSlice(), pcommon.Value.SetBool)
+	case attribute.INT64SLICE:
+		setSliceValue(dst, src.AsInt64Slice(), pcommon.Value.SetInt)
+	case attribute.FLOAT64SLICE:
+		setSliceValue(dst, src.AsFloat64Slice(), pcommon.Value.SetDouble)
+	case attribute.STRINGSLICE:
+		setSliceValue(dst, src.AsStringSlice(), pcommon.Value.SetStr)
+	case attribute.SLICE:
+		setSliceValue(dst, src.AsSlice(), setAttributeValue)
+	case attribute.MAP:
+		kvs := src.AsMap()
+		m := dst.SetEmptyMap()
+		m.EnsureCapacity(len(kvs))
+		for _, kv := range kvs {
+			setAttributeValue(m.PutEmpty(string(kv.Key)), kv.Value)
+		}
+	case attribute.EMPTY:
+		// A published empty value, and dst already is one.
+	default:
+		// Reachable only if otel adds an attribute.Type.
+		log.Warnf("setAttributeValue: no pcommon representation for %s, "+
+			"emitting empty", src.Type())
+	}
+}
+
+func setSliceValue[T any](dst pcommon.Value, values []T, set func(pcommon.Value, T)) {
+	sl := dst.SetEmptySlice()
+	sl.EnsureCapacity(len(values))
+	for _, v := range values {
+		set(sl.AppendEmpty(), v)
+	}
+}

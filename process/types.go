@@ -1,0 +1,195 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// This file defines the interface to access a Process state.
+
+package process // import "go.opentelemetry.io/ebpf-profiler/process"
+
+import (
+	"debug/elf"
+	"io"
+	"io/fs"
+	"strings"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/util"
+)
+
+// VdsoPathName is the path to use for VDSO mappings.
+const VdsoPathName = "linux-vdso.1.so"
+
+// vdsoInode is the synthesized inode number for VDSO mappings.
+const vdsoInode = 50
+
+// RawMapping represents a memory mapping parsed from /proc/pid/maps or a coredump.
+//
+// WARNING: When produced by the systemProcess IterateMappings implementation,
+// Path may reference an internal scanner buffer that is recycled after the
+// iteration completes. Callers that need to store the mapping beyond the
+// callback scope must intern the Path via libpf.Intern to detach it from the
+// buffer and deduplicate identical paths across mappings.
+type RawMapping struct {
+	// Vaddr is the virtual memory start for this mapping.
+	Vaddr uint64
+	// Length is the length of the mapping.
+	Length uint64
+	// Flags contains the mapping flags and permissions.
+	Flags elf.ProgFlag
+	// FileOffset contains for file backed mappings the offset from the file start.
+	FileOffset uint64
+	// Device holds the device ID where the file is located.
+	Device uint64
+	// Inode holds the mapped file's inode number.
+	Inode uint64
+	// Path is the file path for file-backed and special mappings.
+	// When received from IterateMappings, this may point into an internal
+	// buffer. The caller must use libpf.Intern to detach it before storing
+	// the mapping long-term.
+	Path string
+}
+
+func (m *RawMapping) IsExecutable() bool {
+	return m.Flags&elf.PF_X == elf.PF_X
+}
+
+func (m *RawMapping) IsAnonymous() bool {
+	return !m.IsFileBacked() && !m.IsVDSO()
+}
+
+func (m *RawMapping) IsFileBacked() bool {
+	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD() && !m.IsPrctlNamed()
+}
+
+// IsPrctlNamed returns true if the mapping was named via prctl(PR_SET_VMA),
+// which gives anonymous mappings a path like "[anon:name]". These are still
+// anonymous memory, not file-backed.
+func (m *RawMapping) IsPrctlNamed() bool {
+	return strings.HasPrefix(m.Path, "[anon:")
+}
+
+func (m *RawMapping) IsMemFD() bool {
+	return strings.HasPrefix(m.Path, "/memfd:")
+}
+
+func (m *RawMapping) IsVDSO() bool {
+	return m.Path == VdsoPathName
+}
+
+func (m *RawMapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
+	return util.OnDiskFileIdentifier{
+		DeviceID: m.Device,
+		InodeNum: m.Inode,
+	}
+}
+
+// ThreadInfo contains the information about a thread CPU state needed for unwinding.
+type ThreadInfo struct {
+	// TPBase contains the Thread Pointer Base value.
+	TPBase uint64
+	// GPRegs contains the CPU state (registers) for the thread.
+	GPRegs []byte
+	// LWP is the Light Weight Process ID (thread ID).
+	LWP uint32
+}
+
+// MachineData contains machine specific information about the process.
+type MachineData struct {
+	// Machine is the Process Machine type.
+	Machine elf.Machine
+	// CodePACMask contains the PAC mask for code pointers. ARM64 specific, otherwise 0.
+	CodePACMask uint64
+	// DataPACMask contains the PAC mask for data pointers. ARM64 specific, otherwise 0.
+	DataPACMask uint64
+}
+
+// ProcessMeta contains metadata about a tracked process.
+type Meta struct {
+	// executable path retrieved from /proc/PID/exe
+	Executable libpf.String
+	// process env vars from /proc/PID/environ that may be reported
+	EnvVariables map[libpf.String]libpf.String
+	// process env vars captured for the profiler's own use. Overlaps
+	// EnvVariables when the user also asked to report one of them.
+	InternalEnvVariables map[libpf.String]libpf.String
+	// container ID retrieved from /proc/PID/cgroup
+	ContainerID libpf.String
+
+	// ExtraMeta holds arbitrary key-value pairs populated by a MetaEnricher.
+	// It is nil unless an enricher is configured and explicitly sets values.
+	// Must be treated as read-only after enricher logic has executed: access is
+	// not synchronized, so concurrent writes will trigger data races.
+	ExtraMeta map[libpf.String]string
+}
+
+// Process is the interface to inspect ELF coredump/process.
+// The current implementations do not allow concurrent access to this interface
+// from different goroutines. As an exception the fs.FS and the returned
+// GetRemoteMemory object are safe for concurrent use.
+type Process interface {
+	// PID returns the process identifier.
+	PID() libpf.PID
+
+	// GetMachineData reads machine specific data from the target process.
+	GetMachineData() MachineData
+
+	// GetProcessMeta returns process specific metadata.
+	GetProcessMeta([]MetaEnricher) Meta
+
+	// GetExe returns the executable path of the process.
+	GetExe() (libpf.String, error)
+
+	// IterateMappings parses process memory mappings and calls the
+	// callback for each mapping. The RawMapping's Path field may reference
+	// an internal buffer that is recycled after the iteration completes;
+	// callers must use libpf.Intern to detach the Path before storing the
+	// mapping beyond the callback scope. Returning false from the callback
+	// stops iteration and causes ErrCallbackStopped to be returned.
+	IterateMappings(callback func(m RawMapping) bool) (uint32, error)
+
+	// GetThreads reads the process thread states.
+	GetThreads() ([]ThreadInfo, error)
+
+	// GetRemoteMemory returns a remote memory reader accessing the target process.
+	GetRemoteMemory() remotememory.RemoteMemory
+
+	// OpenMappingFile returns the backing file of the mapping. The returned
+	// fs.File is of the same kind as those returned by Open (in particular it
+	// implements io.ReaderAt), but it may also be able to access the file
+	// even if it was deleted or replaced on disk after being mapped.
+	OpenMappingFile(*RawMapping) (fs.File, error)
+
+	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
+	// or zero if an error occurs or mapping file is not accessible via filesystem.
+	GetMappingFileLastModified(*RawMapping) int64
+
+	// CalculateMappingFileID calculates FileID of the backing file.
+	CalculateMappingFileID(*RawMapping) (libpf.FileID, error)
+
+	io.Closer
+
+	// FS opens files in the process's file system namespace. As required by
+	// fs.FS, names are unrooted (e.g. "usr/lib/libc.so.6" for the absolute
+	// path "/usr/lib/libc.so.6"). Callers that have a RawMapping should use
+	// OpenMappingFile instead, which can open the backing file even if it was
+	// deleted or replaced on disk.
+	fs.FS
+}
+
+// MetaEnricher is called once per process when it is first observed.
+// Implementations may read from /proc or any other source and store arbitrary
+// key-value pairs in meta.ExtraMeta. The call happens while the process is still
+// alive, so short-lived process data is reliably captured.
+type MetaEnricher interface {
+	// EnrichMeta is called with the process's /proc/<pid>/ base path (including
+	// trailing slash) and a pointer to the Meta to populate.
+	EnrichMeta(string, *Meta)
+}
+
+// MetaEnricherFunc is an adapter to allow use of plain functions as a
+// MetaEnricher.
+type MetaEnricherFunc func(string, *Meta)
+
+func (f MetaEnricherFunc) EnrichMeta(procBase string, meta *Meta) {
+	f(procBase, meta)
+}

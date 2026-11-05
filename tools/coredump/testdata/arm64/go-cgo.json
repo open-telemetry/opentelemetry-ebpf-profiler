@@ -1,0 +1,97 @@
+{
+  "coredump-ref": "693682699a5a6dfa1f00c1b7a7ccfd9c668ed9511d8d478eace45eaaf0b8b521",
+  "threads": [
+    {
+      "lwp": 137936,
+      "frames": [
+        "libc.so.6+0x8ef68",
+        "libc.so.6+0x82617",
+        "libc.so.6+0xbe25b",
+        "libc.so.6+0xc887f",
+        "libc.so.6+0xd8fcf",
+        "runtime.asmcgocall+0 in /usr/local/go/src/runtime/asm_arm64.s:1050",
+        "runtime.cgocall+0 in /usr/local/go/src/runtime/cgocall.go:185",
+        "main._Cfunc_c_outer+0 in _cgo_gotypes.go:49",
+        "main.goCallC+0 in /home/tintin/ebpf/tools/coredump/testsources/go/cgo/main.go:27",
+        "main.goMiddle+0 in /home/tintin/ebpf/tools/coredump/testsources/go/cgo/main.go:32",
+        "main.goOuter+0 in /home/tintin/ebpf/tools/coredump/testsources/go/cgo/main.go:37",
+        "main.main+0 in /home/tintin/ebpf/tools/coredump/testsources/go/cgo/main.go:41",
+        "runtime.main+0 in /usr/local/go/src/internal/runtime/atomic/types.go:194",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 137942,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.templateThread+0 in /usr/local/go/src/runtime/lock_spinbit.go:152",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    },
+    {
+      "lwp": 137941,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 137940,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 137939,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3283",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4128",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 137938,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notetsleep_internal+0 in /usr/local/go/src/runtime/lock_futex.go:90",
+        "runtime.notetsleep+0 in /usr/local/go/src/runtime/lock_futex.go:112",
+        "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6270",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "fb192763ab60dea678622e189b853e81cac74e9631cb550684f6aa4f6d5876a6",
+      "local-path": "/home/tintin/ebpf/test-cgo"
+    },
+    {
+      "ref": "53ccedf551e22a6935fab85293ed22590b3c0d0d413c6f73878eb3acc7b08eff",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "52a8dc3663b1068c45fb325ad32134a11764973785eee99cb2ee84aa62b7b0f1",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    }
+  ]
+}

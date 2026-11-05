@@ -1,0 +1,393 @@
+// This file contains the code and map definitions for the Python tracer
+
+#include "bpfdefs.h"
+#include "errors.h"
+#include "native_stack_trace.h"
+#include "tracemgmt.h"
+#include "tsd.h"
+#include "types.h"
+
+// Number of loop iterations in unwind_python. Each iteration handles either
+// a Python or a native frame, so the name follows the *_FRAMES_PER_PROGRAM
+// convention of the other tracers even though it covers both. 10 fits the
+// 5.x / 6.0-6.5 verifier; the host agent bumps it to 15 on 6.6+.
+BPF_RODATA_VAR(u32, python_frames_per_program, 10)
+
+// Forward declaration to avoid warnings like
+// "declaration of 'struct pt_regs' will not be visible outside of this function [-Wvisibility]".
+struct pt_regs;
+
+// Map from Python process IDs to a structure containing addresses of variables
+// we require in order to build the stack trace
+struct py_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u32);
+  __type(value, PyProcInfo);
+  __uint(max_entries, 1024);
+} py_procs SEC(".maps");
+
+// Record a Python frame
+static EBPF_INLINE ErrorCode push_python(UnwindState *state, Trace *trace, u64 file, u64 line)
+{
+  u64 *data = push_frame(state, trace, FRAME_MARKER_PYTHON, FRAME_FLAG_PID_SPECIFIC, 0, 2);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = file;
+  data[1] = line;
+  return ERR_OK;
+}
+
+static EBPF_INLINE u64 py_encode_lineno(u32 object_id, u32 f_lasti)
+{
+  return (object_id | (((u64)f_lasti) << 32));
+}
+
+static EBPF_INLINE ErrorCode process_python_frame(
+  PerCPURecord *record,
+  const PyProcInfo *pyinfo,
+  void **py_frameobjectptr,
+  bool *continue_with_next)
+{
+  Trace *trace               = &record->trace;
+  const void *py_frameobject = *py_frameobjectptr;
+  u64 lineno = FUNC_TYPE_UNKNOWN, file_id = UNKNOWN_FILE;
+  u32 codeobject_id;
+
+  *continue_with_next = false;
+
+  // Vars used in extracting data from the Python interpreter
+  PythonUnwindScratchSpace *pss = &record->pythonUnwindScratch;
+
+  // Make verifier happy for PyFrameObject offsets
+  if (
+    pyinfo->PyFrameObject_f_code > sizeof(pss->frame) - sizeof(void *) ||
+    pyinfo->PyFrameObject_f_back > sizeof(pss->frame) - sizeof(void *) ||
+    pyinfo->PyFrameObject_f_lasti > sizeof(pss->frame) - sizeof(u64) ||
+    pyinfo->PyFrameObject_entry_member > sizeof(pss->frame) - sizeof(u8)) {
+    return ERR_UNREACHABLE;
+  }
+
+  // Read PyFrameObject
+  if (bpf_probe_read_user(pss->frame, sizeof(pss->frame), py_frameobject)) {
+    DEBUG_PRINT("Failed to read PyFrameObject 0x%lx", (u64)py_frameobject);
+    increment_metric(metricID_UnwindPythonErrBadFrameCodeObjectAddr);
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+
+  void *py_codeobject = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_code]);
+  *py_frameobjectptr  = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
+
+  // Python 3.14 stores f_executable as a _PyStackRef, whose low bit can mark
+  // references to immortal objects. Earlier versions use aligned PyObject pointers,
+  // so clearing the tag is a no-op for them.
+  // https://github.com/python/cpython/commit/b2afe2aae487ebf89897e22c01d9095944fd334f
+  py_codeobject = (void *)((u64)py_codeobject & ~1ULL);
+
+  // Stop unwinding if `f_executable` is None. See comment when getting the
+  // ´noneStruct´ address in python.go for details.
+  void *noneStructAddr = (void *)pyinfo->noneStructAddr;
+  if (noneStructAddr && py_codeobject == noneStructAddr) {
+    *continue_with_next = true;
+    return ERR_OK;
+  }
+
+  // See experiments/python/README.md for a longer version of this. In short, we
+  // cannot directly obtain the correct Python line number. It has to be calculated
+  // using information found in the PyCodeObject for the current frame. This
+  // calculation involves iterating over potentially unbounded data, and so we don't
+  // want to do it in eBPF. Instead, we log the bytecode instruction that is being
+  // executed, and then convert this to a line number in the user-land component.
+  // Bytecode instructions are identified as an offset within a code object. The
+  // offset is easy to retrieve (PyFrameObject->f_lasti). Code objects are a little
+  // more tricky. We need to log enough information to uniquely identify the code
+  // object for the current frame, so that in the user-land component we can load
+  // it from the .pyc. There is no unique identifier for code objects though, so we
+  // try to construct one below by hashing together a few fields. These fields are
+  // selected in the *hope* that no collisions occur between code objects.
+
+  int py_f_lasti = 0;
+  if (pyinfo->lasti_is_codeunit) {
+    // With Python 3.11 the element f_lasti not only got renamed but also its
+    // type changed from int to a _Py_CODEUNIT* and needs to be translated to lastI.
+    // It is a direct pointer to the bytecode, so calculate the byte code index.
+    // sizeof(_Py_CODEUNIT) == 2.
+    // https://github.com/python/cpython/commit/ef6a482b0285870c45f39c9b17ed827362b334ae
+    u64 prev_instr = *(u64 *)(&pss->frame[pyinfo->PyFrameObject_f_lasti]);
+    s64 instr_diff = (s64)prev_instr - (s64)py_codeobject - pyinfo->PyCodeObject_sizeof;
+    if (instr_diff < -2 || instr_diff > 0x10000000)
+      instr_diff = -2;
+    py_f_lasti = (int)instr_diff >> 1;
+
+    // Python 3.11+ the frame object has some field that can be used to determine
+    // if this is the last frame in the interpreter loop. This generalized test
+    // works on 3.11 and 3.12 though the actual struct members are different.
+    if (
+      *(u8 *)(&pss->frame[pyinfo->PyFrameObject_entry_member]) == pyinfo->PyFrameObject_entry_val) {
+      *continue_with_next = true;
+    }
+  } else {
+    py_f_lasti = *(int *)(&pss->frame[pyinfo->PyFrameObject_f_lasti]);
+  }
+
+  if (!py_codeobject) {
+    DEBUG_PRINT(
+      "Null codeobject for PyFrameObject 0x%lx 0x%lx",
+      (u64)py_frameobject,
+      (u64)py_frameobject + pyinfo->PyFrameObject_f_code);
+    increment_metric(metricID_UnwindPythonZeroFrameCodeObject);
+    goto push_frame;
+  }
+
+  // Make verifier happy for PyCodeObject offsets
+  if (
+    pyinfo->PyCodeObject_co_argcount > sizeof(pss->code) - sizeof(int) ||
+    pyinfo->PyCodeObject_co_kwonlyargcount > sizeof(pss->code) - sizeof(int) ||
+    pyinfo->PyCodeObject_co_flags > sizeof(pss->code) - sizeof(int) ||
+    pyinfo->PyCodeObject_co_firstlineno > sizeof(pss->code) - sizeof(int)) {
+    return ERR_UNREACHABLE;
+  }
+
+  // Read PyCodeObject
+  if (bpf_probe_read_user_with_test_fault(pss->code, sizeof(pss->code), py_codeobject)) {
+    DEBUG_PRINT("Failed to read PyCodeObject at 0x%lx", (u64)py_codeobject);
+    increment_metric(metricID_UnwindPythonErrBadCodeObjectArgCountAddr);
+    // Push the frame with the code object address so the agent can try to
+    // read it in userspace (which can take page faults unlike BPF).
+    // codeobject_id=0 distinguishes this from a successful read.
+    file_id = (u64)py_codeobject;
+    lineno  = py_encode_lineno(0, (u32)py_f_lasti);
+    goto push_frame;
+  }
+
+  u32 py_argcount       = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);
+  u32 py_kwonlyargcount = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_kwonlyargcount]);
+  u32 py_flags          = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_flags]);
+  u32 py_firstlineno    = *(u32 *)(&pss->code[pyinfo->PyCodeObject_co_firstlineno]);
+
+  codeobject_id =
+    (py_argcount << 25) + (py_kwonlyargcount << 18) + (py_flags << 10) + py_firstlineno;
+
+  file_id = (u64)py_codeobject;
+  lineno  = py_encode_lineno(codeobject_id, (u32)py_f_lasti);
+
+push_frame:
+  DEBUG_PRINT("Pushing Python %lx %lu", file_id, lineno);
+  ErrorCode error = push_python(&record->state, trace, file_id, lineno);
+  if (error) {
+    DEBUG_PRINT("failed to push python frame");
+    return error;
+  }
+  increment_metric(metricID_UnwindPythonFrames);
+  return ERR_OK;
+}
+
+// get_PyThreadState retrieves the PyThreadState* for the current thread.
+//
+// Python 3.12 and earlier set the thread_state using pthread_setspecific with the key
+// stored in a global variable autoTLSkey.
+// Python 3.13+ uses a direct thread-local variable _Py_tss_tstate instead.
+static EBPF_INLINE ErrorCode get_PyThreadState(
+  const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr, void **thread_state)
+{
+  if (pyinfo->tls_offset != 0) {
+    if (bpf_probe_read_user(thread_state, sizeof(void *), tsd_base + pyinfo->tls_offset)) {
+      DEBUG_PRINT(
+        "Failed to read direct TLS at base 0x%lx offset %d", (u64)tsd_base, pyinfo->tls_offset);
+      increment_metric(metricID_UnwindPythonErrReadThreadStateAddr);
+      return ERR_PYTHON_READ_THREAD_STATE_ADDR;
+    }
+    return ERR_OK;
+  }
+
+  // Python 3.12 and earlier: use pthread TLS
+  u32 key;
+  if (bpf_probe_read_user(&key, sizeof(key), autoTLSkeyAddr)) {
+    DEBUG_PRINT("Failed to read autoTLSkey from 0x%lx", (u64)autoTLSkeyAddr);
+    increment_metric(metricID_UnwindPythonErrBadAutoTlsKeyAddr);
+    return ERR_PYTHON_BAD_AUTO_TLS_KEY_ADDR;
+  }
+
+  if (tsd_read(&pyinfo->tsdInfo, tsd_base, key, thread_state)) {
+    increment_metric(metricID_UnwindPythonErrReadThreadStateAddr);
+    return ERR_PYTHON_READ_THREAD_STATE_ADDR;
+  }
+
+  return ERR_OK;
+}
+
+static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
+{
+  void *tsd_base;
+  if (tsd_get_base(&tsd_base)) {
+    DEBUG_PRINT("Failed to get TSD base address");
+    increment_metric(metricID_UnwindPythonErrReadTsdBase);
+    return ERR_PYTHON_READ_TSD_BASE;
+  }
+  DEBUG_PRINT("TSD Base 0x%lx, autoTLSKeyAddr 0x%lx", (u64)tsd_base, pyinfo->autoTLSKeyAddr);
+
+  // Get the PyThreadState from TSD
+  void *py_tsd_thread_state;
+  ErrorCode error =
+    get_PyThreadState(pyinfo, tsd_base, (void *)pyinfo->autoTLSKeyAddr, &py_tsd_thread_state);
+  if (error) {
+    return error;
+  }
+
+  if (!py_tsd_thread_state) {
+    DEBUG_PRINT("PyThreadState is 0x0");
+    increment_metric(metricID_UnwindPythonErrZeroThreadState);
+    return ERR_PYTHON_ZERO_THREAD_STATE;
+  }
+
+  // Get PyThreadState.frame
+  if (bpf_probe_read_user(
+        frame, sizeof(void *), py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
+    DEBUG_PRINT(
+      "Failed to read PyThreadState.frame at 0x%lx",
+      (u64)py_tsd_thread_state + pyinfo->PyThreadState_frame);
+    increment_metric(metricID_UnwindPythonErrBadThreadStateFrameAddr);
+    return ERR_PYTHON_BAD_THREAD_STATE_FRAME_ADDR;
+  }
+
+  if (pyinfo->frame_is_cframe) {
+    if (bpf_probe_read_user(frame, sizeof(void *), *frame + pyinfo->PyCFrame_current_frame)) {
+      DEBUG_PRINT(
+        "Failed to read _PyCFrame.current_frame at 0x%lx",
+        (u64)*frame + pyinfo->PyCFrame_current_frame);
+      increment_metric(metricID_UnwindPythonErrBadCFrameFrameAddr);
+      return ERR_PYTHON_BAD_CFRAME_CURRENT_FRAME_ADDR;
+    }
+  }
+
+  return ERR_OK;
+}
+
+// python_step_python processes one Python frame.
+static EBPF_INLINE ErrorCode
+python_step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_frame, int *unwinder)
+{
+  bool continue_with_next;
+  ErrorCode error = process_python_frame(record, pyinfo, py_frame, &continue_with_next);
+  if (error) {
+    *unwinder = PROG_UNWIND_STOP;
+    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
+    return error;
+  }
+  if (!*py_frame) {
+    *unwinder = continue_with_next ? get_next_unwinder_after_interpreter() : PROG_UNWIND_STOP;
+    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
+  } else if (continue_with_next) {
+    *unwinder = get_next_unwinder_after_interpreter();
+  }
+  // else: keep *unwinder = PROG_UNWIND_PYTHON (set by the caller's dispatch).
+  return ERR_OK;
+}
+
+// python_step_native processes one native frame at an interpreter boundary
+// and updates *unwinder. Native-only commands are handed to PROG_UNWIND_NATIVE via
+// *delegate_command.
+static EBPF_INLINE ErrorCode
+python_step_native(PerCPURecord *record, int *unwinder, bool *delegate_command)
+{
+  Trace *trace      = &record->trace;
+  *unwinder         = PROG_UNWIND_STOP;
+  *delegate_command = false;
+
+  increment_metric(metricID_UnwindNativeAttempts);
+  // ra is read before unwinding, which marks the frame non-leaf and overwrites it. The push
+  // comes after, because unwind_one_frame may hand a Go frame over to PROG_UNWIND_NATIVE,
+  // which then pushes this same frame itself.
+  u64 file = record->state.text_section_id;
+  u64 line = record->state.text_section_offset;
+  bool ra  = record->state.return_address;
+
+  bool stop;
+  ErrorCode error = unwind_one_frame(record, &stop, delegate_command);
+  if (*delegate_command) {
+    *unwinder = PROG_UNWIND_NATIVE;
+    return ERR_OK;
+  }
+
+  ErrorCode push_error = push_native(&record->state, trace, file, line, ra);
+  if (push_error) {
+    return push_error;
+  }
+  if (error || stop) {
+    return error;
+  }
+
+  return get_next_unwinder_after_native_frame(record, unwinder);
+}
+
+// unwind_python is the entry point for tracing when invoked from the native tracer
+// or interpreter dispatcher. It does not reset the trace object and will append the
+// Python stack frames to the trace object for the current CPU.
+static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
+{
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return -1;
+
+  ErrorCode error = ERR_OK;
+  int unwinder    = PROG_UNWIND_PYTHON;
+  Trace *trace    = &record->trace;
+  u32 pid         = trace->pid;
+
+  DEBUG_PRINT("unwind_python()");
+
+  const PyProcInfo *pyinfo = bpf_map_lookup_elem(&py_procs, &pid);
+  if (!pyinfo) {
+    // Not a Python process that we have info on
+    DEBUG_PRINT("Can't build Python stack, no address info");
+    increment_metric(metricID_UnwindPythonErrNoProcInfo);
+    error    = ERR_PYTHON_NO_PROC_INFO;
+    unwinder = PROG_UNWIND_STOP;
+    goto exit;
+  }
+
+  if (!record->pythonUnwindState.py_frame) {
+    increment_metric(metricID_UnwindPythonAttempts);
+    error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
+    if (error || !record->pythonUnwindState.py_frame) {
+      DEBUG_PRINT("  -> Python frames are handled");
+      unwinder = PROG_UNWIND_STOP;
+      goto exit;
+    }
+  }
+
+  {
+    void *py_frame = record->pythonUnwindState.py_frame;
+
+    for (u64 t = 0; t < python_frames_per_program; t++) {
+      // clang-format off
+      switch (unwinder) {
+      case PROG_UNWIND_PYTHON:
+        error = python_step_python(record, pyinfo, &py_frame, &unwinder);
+        break;
+      case PROG_UNWIND_NATIVE: {
+        bool delegate_command = false;
+        error = python_step_native(record, &unwinder, &delegate_command);
+        if (delegate_command) {
+          goto save_python_cursor;
+        }
+        break;
+      }
+      default:
+        goto exit;
+      }
+      // clang-format on
+      if (error) {
+        goto exit;
+      }
+    }
+
+  save_python_cursor:
+    record->pythonUnwindState.py_frame = py_frame;
+  }
+
+exit:
+  record->state.unwind_error = error;
+  return tail_call(ctx, record, unwinder);
+}
+MULTI_USE_FUNC(unwind_python)

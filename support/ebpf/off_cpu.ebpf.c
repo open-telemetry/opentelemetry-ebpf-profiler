@@ -1,0 +1,124 @@
+#include "bpfdefs.h"
+#include "tracemgmt.h"
+#include "types.h"
+
+// kprobe_progs maps from a program ID to a kprobe eBPF program
+struct kprobe_progs_t {
+  __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+  __type(key, u32);
+  __type(value, u32);
+  __uint(max_entries, NUM_TRACER_PROGS);
+} kprobe_progs SEC(".maps");
+
+// sched_times keeps track of sched_switch call times.
+struct sched_times_t {
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
+  __type(key, u64);         // pid_tgid
+  __type(value, u64);       // CLOCK_MONOTONIC time in ns
+  __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
+} sched_times SEC(".maps");
+
+// off_cpu_threshold is set during load time.
+BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
+
+// origin_id_off_cpu is set during load time.
+BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
+
+// tracepoint__sched_switch serves as entry point for off cpu profiling.
+SEC("tracepoint/sched/sched_switch")
+int tracepoint__sched_switch(UNUSED void *ctx)
+{
+  u32 pid          = 0;
+  u32 tid          = 0;
+  u64 group_leader = 0;
+  if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
+    return 0;
+  }
+
+  if (pid == 0 || tid == 0) {
+    return 0;
+  }
+
+  if (bpf_get_prandom_u32() > off_cpu_threshold) {
+    return 0;
+  }
+
+  if (process_is_too_new(bpf_ktime_get_boot_ns(), group_leader)) {
+    return 0;
+  }
+
+  // Measure off-CPU duration on CLOCK_MONOTONIC, which does not advance on system
+  // suspend. We don't use CLOCK_BOOTTIME to avoid charging the whole suspend period
+  // to every thread that happened to be descheduled across it.
+  u64 ts       = bpf_ktime_get_ns();
+  u64 pid_tgid = ((u64)pid << 32) | tid;
+
+  if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
+    DEBUG_PRINT("Failed to record sched_switch event entry");
+    return 0;
+  }
+
+  return 0;
+}
+
+// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs and
+// per_cpu_records_kp are referenced (both are only used via load-time map rewriting),
+// keeping rewriteMaps and the linker happy.
+SEC("kprobe/dummy")
+int kprobe__dummy(struct pt_regs *ctx)
+{
+  int key = 0;
+  if (bpf_map_lookup_elem(&per_cpu_records_kp, &key))
+    bpf_tail_call(ctx, &kprobe_progs, 0);
+  return 0;
+}
+
+// kp__finish_task_switch is triggered right after the scheduler updated
+// the CPU registers.
+SEC("kprobe/finish_task_switch")
+int finish_task_switch(struct pt_regs *ctx)
+{
+  u32 pid          = 0;
+  u32 tid          = 0;
+  u64 group_leader = 0;
+  if (!get_pid_tgid_leader(&pid, &tid, &group_leader)) {
+    return 0;
+  }
+
+  if (pid == 0 || tid == 0) {
+    return 0;
+  }
+
+  u64 pid_tgid = ((u64)pid << 32) | tid;
+
+  u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
+  if (!start_ts || *start_ts == 0) {
+    // There is no information from the sched/sched_switch entry hook.
+    return 0;
+  }
+
+  // Trace timestamps are CLOCK_BOOTTIME
+  u64 ts      = bpf_ktime_get_boot_ns();
+  // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
+  // tracepoint__sched_switch.
+  u64 mono_ts = bpf_ktime_get_ns();
+
+  // diff stores the nanoseconds that the trace was off-cpu for.
+  u64 diff = mono_ts - *start_ts;
+
+  // Remove entry from the map so the stack for the same pid_tgid does not get unwound and
+  // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
+  bpf_map_delete_elem(&sched_times, &pid_tgid);
+  DEBUG_PRINT("==== finish_task_switch ====");
+
+  PerCPURecord *record = prepare_trace(origin_id_off_cpu, pid, tid, group_leader, ts);
+  if (!record) {
+    return 0;
+  }
+  u64 *values = push_context_values(&record->trace, 1);
+  if (!values) {
+    return 0;
+  }
+  values[0] = diff;
+  return unwind_trace(ctx, record, true);
+}
