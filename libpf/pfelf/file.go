@@ -456,7 +456,6 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		case elf.PT_DYNAMIC:
 			rdr := pfbufio.Reader{}
 			rdr.InitFromView(f.elfReader, int64(p.Off), int64(p.Filesz))
-			defer rdr.Release()
 
 			var dyn elf.Dyn64
 			var bias int64
@@ -493,6 +492,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
+			rdr.Release()
 		case elf.PT_INTERP:
 			f.isExecutable = true
 		}
