@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	cebpf "github.com/cilium/ebpf"
 
@@ -469,7 +470,9 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 	}
 
 	if ss, ok := p.(SnapshotSource); ok {
-		t.snapshotSources = append(t.snapshotSources, ss)
+		sources := t.snapshotSources.WLock()
+		*sources = append(*sources, ss)
+		t.snapshotSources.WUnlock(&sources)
 	}
 
 	return nil
@@ -478,8 +481,13 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 // CollectSnapshots invokes all registered SnapshotSource probes and returns
 // their combined profiles. Called by the reporter once per collection interval.
 func (t *Tracer) CollectSnapshots() []samples.SnapshotProfile {
+	// Copy the registered sources so probe code runs without holding the lock.
+	sources := t.snapshotSources.RLock()
+	snapshotSources := slices.Clone(*sources)
+	t.snapshotSources.RUnlock(&sources)
+
 	var profiles []samples.SnapshotProfile
-	for _, ss := range t.snapshotSources {
+	for _, ss := range snapshotSources {
 		profiles = append(profiles, ss.ProduceSnapshots()...)
 	}
 	return profiles
