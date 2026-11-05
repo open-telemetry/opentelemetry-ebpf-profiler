@@ -149,7 +149,6 @@ func TestAttachmentPointsFromNotesContinuesAfterError(t *testing.T) {
 		Provider:        "provider",
 		Name:            "alloc",
 		Location:        0x220,
-		ELFAddress:      0x1020,
 		SemaphoreOffset: 0x420,
 		Arguments:       "8@%rdi",
 		Machine:         elf.EM_X86_64,
