@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
@@ -125,7 +126,7 @@ func alignNoteSize(size int) int {
 	return (size + 3) &^ 3
 }
 
-func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
+func getBuildIDFromNotesFile(r libpf.ViewAtReader) (string, error) {
 	rdr := pfbufio.NewReader(r, 0, 1<<63-1)
 	defer rdr.Release()
 
@@ -150,13 +151,13 @@ func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 // GetBuildIDFromNotesFile returns the build ID contained in a file with
 // the format of an ELF notes.
 func GetBuildIDFromNotesFile(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	// The notes files are small (e.g. /sys/kernel/notes): load the full
+	// content, and serve views from it.
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", fmt.Errorf("could not open %s: %w", filePath, err)
+		return "", fmt.Errorf("could not read %s: %w", filePath, err)
 	}
-	defer file.Close()
-
-	return getBuildIDFromNotesFile(file)
+	return getBuildIDFromNotesFile(libpf.NewBytesView(data))
 }
 
 // ParseDebugLink parses the name and CRC32 of the debug info file from the provided section data.
