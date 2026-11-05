@@ -89,7 +89,6 @@ func attachmentPointsFromNotes(
 			Provider:        note.provider,
 			Name:            note.name,
 			Location:        location,
-			ELFAddress:      elfAddress,
 			SemaphoreOffset: semaphoreOffset,
 			Arguments:       note.arguments,
 			Machine:         f.Machine,

@@ -15,8 +15,6 @@ type AttachmentPoint struct {
 
 	// Location is the ELF file offset used to attach the uprobe.
 	Location uint64
-	// ELFAddress is the adjusted virtual address from the SDT descriptor.
-	ELFAddress uint64
 	// SemaphoreOffset is the ELF file offset of the optional SDT semaphore.
 	SemaphoreOffset uint64
 
