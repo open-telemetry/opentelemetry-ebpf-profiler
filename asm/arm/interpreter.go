@@ -211,6 +211,28 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 				i.Regs.setArm64asm(dst, v)
 			}
 		}
+	case arm64asm.MOVZ, arm64asm.MOVK:
+		dst, dstOk := inst.Args[0].(arm64asm.Reg)
+		src, srcOk := inst.Args[1].(arm64asm.ImmShift)
+		if !dstOk || !srcOk {
+			break
+		}
+		imm, shift, ok := immShift(src)
+		if !ok {
+			break
+		}
+		v := imm << shift
+		if inst.Op == arm64asm.MOVK {
+			// MOVK writes one 16 bit field and leaves the rest of the
+			// register alone, so its result is known only where the previous
+			// value is known as well.
+			old, known := expression.AsConstant(i.Regs.GetArm(dst))
+			if !known {
+				break
+			}
+			v |= old &^ (uint64(0xffff) << shift)
+		}
+		i.Regs.setArm64asm(dst, expression.Imm(v))
 	case arm64asm.ADRP:
 		if src, ok := inst.Args[1].(arm64asm.PCRel); ok {
 			if dst, ok := inst.Args[0].(arm64asm.Reg); ok {
