@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent license-check license-save \
+	test-junit test-luajit-offsets test-coredump protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
@@ -42,7 +42,7 @@ GO_TAGS := osusergo,netgo
 GO_FLAGS ?=
 EBPF_FLAGS :=
 
-GO_TOOLS := -modfile=internal/tools/go.mod
+GO_TOOLS := -modfile=$(CURDIR)/internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -105,13 +105,14 @@ rust-tests: rust-targets
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
-	# tools/coredump tests require CGO_ENABLED
 	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	cd tools/coredump && CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
 
 format: format-go format-ebpf
 
 format-go:
 	go tool $(GO_TOOLS) golangci-lint fmt
+	cd tools/coredump && go tool $(GO_TOOLS) golangci-lint fmt
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
@@ -122,9 +123,13 @@ vanity-import-check:
 vanity-import-fix:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
-test: generate ebpf test-deps
-	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+test: generate ebpf test-deps test-coredump
+	# Without CGO the symblib C-API bindings are skipped as having no Go files.
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+test-coredump: generate ebpf
+	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+	CGO_ENABLED=1 go test -C tools/coredump $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # Lives in its own module to keep heavy dependencies (testcontainers,
 # Docker, etc.) out of the main go.mod.
@@ -133,7 +138,8 @@ test-luajit-offsets: generate
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	cd tools/coredump && CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit-coredump.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
