@@ -4,18 +4,18 @@
     {
       "lwp": 7331,
       "frames": [
-        "libc.so.6+0xcf303",
-        "libc.so.6+0xd3c52",
-        "libc.so.6+0xd3b89",
-        "sig+0x1182",
+        "libc.so.6+0xcf303 (clock_nanosleep)",
+        "libc.so.6+0xd3c52 (nanosleep)",
+        "libc.so.6+0xd3b89 (sleep)",
+        "sig+0x1182 (sig_handler)",
         "libc.so.6+0x3bf8f",
-        "libc.so.6+0xcf303",
-        "libc.so.6+0xd3c52",
-        "libc.so.6+0xd3b89",
-        "sig+0x11bc",
+        "libc.so.6+0xcf303 (clock_nanosleep)",
+        "libc.so.6+0xd3c52 (nanosleep)",
+        "libc.so.6+0xd3b89 (sleep)",
+        "sig+0x11bc (main)",
         "libc.so.6+0x27189",
-        "libc.so.6+0x27244",
-        "sig+0x1090"
+        "libc.so.6+0x27244 (__libc_start_main)",
+        "sig+0x1090 (_start)"
       ]
     }
   ],

@@ -18,14 +18,12 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/ianlancetaylor/demangle"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -48,11 +46,10 @@ type nativeData struct {
 	fileID host.FileID
 	// Keyed by the top 32 bits of the address, each bucket sorted by the rest.
 	symbols map[uint32][]symbolEntry
-	numSyms int
 	// Names come from strtab for .symtab, or from process memory at dynstrAddr.
 	strtab     []byte
 	dynstrAddr uint64
-	nameCache  *lru.SyncedLRU[uint32, string]
+	nameCache  *lru.SyncedLRU[uint32, libpf.String]
 	dataRef    io.Closer
 	refs       atomic.Int32
 }
@@ -91,15 +88,8 @@ func load(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if len(symbols) == 0 {
 		return nil, nil
 	}
-	numSyms := countSymbols(symbols)
-	if cfg.MaxSymbols != 0 && numSyms > int(cfg.MaxSymbols) {
-		log.Debugf("file %s has %d function symbols, over max_symbols %d, skipping",
-			info.FileName(), numSyms, cfg.MaxSymbols)
-		_ = dataRef.Close()
-		return nil, nil
-	}
 
-	nameCache, err := lru.NewSynced[uint32, string](cfg.nameCacheSize(), hash.Uint32)
+	nameCache, err := lru.NewSynced[uint32, libpf.String](cfg.nameCacheSize(), hash.Uint32)
 	if err != nil {
 		_ = dataRef.Close()
 		return nil, fmt.Errorf("failed to create name cache: %w", err)
@@ -108,7 +98,6 @@ func load(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	d := &nativeData{
 		fileID:     info.FileID(),
 		symbols:    symbols,
-		numSyms:    numSyms,
 		strtab:     strtab,
 		dynstrAddr: dynstrAddr,
 		nameCache:  nameCache,
@@ -156,23 +145,12 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) (
 		return nil, nil, nil
 	}
 
-	rdr := pfbufio.NewReader(symTab, 0, int64(symTab.FileSize))
-	defer rdr.Release()
-
-	sym := &elf.Sym64{}
 	symbols := make(map[uint32][]symbolEntry)
-
-	for {
-		if _, err := io.ReadFull(&rdr, pfunsafe.FromPointer(sym)); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
-			}
-			return nil, nil, nil
-		}
+	err = ef.VisitSymbolOffsets(sectionName, func(sym *elf.Sym64) bool {
 		t := elf.ST_TYPE(sym.Info)
 		if t != elf.STT_FUNC && t != elf.STT_GNU_IFUNC || sym.Value == 0 || sym.Size == 0 ||
 			sym.Size > math.MaxUint32 || int(sym.Name) >= len(strtab) || strtab[sym.Name] == 0 {
-			continue
+			return true
 		}
 		high := uint32(sym.Value >> 32)
 		symbols[high] = append(symbols[high], symbolEntry{
@@ -180,8 +158,9 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) (
 			size:    uint32(sym.Size),
 			nameOff: sym.Name,
 		})
-	}
-	if len(symbols) == 0 {
+		return true
+	})
+	if err != nil || len(symbols) == 0 {
 		return nil, nil, nil
 	}
 	for high := range symbols {
@@ -201,7 +180,7 @@ func demangleSymbol(name string) string {
 	return name
 }
 
-func (inst *nativeInstance) symbolName(nameOff uint32) string {
+func (inst *nativeInstance) symbolName(nameOff uint32) libpf.String {
 	d := inst.d
 	if name, ok := d.nameCache.Get(nameOff); ok {
 		return name
@@ -215,10 +194,10 @@ func (inst *nativeInstance) symbolName(nameOff uint32) string {
 	} else {
 		raw = inst.rm.String(inst.bias + libpf.Address(d.dynstrAddr+uint64(nameOff)))
 	}
-	if raw == "" {
-		return ""
+	if raw, _, _ = strings.Cut(raw, "@"); raw == "" {
+		return libpf.NullString
 	}
-	name := demangleSymbol(raw)
+	name := libpf.Intern(demangleSymbol(raw))
 	d.nameCache.Add(nameOff, name)
 	return name
 }
@@ -239,15 +218,7 @@ func (d *nativeData) lookupSymbol(addr uint64) (uint32, bool) {
 }
 
 func (d *nativeData) String() string {
-	return fmt.Sprintf("Native symbolizer (%d symbols)", d.numSyms)
-}
-
-func countSymbols(symbols map[uint32][]symbolEntry) int {
-	count := 0
-	for _, bucket := range symbols {
-		count += len(bucket)
-	}
-	return count
+	return "Native symbolizer"
 }
 
 func (d *nativeData) unref() {
@@ -301,19 +272,20 @@ func (inst *nativeInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
 	if ef.Flags().ReturnAddress() {
 		address--
 	}
+	// Best effort: without a name the frame is reported as a plain native frame.
 	nameOff, ok := inst.d.lookupSymbol(address)
 	if !ok {
-		return fmt.Errorf("no symbol for 0x%x", address)
+		return interpreter.ErrMismatchInterpreterType
 	}
 	name := inst.symbolName(nameOff)
-	if name == "" {
-		return fmt.Errorf("unreadable symbol name for 0x%x", address)
+	if name == libpf.NullString {
+		return interpreter.ErrMismatchInterpreterType
 	}
 	frames.Append(&libpf.Frame{
 		Type:            ef.Type(),
 		AddressOrLineno: libpf.AddressOrLineno(address),
 		Mapping:         mapping,
-		FunctionName:    libpf.Intern(name),
+		FunctionName:    name,
 	})
 	sfCounter.ReportSuccess()
 	return nil

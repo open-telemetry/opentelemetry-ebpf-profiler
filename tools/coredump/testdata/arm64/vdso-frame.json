@@ -5,12 +5,12 @@
       "lwp": 1016,
       "frames": [
         "linux-vdso.1.so+0x50c",
-        "linux-vdso.1.so+0x7df",
-        "libc.so.6+0xbbccb",
-        "cpuhog+0x857",
+        "linux-vdso.1.so+0x7df (__kernel_clock_gettime)",
+        "libc.so.6+0xbbccb (clock_gettime)",
+        "cpuhog+0x857 (main)",
         "libc.so.6+0x284c3",
-        "libc.so.6+0x28597",
-        "cpuhog+0x72f"
+        "libc.so.6+0x28597 (__libc_start_main)",
+        "cpuhog+0x72f (_start)"
       ]
     }
   ],

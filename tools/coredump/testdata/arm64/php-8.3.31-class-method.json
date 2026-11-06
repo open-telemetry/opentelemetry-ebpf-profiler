@@ -7,15 +7,15 @@
         "php8.3+0x3392d4",
         "PrimeChecker::isPrime+11 in /tmp/tmp.jKn9fA0Ict/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/class_method.php:16",
         "<top-level>+29 in /tmp/tmp.jKn9fA0Ict/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/class_method.php:30",
-        "php8.3+0x386aa7",
-        "php8.3+0x392a4f",
-        "php8.3+0x3060db",
-        "php8.3+0x295bab",
+        "php8.3+0x386aa7 (execute_ex)",
+        "php8.3+0x392a4f (zend_execute)",
+        "php8.3+0x3060db (zend_execute_scripts)",
+        "php8.3+0x295bab (php_execute_script)",
         "php8.3+0x40c89b",
         "php8.3+0x1113bb",
         "libc.so.6+0x284c3",
-        "libc.so.6+0x28597",
-        "php8.3+0x1114af"
+        "libc.so.6+0x28597 (__libc_start_main)",
+        "php8.3+0x1114af (_start)"
       ]
     }
   ],

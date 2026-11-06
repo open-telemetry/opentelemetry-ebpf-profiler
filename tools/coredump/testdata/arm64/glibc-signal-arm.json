@@ -4,18 +4,18 @@
     {
       "lwp": 17849,
       "frames": [
-        "libc.so.6+0xc090c",
-        "libc.so.6+0xc5c5f",
-        "libc.so.6+0xc5b0f",
-        "sig+0x4101f7",
+        "libc.so.6+0xc090c (clock_nanosleep)",
+        "libc.so.6+0xc5c5f (__nanosleep)",
+        "libc.so.6+0xc5b0f (sleep)",
+        "sig+0x4101f7 (sig_handler)",
         "linux-vdso.1.so+0x803",
-        "libc.so.6+0xc0910",
-        "libc.so.6+0xc5c5f",
-        "libc.so.6+0xc5b0f",
-        "sig+0x410237",
-        "libc.so.6+0x35a73",
-        "libc.so.6+0x35b5b",
-        "sig+0x4100ef"
+        "libc.so.6+0xc0910 (clock_nanosleep)",
+        "libc.so.6+0xc5c5f (__nanosleep)",
+        "libc.so.6+0xc5b0f (sleep)",
+        "sig+0x410237 (main)",
+        "libc.so.6+0x35a73 (__libc_start_call_main)",
+        "libc.so.6+0x35b5b (__libc_start_main_impl)",
+        "sig+0x4100ef (_start)"
       ]
     }
   ],

@@ -1,11 +1,4 @@
-.PHONY: all clean
-
 CC ?= cc
-
-all: testbin testbin-dynsym
-
-testbin: test.c
-	$(CC) -o $@ $<
 
 # Stripped of .symtab; -rdynamic exports the functions to .dynsym.
 testbin-dynsym: test.c
@@ -13,4 +6,6 @@ testbin-dynsym: test.c
 	strip $@
 
 clean:
-	rm -f testbin testbin-dynsym
+	rm -f testbin-dynsym
+
+.PHONY: clean

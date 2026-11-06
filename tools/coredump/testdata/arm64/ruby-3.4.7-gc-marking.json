@@ -4,16 +4,16 @@
     {
       "lwp": 304617,
       "frames": [
-        "libruby.so.3.4.7+0x150be0",
-        "libruby.so.3.4.7+0x15374f",
-        "libruby.so.3.4.7+0x1548f3",
-        "libruby.so.3.4.7+0x155947",
-        "libruby.so.3.4.7+0x28dbe3",
-        "libruby.so.3.4.7+0x29309b",
-        "libruby.so.3.4.7+0x244e6f",
-        "libruby.so.3.4.7+0x2a4c2b",
-        "libruby.so.3.4.7+0x309f8b",
-        "libruby.so.3.4.7+0x318c7f",
+        "libruby.so.3.4.7+0x150be0 (gc_marks_finish)",
+        "libruby.so.3.4.7+0x15374f (gc_start)",
+        "libruby.so.3.4.7+0x1548f3 (newobj_cache_miss)",
+        "libruby.so.3.4.7+0x155947 (rb_wb_protected_newobj_of)",
+        "libruby.so.3.4.7+0x28dbe3 (str_enc_new)",
+        "libruby.so.3.4.7+0x29309b (str_new_frozen_buffer)",
+        "libruby.so.3.4.7+0x244e6f (rb_reg_search)",
+        "libruby.so.3.4.7+0x2a4c2b (rb_str_aref_m)",
+        "libruby.so.3.4.7+0x309f8b (vm_call_cfunc_with_frame)",
+        "libruby.so.3.4.7+0x318c7f (vm_exec_core)",
         "(marking)+0 in <gc>:0",
         "(garbage collection)+0 in <gc>:0"
       ]
@@ -21,8 +21,8 @@
     {
       "lwp": 304657,
       "frames": [
-        "libc.so.6+0xebe34",
-        "libruby.so.3.4.7+0x2c514b",
+        "libc.so.6+0xebe34 (epoll_pwait)",
+        "libruby.so.3.4.7+0x2c514b (timer_thread_func)",
         "libc.so.6+0x8595b",
         "libc.so.6+0xebb0b"
       ]

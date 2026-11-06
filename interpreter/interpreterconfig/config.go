@@ -40,6 +40,13 @@ type Config struct {
 // AllInterpreters returns a Config with all interpreters enabled.
 func AllInterpreters() Config { return Config{} }
 
+// DefaultInterpreters is AllInterpreters without native symbolization.
+func DefaultInterpreters() Config {
+	cfg := AllInterpreters()
+	cfg.Symtab.Disabled = true
+	return cfg
+}
+
 // NoInterpreters returns a Config with all interpreters disabled.
 func NoInterpreters() Config {
 	disabled := interpreter.BaseConfig{Disabled: true}
@@ -55,6 +62,7 @@ func NoInterpreters() Config {
 		BEAM:          beam.Config{BaseConfig: disabled},
 		LuaJIT:        luajit.Config{BaseConfig: disabled},
 		ThreadContext: threadcontext.Config{BaseConfig: disabled},
+		Symtab:        native.Config{BaseConfig: disabled},
 	}
 }
 

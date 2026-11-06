@@ -11,8 +11,8 @@
     {
       "lwp": 3327418,
       "frames": [
-        "libc.so.6+0x899d9",
-        "libc.so.6+0x8c1cf",
+        "libc.so.6+0x899d9 (__futex_abstimed_wait_common)",
+        "libc.so.6+0x8c1cf (__GI___pthread_cond_wait)",
         "hellograal+0x4a8886",
         "<unwinding aborted due to error native_stack_delta_invalid>"
       ]

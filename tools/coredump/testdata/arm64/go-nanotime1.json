@@ -45,7 +45,7 @@
     {
       "lwp": 2478,
       "frames": [
-        "linux-vdso.1.so+0x360",
+        "linux-vdso.1.so+0x360 (__kernel_clock_gettime)",
         "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
         "time.runtimeNano+0 in /usr/local/go/src/runtime/time_nofake.go:33",
         "time.Since+0 in /usr/local/go/src/time/time.go:1226",
