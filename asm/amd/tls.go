@@ -99,6 +99,24 @@ func threadPointer() e.Expression {
 	return e.MemWithSegment8(x86asm.FS, e.Imm(0))
 }
 
+// tlsSlotScan holds the state that ExtractTLSSlot carries from one instruction
+// to the next while it walks a TLS access sequence.
+type tlsSlotScan struct {
+	// capture matches the slot address wherever the code materializes it
+	capture *e.ImmediateCapture
+	// slot is the slot address seen at the call site
+	slot uint64
+	// disp sums the immediates added to the call result
+	disp int64
+	// resReg is the register still holding the call result, or 0 for none
+	resReg Reg
+	// called records that the descriptor resolver or __tls_get_addr ran
+	called bool
+	// viaDescriptor means the call returned the variable's offset from the
+	// thread pointer instead of its address
+	viaDescriptor bool
+}
+
 // ExtractTLSSlot scans through x86_64 assembly code looking for TLS accesses
 // through the GOT, as used in shared libraries. It handles three patterns:
 //  1. Initial-exec: MOV reg, [RIP+slot]; MOV reg, FS:[reg+disp]
@@ -108,90 +126,142 @@ func threadPointer() e.Expression {
 // The function returns the address of the GOT slot and the displacement the
 // code adds to the value it resolves to.
 func ExtractTLSSlot(code []byte, codeAddress uint64) (slot uint64, disp int64, err error) {
-	capture := e.NewImmediateCapture("slot")
+	s := tlsSlotScan{capture: e.NewImmediateCapture("slot")}
 	it := NewInterpreterWithCodeAt(code, e.Imm(codeAddress))
-	called := false
-	viaDescriptor := false
-	// Register holding the call result, or 0 if unknown
-	var offReg Reg
 
 	for {
+		// Registers before Step overwrites the destination
 		regs := it.Regs
-		op, err := it.Step()
-		if err != nil {
+		op, stepErr := it.Step()
+		if stepErr != nil {
 			break
 		}
-		// Untracked writes to the result register invalidate it
-		off := offReg
-		if called && writesFirstOperand(op.Op) {
-			if dst, ok := op.Args[0].(x86asm.Reg); ok && regMappingFor(dst).idx == offReg {
-				offReg = 0
-			}
-		}
+		res := s.takeResultReg(op)
+
+		var done bool
+		var matchErr error
 		switch op.Op {
 		case x86asm.CALL:
-			if called {
-				return 0, 0, errors.New("unexpected call after TLS slot lookup")
-			}
-			// __tls_get_addr takes its argument in RDI, also with -fno-plt.
-			// Example: CALL [RAX] for a TLS descriptor
-			argReg := x86asm.RDI
-			if mem, ok := op.Args[0].(x86asm.Mem); ok &&
-				mem.Base != 0 && mem.Base != x86asm.RIP {
-				argReg = mem.Base
-			}
-			if regs.GetX86(argReg).Match(capture) {
-				slot = capture.CapturedValue()
-				called = true
-				viaDescriptor = argReg != x86asm.RDI
-				offReg = RAX
-			}
+			matchErr = s.matchCall(&regs, op)
 		case x86asm.LEA:
-			// LEA reg, [off+imm]
-			dst, dstOk := op.Args[0].(x86asm.Reg)
-			mem, memOk := op.Args[1].(x86asm.Mem)
-			if called && off != 0 && dstOk && memOk && mem.Segment == 0 && mem.Index == 0 &&
-				mem.Base != 0 && regMappingFor(mem.Base).idx == off {
-				disp += int64(int32(mem.Disp))
-				offReg = regMappingFor(dst).idx
-			}
+			s.matchLea(op, res)
 		case x86asm.ADD, x86asm.SUB:
-			// ADD off, imm or SUB off, imm
-			dst, dstOk := op.Args[0].(x86asm.Reg)
-			imm, immOk := op.Args[1].(x86asm.Imm)
-			if called && off != 0 && dstOk && immOk && regMappingFor(dst).idx == off {
-				if op.Op == x86asm.SUB {
-					disp -= int64(imm)
-				} else {
-					disp += int64(imm)
-				}
-				offReg = off
-			}
+			s.matchAddSub(op, res)
 		case x86asm.MOV:
-			mem, ok := op.Args[1].(x86asm.Mem)
-			if !ok || mem.Base == 0 {
-				continue
-			}
-			// Pattern 2 & 3: access through the call result
-			// Example: MOV rax, [rax+0x8]
-			if called && off != 0 && regMappingFor(mem.Base).idx == off {
-				if mem.Index != 0 || (mem.Segment == x86asm.FS) != viaDescriptor {
-					return 0, 0, fmt.Errorf("unexpected access to TLS call result: %v", op)
-				}
-				return slot, disp + int64(int32(mem.Disp)), nil
-			}
-			// Pattern 1: FS-relative access with the offset from the GOT
-			// Example: MOV 0x2ecd(RIP), rax; MOV rax, FS:(rax)
-			if !called && mem.Segment == x86asm.FS &&
-				regs.GetX86(mem.Base).Match(e.Mem8(capture)) {
-				return capture.CapturedValue(), int64(int32(mem.Disp)), nil
-			}
+			done, matchErr = s.matchLoad(&regs, op, res)
+		}
+		if matchErr != nil {
+			return 0, 0, matchErr
+		}
+		if done {
+			return s.slot, s.disp, nil
 		}
 	}
-	if called {
-		return 0, 0, errors.New("could not follow the result of the TLS call")
+	return 0, 0, s.unresolved()
+}
+
+// takeResultReg returns the register holding the call result as it was before
+// op, and stops tracking it if op overwrites it.
+func (s *tlsSlotScan) takeResultReg(op x86asm.Inst) Reg {
+	prev := s.resReg
+	if s.called && writesFirstOperand(op.Op) {
+		if dst, ok := op.Args[0].(x86asm.Reg); ok && regMappingFor(dst).idx == s.resReg {
+			s.resReg = 0
+		}
 	}
-	return 0, 0, errors.New("could not find a GOT-based TLS access")
+	return prev
+}
+
+// matchCall captures the slot address that a call to __tls_get_addr or to a
+// TLS descriptor resolver takes in a register.
+func (s *tlsSlotScan) matchCall(regs *Registers, op x86asm.Inst) error {
+	if s.called {
+		return errors.New("unexpected call after TLS slot lookup")
+	}
+	// __tls_get_addr takes its argument in RDI, also with -fno-plt.
+	// Example: CALL [RAX] for a TLS descriptor
+	argReg := x86asm.RDI
+	if mem, ok := op.Args[0].(x86asm.Mem); ok &&
+		mem.Base != 0 && mem.Base != x86asm.RIP {
+		argReg = mem.Base
+	}
+	if !regs.GetX86(argReg).Match(s.capture) {
+		return nil
+	}
+	s.slot = s.capture.CapturedValue()
+	s.called = true
+	s.viaDescriptor = argReg != x86asm.RDI
+	s.resReg = RAX
+	return nil
+}
+
+// matchLea folds the immediate of a LEA off the call result into the
+// displacement and follows the result into its new register.
+func (s *tlsSlotScan) matchLea(op x86asm.Inst, res Reg) {
+	// LEA reg, [res+imm]
+	dst, dstOk := op.Args[0].(x86asm.Reg)
+	mem, memOk := op.Args[1].(x86asm.Mem)
+	if !s.called || res == 0 || !dstOk || !memOk {
+		return
+	}
+	if mem.Segment != 0 || mem.Index != 0 || mem.Base == 0 ||
+		regMappingFor(mem.Base).idx != res {
+		return
+	}
+	s.disp += int64(int32(mem.Disp))
+	s.resReg = regMappingFor(dst).idx
+}
+
+// matchAddSub folds an immediate added to or subtracted from the call result
+// into the displacement.
+func (s *tlsSlotScan) matchAddSub(op x86asm.Inst, res Reg) {
+	// ADD res, imm or SUB res, imm
+	dst, dstOk := op.Args[0].(x86asm.Reg)
+	imm, immOk := op.Args[1].(x86asm.Imm)
+	if !s.called || res == 0 || !dstOk || !immOk || regMappingFor(dst).idx != res {
+		return
+	}
+	if op.Op == x86asm.SUB {
+		s.disp -= int64(imm)
+	} else {
+		s.disp += int64(imm)
+	}
+	s.resReg = res
+}
+
+// matchLoad follows a MOV that dereferences either the call result, or the
+// thread pointer with an offset taken from the GOT slot.
+func (s *tlsSlotScan) matchLoad(regs *Registers, op x86asm.Inst, res Reg) (bool, error) {
+	mem, ok := op.Args[1].(x86asm.Mem)
+	if !ok || mem.Base == 0 {
+		return false, nil
+	}
+	// Pattern 2 & 3: access through the call result
+	// Example: MOV rax, [rax+0x8]
+	if s.called && res != 0 && regMappingFor(mem.Base).idx == res {
+		if mem.Index != 0 || (mem.Segment == x86asm.FS) != s.viaDescriptor {
+			return false, fmt.Errorf("unexpected access to TLS call result: %v", op)
+		}
+		s.disp += int64(int32(mem.Disp))
+		return true, nil
+	}
+	// Pattern 1: FS-relative access with the offset from the GOT
+	// Example: MOV 0x2ecd(RIP), rax; MOV rax, FS:(rax)
+	if !s.called && mem.Segment == x86asm.FS &&
+		regs.GetX86(mem.Base).Match(e.Mem8(s.capture)) {
+		s.slot = s.capture.CapturedValue()
+		s.disp = int64(int32(mem.Disp))
+		return true, nil
+	}
+	return false, nil
+}
+
+// unresolved names the stage of the sequence the scan did not get past.
+func (s *tlsSlotScan) unresolved() error {
+	if s.called {
+		return errors.New("could not follow the result of the TLS call")
+	}
+	return errors.New("could not find a GOT-based TLS access")
 }
 
 // writesFirstOperand reports whether op may write its first operand.
