@@ -4,7 +4,7 @@
     {
       "lwp": 265938,
       "frames": [
-        "perl+0x140471",
+        "perl+0x140471 (Perl_pp_entersub)",
         "main::fib+0 in a.pl:24",
         "main::fib+0 in a.pl:24",
         "main::fib+0 in a.pl:24",
@@ -17,13 +17,13 @@
         "main::fib+0 in a.pl:24",
         "main::fib+0 in a.pl:24",
         "<top-level>+0 in a.pl:32",
-        "perl+0x200430",
-        "perl+0x7810c",
-        "perl+0x77d8d",
-        "perl+0x48110",
+        "perl+0x200430 (Perl_runops_standard)",
+        "perl+0x7810c (S_run_body)",
+        "perl+0x77d8d (perl_run)",
+        "perl+0x48110 (main)",
         "libc.so.6+0x29ca7",
-        "libc.so.6+0x29d64",
-        "perl+0x47f70"
+        "libc.so.6+0x29d64 (__libc_start_main)",
+        "perl+0x47f70 (_start)"
       ]
     }
   ],

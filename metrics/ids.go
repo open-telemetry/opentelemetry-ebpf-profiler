@@ -710,6 +710,12 @@ const (
 	// Number of processes whose published thread-context label schema was rejected
 	IDThreadContextSchemaRejected = 312
 
+	// Number of successfully symbolized native frames
+	IDNativeSymbolizationSuccess = 313
+
+	// Number of native frames that failed symbolization
+	IDNativeSymbolizationFailure = 314
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 313
+	IDMax = 315
 )

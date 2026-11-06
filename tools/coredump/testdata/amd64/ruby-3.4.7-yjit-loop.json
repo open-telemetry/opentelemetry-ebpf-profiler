@@ -4,8 +4,8 @@
     {
       "lwp": 780083,
       "frames": [
-        "libruby.so.3.4.7+0x33c55f",
-        "libruby.so.3.4.7+0x241573",
+        "libruby.so.3.4.7+0x33c55f (rb_funcallv)",
+        "libruby.so.3.4.7+0x241573 (range_each)",
         "<unknown jit code>+0 in <jitted code>:0",
         "Range#each+0 in <cfunc>:0",
         "Object#is_prime+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:14",
@@ -21,8 +21,8 @@
     {
       "lwp": 780085,
       "frames": [
-        "libc.so.6+0x108f26",
-        "libruby.so.3.4.7+0x2d7c94",
+        "libc.so.6+0x108f26 (epoll_wait)",
+        "libruby.so.3.4.7+0x2d7c94 (timer_thread_func)",
         "libc.so.6+0x891f4",
         "libc.so.6+0x1098db"
       ]

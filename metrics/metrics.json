@@ -2284,5 +2284,19 @@
     "name": "ThreadContextSchemaRejected",
     "field": "agent.threadctx.schema_rejected",
     "id": 312
+  },
+  {
+    "description": "Number of successfully symbolized native frames",
+    "type": "counter",
+    "name": "NativeSymbolizationSuccess",
+    "field": "ha.native.symbolization.success",
+    "id": 313
+  },
+  {
+    "description": "Number of native frames that failed symbolization",
+    "type": "counter",
+    "name": "NativeSymbolizationFailure",
+    "field": "ha.native.symbolization.failure",
+    "id": 314
   }
 ]

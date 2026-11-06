@@ -11,6 +11,7 @@ import (
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/native"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -33,10 +34,18 @@ type Config struct {
 	BEAM          beam.Config          `mapstructure:"beam" json:"beam"`
 	LuaJIT        luajit.Config        `mapstructure:"luajit" json:"luajit"`
 	ThreadContext threadcontext.Config `mapstructure:"thread_context" json:"thread_context"`
+	Symtab        native.Config        `mapstructure:"symtab" json:"symtab"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
 func AllInterpreters() Config { return Config{} }
+
+// DefaultInterpreters is AllInterpreters without native symbolization.
+func DefaultInterpreters() Config {
+	cfg := AllInterpreters()
+	cfg.Symtab.Disabled = true
+	return cfg
+}
 
 // NoInterpreters returns a Config with all interpreters disabled.
 func NoInterpreters() Config {
@@ -53,12 +62,13 @@ func NoInterpreters() Config {
 		BEAM:          beam.Config{BaseConfig: disabled},
 		LuaJIT:        luajit.Config{BaseConfig: disabled},
 		ThreadContext: threadcontext.Config{BaseConfig: disabled},
+		Symtab:        native.Config{BaseConfig: disabled},
 	}
 }
 
 // Loaders returns active loaders for all enabled interpreters.
 func (cfg *Config) Loaders() []interpreter.Loader {
-	loaders := make([]interpreter.Loader, 0, 12)
+	loaders := make([]interpreter.Loader, 0, 13)
 	if !cfg.Perl.IsDisabled() {
 		loaders = append(loaders, perl.GetLoader(cfg.Perl))
 	}
@@ -92,6 +102,10 @@ func (cfg *Config) Loaders() []interpreter.Loader {
 	}
 	if !cfg.ThreadContext.IsDisabled() {
 		loaders = append(loaders, threadcontext.GetLoader(cfg.ThreadContext))
+	}
+	// Last, so interpreter symbolizers win.
+	if !cfg.Symtab.IsDisabled() {
+		loaders = append(loaders, native.GetLoader(cfg.Symtab))
 	}
 	return loaders
 }

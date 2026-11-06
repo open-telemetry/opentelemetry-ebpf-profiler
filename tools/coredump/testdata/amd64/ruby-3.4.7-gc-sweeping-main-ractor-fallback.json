@@ -9,18 +9,18 @@
     {
       "lwp": 48549,
       "frames": [
-        "libruby.so.3.4.7+0x139ae0",
-        "libruby.so.3.4.7+0x13c5d9",
-        "libruby.so.3.4.7+0x144cb1",
-        "libruby.so.3.4.7+0x146137",
-        "libruby.so.3.4.7+0x147b08",
-        "libruby.so.3.4.7+0x284a24",
-        "libruby.so.3.4.7+0x28a549",
-        "libruby.so.3.4.7+0x23aaf7",
-        "libruby.so.3.4.7+0x29f640",
-        "libruby.so.3.4.7+0x2fc1eb",
-        "libruby.so.3.4.7+0x302c2e",
-        "libruby.so.3.4.7+0x3103ad",
+        "libruby.so.3.4.7+0x139ae0 (gc_sweep_step)",
+        "libruby.so.3.4.7+0x13c5d9 (gc_sweep)",
+        "libruby.so.3.4.7+0x144cb1 (gc_start)",
+        "libruby.so.3.4.7+0x146137 (newobj_cache_miss)",
+        "libruby.so.3.4.7+0x147b08 (rb_wb_protected_newobj_of)",
+        "libruby.so.3.4.7+0x284a24 (str_enc_new)",
+        "libruby.so.3.4.7+0x28a549 (str_new_frozen_buffer)",
+        "libruby.so.3.4.7+0x23aaf7 (rb_reg_search0)",
+        "libruby.so.3.4.7+0x29f640 (str_gsub)",
+        "libruby.so.3.4.7+0x2fc1eb (vm_call_cfunc_with_frame)",
+        "libruby.so.3.4.7+0x302c2e (vm_sendish.constprop.0)",
+        "libruby.so.3.4.7+0x3103ad (vm_exec_core)",
         "(sweeping)+0 in <gc>:0",
         "(garbage collection)+0 in <gc>:0"
       ]
@@ -28,8 +28,8 @@
     {
       "lwp": 48553,
       "frames": [
-        "libc.so.6+0x108f26",
-        "libruby.so.3.4.7+0x2bbdf4",
+        "libc.so.6+0x108f26 (epoll_wait)",
+        "libruby.so.3.4.7+0x2bbdf4 (timer_thread_func)",
         "libc.so.6+0x891f4",
         "libc.so.6+0x1098db"
       ]

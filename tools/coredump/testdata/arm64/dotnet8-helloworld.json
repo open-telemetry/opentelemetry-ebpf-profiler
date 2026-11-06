@@ -4,8 +4,8 @@
     {
       "lwp": 460095,
       "frames": [
-        "libc.so.6+0xddc9c",
-        "libSystem.Native.so+0x1cd3b",
+        "libc.so.6+0xddc9c (__write)",
+        "libSystem.Native.so+0x1cd3b (SystemNative_Write)",
         "Interop/Sys.Write+0 in System.Console.dll:0",
         "System.ConsolePal.Write+0 in System.Console.dll:0",
         "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
@@ -19,16 +19,16 @@
         "libcoreclr.so+0x1dfe4b",
         "libcoreclr.so+0x1e01a3",
         "libcoreclr.so+0x209c0b",
-        "libcoreclr.so+0x1cabeb",
+        "libcoreclr.so+0x1cabeb (coreclr_execute_assembly)",
         "libhostpolicy.so+0x3b8a7",
-        "libhostpolicy.so+0x3c873",
+        "libhostpolicy.so+0x3c873 (corehost_main)",
         "libhostfxr.so+0x2d2bb",
         "libhostfxr.so+0x2c59b",
-        "libhostfxr.so+0x28cbf",
+        "libhostfxr.so+0x28cbf (hostfxr_main_startupinfo)",
         "helloworld+0x1fb8b",
         "helloworld+0x1fec3",
         "libc.so.6+0x27743",
-        "libc.so.6+0x27817",
+        "libc.so.6+0x27817 (__libc_start_main)",
         "helloworld+0x1654b",
         "<unwinding aborted due to error native_exceeded_delta_lookup_iterations>"
       ]
@@ -36,7 +36,7 @@
     {
       "lwp": 460096,
       "frames": [
-        "libc.so.6+0xe1c3c",
+        "libc.so.6+0xe1c3c (__poll)",
         "libcoreclr.so+0x5eddf3",
         "libcoreclr.so+0x5ed4bb",
         "libcoreclr.so+0x5f68e7",
@@ -47,7 +47,7 @@
     {
       "lwp": 460097,
       "frames": [
-        "libc.so.6+0xe1c3c",
+        "libc.so.6+0xe1c3c (__poll)",
         "libcoreclr.so+0x4eafcf",
         "libcoreclr.so+0x5a15bf",
         "libcoreclr.so+0x59f357",
@@ -59,7 +59,7 @@
     {
       "lwp": 460098,
       "frames": [
-        "libc.so.6+0xdd90c",
+        "libc.so.6+0xdd90c (__open)",
         "libcoreclr.so+0x4ebb47",
         "libcoreclr.so+0x4e662b",
         "libcoreclr.so+0x4e56ab",
@@ -72,7 +72,7 @@
       "lwp": 460099,
       "frames": [
         "libc.so.6+0x7e834",
-        "libc.so.6+0x81387",
+        "libc.so.6+0x81387 (pthread_cond_wait)",
         "libcoreclr.so+0x5eb77f",
         "libcoreclr.so+0x5eb4a3",
         "libcoreclr.so+0x5efd9b",
@@ -88,7 +88,7 @@
       "lwp": 460100,
       "frames": [
         "libc.so.6+0x7e834",
-        "libc.so.6+0x81687",
+        "libc.so.6+0x81687 (pthread_cond_timedwait)",
         "libcoreclr.so+0x5eb873",
         "libcoreclr.so+0x5eb4a3",
         "libcoreclr.so+0x5efd9b",
@@ -105,7 +105,7 @@
     {
       "lwp": 460102,
       "frames": [
-        "libc.so.6+0xddbc8",
+        "libc.so.6+0xddbc8 (__read)",
         "libSystem.Native.so+0x230fb",
         "libc.so.6+0x8202f",
         "libc.so.6+0xebf5b"
