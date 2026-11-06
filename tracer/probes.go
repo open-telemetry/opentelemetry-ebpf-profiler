@@ -229,17 +229,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, c.maxConcurrentLoads(), perfProgs.FD(), perCPURecords.FD(),
+		bpfVerifierLogLevel, c.maxConcurrentProgLoads, perfProgs.FD(), perCPURecords.FD(),
 		perCPURecordsKp)
-}
-
-// maxConcurrentLoads returns the concurrency limit for loading eBPF programs,
-// falling back to DefaultMaxConcurrentProgLoads if it is unset.
-func (c *ProbeContext) maxConcurrentLoads() int {
-	if c.maxConcurrentProgLoads <= 0 {
-		return DefaultMaxConcurrentProgLoads
-	}
-	return c.maxConcurrentProgLoads
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs

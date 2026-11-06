@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
-	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 var errInvalidConfig = errors.New("invalid config")
@@ -52,7 +51,6 @@ func defaultConfig() component.Config {
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
-		MaxConcurrentProgLoads: tracer.DefaultMaxConcurrentProgLoads,
 	}
 }
 

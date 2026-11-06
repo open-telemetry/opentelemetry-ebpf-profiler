@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/collector/component"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -120,12 +119,6 @@ func (cfg *Config) Validate() error {
 
 	if cfg.BPFVerifierLogLevel > 2 {
 		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BPFVerifierLogLevel)
-	}
-
-	if cfg.MaxConcurrentProgLoads < 1 {
-		log.Infof("Using %d concurrent eBPF program loads",
-			tracer.DefaultMaxConcurrentProgLoads)
-		cfg.MaxConcurrentProgLoads = tracer.DefaultMaxConcurrentProgLoads
 	}
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {

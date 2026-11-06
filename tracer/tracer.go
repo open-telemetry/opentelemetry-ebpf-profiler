@@ -266,7 +266,7 @@ type Config struct {
 	// MaxConcurrentProgLoads caps how many eBPF programs are loaded and verified
 	// concurrently. Since the memory used during verification is accounted to the
 	// profiler's memory cgroup, lowering this value can prevent OOM kills at startup
-	// when the limit is tight. A value of 0 selects DefaultMaxConcurrentProgLoads.
+	// when the limit is tight. A value of 0 selects the built-in default.
 	MaxConcurrentProgLoads int
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	ProbabilisticInterval time.Duration
@@ -1005,20 +1005,22 @@ type progEntry struct {
 	loadTime time.Duration
 }
 
-// DefaultMaxConcurrentProgLoads is the default for how many eBPF programs are
+// defaultMaxConcurrentProgLoads is the default for how many eBPF programs are
 // verified at once.
 //
 // While verifying a program, the kernel allocates temporary memory that is charged
 // to the memory cgroup of the profiler: up to ~9 MiB for the largest programs, and
 // ~80 MiB for all of them together. Four concurrent loads bound this to ~30 MiB,
 // independently of the number of CPUs, and already give most of the speedup.
-const DefaultMaxConcurrentProgLoads = 4
+const defaultMaxConcurrentProgLoads = 4
 
 // maxConcurrentProgLoads returns the configured concurrency limit for loading
-// eBPF programs, falling back to DefaultMaxConcurrentProgLoads if it is unset.
+// eBPF programs, falling back to defaultMaxConcurrentProgLoads if it is unset.
 func (cfg *Config) maxConcurrentProgLoads() int {
 	if cfg.MaxConcurrentProgLoads <= 0 {
-		return DefaultMaxConcurrentProgLoads
+		log.Debugf("MaxConcurrentProgLoads is %d, falling back to %d",
+			cfg.MaxConcurrentProgLoads, defaultMaxConcurrentProgLoads)
+		return defaultMaxConcurrentProgLoads
 	}
 	return cfg.MaxConcurrentProgLoads
 }
