@@ -193,6 +193,7 @@ func (r *Reader) init(source libpf.ViewAtReader, start, maxLen int64) {
 	r.limit = start + maxLen
 	r.slimit = r.limit
 	r.bufSize = maxBufferSize
+	r.slideView = false
 	r.pinnedPin = 0
 }
 

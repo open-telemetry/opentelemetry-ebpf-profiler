@@ -10,7 +10,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"syscall"
-	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
@@ -90,7 +89,7 @@ func (r *ReaderAt) ViewAt(offs, minLen int64) ([]byte, error) {
 	if offs >= int64(r.Len()) || int64(r.Len())-offs < minLen {
 		return nil, io.EOF
 	}
-	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offs])), r.Len()-int(offs)), nil
+	return r.data[offs:], nil
 }
 
 // PinAt implements the libpf.ViewAtReader interface. The mapping is

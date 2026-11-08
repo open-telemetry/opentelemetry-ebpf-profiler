@@ -318,43 +318,12 @@ func NewFileFromFS(f fs.File) (*File, error) {
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
-	// Normalize the source to a ViewAtReader. Memory map os.File sources
-	// by default: mapping views are naturally stable and zero-copy.
-	// Sources that already provide views (modulestore chunk caches,
-	// out-of-tree mappings) are borrowed as-is; remaining raw sources are
-	// wrapped in a small page cache so that random access reads do not hit
-	// the kernel for every read.
-	var elfReader libpf.ViewAtReader
-	var ownsCache bool
-	if cache, ok := r.(*readatbuf.Reader); ok {
-		elfReader = cache
-	} else if osFile, ok := r.(*os.File); ok {
-		// Attempt to mmap the file if possible.
-		if mapping, err := mmap.OpenFile(osFile); err == nil {
-			elfReader = mapping
-		}
-	} else if view, ok := r.(libpf.ViewAtReader); ok {
-		elfReader = view
-	}
-	if elfReader == nil {
-		var err error
-		if elfReader, err = readatbuf.New(r, defaultPageSize, defaultCachePages); err != nil {
-			return nil, err
-		}
-		ownsCache = true
-	}
-
 	f := &File{
-		elfReader:     elfReader,
-		ownsCache:     ownsCache,
 		InsideCore:    loadAddress != 0,
 		closer:        closer,
 		debuglinkPath: notYetProcessed,
 		notesError:    errNotProcessed,
 		golangVersion: strNotProcessed,
-	}
-	if mapping, ok := elfReader.(*mmap.ReaderAt); ok {
-		f.mmapReader = mapping
 	}
 	success := false
 	defer func() {
@@ -362,6 +331,33 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			_ = f.Close()
 		}
 	}()
+
+	// Normalize the source to a ViewAtReader. Memory map os.File sources
+	// by default: mapping views are naturally stable and zero-copy.
+	// Sources that already provide views (modulestore chunk caches,
+	// out-of-tree mappings) are borrowed as-is; remaining raw sources are
+	// wrapped in a small page cache so that random access reads do not hit
+	// the kernel for every read.
+	if cache, ok := r.(*readatbuf.Reader); ok {
+		f.elfReader = cache
+	} else if osFile, ok := r.(*os.File); ok {
+		// Attempt to mmap the file if possible.
+		if mapping, err := mmap.OpenFile(osFile); err == nil {
+			f.elfReader = mapping
+		}
+	} else if view, ok := r.(libpf.ViewAtReader); ok {
+		f.elfReader = view
+	} else {
+		var err error
+		f.ownsCache = true
+		f.elfReader, err = readatbuf.New(r, defaultPageSize, defaultCachePages)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		f.mmapReader = mapping
+	}
 
 	hdr := &f.elfHeader
 	if _, err := f.elfReader.ReadAt(pfunsafe.FromPointer(hdr), 0); err != nil {
@@ -1368,16 +1364,14 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		if err != nil {
 			return fmt.Errorf("failed to read symbol name from %v: %w", name, err)
 		}
-		if symName != "" {
-			if !visitor(libpf.Symbol{
-				Name:    libpf.SymbolName(symName),
-				Address: libpf.SymbolValue(sym.Value),
-				Size:    sym.Size,
-				Info:    sym.Info,
-				Shndx:   sym.Shndx,
-			}) {
-				break
-			}
+		if !visitor(libpf.Symbol{
+			Name:    libpf.SymbolName(symName),
+			Address: libpf.SymbolValue(sym.Value),
+			Size:    sym.Size,
+			Info:    sym.Info,
+			Shndx:   sym.Shndx,
+		}) {
+			break
 		}
 	}
 	runtime.KeepAlive(f)
