@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"sync/atomic"
 	"syscall"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -19,27 +18,13 @@ import (
 // Like any io.ReaderAt, clients can execute parallel ReadAt calls, but it is
 // not safe to call Close and reading methods concurrently.
 type ReaderAt struct {
-	// refCount is the number of references
-	refCount atomic.Int32
-
 	data []byte
 }
 
 var _ libpf.ViewAtReader = &ReaderAt{}
 
-// Take takes a reference on the data
-func (r *ReaderAt) Take() io.Closer {
-	r.refCount.Add(1)
-	return r
-}
-
 // Close closes the reader.
 func (r *ReaderAt) Close() error {
-	// Drop reference
-	if r.refCount.Add(-1) > 0 {
-		return nil
-	}
-	// No more references - unmap data
 	if r.data == nil {
 		return nil
 	} else if len(r.data) == 0 {
@@ -159,7 +144,6 @@ func OpenFile(f *os.File) (*ReaderAt, error) {
 	}
 
 	r := &ReaderAt{data: data}
-	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
 	r.setRandom()
 	return r, nil

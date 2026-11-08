@@ -20,6 +20,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 )
 
 func getPFELF(t *testing.T, path string) *File {
@@ -244,4 +246,70 @@ func TestGetGoBuildID(t *testing.T) {
 	require.NoError(t, err)
 	expectedBuildID := strings.TrimRight(string(out), "\n")
 	assert.Equal(t, expectedBuildID, buildID)
+}
+
+// TestFileTakeRefcount verifies that the underlying reader stays readable
+// after Close while a Take reference is outstanding, and is closed when the
+// last reference is dropped.
+func TestFileTakeRefcount(t *testing.T) {
+	ef := getPFELF(t, "testdata/go-binary")
+
+	// Open() maps the file: the mapping stands in for the closed source
+	// file descriptor as the owned closer.
+	require.IsType(t, &mmap.ReaderAt{}, ef.resources.closer)
+
+	dataRef := ef.Take()
+	// Close the File: the reference keeps the underlying reader open.
+	require.NoError(t, ef.Close())
+
+	// The File is closed, but the reference keeps the reader readable.
+	progs := make([]byte, 64)
+	_, err := ef.Underlying().ReadAt(progs, 0)
+	require.NoError(t, err)
+
+	// Dropping the last reference closes the underlying reader.
+	require.NoError(t, dataRef.Close())
+	_, err = ef.Underlying().ReadAt(progs, 0)
+	assert.Error(t, err)
+}
+
+// TestFileBorrowedReaderTake verifies that Take returns the no-op closer,
+// and Close releases nothing, for Files that only borrow the reader from
+// the caller.
+func TestFileBorrowedReaderTake(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/go-binary")
+	f, err := os.Open("testdata/go-binary")
+	require.NoError(t, err)
+	defer f.Close()
+
+	cache, err := readatbuf.New(f, 4096, 4)
+	require.NoError(t, err)
+
+	ef, err := NewFile(cache, 0, false)
+	require.NoError(t, err)
+
+	assert.IsType(t, NoOpCloser{}, ef.Take())
+	require.NoError(t, ef.Close())
+	// The borrowed reader remains fully functional.
+	_, err = cache.ReadAt(make([]byte, 4), 0)
+	assert.NoError(t, err)
+}
+
+// TestFileBorrowedMappingTake verifies that a File built on a caller-created
+// memory mapping borrows it: Close does not unmap it, and it stays usable.
+func TestFileBorrowedMappingTake(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/go-binary")
+	mapping, err := mmap.Open("testdata/go-binary")
+	require.NoError(t, err)
+	defer mapping.Close()
+
+	ef, err := NewFile(mapping, 0, false)
+	require.NoError(t, err)
+
+	assert.IsType(t, NoOpCloser{}, ef.Take())
+	require.NoError(t, ef.Close())
+	// The File must not unmap a mapping it does not own.
+	view, err := mapping.ViewAt(0, 1)
+	require.NoError(t, err)
+	assert.NotEmpty(t, view)
 }
