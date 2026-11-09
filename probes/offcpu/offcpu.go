@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -24,9 +25,12 @@ import (
 //
 //	extensions:
 //	   offcpu:
-//	     threshold: 0.1		# capture probability in ]0.0, 1.0]
+//	     threshold: 0.1       # capture probability in ]0.0, 1.0]
+//	     min_duration: 0s     # optional; 0 = keep all sampled waits
 type Config struct {
 	Threshold float64 `mapstructure:"threshold"`
+	// MinDuration drops off-CPU waits shorter than this before stack unwinding.
+	MinDuration time.Duration `mapstructure:"min_duration"`
 }
 
 // Validate implements confmap.Validator.
@@ -34,12 +38,16 @@ func (cfg *Config) Validate() error {
 	if cfg.Threshold <= 0.0 || cfg.Threshold > 1.0 {
 		return fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
 	}
+	if cfg.MinDuration < 0 {
+		return fmt.Errorf("offcpu: min_duration must be >= 0")
+	}
 	return nil
 }
 
 type probe struct {
-	threshold uint32
-	links     []link.Link
+	threshold     uint32
+	minDurationNs uint64
+	links         []link.Link
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
@@ -57,7 +65,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	coll, err := probeCtx.CollectionSpecWith(
 		[]string{"sched_times"},
 		[]string{"finish_task_switch", "tracepoint__sched_switch"},
-		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
+		[]string{"off_cpu_threshold", "off_cpu_min_duration_ns", "origin_id_off_cpu"},
 	)
 	if err != nil {
 		return err
@@ -65,6 +73,9 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 	if err := coll.Variables["off_cpu_threshold"].Set(p.threshold); err != nil {
 		return fmt.Errorf("set off_cpu_threshold: %w", err)
+	}
+	if err := coll.Variables["off_cpu_min_duration_ns"].Set(p.minDurationNs); err != nil {
+		return fmt.Errorf("set off_cpu_min_duration_ns: %w", err)
 	}
 	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
 		return fmt.Errorf("set origin_id_off_cpu: %w", err)

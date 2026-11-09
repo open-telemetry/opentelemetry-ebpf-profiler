@@ -21,6 +21,9 @@ struct sched_times_t {
 // off_cpu_threshold is set during load time.
 BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 
+// off_cpu_min_duration_ns is set during load time. 0 disables the filter.
+BPF_RODATA_VAR(u64, off_cpu_min_duration_ns, 0)
+
 // origin_id_off_cpu is set during load time.
 BPF_RODATA_VAR(u16, origin_id_off_cpu, 0)
 
@@ -97,8 +100,6 @@ int finish_task_switch(struct pt_regs *ctx)
     return 0;
   }
 
-  // Trace timestamps are CLOCK_BOOTTIME
-  u64 ts      = bpf_ktime_get_boot_ns();
   // The off-CPU duration is CLOCK_MONOTONIC to match the value stored by
   // tracepoint__sched_switch.
   u64 mono_ts = bpf_ktime_get_ns();
@@ -109,8 +110,16 @@ int finish_task_switch(struct pt_regs *ctx)
   // Remove entry from the map so the stack for the same pid_tgid does not get unwound and
   // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
   bpf_map_delete_elem(&sched_times, &pid_tgid);
+
+  // Drop short waits before prepare_trace to skip stack unwinding and export.
+  if (off_cpu_min_duration_ns && diff < off_cpu_min_duration_ns) {
+    return 0;
+  }
+
   DEBUG_PRINT("==== finish_task_switch ====");
 
+  // Trace timestamps are CLOCK_BOOTTIME
+  u64 ts               = bpf_ktime_get_boot_ns();
   PerCPURecord *record = prepare_trace(origin_id_off_cpu, pid, tid, group_leader, ts);
   if (!record) {
     return 0;
