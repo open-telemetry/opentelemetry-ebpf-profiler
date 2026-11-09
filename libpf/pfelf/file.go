@@ -1017,9 +1017,7 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 		n, err = ph.elfReader.ReadAt(p[0:end], int64(ph.Off)+off)
 		if n == 0 && errors.Is(err, syscall.EFAULT) {
 			// Read zeroes from sparse file holes
-			for i := range p[0:end] {
-				p[i] = 0
-			}
+			clear(p[0:end])
 			n = end
 		}
 		if n != end || err != nil {
