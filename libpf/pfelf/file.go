@@ -1032,9 +1032,7 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// anonymous pages, and zero initialized. Read zeroes from this area.
 	if n < len(p) && uint64(off) < ph.Memsz {
 		end := int(min(int64(len(p)-n), int64(ph.Memsz)-off))
-		for i := range p[n : n+end] {
-			p[i] = 0
-		}
+		clear(p[n : n+end])
 		n += end
 	}
 
