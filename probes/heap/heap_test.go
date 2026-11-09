@@ -177,10 +177,7 @@ func TestProbeVirtualAddress(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, contained, err := probeVirtualAddress(mapping, tc.fileOffset)
-			if err != nil {
-				t.Fatalf("probeVirtualAddress() returned %v", err)
-			}
+			got, contained := probeVirtualAddress(mapping, tc.fileOffset)
 			if got != tc.want || contained != tc.contained {
 				t.Fatalf("probeVirtualAddress() = (%#x, %v), want (%#x, %v)",
 					got, contained, tc.want, tc.contained)
@@ -191,8 +188,8 @@ func TestProbeVirtualAddress(t *testing.T) {
 	overflow := &process.RawMapping{
 		Vaddr: math.MaxUint64 - 1, FileOffset: 0x1000, Length: 0x1000,
 	}
-	if _, _, err := probeVirtualAddress(overflow, 0x1002); err == nil {
-		t.Fatal("probeVirtualAddress() accepted an overflowing address")
+	if _, contained := probeVirtualAddress(overflow, 0x1002); contained {
+		t.Fatal("probeVirtualAddress() reported an overflowing address as contained")
 	}
 }
 

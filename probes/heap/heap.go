@@ -35,6 +35,11 @@ const (
 	allocOriginVar    = "origin_id_heap_alloc"
 )
 
+// attachmentKey identifies one uprobe link within a single process. It is
+// only unique within the per-PID attachments map and must not be used as a
+// global key. It uses the on-disk identity rather than FileID because the
+// kernel registers uprobes against an inode and file offset: separate inodes
+// with identical contents share a FileID but each needs its own link.
 type attachmentKey struct {
 	odfi   util.OnDiskFileIdentifier
 	name   string
@@ -82,20 +87,17 @@ func New(cfg Config) (*Probe, error) {
 }
 
 // probeVirtualAddress translates a file offset to its runtime virtual address.
-// The boolean reports whether the offset is contained in mapping. An error is
-// returned when a contained offset can't be represented as a virtual address.
-func probeVirtualAddress(mapping *process.RawMapping, fileOffset uint64) (uint64, bool, error) {
+// The boolean reports whether the offset is contained in mapping. An address
+// that would overflow is treated as not contained.
+func probeVirtualAddress(mapping *process.RawMapping, fileOffset uint64) (uint64, bool) {
 	if fileOffset < mapping.FileOffset {
-		return 0, false, nil
+		return 0, false
 	}
 	delta := fileOffset - mapping.FileOffset
-	if delta >= mapping.Length {
-		return 0, false, nil
+	if delta >= mapping.Length || mapping.Vaddr > math.MaxUint64-delta {
+		return 0, false
 	}
-	if mapping.Vaddr > math.MaxUint64-delta {
-		return 0, false, errors.New("probe virtual address overflows")
-	}
-	return mapping.Vaddr + delta, true, nil
+	return mapping.Vaddr + delta, true
 }
 
 // Derive an unbiased object-count estimator from the
@@ -136,9 +138,10 @@ func appendAllocValues(dst []int64, meta *samples.TraceEventMeta) []int64 {
 
 // Load implements tracer.Probe. It loads the heap eBPF programs and creates
 // the USDT discoverer used during per-process attachment.
-func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
+func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar,
+	pctx *tracer.ProbeContext,
+) (err error) {
 	// Register origin ID. The eBPF program reads this from RODATA.
-	var err error
 	hp.originAlloc, err = reg.Register(&tracer.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes: []samples.SampleType{
@@ -182,19 +185,33 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	if err != nil {
 		return fmt.Errorf("creating usdt_specs map: %w", err)
 	}
-	if err := pctx.RewriteMaps(coll, map[string]*cebpf.Map{"usdt_specs": specMap}); err != nil {
+
+	// Everything created from here on is owned by Load until it returns
+	// successfully, so release it on any error.
+	ebpfProgs := make(map[string]*cebpf.Program)
+	defer func() {
+		if err == nil {
+			return
+		}
+		hp.usdtSpecs = nil
+		hp.programs = nil
+		hp.discoverer = nil
+		for _, p := range ebpfProgs {
+			_ = p.Close()
+		}
 		_ = specMap.Close()
+	}()
+
+	if err := pctx.RewriteMaps(coll, map[string]*cebpf.Map{"usdt_specs": specMap}); err != nil {
 		return fmt.Errorf("rewriting maps: %w", err)
 	}
 
-	ebpfProgs := make(map[string]*cebpf.Program)
 	progs := []tracer.ProgLoaderHelper{{
 		Name:             allocProgName,
 		NoTailCallTarget: true,
 		Enable:           true,
 	}}
 	if err := pctx.LoadProbeUnwinders(coll, ebpfProgs, progs, 0); err != nil {
-		_ = specMap.Close()
 		return fmt.Errorf("loading heap eBPF programs: %w", err)
 	}
 
@@ -204,15 +221,12 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	}
 	hp.discoverer, err = usdt.NewDiscoverer()
 	if err != nil {
-		_ = specMap.Close()
 		return fmt.Errorf("creating USDT discoverer: %w", err)
 	}
 
 	// Register for per-process callbacks via ProbeAttacher.
 	hp.usdtSpecs = specMap
 	if err := pctx.AddAttacher(hp); err != nil {
-		hp.usdtSpecs = nil
-		_ = specMap.Close()
 		return err
 	}
 	return nil
@@ -263,12 +277,7 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		}
 		// USDT notes identify sites by file offset, while the spec map is keyed by
 		// the runtime PC. Ignore sites that belong to another mapping of this ELF.
-		virtualAddress, contained, err := probeVirtualAddress(mapping, point.Location)
-		if err != nil {
-			log.Warnf("heap probe: resolve virtual address for %s:%s PID %d at offset %#x: %v",
-				point.Provider, point.Name, pid, point.Location, err)
-			continue
-		}
+		virtualAddress, contained := probeVirtualAddress(mapping, point.Location)
 		if !contained {
 			continue
 		}
@@ -354,8 +363,9 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 			}
 			attached.specKeys[candidate.specKey] = libpf.Void{}
 			hp.mu.Unlock()
-			// A PID-scoped uprobe is registered by inode and file offset, so the
-			// existing link fires for every mapping of that site in this process.
+			// In some cases, e.g. with dlmopen, a library may be mapped in multiple
+			// times. A PID-scoped uprobe is registered by inode and file offset, so
+			// the existing link fires for every mapping of that site in this process.
 			continue
 		}
 		if err := hp.usdtSpecs.Put(candidate.specKey, candidate.spec); err != nil {
