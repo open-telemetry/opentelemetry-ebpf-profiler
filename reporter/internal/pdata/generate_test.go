@@ -795,8 +795,10 @@ func TestGenerate_ErrorFrames(t *testing.T) {
 		}
 		if tc.errorType == "" {
 			assert.NotContains(t, attrs, string(semconv.ErrorTypeKey), "frame %d", i)
+			assert.Equal(t, uint64(tc.address), loc.Address(), "frame %d", i)
 		} else {
 			assert.Equal(t, tc.errorType, attrs[string(semconv.ErrorTypeKey)], "frame %d", i)
+			assert.EqualValues(t, 0, loc.Address(), "frame %d", i)
 		}
 	}
 }

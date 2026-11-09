@@ -284,7 +284,9 @@ func (p *Pdata) setProfile(
 			if !exists {
 				// Add a new Location to the dictionary
 				loc := dic.LocationTable().AppendEmpty()
-				loc.SetAddress(locInfo.address)
+				if !locInfo.frameType.IsError() {
+					loc.SetAddress(locInfo.address)
+				}
 				loc.SetMappingIndex(locInfo.mappingIndex)
 				if locInfo.hasLine {
 					line := loc.Lines().AppendEmpty()
