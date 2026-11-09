@@ -105,7 +105,7 @@ rust-tests: rust-targets
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
-	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
 	cd tools/coredump && CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
 
 format: format-go format-ebpf
