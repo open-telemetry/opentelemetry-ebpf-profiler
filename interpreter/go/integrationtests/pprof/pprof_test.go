@@ -46,7 +46,6 @@ func setPprofLabels(t *testing.T, ctx context.Context, cookie string, busyFunc f
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
-				break
 			}
 		}
 	})

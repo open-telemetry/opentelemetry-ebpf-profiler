@@ -44,6 +44,11 @@ EBPF_FLAGS :=
 
 GO_TOOLS := -modfile=$(CURDIR)/internal/tools/go.mod
 
+# Go modules to lint and format. The collector module is generated, and the
+# testdata modules hold fixtures built by their own Makefiles.
+GO_MODULES := . internal/tools interpreter/go/integrationtests/pprof \
+	tools/coredump tools/luajitoffsets
+
 MAKEFLAGS += -j$(shell nproc)
 
 JUNIT_OUT_DIR ?= /tmp/testresults
@@ -105,14 +110,18 @@ rust-tests: rust-targets
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
-	go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
-	cd tools/coredump && CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	# Without CGO the cgo bindings are skipped as having no Go files.
+	for mod in $(GO_MODULES); do \
+		CGO_ENABLED=1 go -C $$mod tool $(GO_TOOLS) golangci-lint run \
+			--max-issues-per-linter -1 --max-same-issues -1 || exit ; \
+	done
 
 format: format-go format-ebpf
 
 format-go:
-	go tool $(GO_TOOLS) golangci-lint fmt
-	cd tools/coredump && go tool $(GO_TOOLS) golangci-lint fmt
+	for mod in $(GO_MODULES); do \
+		go -C $$mod tool $(GO_TOOLS) golangci-lint fmt || exit ; \
+	done
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
