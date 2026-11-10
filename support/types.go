@@ -126,14 +126,19 @@ type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16
 }
-type StackDeltaPageInfo struct {
-	FirstDelta uint32
-	NumDeltas  uint16
-	MapID      uint16
+type StackDeltaPair struct {
+	First  StackDelta
+	Second StackDelta
 }
-type StackDeltaPageKey struct {
-	FileID uint64
-	Page   uint64
+type StackDeltaMeta struct {
+	FirstPage uint32
+	NumPages  uint32
+	MapID     uint32
+}
+type StackDeltaPageDesc struct {
+	FirstPair    uint32
+	NumPairs     uint16
+	FallbackInfo uint16
 }
 type SystemAnalysis struct {
 	Address   uint64

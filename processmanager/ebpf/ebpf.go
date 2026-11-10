@@ -56,7 +56,7 @@ type ebpfMapsImpl struct {
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
-	StackDeltaPageToInfo  *cebpf.Map `name:"stack_delta_page_to_info"`
+	ExeIDToStackDeltaMeta *cebpf.Map `name:"exe_id_to_stackdelta_meta"`
 	PidPageToMappingInfo  *cebpf.Map `name:"pid_page_to_mapping_info"`
 	UnwindInfoArray       *cebpf.Map `name:"unwind_info_array"`
 	ReportedPIDs          *cebpf.Map `name:"reported_pids"`
@@ -439,14 +439,27 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, value sdtypes.UnwindInf
 			cebpf.UpdateAny))
 }
 
-// UpdateExeIDToStackDeltas creates a nested map for fileID in the eBPF map exeIDTostack_deltas
-// and inserts the elements of the deltas array in this nested map. Returns mapID or error.
+// Compile-time assertions that a flat delta list is byte-identical to
+// StackDeltaPair entries, so it can be reinterpreted as pairs without a copy.
+var (
+	_ = [1]struct{}{}[unsafe.Sizeof(support.StackDeltaPair{})/(2*unsafe.Sizeof(support.StackDelta{}))-1]
+	_ = [1]struct{}{}[unsafe.Offsetof(support.StackDeltaPair{}.First)]
+	_ = [1]struct{}{}[unsafe.Offsetof(support.StackDeltaPair{}.Second)/unsafe.Sizeof(support.StackDelta{})-1]
+	_ = [1]struct{}{}[unsafe.Offsetof(support.StackDelta{}.AddrLow)]
+	_ = [1]struct{}{}[unsafe.Offsetof(support.StackDelta{}.UnwindInfo)/2-1]
+)
+
+// UpdateExeIDToStackDeltas creates a nested map for fileID in the eBPF map exeIDTostack_deltas,
+// inserts the page descriptors followed by the stack delta pairs into it, and updates the
+// exe_id_to_stackdelta_meta map routing lookups to the nested map. Returns mapID or error.
 func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltas []ebpfapi.StackDeltaEBPF) (
+	deltas []ebpfapi.StackDelta, pageDescs []ebpfapi.StackDeltaPageDesc,
+	firstPage uint64,
+) (
 	uint16, error,
 ) {
-	numDeltas := len(deltas)
-	mapID, err := getMapID(uint32(numDeltas))
+	numEntries := len(pageDescs) + (len(deltas)+1)/2
+	mapID, err := getMapID(uint32(numEntries))
 	if err != nil {
 		return 0, err
 	}
@@ -487,28 +500,70 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 
 	impl.updateWorkers.EnqueueUpdate(outerMap, fileID, innerMapCloned)
 
-	innerKeys := make([]uint32, numDeltas)
-	stackDeltas := make([]support.StackDelta, numDeltas)
-
-	// Prepare values for batch update.
-	for index, delta := range deltas {
-		innerKeys[index] = uint32(index)
-		stackDeltas[index].AddrLow = delta.AddressLow
-		stackDeltas[index].UnwindInfo = delta.UnwindInfo
+	// Write the page descriptors first, then the stack delta pairs. The
+	// compile-time assertions above let the flat delta list be reinterpreted
+	// as pairs without a copy; only a final odd delta needs its own update.
+	numPages := len(pageDescs)
+	if bulkPairs := len(deltas) / 2; bulkPairs > 0 {
+		pairs := unsafe.Slice(
+			(*support.StackDeltaPair)(unsafe.Pointer(unsafe.SliceData(deltas))), bulkPairs)
+		pairKeys := make([]uint32, bulkPairs)
+		for index := range pairKeys {
+			pairKeys[index] = uint32(numPages + index)
+		}
+		_, err = innerMap.BatchUpdate(
+			ptrCastMarshaler[uint32](pairKeys),
+			ptrCastMarshaler[support.StackDeltaPair](pairs),
+			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
+		if err != nil {
+			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
+				fmt.Errorf("failed to batch insert %d elements for 0x%x "+
+					"into exeIDTostack_deltas: %v",
+					bulkPairs, fileID, err))
+		}
+	}
+	if len(deltas)%2 == 1 {
+		tailKey := uint32(numPages + len(deltas)/2)
+		tailPair := support.StackDeltaPair{First: deltas[len(deltas)-1]}
+		if err = innerMap.Update(unsafe.Pointer(&tailKey), unsafe.Pointer(&tailPair),
+			cebpf.UpdateAny); err != nil {
+			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasUpdate,
+				fmt.Errorf("failed to insert the last stack delta for 0x%x "+
+					"into exeIDTostack_deltas: %v", fileID, err))
+		}
 	}
 
+	descKeys := make([]uint32, len(pageDescs))
+	for index := range pageDescs {
+		descKeys[index] = uint32(index)
+	}
 	_, err = innerMap.BatchUpdate(
-		ptrCastMarshaler[uint32](innerKeys),
-		ptrCastMarshaler[support.StackDelta](stackDeltas),
+		ptrCastMarshaler[uint32](descKeys),
+		ptrCastMarshaler[support.StackDeltaPageDesc](pageDescs),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 	if err != nil {
 		// Undo the insertion enqueued above as the caller gets no mapID to clean up with.
 		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
-			fmt.Errorf("failed to batch insert %d elements for 0x%x "+
+			fmt.Errorf("failed to batch insert %d page descriptors for 0x%x "+
 				"into exeIDTostack_deltas: %v",
-				numDeltas, fileID, err))
+				len(pageDescs), fileID, err))
 	}
+
+	meta := support.StackDeltaMeta{
+		FirstPage: uint32(firstPage),
+		NumPages:  uint32(len(pageDescs)),
+		MapID:     uint32(mapID),
+	}
+	if err = impl.ExeIDToStackDeltaMeta.Update(unsafe.Pointer(&fileID), unsafe.Pointer(&meta),
+		cebpf.UpdateAny); err != nil {
+		// Roll back the enqueued outer map update so the inner map is not
+		// leaked. The updater pool preserves the ordering of updates per key.
+		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
+		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltaMetaUpdate,
+			fmt.Errorf("failed to insert stack delta meta for 0x%x: %v", fileID, err))
+	}
+
 	return mapID, nil
 }
 
@@ -519,80 +574,17 @@ func (impl *ebpfMapsImpl) DeleteExeIDToStackDeltas(fileID host.FileID, mapID uin
 		return fmt.Errorf("invalid mapID %d", mapID)
 	}
 
+	// Remove the metadata first so ebpf will not see an inconsistent state.
+	if err := impl.ExeIDToStackDeltaMeta.Delete(unsafe.Pointer(&fileID)); err != nil &&
+		!errors.Is(err, cebpf.ErrKeyNotExist) {
+		return impl.trackMapError(metrics.IDExeIDToStackDeltaMetaDelete, err)
+	}
+
 	// Deleting the entry from the outer maps deletes also the entries of the inner
 	// map associated with this outer key.
 	impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 
 	return nil
-}
-
-// UpdateStackDeltaPages adds fileID/page combinations with given information to the eBPF map.
-// Existing entries for these fileID/page keys are overwritten.
-func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-	mapID uint16, firstPageAddr uint64,
-) error {
-	firstDelta := uint32(0)
-	keys := make([]support.StackDeltaPageKey, len(numDeltasPerPage))
-	values := make([]support.StackDeltaPageInfo, len(numDeltasPerPage))
-
-	// Prepare the key/value combinations that will be loaded.
-	for pageNumber, numDeltas := range numDeltasPerPage {
-		pageAddr := firstPageAddr + uint64(pageNumber)<<support.StackDeltaPageBits
-		keys[pageNumber] = support.StackDeltaPageKey{
-			FileID: uint64(fileID),
-			Page:   pageAddr,
-		}
-		values[pageNumber] = support.StackDeltaPageInfo{
-			FirstDelta: firstDelta,
-			NumDeltas:  numDeltas,
-			MapID:      mapID,
-		}
-		firstDelta += uint32(numDeltas)
-	}
-
-	// The kernel never reads attr->batch.flags for batch updates, and only
-	// accepts BPF_F_LOCK in attr->batch.elem_flags. BPF_NOEXIST is silently ignored in Flags.
-	// We cannot pass BPF_NOEXIST as attr->batch.elem_flags because it will get
-	// rejected due to a discrepancy between the source code and documentation.
-	// See https://github.com/torvalds/linux/blob/e8f897f4afef0031fe618a8e94127a0934896aba/kernel/bpf/syscall.c#L1754
-	inserted, err := impl.StackDeltaPageToInfo.BatchUpdate(
-		ptrCastMarshaler[support.StackDeltaPageKey](keys),
-		ptrCastMarshaler[support.StackDeltaPageInfo](values),
-		nil)
-	if err != nil {
-		// The batch stops at the first failing element and keeps everything inserted before it.
-		if errors.Is(err, unix.E2BIG) {
-			// E2BIG returns the exact number of inserted keys, so we can batch delete them.
-			if _, derr := impl.StackDeltaPageToInfo.BatchDelete(
-				ptrCastMarshaler[support.StackDeltaPageKey](keys[:inserted]), nil); derr == nil {
-				return impl.trackMapError(
-					metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-			}
-		}
-		// Pre-loop errors and failed batch deletes report an unreliable count, so safely remove every attempted key.
-		var failed int
-		for i := range keys {
-			if derr := impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&keys[i])); derr != nil &&
-				!errors.Is(derr, cebpf.ErrKeyNotExist) {
-				failed++
-			}
-		}
-		if failed != 0 {
-			log.Debugf("Failed to delete %d of %d stack delta pages for FileID %x",
-				failed, len(keys), fileID)
-		}
-	}
-	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-}
-
-// DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.
-func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) error {
-	key := support.StackDeltaPageKey{
-		FileID: uint64(fileID),
-		Page:   page,
-	}
-	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete,
-		impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
 }
 
 // UpdatePidPageMappingInfo updates the pid and page combination with a corresponding fileID and

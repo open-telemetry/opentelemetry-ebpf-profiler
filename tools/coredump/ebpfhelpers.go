@@ -127,8 +127,8 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 				return val
 			}
 		}
-	case unsafe.Pointer(&C.stack_delta_page_to_info):
-		return ctx.stackDeltaPageToInfo[*(*C.StackDeltaPageKey)(keyptr)]
+	case unsafe.Pointer(&C.exe_id_to_stackdelta_meta):
+		return ctx.exeIDToStackDeltaMeta[*(*C.u64)(keyptr)]
 	case unsafe.Pointer(&C.exe_id_to_8_stack_deltas), unsafe.Pointer(&C.exe_id_to_9_stack_deltas),
 		unsafe.Pointer(&C.exe_id_to_10_stack_deltas), unsafe.Pointer(&C.exe_id_to_11_stack_deltas),
 		unsafe.Pointer(&C.exe_id_to_12_stack_deltas), unsafe.Pointer(&C.exe_id_to_13_stack_deltas),
@@ -145,7 +145,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 	case stackDeltaInnerMap:
 		key := uintptr(*(*C.u32)(keyptr))
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
-			return unsafe.Add(deltas, key*C.sizeof_StackDelta)
+			return unsafe.Add(deltas, key*C.sizeof_StackDeltaPair)
 		}
 	}
 	return unsafe.Pointer(uintptr(0))

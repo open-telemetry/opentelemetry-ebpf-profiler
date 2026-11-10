@@ -31,7 +31,7 @@
         "libc.so.6+0x27743",
         "libc.so.6+0x27817",
         "helloworld+0x1673b",
-        "<unwinding aborted due to error native_exceeded_delta_lookup_iterations>"
+        "<unwinding aborted due to error native_stack_delta_invalid>"
       ]
     },
     {

@@ -993,6 +993,7 @@
     "id": 133
   },
   {
+    "obsolete": true,
     "description": "Current size of the stack delta pages hash map",
     "type": "gauge",
     "name": "HashmapNumStackDeltaPages",
@@ -1452,6 +1453,7 @@
     "id": 197
   },
   {
+    "obsolete": true,
     "description": "Number of times updating an element in stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "StackDeltaPageToInfoUpdate",
@@ -1459,6 +1461,7 @@
     "id": 198
   },
   {
+    "obsolete": true,
     "description": "Number of times deleting an element from stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "StackDeltaPageToInfoDelete",
@@ -1849,6 +1852,7 @@
     "id": 251
   },
   {
+    "obsolete": true,
     "description": "Number of times batch updating elements in stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "StackDeltaPageToInfoBatchUpdate",
@@ -2284,5 +2288,19 @@
     "name": "ThreadContextSchemaRejected",
     "field": "agent.threadctx.schema_rejected",
     "id": 312
+  },
+  {
+    "description": "Number of times updating an element in exeIDToStackDeltaMeta failed",
+    "type": "counter",
+    "name": "ExeIDToStackDeltaMetaUpdate",
+    "field": "agent.errors.exe_id_to_stackdelta_meta_update",
+    "id": 313
+  },
+  {
+    "description": "Number of times deleting an element from exeIDToStackDeltaMeta failed",
+    "type": "counter",
+    "name": "ExeIDToStackDeltaMetaDelete",
+    "field": "agent.errors.exe_id_to_stackdelta_meta_delete",
+    "id": 314
   }
 ]

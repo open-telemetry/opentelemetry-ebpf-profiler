@@ -266,9 +266,6 @@ const (
 	// Current size of the unwind info array
 	IDUnwindInfoArraySize = 133
 
-	// Current size of the stack delta pages hash map
-	IDHashmapNumStackDeltaPages = 134
-
 	// Number of attempted V8 unwinds
 	IDUnwindV8Attempts = 136
 
@@ -431,12 +428,6 @@ const (
 	// Number of times updating an element in exeIDToStackDeltas failed
 	IDExeIDToStackDeltasUpdate = 196
 
-	// Number of times updating an element in stackDeltaPageToInfo failed
-	IDStackDeltaPageToInfoUpdate = 198
-
-	// Number of times deleting an element from stackDeltaPageToInfo failed
-	IDStackDeltaPageToInfoDelete = 199
-
 	// Number of times updating an element in pidPageToMappingInfo failed
 	IDPidPageToMappingInfoUpdate = 200
 
@@ -550,9 +541,6 @@ const (
 
 	// Number of times batch updating elements in exeIDToStackDeltas failed
 	IDExeIDToStackDeltasBatchUpdate = 251
-
-	// Number of times batch updating elements in stackDeltaPageToInfo failed
-	IDStackDeltaPageToInfoBatchUpdate = 252
 
 	// Number of times batch deleting elements from pidPageToMappingInfo failed
 	IDPidPageToMappingInfoBatchDelete = 253
@@ -710,6 +698,12 @@ const (
 	// Number of processes whose published thread-context label schema was rejected
 	IDThreadContextSchemaRejected = 312
 
+	// Number of times updating an element in exeIDToStackDeltaMeta failed
+	IDExeIDToStackDeltaMetaUpdate = 313
+
+	// Number of times deleting an element from exeIDToStackDeltaMeta failed
+	IDExeIDToStackDeltaMetaDelete = 314
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 313
+	IDMax = 315
 )

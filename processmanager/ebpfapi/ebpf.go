@@ -27,22 +27,15 @@ type EbpfHandler interface {
 	// UpdateUnwindInfo writes UnwindInfo to given unwind info array index
 	UpdateUnwindInfo(index uint16, info stackdeltatypes.UnwindInfo) error
 
-	// UpdateExeIDToStackDeltas defines a function that updates the eBPF map exe_id_to_stack_deltas
-	// for host.FileID with the elements of StackDeltaEBPF. It returns the mapID used.
-	UpdateExeIDToStackDeltas(fileID host.FileID, deltas []StackDeltaEBPF) (uint16, error)
+	// UpdateExeIDToStackDeltas defines a function that updates the eBPF maps for
+	// host.FileID with the given stack deltas and their page descriptors. firstPage
+	// is the page number of the first entry of pageDescs. It returns the mapID used.
+	UpdateExeIDToStackDeltas(fileID host.FileID, deltas []StackDelta,
+		pageDescs []StackDeltaPageDesc, firstPage uint64) (uint16, error)
 
 	// DeleteExeIDToStackDeltas defines a function that removes the entries from the outer eBPF
 	// map exe_id_to_stack_deltas and its associated inner map entries.
 	DeleteExeIDToStackDeltas(fileID host.FileID, mapID uint16) error
-
-	// UpdateStackDeltaPages defines a function that updates the mapping in a eBPF map from
-	// a FileID and page to its stack delta lookup information.
-	UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-		mapID uint16, firstPageAddr uint64) error
-
-	// DeleteStackDeltaPage defines a function that removes the element specified by fileID and page
-	// from the eBPF map.
-	DeleteStackDeltaPage(fileID host.FileID, page uint64) error
 
 	// UpdatePidPageMappingInfo defines a function that updates the eBPF map
 	// pid_page_to_mapping_info with the given pidAndPage and fileIDAndOffset encoded values
