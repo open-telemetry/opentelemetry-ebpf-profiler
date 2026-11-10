@@ -39,7 +39,7 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
 	}
 	if cfg.MinDuration < 0 {
-		return fmt.Errorf("offcpu: min_duration must be >= 0")
+		return fmt.Errorf("offcpu: min_duration %s must be >= 0", cfg.MinDuration)
 	}
 	return nil
 }
