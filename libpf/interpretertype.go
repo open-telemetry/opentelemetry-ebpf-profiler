@@ -44,9 +44,6 @@ const (
 	// pseudoInterpreterStart marks the start of the pseudo interpreter ID space.
 	pseudoInterpreterStart InterpreterType = 0x100
 
-	// APMInt identifies the pseudo-interpreter for the APM integration.
-	APMInt InterpreterType = 0x100
-
 	// ThreadContext identifies the pseudo-interpreter for thread context support.
 	ThreadContext InterpreterType = 0x101
 )
@@ -74,7 +71,6 @@ var interpreterTypeToString = map[InterpreterType]string{
 	V8:            "v8js",
 	Dotnet:        "dotnet",
 	BEAM:          "beam",
-	APMInt:        "apm-integration",
 	ThreadContext: "thread-context",
 	LuaJIT:        "luajit",
 	Go:            "go",

@@ -547,6 +547,9 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 		if err != nil {
 			return err
 		}
+		if index >= uint32(len(pp.info.methodSpecs)) {
+			return fmt.Errorf("method spec index %d is out of range (%d)", index, len(pp.info.methodSpecs))
+		}
 		// The entry decoding is from:
 		// https://github.com/dotnet/runtime/blob/v8.0.0/src/coreclr/vm/readytoruninfo.cpp#L1181
 		if id&1 != 0 {
@@ -1227,6 +1230,10 @@ func (pp *peParser) parseTables() error {
 	return nil
 }
 
+func (pp *peParser) release() {
+	libpf.PutBuffer(pp.headers)
+}
+
 func (pp *peParser) parse() error {
 	var err error
 
@@ -1236,7 +1243,7 @@ func (pp *peParser) parse() error {
 		return err
 	}
 	// Dotnet requires currently all headers to fit into 4K
-	pp.headers = make([]byte, 4096)
+	pp.headers = libpf.GetBuffer(4096)
 	if _, err = pp.ReadAt(pp.headers, 0); err != nil {
 		return fmt.Errorf("failed to read PE header: %v", err)
 	}
@@ -1309,11 +1316,9 @@ func (pi *peInfo) parse(r io.ReaderAt) error {
 		ReaderAt: r,
 		info:     pi,
 	}
-	err := pp.parse()
-	if err != nil {
-		return err
-	}
-	return nil
+	defer pp.release()
+
+	return pp.parse()
 }
 
 // peErrEntry caches a previously-observed open/parse error against the

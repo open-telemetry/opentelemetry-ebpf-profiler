@@ -560,18 +560,6 @@ const (
 	// Number of times the Hotspot unwind instructions requested LR unwinding mid-trace
 	IDUnwindHotspotErrLrUnwindingMidTrace = 256
 
-	// Number of failures to get TSD base for APM correlation
-	IDUnwindApmIntErrReadTsdBase = 257
-
-	// Number of failures read the APM correlation pointer
-	IDUnwindApmIntErrReadCorrBufPtr = 258
-
-	// Number of failures read the APM correlation buffer
-	IDUnwindApmIntErrReadCorrBuf = 259
-
-	// Number of successful reads of APM correlation info
-	IDUnwindApmIntReadSuccesses = 260
-
 	// Number of attempted dotnet unwinds
 	IDUnwindDotnetAttempts = 261
 

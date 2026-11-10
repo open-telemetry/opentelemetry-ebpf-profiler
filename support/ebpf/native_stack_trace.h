@@ -1,6 +1,4 @@
-#ifndef OPTI_NATIVE_STACK_TRACE_H
-#define OPTI_NATIVE_STACK_TRACE_H
-
+#pragma once
 #include "bpfdefs.h"
 #include "extmaps.h"
 #include "go_runtime.h"
@@ -60,8 +58,8 @@ static EBPF_INLINE void *get_stack_delta_map(int mapID)
 // Get the stack offset of the given instruction.
 static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindInfo)
 {
-  unsigned long exe_id = state->text_section_id;
-  unsigned long offset = state->text_section_offset - (unsigned long)state->return_address;
+  u64 exe_id = state->text_section_id;
+  u64 offset = state->text_section_offset - (u64)state->return_address;
 
   // Look up the stack delta page information for this address.
   StackDeltaPageKey key = {};
@@ -98,11 +96,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     u32 lo = info->firstDelta;
     u32 hi = lo + info->numDeltas;
 
-    DEBUG_PRINT(
-      "Intervals should be from %lu to %lu (mapID %d)",
-      (unsigned long)lo,
-      (unsigned long)hi,
-      (int)info->mapID);
+    DEBUG_PRINT("Intervals should be from %u to %u (mapID %u)", lo, hi, info->mapID);
 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
@@ -194,7 +188,7 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
   // Dereference, and add the postDereference adder.
   u64 val;
   if (bpf_probe_read_user(&val, sizeof(val), (void *)addr)) {
-    DEBUG_PRINT("unwind failed to dereference address 0x%lx", (unsigned long)addr);
+    DEBUG_PRINT("unwind failed to dereference address 0x%lx", addr);
     return 0;
   }
   // Return: "*(BASE + preDeref) + postDeref"
@@ -267,7 +261,7 @@ unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
       // This is the hard coded implementation of this expression. For further details,
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
       cfa = state->sp + 8UL + ((((state->pc & 15) >= 11) ? 1UL : 0UL) << 3);
-      DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
+      DEBUG_PRINT("PLT, cfa=0x%lx", cfa);
       break;
     case UNWIND_COMMAND_SIGNAL: {
       // Use the PerCPURecord scratch union instead of a stack-local buffer to avoid
@@ -480,7 +474,7 @@ unwind_one_frame(PerCPURecord *record, bool *stop, bool *delegate_command)
       return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
     }
   } else {
-    DEBUG_PRINT("RA: %016llX", (u64)ra);
+    DEBUG_PRINT("RA: %016lx", ra);
 
     // read the value of RA from stack
     long err;
@@ -506,6 +500,4 @@ frame_ok:
 }
 #else
   #error unsupported architecture
-#endif
-
 #endif

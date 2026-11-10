@@ -72,7 +72,7 @@ $(TRACER_NAME): $(OBJS)
 	# With the compile flag -g not only the btf section is added to the
 	# binary but also additional debug sections. As these debug sections
 	# are not relevant for BPF and increase the binary size remove them here.
-	$(STRIP) --strip-debug --enable-deterministic-archives $@
+	$(STRIP) --strip-debug --regex --strip-symbol="^LBB.*" --strip-symbol="^.*\.__.*" --enable-deterministic-archives $@
 	@./print_instruction_count.sh $@
 
 baseline: $(TRACER_NAME)

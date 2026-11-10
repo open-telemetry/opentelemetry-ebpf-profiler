@@ -65,6 +65,8 @@ const (
 var (
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
+	// ErrSectionNotPresent is returned when a section is not present
+	ErrSectionNotPresent = errors.New("section not present")
 
 	// ErrNoDebugLink is returned when debug link does not exist.
 	ErrNoDebugLink = errors.New("no debug link")
@@ -74,6 +76,10 @@ var (
 
 	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
 	ErrNoteNotFound = errors.New("note not found")
+
+	// ErrNoSymbolHash is returned by LookupSymbol for a file without a dynamic
+	// symbol hash table, such as a fully static executable.
+	ErrNoSymbolHash = errors.New("symbol hash not present")
 
 	// errNoGoBuildinfo is returned when the ELF is not a Go executable.
 	errNoGoBuildinfo = errors.New("go buildinfo not found")
@@ -442,7 +448,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
-			pfbufio.PutReader(rdr)
+			rdr.Release()
 		case elf.PT_INTERP:
 			f.isExecutable = true
 		}
@@ -629,25 +635,34 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 
 // SymbolData reads and returns the data associated with given dynamic symbol.
 // The maximum data read is capped to maxSize.
-func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxSize uint) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	data := make([]byte, min(int(sym.Size), maxSize))
-	_, err = f.ReadAt(data, int64(sym.Address))
+	data, err := f.ReadSymbolData(sym, maxSize)
 	if err != nil {
 		return nil, nil, err
 	}
 	return sym, data, nil
 }
 
+// ReadSymbolData reads and returns the data associated with given symbol.
+// The maximum data read is capped to maxSize.
+func (f *File) ReadSymbolData(sym *libpf.Symbol, maxSize uint) ([]byte, error) {
+	data := make([]byte, min(sym.Size, uint64(maxSize)))
+	if _, err := f.ReadAt(data, int64(sym.Address)); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 // VisitNotes iterates the ELF notes.
 // The visitor must make copies of the 'data' it keeps after return.
 // It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	for i := range f.Progs {
 		notes := &f.Progs[i]
@@ -656,7 +671,7 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 		}
 
 		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -685,8 +700,8 @@ func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bo
 		return err
 	}
 
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	visited := false
 	for i := range f.Sections {
@@ -698,7 +713,7 @@ func (f *File) VisitNoteSections(names []string, visitor func(uint64, []byte) bo
 		visited = true
 
 		rdr.Init(f.elfReader, int64(section.Offset), int64(section.Size))
-		err := visitNotes(rdr, visitor)
+		err := visitNotes(&rdr, visitor)
 		if errors.Is(err, ErrNoteNotFound) {
 			continue
 		}
@@ -890,7 +905,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	rela := &elf.Rela64{}
 	sym := &elf.Sym64{}
@@ -935,7 +950,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	d, err := rdr.ReadN(int(s.Size))
 	if err != nil {
@@ -1002,9 +1017,7 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 		n, err = ph.elfReader.ReadAt(p[0:end], int64(ph.Off)+off)
 		if n == 0 && errors.Is(err, syscall.EFAULT) {
 			// Read zeroes from sparse file holes
-			for i := range p[0:end] {
-				p[i] = 0
-			}
+			clear(p[0:end])
 			n = end
 		}
 		if n != end || err != nil {
@@ -1017,9 +1030,7 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// anonymous pages, and zero initialized. Read zeroes from this area.
 	if n < len(p) && uint64(off) < ph.Memsz {
 		end := int(min(int64(len(p)-n), int64(ph.Memsz)-off))
-		for i := range p[n : n+end] {
-			p[i] = 0
-		}
+		clear(p[n : n+end])
 		n += end
 	}
 
@@ -1248,7 +1259,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 			}
 		}
 	} else {
-		return nil, errors.New("symbol hash not present")
+		return nil, ErrNoSymbolHash
 	}
 
 	return nil, libpf.ErrSymbolNotFound
@@ -1267,7 +1278,7 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) error {
 	symTab := f.Section(name)
 	if symTab == nil {
-		return fmt.Errorf("failed to read %v: section not present", name)
+		return ErrSectionNotPresent
 	}
 	if symTab.Link >= uint32(len(f.Sections)) {
 		return fmt.Errorf("failed to read %v strtab: link %v out of range",
@@ -1280,7 +1291,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	}
 
 	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	sym := &elf.Sym64{}
 	for {
@@ -1308,12 +1319,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 
 // VisitSymbols iterates through the symbol table until visitor returns false.
 func (f *File) VisitSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".symtab", visitor)
+	if err := f.visitSymbolTable(".symtab", visitor); err != nil {
+		return fmt.Errorf("failed to visit .symtab: %w", err)
+	}
+	return nil
 }
 
 // VisitDynamicSymbols iterates through the dynamic symbol table until visitor returns false.
 func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol) bool) error {
-	return f.visitSymbolTable(".dynsym", visitor)
+	if err := f.visitSymbolTable(".dynsym", visitor); err != nil {
+		return fmt.Errorf("failed to visit .dynsym: %w", err)
+	}
+	return nil
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic
@@ -1405,7 +1422,7 @@ func (f *File) parseGoBuildinfo() error {
 	}
 
 	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	for {
 		offset, err := rdr.SearchSlice(goBuildInfoMagic)
@@ -1438,7 +1455,7 @@ func (f *File) parseGoBuildinfo() error {
 		if err != nil {
 			return errNoGoBuildinfo
 		}
-		ver, err := decodeString(rdr)
+		ver, err := decodeString(&rdr)
 		if err != nil {
 			return err
 		}

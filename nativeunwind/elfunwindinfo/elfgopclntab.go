@@ -139,8 +139,8 @@ type pcval struct {
 	quantum uint8
 }
 
-// PclntabHeaderSize returns the minimal pclntab header size.
-func PclntabHeaderSize() int {
+// pclntabHeaderSize returns the minimal pclntab header size.
+func pclntabHeaderSize() int {
 	return int(unsafe.Sizeof(pclntabHeader{}))
 }
 
@@ -275,7 +275,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, int64, error) {
 		}
 
 		// Skip segments that are too small anyway.
-		if p.Filesz < uint64(PclntabHeaderSize()) {
+		if p.Filesz < uint64(pclntabHeaderSize()) {
 			continue
 		}
 
@@ -285,7 +285,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, int64, error) {
 			return nil, 0, err
 		}
 
-		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
+		for i := 1; i < len(data)-pclntabHeaderSize(); i += 8 {
 			// Search for something looking like a valid pclntabHeader header
 			// Ignore the first byte on bytes.Index (differs on magicGo1_XXX)
 			n := bytes.Index(data[i:], signature)
@@ -425,7 +425,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	}
 	defer ef.SetDontNeed()
 
-	hdrSize := uintptr(PclntabHeaderSize())
+	hdrSize := uintptr(pclntabHeaderSize())
 	dataLen := uintptr(len(data))
 	if dataLen < hdrSize {
 		return nil, fmt.Errorf(".gopclntab is too short (%v)", len(data))
@@ -498,7 +498,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.filetabOffset >= g.pctabOffset ||
 		g.pctabOffset >= g.pclnOffset ||
 		g.pclnOffset >= dataLen ||
-		(int64(g.numFuncs)+1)*int64(g.funcMapSize) > int64(len(data))-int64(g.pclnOffset) {
+		uint64(g.numFuncs)+1 > uint64(dataLen-g.pclnOffset)/uint64(g.funcMapSize) {
 		return nil, fmt.Errorf("corrupt header (%x < %x < %x < %x < %x)",
 			g.funcnameOffset, g.cuOffset, g.filetabOffset, g.pctabOffset, g.pclnOffset)
 	}
@@ -790,8 +790,8 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	// Walk all filenames and record the ones needing a strategy
 	offsetStrategy := make(map[int]strategy)
@@ -826,8 +826,8 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 }
 
 func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
-	rdr := pfbufio.GetReader()
-	defer pfbufio.PutReader(rdr)
+	rdr := pfbufio.Reader{}
+	defer rdr.Release()
 
 	functionInfo := make(map[int32]*sdtypes.UnwindInfo)
 	rdr.Init(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))

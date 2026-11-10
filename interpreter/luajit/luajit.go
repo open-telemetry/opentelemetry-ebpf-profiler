@@ -8,14 +8,37 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 import (
 	"debug/elf"
 	"errors"
+	"fmt"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+// Records all the "global" pointers we've seen.
+type vmMap map[libpf.Address]struct{}
+
+type regionKey struct {
+	start, end uint64
+}
+
+func keyForMapping(m *process.RawMapping) regionKey {
+	return regionKey{
+		start: m.Vaddr,
+		end:   m.Vaddr + m.Length,
+	}
+}
+
+// Records all the JIT regions we've seen, value is SynchronizeMappings
+// generation.
+type regionMap map[regionKey]uint32
 
 type luajitData struct {
 	// The distance from the "g" pointer in the GG_State struct to the start of the dispatch table.
@@ -29,6 +52,12 @@ type luajitData struct {
 
 type luajitInstance struct {
 	interpreter.InstanceStubs
+	jitRegions regionMap
+
+	// Currently mapped prefixes for entire memory regions
+	prefixes map[regionKey][]lpm.Prefix
+
+	cycle uint32
 }
 
 var (
@@ -107,4 +136,80 @@ DeltasLoop:
 		}
 	}
 	return util.Range{}, errors.New("failed to find interpreter range")
+}
+
+func (l *luajitInstance) addJITRegion(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	start, end uint64) error {
+	prefixes, err := lpm.CalculatePrefixList(start, end)
+	if err != nil {
+		logf("lj: failed to calculate lpm: %v", err)
+		return err
+	}
+	logf("lj: add JIT region pid(%v) %#x:%#x", pid, start, end)
+	for _, prefix := range prefixes {
+		fileID := support.LJJitMarker << 32
+		if err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindLuaJIT,
+			host.FileID(fileID), 0); err != nil {
+			return err
+		}
+	}
+	k := regionKey{start: start, end: end}
+	l.prefixes[k] = prefixes
+	return nil
+}
+
+func (l *luajitInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
+	return l.synchronizeMappings(ebpf, pr.PID(), mappings)
+}
+
+func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	mappings []process.RawMapping) error {
+	cycle := l.cycle
+	l.cycle++
+	for i := range mappings {
+		m := &mappings[i]
+		if !m.IsAnonymous() || !m.IsExecutable() {
+			continue
+		}
+		l.jitRegions[keyForMapping(m)] = cycle
+	}
+
+	// NB: We can't use the approach of the v8 unwinder, which
+	// removes all the regions that don't appear in the latest
+	// generation, because regions can grow (and, in fact, they
+	// can grow _downward_). Rethink this approach and use a
+	// smarter algorithm if churn in pid interpreter mappings is a
+	// bottleneck.
+	//
+	// Remove old ones
+	for k, c := range l.jitRegions {
+		if c != cycle {
+			for _, prefix := range l.prefixes[k] {
+				if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
+					return errors.Join(err, fmt.Errorf("failed to delete prefix %v", prefix))
+				}
+			}
+			delete(l.jitRegions, k)
+			delete(l.prefixes, k)
+		}
+	}
+
+	// Add new ones
+	for k := range l.jitRegions {
+		if _, ok := l.prefixes[k]; !ok {
+			if err := l.addJITRegion(ebpf, pid, k.start, k.end); err != nil {
+				return errors.Join(err, fmt.Errorf("failed to add JIT region %v", k))
+			}
+		}
+	}
+
+	return l.processVMs(ebpf, pid)
+}
+
+func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	// TODO - When the full LuaJIT interpreter lands, this will process the "g" objects
+	// that we learned about from the eBPF side, and add the traces they contain to the
+	// interpreter mapping. Until then, it is a no-op.
+	return nil
 }

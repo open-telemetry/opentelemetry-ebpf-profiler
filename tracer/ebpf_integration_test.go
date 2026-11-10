@@ -9,6 +9,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -26,6 +27,7 @@ import (
 
 	"go.opentelemetry.io/otel/metric/noop"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -104,27 +106,28 @@ func attachKernelFrameProbe(t *testing.T, tr *tracer.Tracer) link.Link {
 	require.NoError(t, err)
 	defer prog.Close()
 
-	ev, err := link.Tracepoint("sched", "sched_switch", prog, nil)
+	event, err := link.Tracepoint("sched", "sched_switch", prog, nil)
 	require.NoError(t, err)
-	return ev
+	return event
 }
 
-// runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
-// that sends a selection of hand-crafted, predictable traces.
+// runKernelFrameProbe triggers sched/sched_switch, which sends a selection of
+// hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	t.Helper()
-	ev := attachKernelFrameProbe(t, tr)
+	event := attachKernelFrameProbe(t, tr)
 	t.Logf("probe for Kernel frames installed on sched/sched_switch")
 
 	// Manually trigger the tracepoint on sched/sched_switch.
 	forceContextSwitch()
 
 	t.Logf("tracepoint sched_switch triggered")
-	require.NoError(t, ev.Close())
+	require.NoError(t, event.Close())
 }
 
 type trace struct {
 	numKernelFrames int
+	contextValues   []uint64
 	frames          libpf.EbpfFrame
 }
 
@@ -236,11 +239,16 @@ Loop:
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
 		case ebpfTrace := <-traceChan:
+			if ebpfTrace == nil {
+				// Flush marker sent before ProcessedUntil.
+				continue
+			}
 			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
 			traces[comm[3]] = trace{
 				numKernelFrames: len(ebpfTrace.KernelFrames),
+				contextValues:   slices.Clone(ebpfTrace.ContextValues),
 				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData)),
 			}
 		}
@@ -254,18 +262,26 @@ Loop:
 		id uint8
 		// hasKernelFrames indicates if the trace should contain kernel frames.
 		hasKernelFrames bool
+		// contextValues are expected before the kernel-frame region in variable_data.
+		contextValues []uint64
 		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
 		// that will be verified against the returned Trace.
 		userSpaceTrace libpf.EbpfFrame
 	}{
 		"Single Native Frame": {
 			id:             1,
+			contextValues:  nil,
 			userSpaceTrace: nativeFrame,
 		},
 		"Single Native Frame with Kernel Frames": {
 			id:              2,
 			hasKernelFrames: true,
-			userSpaceTrace:  nativeFrame,
+			contextValues: []uint64{
+				0x123456789abcdef0,
+				0x2222222222222222,
+				0x3333333333333333,
+			},
+			userSpaceTrace: nativeFrame,
 		},
 	}
 
@@ -273,6 +289,7 @@ Loop:
 		t.Run(name, func(t *testing.T) {
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
+			require.Equal(t, testcase.contextValues, trace.contextValues)
 
 			numKernelFrames := trace.numKernelFrames
 
@@ -388,6 +405,10 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
 		case trace := <-traceChan:
+			if trace == nil {
+				// Flush marker sent before ProcessedUntil.
+				continue
+			}
 			comm := trace.Comm.String()
 			if len(comm) < 4 || comm[:3] != "\xAA\xBB\xCC" {
 				continue
@@ -442,4 +463,38 @@ func runPIDNamespaceTranslationWorkload(comm string) int {
 		}
 	}
 	return 0
+}
+
+// BenchmarkNewTracer measures the cost of the whole tracer startup path,
+// which is dominated by loading eBPF maps and programs into the kernel.
+//
+// Run with:
+//
+//	sudo go test -tags integration -run='^$' -bench=BenchmarkNewTracer \
+//	    -benchtime=5x -count=10 ./tracer/
+func BenchmarkNewTracer(b *testing.B) {
+	// Keep the benchmark output parseable by benchstat.
+	log.SetLevel(slog.LevelError)
+	b.Cleanup(func() { log.SetLevel(slog.LevelInfo) })
+
+	ctx := b.Context()
+
+	for b.Loop() {
+		tr, err := tracer.NewTracer(ctx, &tracer.Config{
+			Intervals:              &mockIntervals{},
+			InterpretersConfig:     interpreterconfig.AllInterpreters(),
+			FilterErrorFrames:      false,
+			SamplesPerSecond:       20,
+			MapScaleFactor:         0,
+			KernelVersionCheck:     true,
+			BPFVerifierLogLevel:    0,
+			ProbabilisticInterval:  100,
+			ProbabilisticThreshold: 100,
+		})
+		require.NoError(b, err)
+
+		b.StopTimer()
+		tr.Close()
+		b.StartTimer()
+	}
 }

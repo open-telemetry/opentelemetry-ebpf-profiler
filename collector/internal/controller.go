@@ -84,7 +84,6 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
 		ReportJitter:           cfg.ReporterJitter,
-		SamplesPerSecond:       cfg.SamplesPerSecond,
 	}, nextConsumer)
 	if err != nil {
 		return nil, err

@@ -13,9 +13,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
-// Both are rejected before the file is looked at, hence the zero File.
+// Invalid symbols are rejected before the file is looked at, hence the zero File.
 func TestResolveRejectsNonThreadLocal(t *testing.T) {
-	tests := map[string]libpf.Symbol{
+	tests := map[string]*libpf.Symbol{
+		"nil symbol":      nil,
 		"undefined entry": {Name: "tls_var", Info: uint8(elf.STT_TLS)},
 		"undefined entry with nonzero value and size": {Name: "tls_var", Address: 0x20,
 			Size: 8, Info: uint8(elf.STT_TLS)},
@@ -25,7 +26,7 @@ func TestResolveRejectsNonThreadLocal(t *testing.T) {
 
 	for name, sym := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := Resolve(&pfelf.File{}, &sym)
+			_, err := Resolve(&pfelf.File{}, sym)
 			require.ErrorIs(t, err, ErrNotThreadLocal)
 		})
 	}

@@ -51,7 +51,6 @@ type ebpfMapsImpl struct {
 	V8Procs            *cebpf.Map `name:"v8_procs"`
 	BeamProcs          *cebpf.Map `name:"beam_procs"`
 	LuaJitProcs        *cebpf.Map `name:"luajit_procs"`
-	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoProcs            *cebpf.Map `name:"go_procs"`
 	ThreadContextProcs *cebpf.Map `name:"thread_context_procs"`
 
@@ -164,8 +163,6 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.V8Procs, nil
 	case libpf.BEAM:
 		return impl.BeamProcs, nil
-	case libpf.APMInt:
-		return impl.ApmIntProcs, nil
 	case libpf.Go:
 		return impl.GoProcs, nil
 	case libpf.LuaJIT:
@@ -505,6 +502,8 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		ptrCastMarshaler[support.StackDelta](stackDeltas),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 	if err != nil {
+		// Undo the insertion enqueued above as the caller gets no mapID to clean up with.
+		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
 			fmt.Errorf("failed to batch insert %d elements for 0x%x "+
 				"into exeIDTostack_deltas: %v",

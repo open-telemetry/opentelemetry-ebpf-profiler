@@ -5,8 +5,7 @@
 // a few updates. We only need a handful of those types anyway, so we just define
 // them ourselves and ditch the problem entirely.
 
-#ifndef OPTI_KERNEL_H
-#define OPTI_KERNEL_H
+#pragma once
 
 // Define kernel integer types.
 //
@@ -26,8 +25,8 @@ typedef signed short s16;
 typedef unsigned short u16;
 typedef signed int s32;
 typedef unsigned int u32;
-typedef signed long long s64;
-typedef unsigned long long u64;
+typedef signed long s64;
+typedef unsigned long u64;
 
 // Size types need to be declared with __SIZE_TYPE__ built-in to not clash with
 // CGo's built-in prolog.
@@ -54,6 +53,12 @@ typedef _Bool bool;
     #define false                         0
     #define __bool_true_false_are_defined 1
   #endif
+#endif
+
+// errno values
+// https://github.com/torvalds/linux/blob/master/include/uapi/asm-generic/errno-base.h
+#ifndef ENOENT
+  #define ENOENT 2 /* No such file or directory */
 #endif
 
 // Go defines `NULL` in `cgo-builtin-prolog`, so we have to check whether
@@ -433,5 +438,3 @@ enum {
 
 // defined in include/uapi/linux/perf_event.h
 #define PERF_MAX_STACK_DEPTH 127
-
-#endif // OPTI_KERNEL_H

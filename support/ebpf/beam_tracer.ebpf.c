@@ -9,8 +9,10 @@
 // Should be log base 2 of a reasonable number of modules to binary-search through.
 #define BEAM_CODE_HEADER_SEARCH_ITERATIONS 16
 
-// The max number of loops to unroll when scanning the stack from for continuation pointers
-#define BEAM_STACK_FRAME_SCAN_ITERATIONS 16
+// Read the stack in chunks so the temporary buffer stays small while scanning deeper for a
+// continuation pointer.
+#define BEAM_STACK_FRAME_SCAN_ITERATIONS     8
+#define BEAM_STACK_FRAME_SCAN_WORDS_PER_READ 16
 
 struct beam_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -112,19 +114,21 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
 #else
   #define stack_reg sp
 #endif
-  u64 data[BEAM_STACK_FRAME_SCAN_ITERATIONS];
-  bpf_probe_read_user(data, sizeof(data), (void *)(state->stack_reg + 8));
+  u64 data[BEAM_STACK_FRAME_SCAN_WORDS_PER_READ];
+  for (int chunk = 0; chunk < BEAM_STACK_FRAME_SCAN_ITERATIONS; chunk++) {
+    bpf_probe_read_user(data, sizeof(data), (void *)(state->stack_reg + 8));
 
-  for (u64 i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
-    state->stack_reg += 8;
-    pc = data[i];
+    for (int i = 0; i < BEAM_STACK_FRAME_SCAN_WORDS_PER_READ; i++) {
+      state->stack_reg += 8;
+      pc = data[i];
 
-    // On the stack, if the value is tagged as a header value, then that means it's actually a
-    // continuation pointer.
-    // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
-    // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
-    if ((pc & 0x03) == 0) {
-      goto found_pc;
+      // On the stack, if the value is tagged as a header value, then that means it's actually a
+      // continuation pointer.
+      // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
+      // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
+      if ((pc & 0x03) == 0) {
+        goto found_pc;
+      }
     }
   }
 #undef stack_reg
@@ -162,7 +166,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->num_frames, state->pc);
+  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%lx ====", trace->num_frames, state->pc);
 
   unwinder_analyze_frame_pointer(&record->state);
 
@@ -181,7 +185,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
   u64 active_ranges = info->r + (the_active_code_index * info->ranges_sizeof);
 
   DEBUG_PRINT(
-    "beam: r: %llx, the_active_code_index: %d, active_ranges: %llx",
+    "beam: r: %lx, the_active_code_index: %d, active_ranges: %lx",
     info->r,
     the_active_code_index,
     active_ranges);
@@ -194,7 +198,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("beam: modules: %llx, n: %llu", ranges.info.modules, ranges.info.n);
+  DEBUG_PRINT("beam: modules: %lx, n: %lu", ranges.info.modules, ranges.info.n);
 
   u64 entry_ptr = ranges.info.modules;
   if (bpf_probe_read_user(&ranges.first, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
@@ -217,7 +221,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
+  DEBUG_PRINT("beam: valid addresses 0x%lx - 0x%lx", ranges.first.start, ranges.last.end);
 
   for (u64 i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++) {
     if (record->state.pc == info->beam_normal_exit) {

@@ -26,8 +26,6 @@ type Config struct {
 
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
-	// samplesPerSecond defines the number of samples per second.
-	SamplesPerSecond int
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32

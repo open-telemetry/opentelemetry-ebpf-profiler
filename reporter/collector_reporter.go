@@ -29,10 +29,7 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}

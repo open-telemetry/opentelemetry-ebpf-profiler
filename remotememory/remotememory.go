@@ -105,30 +105,31 @@ func (rm RemoteMemory) Uint64(addr libpf.Address) uint64 {
 
 // String reads a zero terminated string from remote memory
 func (rm RemoteMemory) String(addr libpf.Address) string {
-	buf := make([]byte, 1024)
-	n, err := rm.ReadAt(buf, int64(addr))
+	const firstRead = 1024
+
+	buf := libpf.GetBuffer(4096)
+	defer libpf.PutBuffer(buf)
+
+	n, err := rm.ReadAt(buf[:firstRead], int64(addr))
 	if n == 0 || (err != nil && err != io.EOF) {
 		return ""
 	}
-	buf = buf[:n]
-	zeroIdx := bytes.IndexByte(buf, 0)
+	zeroIdx := bytes.IndexByte(buf[:n], 0)
 	if zeroIdx >= 0 {
 		return string(buf[:zeroIdx])
 	}
-	if n != cap(buf) {
+	if n != firstRead {
 		return ""
 	}
 
-	bigBuf := make([]byte, 4096)
-	copy(bigBuf, buf)
-	n, err = rm.ReadAt(bigBuf[len(buf):], int64(addr)+int64(len(buf)))
+	n, err = rm.ReadAt(buf[firstRead:cap(buf)], int64(addr)+firstRead)
 	if n == 0 || (err != nil && err != io.EOF) {
 		return ""
 	}
-	bigBuf = bigBuf[:len(buf)+n]
-	zeroIdx = bytes.IndexByte(bigBuf, 0)
+
+	zeroIdx = bytes.IndexByte(buf[firstRead:firstRead+n], 0)
 	if zeroIdx >= 0 {
-		return string(bigBuf[:zeroIdx])
+		return string(buf[:firstRead+zeroIdx])
 	}
 
 	// Not a zero terminated string

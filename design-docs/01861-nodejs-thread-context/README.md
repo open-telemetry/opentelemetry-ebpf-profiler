@@ -460,7 +460,7 @@ The proposal is additive at three points, in increasing order of new code:
 2. **`interpreter/threadcontext`** — a second TLS export name,
    `otel_thread_ctx_nodejs_v1`, and a 4-word struct where the existing schema
    has a single 8-byte pointer. The TLS access-model resolution, the symbol and
-   relocation matching, and the `TLSVarInfo` plumbing shared with `apmint` are
+   relocation matching, and the `TLSVarInfo` plumbing shared with Ruby are
    reused unchanged: locating a thread-local is the same problem regardless of
    what it holds. As for OTEP 4947, this user-space side only resolves where the
    thread-local is and hands that and the selected schema to the eBPF side.

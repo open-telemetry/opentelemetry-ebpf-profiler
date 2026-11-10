@@ -1,6 +1,4 @@
-#ifndef OPTI_BPFDEFS_H
-#define OPTI_BPFDEFS_H
-
+#pragma once
 #include "kernel.h"
 
 // with_debug_output is declared in native_stack_trace.ebpf.c
@@ -36,9 +34,10 @@ extern u32 with_debug_output;
 
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
 int bpf_tail_call(void *ctx, void *map, int index);
-unsigned long long bpf_ktime_get_ns(void);
+u64 bpf_ktime_get_ns(void);
+u64 bpf_ktime_get_boot_ns(void);
 int bpf_get_current_comm(void *, int);
-int bpf_perf_event_output(void *, void *, unsigned long long, void *, int);
+long bpf_perf_event_output(void *, void *, u64, void *, u64);
 long bpf_ringbuf_output(void *, void *, u64, u64);
 static inline struct task_struct *bpf_get_current_task_btf(void)
 {
@@ -82,7 +81,7 @@ static inline long bpf_get_ns_current_pid_tgid(u64 dev, u64 ino, void *info, u32
   return -1;
 }
 
-static inline unsigned long long bpf_get_current_task(void)
+static inline u64 bpf_get_current_task(void)
 {
   return 0;
 }
@@ -135,27 +134,27 @@ bpf_get_stack(UNUSED void *ctx, UNUSED void *buf, UNUSED u32 size, UNUSED u64 fl
 static void *(*bpf_map_lookup_elem)(void *map, void *key) = (void *)BPF_FUNC_map_lookup_elem;
 static int (*bpf_map_update_elem)(void *map, void *key, void *value, u64 flags) = (void *)
   BPF_FUNC_map_update_elem;
-static int (*bpf_map_delete_elem)(void *map, void *key)     = (void *)BPF_FUNC_map_delete_elem;
-static unsigned long long (*bpf_ktime_get_ns)(void)         = (void *)BPF_FUNC_ktime_get_ns;
-static unsigned long long (*bpf_get_current_pid_tgid)(void) = (void *)BPF_FUNC_get_current_pid_tgid;
+static int (*bpf_map_delete_elem)(void *map, void *key) = (void *)BPF_FUNC_map_delete_elem;
+static u64 (*bpf_ktime_get_ns)(void)                    = (void *)BPF_FUNC_ktime_get_ns;
+static u64 (*bpf_ktime_get_boot_ns)(void)               = (void *)BPF_FUNC_ktime_get_boot_ns;
+static u64 (*bpf_get_current_pid_tgid)(void)            = (void *)BPF_FUNC_get_current_pid_tgid;
 static long (*bpf_get_ns_current_pid_tgid)(u64 dev, u64 ino, void *info, u32 size) = (void *)
   BPF_FUNC_get_ns_current_pid_tgid;
 static int (*bpf_get_current_comm)(void *buf, int buf_size)  = (void *)BPF_FUNC_get_current_comm;
-static unsigned long long (*bpf_get_current_task)(void)      = (void *)BPF_FUNC_get_current_task;
+static u64 (*bpf_get_current_task)(void)                     = (void *)BPF_FUNC_get_current_task;
 static struct task_struct *(*bpf_get_current_task_btf)(void) = (void *)
   BPF_FUNC_get_current_task_btf;
 static long (*bpf_find_vma)(
   struct task_struct *task, u64 addr, void *callback_fn, void *callback_ctx, u64 flags) = (void *)
   BPF_FUNC_find_vma;
-static int (*bpf_perf_event_output)(
-  void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
-  BPF_FUNC_perf_event_output;
+static int (*bpf_perf_event_output)(void *ctx, void *map, u64 flags, void *data, u64 size) =
+  (void *)BPF_FUNC_perf_event_output;
 static long (*bpf_ringbuf_output)(void *ringbuf, void *data, u64 size, u64 flags) = (void *)
   BPF_FUNC_ringbuf_output;
 static u32 (*bpf_get_smp_processor_id)(void) = (void *)BPF_FUNC_get_smp_processor_id;
 static long (*bpf_get_stack)(void *ctx, void *buf, u32 size, u64 flags) = (void *)
   BPF_FUNC_get_stack;
-static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;
+static u64 (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;
 
 __attribute__((format(printf, 1, 3))) static int (*bpf_trace_printk)(
   const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;
@@ -225,5 +224,3 @@ static inline int bpf_tail_call(void *ctx, void *map, int index)
 #endif // !TESTING_COREDUMP
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
-
-#endif // OPTI_BPFDEFS_H

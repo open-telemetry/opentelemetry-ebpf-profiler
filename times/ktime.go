@@ -3,22 +3,13 @@
 
 package times // import "go.opentelemetry.io/ebpf-profiler/times"
 
-import (
-	"time"
-	_ "unsafe" // required to use //go:linkname for runtime.nanotime
-)
+import "time"
 
-// KTime stores a time value, retrieved from a monotonic clock, in nanoseconds
+// KTime stores a time value in nanoseconds on CLOCK_BOOTTIME, the clock used by the
+// bpf_ktime_get_boot_ns() eBPF helper for trace timestamps. Unlike CLOCK_MONOTONIC it
+// keeps advancing while the system is suspended, so timestamps taken before and after
+// a suspend convert to the correct wall-clock time with a single boot-time offset.
 type KTime int64
-
-// GetKTime gets the current time in same nanosecond format as bpf_ktime_get_ns() eBPF call
-// This relies runtime.nanotime to use CLOCK_MONOTONIC. If this changes, this needs to
-// be adjusted accordingly. Using this internal is superior in performance, as it is able
-// to use the vDSO to query the time without syscall.
-//
-//go:noescape
-//go:linkname GetKTime runtime.nanotime
-func GetKTime() KTime
 
 // Time converts the kernel timestamp into a Go time object.
 func (t KTime) Time() time.Time {
