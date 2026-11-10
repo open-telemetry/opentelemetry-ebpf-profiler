@@ -16,14 +16,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 )
 
-// page represents a cached region from the underlying reader.
-type page struct {
-	// data contains the data cached from a previous read.
-	data []byte
-	// eof determines whether we encountered an EOF when reading the page originally.
-	eof bool
-}
-
 // Statistics contains statistics about cache efficiency.
 type Statistics struct {
 	Hits      uint64
@@ -34,19 +26,19 @@ type Statistics struct {
 // Reader implements buffering for random access reads via the `ReaderAt` interface.
 type Reader struct {
 	inner    io.ReaderAt
-	cache    *lru.LRU[uint, page]
+	cache    *lru.LRU[uint64, []byte]
 	pageSize uint
 	stats    Statistics
 }
 
-func HashUInt(v uint) uint32 {
-	return uint32(hash.Uint64(uint64(v)))
+func hashUint64(v uint64) uint32 {
+	return uint32(hash.Uint64(v))
 }
 
 // New creates a new buffered reader supporting random access. The pageSize argument decides the
 // size of each region (page) tracked in the cache. cacheSize defines the maximum number of pages
 // to cache.
-func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error) {
+func New(inner io.ReaderAt, pageSize, cacheSize uint) (*Reader, error) {
 	if pageSize == 0 {
 		return nil, errors.New("pageSize cannot be zero")
 	}
@@ -54,23 +46,18 @@ func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error
 		return nil, errors.New("cacheSize cannot be zero")
 	}
 
-	reader = &Reader{
-		inner:    inner,
-		pageSize: pageSize,
-	}
-
-	reader.cache, err = lru.New[uint, page](uint32(cacheSize), HashUInt)
+	cache, err := lru.New[uint64, []byte](uint32(cacheSize), hashUint64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create internal cache: %w", err)
 	}
 
-	reader.cache.SetOnEvict(func(_ uint, page page) {
-		reader.stats.Evictions++
-		libpf.PutBuffer(page.data)
-		page.data = nil
+	r := &Reader{inner: inner, cache: cache, pageSize: pageSize}
+	cache.SetOnEvict(func(_ uint64, data []byte) {
+		r.stats.Evictions++
+		libpf.PutBuffer(data)
 	})
 
-	return
+	return r, nil
 }
 
 // InvalidateCache flushes the internal cache. Resets the statistics.
@@ -98,73 +85,60 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 		return reader.inner.ReadAt(p, off)
 	}
 
-	writeOffset := uint(0)
-	remaining := uint(len(p))
-	skipOffset := uint(off) % reader.pageSize
-	pageIdx := uint(off) / reader.pageSize
+	pageIdx := uint64(off) / uint64(reader.pageSize)
+	pageOffset := int(uint64(off) % uint64(reader.pageSize))
 
-	for remaining > 0 {
-		data, eof, err := reader.getOrReadPage(pageIdx)
+	for pos := 0; pos < len(p); {
+		data, err := reader.getOrReadPage(pageIdx)
 		if err != nil {
-			return int(writeOffset), err
+			return pos, err
 		}
-		if skipOffset > uint(len(data)) {
-			return 0, io.EOF
+		if pageOffset >= len(data) {
+			return pos, io.EOF
 		}
 
-		copyLen := min(remaining, uint(len(data))-skipOffset)
-		copy(p[writeOffset:][:copyLen], data[skipOffset:][:copyLen])
+		copyLen := min(len(p)-pos, len(data)-pageOffset)
+		copy(p[pos:][:copyLen], data[pageOffset:][:copyLen])
 
-		skipOffset = 0
+		pageOffset = 0
 		pageIdx++
-		writeOffset += copyLen
-		remaining -= copyLen
+		pos += copyLen
 
-		if eof {
-			if remaining == 0 {
-				// While there was an EOF in the chunk read, the user buffer was small enough to
-				// not have caused it.
-				break
-			}
-
+		if pos < len(p) && uint(len(data)) < reader.pageSize {
 			// The read is incomplete.
-			return int(writeOffset), io.EOF
+			return pos, io.EOF
 		}
 	}
 
-	return int(writeOffset), nil
+	return len(p), nil
 }
 
-func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err error) {
-	if cachedPage, exists := reader.cache.Get(pageIdx); exists {
+// getOrReadPage returns the data of the page pageIdx, serving it from the cache when possible.
+func (reader *Reader) getOrReadPage(pageIdx uint64) ([]byte, error) {
+	if cachedData, exists := reader.cache.Get(pageIdx); exists {
 		// Data is cached: serve from there.
 		reader.stats.Hits++
-		return cachedPage.data, cachedPage.eof, nil
+		return cachedData, nil
 	}
 
 	reader.stats.Misses++
 
 	buffer := libpf.GetBuffer(int(reader.pageSize))
 
-	// Read from the underlying reader.
-	n, err := reader.inner.ReadAt(buffer, int64(pageIdx*reader.pageSize))
-	if err != nil {
-		// We speculatively read more than the original caller asked us to, so running into
-		// EOF is actually expected for us.
-		if err == io.EOF {
-			buffer = buffer[:n]
-			eof = true
-		} else {
-			libpf.PutBuffer(buffer)
-			return nil, false, err
-		}
-	}
-
-	if !eof && uint(n) < reader.pageSize {
+	// Read from the underlying reader. We speculatively read more than the original caller
+	// asked us to, so running into EOF is expected for us and reported via the length of
+	// the returned data.
+	n, err := reader.inner.ReadAt(buffer, int64(pageIdx*uint64(reader.pageSize)))
+	if err != nil && err != io.EOF {
 		libpf.PutBuffer(buffer)
-		return nil, false, errors.New("failed to read whole page")
+		return nil, err
+	}
+	if n == 0 {
+		libpf.PutBuffer(buffer)
+		return nil, io.EOF
 	}
 
-	reader.cache.Add(pageIdx, page{data: buffer, eof: eof})
-	return buffer, eof, nil
+	buffer = buffer[:n]
+	reader.cache.Add(pageIdx, buffer)
+	return buffer, nil
 }
