@@ -45,9 +45,9 @@ func (cfg *Config) Validate() error {
 }
 
 type probe struct {
-	threshold     uint32
-	minDurationNs uint64
-	links         []link.Link
+	threshold   uint32
+	minDuration time.Duration
+	links       []link.Link
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
@@ -74,7 +74,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	if err := coll.Variables["off_cpu_threshold"].Set(p.threshold); err != nil {
 		return fmt.Errorf("set off_cpu_threshold: %w", err)
 	}
-	if err := coll.Variables["off_cpu_min_duration_ns"].Set(p.minDurationNs); err != nil {
+	if err := coll.Variables["off_cpu_min_duration_ns"].Set(uint64(p.minDuration.Nanoseconds())); err != nil {
 		return fmt.Errorf("set off_cpu_min_duration_ns: %w", err)
 	}
 	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
