@@ -24,12 +24,12 @@ import (
 // Config holds the YAML configuration for the off-CPU probe.
 //
 //	extensions:
-//	   offcpu:
-//	     threshold: 0.1       # capture probability in ]0.0, 1.0]
-//	     min_duration: 0s     # optional; 0 = keep all sampled waits
+//	  offcpu:
+//	    threshold: 0.1      # capture probability in ]0.0, 1.0]
+//	    min_duration: 0s    # optional; 0 = keep all sampled waits.
+//	                        # Drops shorter off-CPU waits before stack unwinding.
 type Config struct {
-	Threshold float64 `mapstructure:"threshold"`
-	// MinDuration drops off-CPU waits shorter than this before stack unwinding.
+	Threshold   float64       `mapstructure:"threshold"`
 	MinDuration time.Duration `mapstructure:"min_duration"`
 }
 
