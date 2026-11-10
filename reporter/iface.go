@@ -15,6 +15,9 @@ import (
 type Reporter interface {
 	TraceReporter
 
+	// SetSnapshotSource configures the source of probe-produced snapshots.
+	SetSnapshotSource(samples.SnapshotSource)
+
 	// Start starts the reporter in the background.
 	//
 	// If the reporter needs to perform a long-running starting operation then it
@@ -31,18 +34,6 @@ type TraceReporter interface {
 	// and enqueues it for reporting to the backend.
 	// If handling the trace event fails it returns an error.
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
-}
-
-// SnapshotProvider supplies self-contained profiles produced from probe state
-// at each collection interval.
-type SnapshotProvider interface {
-	CollectSnapshots() []samples.SnapshotProfile
-}
-
-// SnapshotReporter is an optional reporter capability for accepting snapshots
-// from a SnapshotProvider.
-type SnapshotReporter interface {
-	SetSnapshotProvider(SnapshotProvider)
 }
 
 type ExecutableMetadata struct {

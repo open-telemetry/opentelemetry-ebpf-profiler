@@ -509,11 +509,11 @@ func TestCustomLabelsArePartOfSampleIdentity(t *testing.T) {
 	}, timestampsByLabel)
 }
 
-type testSnapshotProvider struct {
+type testSnapshotSource struct {
 	profiles []samples.SnapshotProfile
 }
 
-func (p *testSnapshotProvider) CollectSnapshots() []samples.SnapshotProfile {
+func (p *testSnapshotSource) ProduceSnapshots() []samples.SnapshotProfile {
 	return p.profiles
 }
 
@@ -545,7 +545,7 @@ func TestMergeSnapshotsIntoTree(t *testing.T) {
 		libpf.Intern("DEPLOYMENT_ENV"): libpf.Intern("staging"),
 	}
 	resourceAttrs := serviceAttrs("snapshot-service")
-	reporter.SetSnapshotProvider(&testSnapshotProvider{
+	reporter.SetSnapshotSource(&testSnapshotSource{
 		profiles: []samples.SnapshotProfile{{
 			ProfileType: profileType,
 			Samples: []samples.SnapshotSample{{
@@ -581,7 +581,7 @@ func TestMergeSnapshotsPreservesEventResourceMetadata(t *testing.T) {
 		libpf.Intern("SOURCE"): libpf.Intern("snapshot"),
 	}
 	snapshotAttrs := serviceAttrs("snapshot-service")
-	provider := &testSnapshotProvider{
+	source := &testSnapshotSource{
 		profiles: []samples.SnapshotProfile{{
 			ProfileType: profileTypeSampling,
 			Samples: []samples.SnapshotSample{{
@@ -594,7 +594,7 @@ func TestMergeSnapshotsPreservesEventResourceMetadata(t *testing.T) {
 		}},
 	}
 	reporter := createTestBaseReporter(t, &Config{})
-	reporter.SetSnapshotProvider(provider)
+	reporter.SetSnapshotSource(source)
 
 	// Simulate an event-driven sample having created this resource before the
 	// interval snapshot is merged. Its newer metadata remains authoritative.

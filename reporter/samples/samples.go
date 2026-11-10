@@ -113,6 +113,15 @@ type SampleType struct {
 	Period *Period
 }
 
+// SnapshotSource produces self-contained profiles at each collection interval.
+// Probes implement it to report state that isn't tied to individual traces,
+// such as live heap snapshots aggregated from alloc/free correlation. The
+// tracer implements it too, combining the snapshots of all enabled probes for
+// the reporter.
+type SnapshotSource interface {
+	ProduceSnapshots() []SnapshotProfile
+}
+
 // SnapshotProfile is a set of snapshot samples produced by a probe's
 // SnapshotSource implementation at each collection interval. The reporter folds
 // them into the TraceEventsTree so they share the event-driven export path.

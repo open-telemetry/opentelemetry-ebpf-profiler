@@ -215,10 +215,10 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
-	// snapshotSources are probes that implement SnapshotSource and produce
+	// snapshotSources are probes that implement samples.SnapshotSource and produce
 	// additional profiles at each collection interval. Probes can be enabled
 	// while the reporter is already collecting snapshots, so access is guarded.
-	snapshotSources xsync.RWMutex[[]SnapshotSource]
+	snapshotSources xsync.RWMutex[[]samples.SnapshotSource]
 
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.

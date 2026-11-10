@@ -162,7 +162,7 @@ func TestEnableRegistersSnapshotSource(t *testing.T) {
 
 	require.NoError(t, tracer.Enable(context.Background(), probe))
 
-	profiles := tracer.CollectSnapshots()
+	profiles := tracer.ProduceSnapshots()
 	require.Len(t, profiles, 1)
 	assert.Same(t, profileType, profiles[0].ProfileType)
 }

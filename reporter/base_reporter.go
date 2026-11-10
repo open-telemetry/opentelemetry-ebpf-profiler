@@ -17,8 +17,8 @@ import (
 
 // baseReporter encapsulates shared behavior between all the available reporters.
 type baseReporter struct {
-	cfg              *Config
-	snapshotProvider SnapshotProvider
+	cfg            *Config
+	snapshotSource samples.SnapshotSource
 
 	// name is the ScopeProfile's name.
 	name string
@@ -129,9 +129,9 @@ func appendEventValues(dst []int64, meta *samples.TraceEventMeta) ([]int64, erro
 	return values, nil
 }
 
-// SetSnapshotProvider configures the source of probe-produced snapshots.
-func (b *baseReporter) SetSnapshotProvider(provider SnapshotProvider) {
-	b.snapshotProvider = provider
+// SetSnapshotSource configures the source of probe-produced snapshots.
+func (b *baseReporter) SetSnapshotSource(source samples.SnapshotSource) {
+	b.snapshotSource = source
 }
 
 // mergeSnapshots folds probe-produced snapshot samples into tree so they are
@@ -142,12 +142,12 @@ func (b *baseReporter) SetSnapshotProvider(provider SnapshotProvider) {
 // SampleKey holds only the trace hash, and ts (the collection interval end) is
 // used as the single timestamp.
 func (b *baseReporter) mergeSnapshots(tree samples.TraceEventsTree, ts time.Time) {
-	if b.snapshotProvider == nil {
+	if b.snapshotSource == nil {
 		return
 	}
 
 	timestamp := uint64(ts.UnixNano())
-	for _, sp := range b.snapshotProvider.CollectSnapshots() {
+	for _, sp := range b.snapshotSource.ProduceSnapshots() {
 		if sp.ProfileType == nil {
 			log.Warnf("Skipping snapshot profile with no profile type")
 			continue

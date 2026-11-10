@@ -107,11 +107,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Wire probe snapshot sources into the reporter before starting its
 	// collection loop.
-	if snapshotReporter, ok := c.reporter.(reporter.SnapshotReporter); ok {
-		snapshotReporter.SetSnapshotProvider(trc)
-	} else {
-		log.Debug("Reporter does not support probe snapshots; snapshot profiles will not be reported")
-	}
+	c.reporter.SetSnapshotSource(trc)
 
 	if err := c.reporter.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start reporter: %w", err)
