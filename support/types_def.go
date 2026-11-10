@@ -106,8 +106,9 @@ type PIDPage C.PIDPage
 type PIDPageMappingInfo C.PIDPageMappingInfo
 type PIDNamespaceLayout C.PIDNamespaceLayout
 type StackDelta C.StackDelta
-type StackDeltaPageInfo C.StackDeltaPageInfo
-type StackDeltaPageKey C.StackDeltaPageKey
+type StackDeltaPair C.StackDeltaPair
+type StackDeltaMeta C.StackDeltaMeta
+type StackDeltaPageDesc C.StackDeltaPageDesc
 type SystemAnalysis C.SystemAnalysis
 type TSDInfo C.TSDInfo
 type TLSVarInfo C.TLSVarInfo

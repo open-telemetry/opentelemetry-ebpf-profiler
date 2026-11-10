@@ -61,7 +61,7 @@ type ExecutableInfo struct {
 //
 // The manager is responsible for managing entries in the following BPF maps:
 //
-// - stack_delta_page_to_info
+// - exe_id_to_stackdelta_meta
 // - exe_id_to_%d_stack_deltas
 // - unwind_info_array
 // - interpreter_offsets
@@ -293,7 +293,7 @@ type executableInfoManagerState struct {
 	// executables is the primary mapping from file ID to executable information. Entries are
 	// managed with reference counting and are synchronized with various eBPF maps:
 	//
-	// - stack_delta_page_to_info
+	// - exe_id_to_stackdelta_meta
 	// - exe_id_to_%d_stack_deltas
 	executables map[host.FileID]*entry
 
@@ -355,9 +355,10 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	}
 }
 
-// loadDeltas converts the sdtypes.StackDelta to StackDeltaEBPF and passes that to
+// loadDeltas converts the sdtypes.StackDelta to StackDelta and passes that to
 // the ebpf interface to be loaded to kernel maps. While converting the deltas, it
-// also creates a list of all large gaps in the executable.
+// also builds a page descriptor for every 64kB page covering the deltas, so the
+// eBPF side can locate the stack delta data of each page with a single lookup.
 func (state *executableInfoManagerState) loadDeltas(
 	fileID host.FileID,
 	intervals *sdtypes.IntervalData,
@@ -368,31 +369,65 @@ func (state *executableInfoManagerState) loadDeltas(
 		return mapRef{MapID: 0}, nil
 	}
 
-	firstBlock := intervals.Blocks[0]
-	lastBlock := intervals.Blocks[len(intervals.Blocks)-1]
-
-	firstPage := firstBlock.Start >> support.StackDeltaPageBits
-	firstPageAddr := firstBlock.Start &^ support.StackDeltaPageMask
-	lastPage := lastBlock.End >> support.StackDeltaPageBits
-	numPages := lastPage - firstPage + 1
-	numDeltasPerPage := make([]uint16, numPages)
-
-	// Index the unwind-info.
+	// Index the unwind-info. The page descriptors are built in the same loop:
+	// each descriptor covers one 64kB page and points to the range of the
+	// page's own delta pairs. Pages without own deltas get an empty range
+	// that resolves to the covering delta of the previous page.
+	//
+	// Every page slice is padded to a pair boundary with a duplicate of the
+	// last delta, so the eBPF side can always run its binary search on the
+	// first element of a pair, and the pads double as the covering deltas
+	// of the delta-free pages that follow.
+	//
+	// The deltas are emitted in address order, and the last one is always the
+	// sentinel of the last block, so the block span gives the number of pages
+	// for preallocating the descriptor slice. The actual first and last page
+	// are still derived from the emitted deltas, as a signal handler delta at
+	// the very start of the data shifts the first page by one with its -1
+	// fixup if the first block starts on a page boundary.
 	var unwindInfo sdtypes.UnwindInfo
-	ebpfDeltas := make([]pmebpf.StackDeltaEBPF, 0, numDeltas)
+	var firstPage, lastPage uint64
+	ebpfDeltas := make([]pmebpf.StackDelta, 0, numDeltas)
+	pageDescs := make([]pmebpf.StackDeltaPageDesc, 0,
+		int(intervals.Blocks[len(intervals.Blocks)-1].End>>support.StackDeltaPageBits-
+			intervals.Blocks[0].Start>>support.StackDeltaPageBits)+1)
+	closePage := func() {
+		// Pad the open page slice to a pair boundary.
+		if len(ebpfDeltas)%2 == 1 {
+			ebpfDeltas = append(ebpfDeltas, ebpfDeltas[len(ebpfDeltas)-1])
+		}
+		last := &pageDescs[len(pageDescs)-1]
+		last.NumPairs = uint16(uint32(len(ebpfDeltas))/2 - last.FirstPair)
+	}
 	addDelta := func(addr uint64, info support.UnwindInfo) error {
 		unwindInfoIndex, err := state.getUnwindInfoIndex(info)
 		if err != nil {
 			return err
 		}
-		numDeltas := len(ebpfDeltas)
-		if numDeltas == 0 || ebpfDeltas[numDeltas-1].UnwindInfo != unwindInfoIndex {
-			ebpfDeltas = append(ebpfDeltas, pmebpf.StackDeltaEBPF{
-				AddressLow: uint16(addr),
-				UnwindInfo: unwindInfoIndex,
-			})
-			numDeltasPerPage[(addr>>support.StackDeltaPageBits)-firstPage]++
+		if numDeltas := len(ebpfDeltas); numDeltas > 0 &&
+			ebpfDeltas[numDeltas-1].UnwindInfo == unwindInfoIndex {
+			// Deduplicate consecutive deltas with identical unwind info.
+			return nil
 		}
+		page := addr >> support.StackDeltaPageBits
+		if len(pageDescs) == 0 {
+			firstPage, lastPage = page, page
+			pageDescs = append(pageDescs, pmebpf.StackDeltaPageDesc{FirstPair: 0})
+		} else {
+			if page != lastPage {
+				closePage()
+				for p := lastPage + 1; p <= page; p++ {
+					pageDescs = append(pageDescs, pmebpf.StackDeltaPageDesc{
+						FirstPair: uint32(len(ebpfDeltas)) / 2,
+					})
+				}
+			}
+		}
+		lastPage = page
+		ebpfDeltas = append(ebpfDeltas, pmebpf.StackDelta{
+			AddrLow:    uint16(addr),
+			UnwindInfo: unwindInfoIndex,
+		})
 		return nil
 	}
 
@@ -434,26 +469,23 @@ func (state *executableInfoManagerState) loadDeltas(
 		}
 	}
 
+	// Close the last page. The FirstPair values stay relative to the start
+	// of the pair region, which the inner map holds before the page
+	// descriptors.
+	closePage()
+	numPages := lastPage - firstPage + 1
+
 	// Update data to eBPF
-	mapID, err := state.ebpf.UpdateExeIDToStackDeltas(fileID, ebpfDeltas)
+	mapID, err := state.ebpf.UpdateExeIDToStackDeltas(fileID, ebpfDeltas, pageDescs, firstPage)
 	if err != nil {
 		return mapRef{},
 			fmt.Errorf("failed UpdateExeIDToStackDeltas for FileID %x: %v", fileID, err)
 	}
-
-	// Update stack delta pages
-	if err = state.ebpf.UpdateStackDeltaPages(fileID, numDeltasPerPage, mapID,
-		firstPageAddr); err != nil {
-		_ = state.ebpf.DeleteExeIDToStackDeltas(fileID, mapID)
-		return mapRef{},
-			fmt.Errorf("failed UpdateStackDeltaPages for FileID %x: %v", fileID, err)
-	}
 	state.numStackDeltaMapPages += numPages
 
 	return mapRef{
-		MapID:     mapID,
-		StartPage: firstPageAddr,
-		NumPages:  uint32(numPages),
+		MapID:    mapID,
+		NumPages: uint32(numPages),
 	}, nil
 }
 
@@ -514,18 +546,11 @@ func (state *executableInfoManagerState) unloadDeltas(
 		return nil
 	}
 
-	// To avoid race conditions first remove the stack delta page mappings
-	// which reference the stack delta data.
-	var err error
-	for i := uint64(0); i < uint64(ref.NumPages); i++ {
-		pageAddr := ref.StartPage + i<<support.StackDeltaPageBits
-		err = errors.Join(err, state.ebpf.DeleteStackDeltaPage(fileID, pageAddr))
-	}
-
+	// DeleteExeIDToStackDeltas removes first the stack delta meta entry that
+	// references the stack delta data, and then the stack delta data itself.
 	state.numStackDeltaMapPages -= uint64(ref.NumPages)
 
-	// Now remove the actual stack delta data after all references are removed.
-	return errors.Join(err, state.ebpf.DeleteExeIDToStackDeltas(fileID, ref.MapID))
+	return state.ebpf.DeleteExeIDToStackDeltas(fileID, ref.MapID)
 }
 
 // entry is the type used in the EIM executable map.
@@ -541,7 +566,6 @@ type entry struct {
 // mapRef stores all info required to identify and remove
 // all data for an executable from our BPF maps.
 type mapRef struct {
-	StartPage uint64
-	NumPages  uint32
-	MapID     uint16
+	NumPages uint32
+	MapID    uint16
 }

@@ -174,21 +174,50 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 
 // Stack delta management
 func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltaArrays []pmebpf.StackDeltaEBPF) (uint16, error) {
-	entSize := C.sizeof_StackDelta
-	deltas := C.malloc(C.size_t(len(deltaArrays) * entSize))
+	deltaArrays []pmebpf.StackDelta, pageDescs []pmebpf.StackDeltaPageDesc,
+	firstPage uint64,
+) (uint16, error) {
+	ctx := emc.ctx
+	entSize := int(C.sizeof_StackDeltaPair)
+	numPairs := (len(deltaArrays) + 1) / 2
+	deltas := C.malloc(C.size_t((len(pageDescs) + numPairs) * entSize))
+	base := 0
 	for index, delta := range deltaArrays {
-		info := (*C.StackDelta)(unsafe.Add(deltas, uintptr(index*entSize)))
-		*info = C.StackDelta{
-			addrLow:    C.u16(delta.AddressLow),
-			unwindInfo: C.u16(delta.UnwindInfo),
+		pair := (*C.StackDeltaPair)(unsafe.Add(deltas, uintptr((base+index/2)*entSize)))
+		if index%2 == 0 {
+			pair.first = C.StackDelta{
+				addrLow:    C.u16(delta.AddrLow),
+				unwindInfo: C.u16(delta.UnwindInfo),
+			}
+		} else {
+			pair.second = C.StackDelta{
+				addrLow:    C.u16(delta.AddrLow),
+				unwindInfo: C.u16(delta.UnwindInfo),
+			}
 		}
 	}
-	ctx := emc.ctx
+	// The page descriptors follow the stack delta pairs.
+	base = numPairs
+	for index, desc := range pageDescs {
+		entry := (*C.StackDeltaPageDesc)(unsafe.Add(deltas, uintptr((base+index)*entSize)))
+		*entry = C.StackDeltaPageDesc{
+			firstPair: C.u32(desc.FirstPair),
+			numPairs:  C.u16(desc.NumPairs),
+		}
+	}
 	// The coredump framework has only one map because we don't have the kernel limitation
 	// of requiring fixed size inner maps. Return StackDeltaBucketSmallest as fixed mapID.
+	mapID := uint16(support.StackDeltaBucketSmallest)
 	ctx.exeIDToStackDeltaMaps[C.u64(fileID)] = deltas
-	return support.StackDeltaBucketSmallest, nil
+	meta := C.malloc(C.sizeof_StackDeltaMeta)
+	*(*C.StackDeltaMeta)(meta) = C.StackDeltaMeta{
+		firstPage: C.u64(firstPage),
+		numPages:  C.u32(len(pageDescs)),
+		numPairs:  C.u32(numPairs),
+		mapID:     C.u16(mapID),
+	}
+	ctx.exeIDToStackDeltaMeta[C.u64(fileID)] = meta
+	return mapID, nil
 }
 
 func (emc *ebpfMapsCoredump) DeleteExeIDToStackDeltas(fileID host.FileID,
@@ -199,42 +228,10 @@ func (emc *ebpfMapsCoredump) DeleteExeIDToStackDeltas(fileID host.FileID,
 		C.free(value)
 		delete(ctx.exeIDToStackDeltaMaps, key)
 	}
-	return nil
-}
-
-func (emc *ebpfMapsCoredump) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-	mapID uint16, firstPageAddr uint64,
-) error {
-	ctx := emc.ctx
-	firstDelta := uint32(0)
-
-	for pageNumber, numDeltas := range numDeltasPerPage {
-		pageAddr := firstPageAddr + uint64(pageNumber)<<support.StackDeltaPageBits
-		key := C.StackDeltaPageKey{
-			fileID: C.u64(fileID),
-			page:   C.u64(pageAddr),
-		}
-		value := C.malloc(C.sizeof_StackDeltaPageInfo)
-		*(*C.StackDeltaPageInfo)(value) = C.StackDeltaPageInfo{
-			firstDelta: C.u32(firstDelta),
-			numDeltas:  C.u16(numDeltas),
-			mapID:      C.u16(mapID),
-		}
-		firstDelta += uint32(numDeltas)
-		ctx.stackDeltaPageToInfo[key] = value
+	if meta, ok := ctx.exeIDToStackDeltaMeta[key]; ok {
+		C.free(meta)
+		delete(ctx.exeIDToStackDeltaMeta, key)
 	}
-
-	return nil
-}
-
-func (emc *ebpfMapsCoredump) DeleteStackDeltaPage(fileID host.FileID, page uint64) error {
-	ctx := emc.ctx
-	key := C.StackDeltaPageKey{
-		fileID: C.u64(fileID),
-		page:   C.u64(page),
-	}
-	C.free(ctx.stackDeltaPageToInfo[key])
-	delete(ctx.stackDeltaPageToInfo, key)
 	return nil
 }
 

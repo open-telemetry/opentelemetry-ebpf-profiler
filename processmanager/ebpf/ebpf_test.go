@@ -4,38 +4,49 @@
 package ebpf
 
 import (
-	"fmt"
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-func TestMapID(t *testing.T) {
-	testCases := map[uint32]uint16{
-		0:       8,
-		1:       8,
-		2:       8,
-		0xFF:    8,  // 255
-		0x100:   9,  // 256
-		0x1FF:   9,  // 511
-		0x200:   10, // 512
-		0x3FF:   10, // 1023
-		0x400:   11, // 1024
-		0xFFFFF: 20, // 1048575 (2^20 - 1)
-		(1 << support.StackDeltaBucketLargest) - 1: support.StackDeltaBucketLargest,
+// packDeltasAsPairs is the reference implementation of packing a flat delta
+// list into pairs, against which the zero-copy reinterpretation is compared.
+func packDeltasAsPairs(deltas []ebpfapi.StackDelta) []support.StackDeltaPair {
+	pairs := make([]support.StackDeltaPair, (len(deltas)+1)/2)
+	for index, delta := range deltas {
+		if index%2 == 0 {
+			pairs[index/2].First.AddrLow = delta.AddrLow
+			pairs[index/2].First.UnwindInfo = delta.UnwindInfo
+		} else {
+			pairs[index/2].Second.AddrLow = delta.AddrLow
+			pairs[index/2].Second.UnwindInfo = delta.UnwindInfo
+		}
 	}
-	for numStackDeltas, expectedShift := range testCases {
-		t.Run(fmt.Sprintf("deltas %d", numStackDeltas), func(t *testing.T) {
-			shift, err := getMapID(numStackDeltas)
-			require.NoError(t, err)
-			assert.Equal(t, expectedShift, shift, "wrong map name for %d deltas",
-				numStackDeltas)
-		})
+	return pairs
+}
+
+// TestStackDeltaPairAliasing verifies that a flat delta list can be
+// reinterpreted as pairs of StackDelta entries without copying, and that the
+// result is identical to explicit packing.
+func TestStackDeltaPairAliasing(t *testing.T) {
+	deltas := []ebpfapi.StackDelta{
+		{AddrLow: 0x0008, UnwindInfo: 1},
+		{AddrLow: 0x0010, UnwindInfo: 2},
+		{AddrLow: 0x0018, UnwindInfo: 3},
+		{AddrLow: 0x0020, UnwindInfo: 4},
 	}
 
-	_, err := getMapID(1 << (support.StackDeltaBucketLargest + 1))
-	require.Error(t, err)
+	aliased := unsafe.Slice(
+		(*support.StackDeltaPair)(unsafe.Pointer(unsafe.SliceData(deltas))), len(deltas)/2)
+	packed := packDeltasAsPairs(deltas)
+
+	require.Len(t, aliased, len(packed))
+	for i := range aliased {
+		assert.Equal(t, packed[i], aliased[i], "pair %d", i)
+	}
 }
