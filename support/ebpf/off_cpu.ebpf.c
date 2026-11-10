@@ -112,7 +112,7 @@ int finish_task_switch(struct pt_regs *ctx)
   bpf_map_delete_elem(&sched_times, &pid_tgid);
 
   // Drop short waits before prepare_trace to skip stack unwinding and export.
-  if (off_cpu_min_duration_ns && diff < off_cpu_min_duration_ns) {
+  if (diff < off_cpu_min_duration_ns) {
     return 0;
   }
 
