@@ -65,6 +65,7 @@ type Config struct {
 	IncludeEnvVars              string                             `mapstructure:"include_env_vars"`
 	MapScaleFactor              uint                               `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel         uint                               `mapstructure:"bpf_verifier_log_level"`
+	MaxConcurrentProgLoads      uint                               `mapstructure:"max_concurrent_prog_loads"`
 	NoKernelVersionCheck        bool                               `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries              uint32                             `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize               int                                `mapstructure:"max_rpc_msg_size"`
