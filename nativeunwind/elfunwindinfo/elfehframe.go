@@ -8,7 +8,6 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"unsafe"
 
@@ -831,8 +830,8 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 	if fde.ipLen != uintptr(len(sigretCode)) {
 		return false
 	}
-	fdeCode, err := efCode.VirtualMemory(int64(fde.ipStart), len(sigretCode), 64)
-	if err != nil {
+	fdeCode := make([]byte, len(sigretCode))
+	if _, err := efCode.ReadAt(fdeCode, int64(fde.ipStart)); err != nil {
 		return false
 	}
 	return bytes.Equal(fdeCode, sigretCode)
@@ -849,9 +848,12 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 		debugFrame: r.debugFrame,
 		vaddr:      r.vaddr,
 	}
+	sub, err := r.SubReader(ciePos)
+	if err != nil {
+		return nil, err
+	}
+	cr.Reader = *sub
 	defer cr.Release()
-	cr.Init(r.Outer())
-	cr.Seek(ciePos, io.SeekStart)
 	cr.SetBufferSize(256) // CIE entry is typically 20-80 bytes
 
 	length, marker, err := cr.parseLengthAndMarker()
@@ -996,7 +998,7 @@ func readEhframe(ef *pfelf.File) (elfRegion, error) {
 		machine: ef.Machine,
 		vaddr:   header.vaddr,
 	}
-	r.Init(ef.Underlying(), header.offset, hdrLength)
+	r.InitSlideView(ef.Underlying(), header.offset, hdrLength)
 	defer r.Release()
 
 	// Read and parse the header
@@ -1041,7 +1043,7 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, frames elfRegion, debugFrame bo
 		vaddr:      frames.vaddr,
 	}
 	defer r.Release()
-	r.Init(ef.Underlying(), frames.offset, frames.length)
+	r.InitSlideView(ef.Underlying(), frames.offset, frames.length)
 
 	for r.Remaining() > 0 {
 		id := r.Tell()
