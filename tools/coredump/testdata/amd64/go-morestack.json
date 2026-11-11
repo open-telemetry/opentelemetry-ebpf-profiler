@@ -5,7 +5,7 @@
       "lwp": 58984,
       "frames": [
         "runtime.newstack+0 in /usr/local/go/src/runtime/stack.go:1026",
-        "runtime.morestack+0 in /usr/local/go/src/runtime/asm_amd64.s:682",
+        "runtime.morestack+0 in /usr/local/go/src/runtime/asm_amd64.s:681",
         "main.fib+0 in /home/brennan/test_go/morestack.go:5",
         "main.fib+0 in /home/brennan/test_go/morestack.go:9",
         "main.fib+0 in /home/brennan/test_go/morestack.go:9",
@@ -140,8 +140,8 @@
         "main.deepfib+0 in /home/brennan/test_go/morestack.go:17",
         "main.deepfib+0 in /home/brennan/test_go/morestack.go:17",
         "main.main+0 in /home/brennan/test_go/morestack.go:24",
-        "runtime.main+0 in /usr/local/go/src/internal/runtime/atomic/types.go:194",
-        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_amd64.s:1772"
+        "runtime.main+0 in /usr/local/go/src/runtime/proc.go:290",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_amd64.s:1771"
       ]
     },
     {
@@ -149,12 +149,13 @@
       "frames": [
         "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_amd64.s:570",
         "runtime.futexsleep+0 in /usr/local/go/src/runtime/os_linux.go:73",
-        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
-        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1968",
-        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3400",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:47",
+        "runtime.mPark+0 in /usr/local/go/src/runtime/proc.go:1967",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:3008",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3796",
         "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4164",
-        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4305",
-        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:500"
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4304",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:496"
       ]
     },
     {
@@ -162,12 +163,13 @@
       "frames": [
         "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_amd64.s:570",
         "runtime.futexsleep+0 in /usr/local/go/src/runtime/os_linux.go:73",
-        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
-        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1968",
-        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3292",
-        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4154",
-        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4305",
-        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:500"
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:47",
+        "runtime.mPark+0 in /usr/local/go/src/runtime/proc.go:1967",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:3008",
+        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3291",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4226",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4304",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:496"
       ]
     },
     {
@@ -175,12 +177,13 @@
       "frames": [
         "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_amd64.s:570",
         "runtime.futexsleep+0 in /usr/local/go/src/runtime/os_linux.go:73",
-        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
-        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1968",
-        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3400",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:47",
+        "runtime.mPark+0 in /usr/local/go/src/runtime/proc.go:1967",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:3008",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3796",
         "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4164",
-        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4305",
-        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:500"
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4304",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_amd64.s:496"
       ]
     },
     {
@@ -190,8 +193,8 @@
         "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6506",
         "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6506",
         "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1935",
-        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1897",
-        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_amd64.s:427"
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1888",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_amd64.s:426"
       ]
     }
   ],
