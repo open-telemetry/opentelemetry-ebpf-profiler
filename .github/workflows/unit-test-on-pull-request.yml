@@ -174,7 +174,9 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            tools/coredump/go.sum
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -184,7 +186,7 @@ jobs:
             coredumps-arm64
             coredumps-
       - name: Run coredump tests
-        run: GODEBUG=asyncpreemptoff=1 go test -v ./tools/coredump/
+        run: GODEBUG=asyncpreemptoff=1 go test -C tools/coredump -v .
 
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
