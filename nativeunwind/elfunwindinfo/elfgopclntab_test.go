@@ -5,11 +5,16 @@ package elfunwindinfo
 
 import (
 	"bytes"
+	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 	"os"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -97,6 +102,256 @@ func TestNewPcvalEmpty(t *testing.T) {
 			assert.Equal(t, int32(-1), p.val)
 		})
 	}
+}
+
+// The first entry can keep the initial -1, encoded as a zero value delta.
+func TestMapInlineIndex(t *testing.T) {
+	data := []byte{0x00, 0x00, 0x05, 0x02, 0x03, 0x00, 0x00}
+	g := Gopclntab{pclnOffset: int64(len(data)), pcval: newPcvalDecoder(libpf.NewBytesView(data), 0, int64(len(data)), 1)}
+	assert.Equal(t, int32(-1), g.mapInlineIndex(1, 0x10, 0x12))
+	assert.Equal(t, int32(0), g.mapInlineIndex(1, 0x10, 0x16))
+	assert.Equal(t, int32(-1), g.mapInlineIndex(1, 0x10, 0x18))
+	// Offset zero is the empty table; the other offsets have no complete entry.
+	assert.Equal(t, int32(-1), g.mapInlineIndex(0, 0x10, 0x12))
+	assert.Equal(t, int32(-1), g.mapInlineIndex(6, 0x10, 0x10))
+	assert.Equal(t, int32(-1), g.mapInlineIndex(7, 0x10, 0x10))
+}
+
+func TestFindGoFunc(t *testing.T) {
+	const pclntabAddr, gofuncAddr = uintptr(0x1000), uintptr(0x2000)
+	const gofuncOffset = 320
+	g := Gopclntab{funcnameOffset: 0x80, cuOffset: 0x100}
+	record := make([]byte, gofuncOffset+8)
+	binary.LittleEndian.PutUint64(record, uint64(pclntabAddr))
+	binary.LittleEndian.PutUint64(record[8:], uint64(pclntabAddr+uintptr(g.funcnameOffset)))
+	binary.LittleEndian.PutUint64(record[32:], uint64(pclntabAddr+uintptr(g.cuOffset)))
+	binary.LittleEndian.PutUint64(record[gofuncOffset:], uint64(gofuncAddr))
+	assert.Equal(t, gofuncAddr, g.findGoFunc(record, pclntabAddr, gofuncOffset))
+
+	// A matching header address alone is insufficient; keep searching.
+	withFalseMatch := make([]byte, 8)
+	binary.LittleEndian.PutUint64(withFalseMatch, uint64(pclntabAddr))
+	withFalseMatch = append(withFalseMatch, record...)
+	assert.Equal(t, gofuncAddr, g.findGoFunc(withFalseMatch, pclntabAddr, gofuncOffset))
+
+	for _, test := range []struct {
+		name   string
+		data   []byte
+		offset int
+	}{
+		{"empty", nil, gofuncOffset},
+		{"truncated", record[:len(record)-1], gofuncOffset},
+		{"unaligned", append([]byte{0}, record...), gofuncOffset},
+		{"negativeOffset", record, -1},
+		{"offsetBeforePrefix", record, 24},
+		{"offsetPastEnd", record, len(record)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Zero(t, g.findGoFunc(test.data, pclntabAddr, test.offset))
+		})
+	}
+	for _, pointerOff := range []int{8, 32} {
+		t.Run(fmt.Sprintf("wrongPointer%d", pointerOff), func(t *testing.T) {
+			bad := append([]byte(nil), record...)
+			binary.LittleEndian.PutUint64(bad[pointerOff:], 0)
+			assert.Zero(t, g.findGoFunc(bad, pclntabAddr, gofuncOffset))
+		})
+	}
+}
+
+func TestGoFuncOffset(t *testing.T) {
+	for _, test := range []struct {
+		version   uint8
+		goVersion string
+		want      int
+	}{
+		{go1_18, "go1.18", 304},
+		{go1_18, "go1.19.13", 304},
+		{go1_18, "", 304}, // The header identifies this layout without build info.
+		{go1_20, "go1.20", 320},
+		{go1_20, "go1.26.0", 320},
+		{go1_20, "go1.27beta1", 344},
+		{go1_20, "go1.27rc1", 344},
+		{go1_20, "go1.27.0", 344},
+		{go1_20, "go1.28beta1", 0},
+		{go1_20, "go1.28rc1", 0},
+		{go1_20, "go1.28.0", 0},
+		{go1_20, "", 0},
+		{go1_20, "devel go1.27-abcdef", 0},
+		{go1_16, "go1.16.15", 0},
+		{goInvalid, "go1.27.0", 0},
+	} {
+		t.Run(fmt.Sprintf("header%d/%s", test.version, test.goVersion), func(t *testing.T) {
+			g := Gopclntab{version: test.version}
+			assert.Equal(t, test.want, g.goFuncOffset(test.goVersion))
+		})
+	}
+}
+
+func TestGetInlinedCall(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		version uint8
+		tree    []byte
+	}{
+		{"Go116", go1_16, []byte{
+			0, 0, 0, 0, // parent, funcID, padding
+			0, 0, 0, 0, // file
+			0, 0, 0, 0, // line
+			1, 0, 0, 0, // name offset
+			42, 0, 0, 0, // parent PC
+		}},
+		{"Go120", go1_20, []byte{
+			0, 0, 0, 0, // funcID, padding
+			1, 0, 0, 0, // name offset
+			42, 0, 0, 0, // parent PC
+			7, 0, 0, 0, // start line
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			data := append([]byte("\x00leaf\x00"), test.tree...)
+			g := Gopclntab{version: test.version, readerAt: libpf.NewBytesView(data), cuOffset: 6, inlineSegmentSize: uint64(len(data))}
+			name, parentPc := g.getInlinedCall(6, 0)
+			assert.Equal(t, "leaf", name.String())
+			assert.Equal(t, 42, parentPc)
+		})
+	}
+}
+
+type symbolizedFrame struct {
+	function, file string
+	line           int
+}
+
+//go:noinline
+func callers() []uintptr {
+	pcs := make([]uintptr, 32)
+	return pcs[:runtime.Callers(2, pcs)]
+}
+
+// These helpers are small enough to be inlined into inlineRoot.
+func inlinedLeaf() []uintptr   { return callers() }
+func inlinedMiddle() []uintptr { return inlinedLeaf() }
+
+//go:noinline
+func inlineRoot() []uintptr { return inlinedMiddle() }
+
+func TestSymbolizeInlined(t *testing.T) {
+	pcs := inlineRoot()
+	require.GreaterOrEqual(t, len(pcs), 4)
+	rootPc := reflect.ValueOf(inlineRoot).Pointer()
+	if runtime.FuncForPC(pcs[0]).Entry() != rootPc {
+		t.Skip("test functions were not inlined")
+	}
+	var want []symbolizedFrame
+	runtimeFrames := runtime.CallersFrames(pcs)
+	for len(want) < 4 {
+		frame, more := runtimeFrames.Next()
+		want = append(want, symbolizedFrame{frame.Function, frame.File, frame.Line})
+		if len(want) < 4 {
+			require.True(t, more)
+		}
+	}
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	ef, err := pfelf.Open(executable)
+	require.NoError(t, err)
+	defer ef.Close()
+	g, err := NewGopclntab(ef)
+	require.NoError(t, err)
+	defer g.Close()
+
+	roots := []libpf.Symbol{{Name: libpf.SymbolName(want[2].function)}}
+	require.NoError(t, g.LookupSymbols(roots))
+	loadBias := rootPc - uintptr(roots[0].Address)
+	symbolize := func(pc uintptr) []symbolizedFrame {
+		var frames []symbolizedFrame
+		ok := g.SymbolizeInlined(uint64(pc-loadBias-1), func(file libpf.String, line uint, name libpf.String) {
+			frames = append(frames, symbolizedFrame{name.String(), file.String(), int(line)})
+		})
+		require.True(t, ok)
+		return frames
+	}
+	assert.Equal(t, want[:3], symbolize(pcs[0]))
+	assert.Equal(t, want[3:], symbolize(pcs[3]))
+
+	// Symbolize retains the containing function with the innermost source line.
+	file, line, name := g.Symbolize(uint64(pcs[0] - loadBias - 1))
+	outer := symbolizedFrame{want[2].function, want[0].file, want[0].line}
+	assert.Equal(t, symbolizedFrame{name.String(), file.String(), int(line)}, outer)
+	assert.False(t, g.SymbolizeInlined(0, func(libpf.String, uint, libpf.String) {
+		t.Fatal("unexpected frame")
+	}))
+
+	pc := uint64(pcs[0] - loadBias - 1)
+	funcEnd, fd := g.findFunc(pc)
+	require.NotNil(t, fd)
+	funcPc := fd.startPc
+	indexTable, tree := fd.inlineIndexOff, fd.inlineTree
+	require.NotEmpty(t, tree)
+	leafIndex := g.mapInlineIndex(indexTable, uint(funcPc), uint(pc))
+	require.GreaterOrEqual(t, leafIndex, int32(0))
+	_, parentPc := g.getInlinedCall(tree, leafIndex)
+	middleIndex := g.mapInlineIndex(indexTable, uint(funcPc), uint(funcPc)+uint(parentPc))
+	require.GreaterOrEqual(t, middleIndex, int32(0))
+	require.NotEqual(t, leafIndex, middleIndex)
+	entrySize := int(unsafe.Sizeof(inlinedCall116{}))
+	nameOff := int(unsafe.Offsetof(inlinedCall116{}.nameOff))
+	parentOff := int(unsafe.Offsetof(inlinedCall116{}.parentPc))
+	if g.version >= go1_20 {
+		entrySize = int(unsafe.Sizeof(inlinedCall120{}))
+		nameOff = int(unsafe.Offsetof(inlinedCall120{}.nameOff))
+		parentOff = int(unsafe.Offsetof(inlinedCall120{}.parentPc))
+	}
+	for _, test := range []struct {
+		name   string
+		index  int32
+		field  int
+		value  uint32
+		frames int
+	}{
+		{"invalidName", leafIndex, nameOff, ^uint32(0), 1},
+		{"negativeParent", leafIndex, parentOff, ^uint32(0), 1},
+		{"parentOutsideFunction", leafIndex, parentOff, uint32(funcEnd - funcPc), 1},
+		{"selfReference", leafIndex, parentOff, uint32(pc - funcPc), 1},
+		{"twoEntryCycle", middleIndex, parentOff, uint32(pc - funcPc), maxInlineDepth + 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			corrupt := *g
+			field := tree + int64(test.index)*int64(entrySize) + int64(test.field)
+			var patch [4]byte
+			binary.LittleEndian.PutUint32(patch[:], test.value)
+			corrupt.readerAt = patchedInlineReader{ViewAtReader: g.readerAt, offset: field, patch: patch}
+			var got []symbolizedFrame
+			require.True(t, corrupt.SymbolizeInlined(pc, func(file libpf.String, line uint, name libpf.String) {
+				got = append(got, symbolizedFrame{name.String(), file.String(), int(line)})
+			}))
+			require.Len(t, got, test.frames)
+			assert.Equal(t, outer.function, got[len(got)-1].function)
+		})
+	}
+
+	// Missing inline data falls back to the same single-frame result.
+	fd.inlineTree = 0
+	assert.Equal(t, []symbolizedFrame{outer}, symbolize(pcs[0]))
+}
+
+// patchedInlineReader changes one inline entry field while preserving the backing ELF.
+type patchedInlineReader struct {
+	libpf.ViewAtReader
+	offset int64
+	patch  [4]byte
+}
+
+func (r patchedInlineReader) ReadAt(p []byte, off int64) (int, error) {
+	n, err := r.ViewAtReader.ReadAt(p, off)
+	for i := range n {
+		if idx := off + int64(i) - r.offset; idx >= 0 && idx < 4 {
+			p[i] = r.patch[idx]
+		}
+	}
+	return n, err
 }
 
 // Some strategy tests

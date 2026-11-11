@@ -40,7 +40,14 @@ const (
 
 	// Offset of the text field in moduledata struct for Go 1.16+
 	// https://github.com/golang/go/blob/release-branch.go1.16/src/runtime/symtab.go#L370
-	textOffset = 22 * 8
+	textOffset                = 22 * 8
+	moduledataGoFuncOffset118 = 38 * 8
+	moduledataGoFuncOffset120 = 40 * 8
+	moduledataGoFuncOffset127 = 43 * 8
+	pcdataInlTreeIndex        = 2
+	funcdataInlTree           = 3
+	maxInlineDepth            = 64
+
 	// section name for the module data for Go 1.26+
 	moduleDataSectionName = ".go.module"
 
@@ -106,6 +113,26 @@ type pclntabFunc struct {
 	nameOff, argsSize, frameSize int32
 	pcspOff, pcfileOff, pclnOff  int32
 	nfuncData, npcData           int32
+}
+
+// inlinedCall116 is the runtime.inlinedCall layout for Go 1.16 through 1.19.
+type inlinedCall116 struct {
+	parent   int16
+	funcID   uint8
+	_        uint8
+	file     int32
+	line     int32
+	nameOff  int32
+	parentPc int32
+}
+
+// inlinedCall120 is the runtime.inlinedCall layout introduced in Go 1.20.
+type inlinedCall120 struct {
+	funcID    uint8
+	_         [3]byte
+	nameOff   int32
+	parentPc  int32
+	startLine int32
 }
 
 // pcvalDecoder is a decoder for pcval tables. A pcval table decodes to
@@ -242,7 +269,7 @@ func (p *pcvalDecoder) step() (uint, int32, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if d == 0 {
+	if d == 0 && (p.minValid != -1 || p.pc != 0) {
 		return 0, 0, io.EOF
 	}
 	pc := p.pc
@@ -399,7 +426,11 @@ type Gopclntab struct {
 	// initFailed records that the symbolization initialization was attempted
 	// and failed (e.g. corrupt function lookup map): it is not retried for
 	// every symbolization call.
-	initFailed bool
+	initFailed          bool
+	inlineSegmentOffset int64
+	inlineSegmentSize   uint64
+	inlineSegmentAddr   uint64
+	gofunc              uint64
 }
 
 func (g *Gopclntab) walkFuncMap(visitor func(pc, endPc uint64, fun *pclntabFunc) error) (start, end uint64, err error) {
@@ -597,6 +628,7 @@ func NewGopclntab(ef *pfelf.File) (g *Gopclntab, err error) {
 
 	// Take the reference only once the pclntab is known to be usable: on the
 	// error paths above there is no Gopclntab to release it on Close.
+	g.loadFuncData(ef)
 	g.dataRef = ef.Take()
 	return g, nil
 }
@@ -628,8 +660,10 @@ type functionData struct {
 	funcName libpf.String
 	// pcfileOff and pclnOff are the offsets of the pcval tables within the
 	// pctab area. Zero means the function has no such table.
-	pcfileOff int32
-	pclnOff   int32
+	pcfileOff      int32
+	pclnOff        int32
+	inlineIndexOff int32
+	inlineTree     int64
 }
 
 // hashFuncOff hashes a function descriptor offset for the LRU cache.
@@ -763,6 +797,7 @@ func (g *Gopclntab) readFuncData(funcOff uintptr) *functionData {
 	fd.funcName = g.readFuncName(fun.nameOff)
 	fd.pcfileOff = fun.pcfileOff
 	fd.pclnOff = fun.pclnOff
+	fd.inlineIndexOff, fd.inlineTree = g.getInlineTree(funcOff, fun)
 	return fd
 }
 
@@ -780,23 +815,23 @@ func (g *Gopclntab) getCachedFuncData(funcOff uintptr) *functionData {
 	return fd
 }
 
-// Symbolize returns the file, line and function information for given PC
-func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, funcName libpf.String) {
+// findFunc finds the cached descriptor and end PC for the containing function.
+func (g *Gopclntab) findFunc(pc uint64) (uint64, *functionData) {
 	if g.sparseIndex == nil {
 		if g.readerAt == nil || g.initFailed {
-			return libpf.NullString, 0, libpf.NullString
+			return 0, nil
 		}
 		if g.initSymbolization() != nil {
 			// Initialization failed (e.g. corrupt function lookup map): do
 			// not retry the full map walk for every symbolization call.
 			g.initFailed = true
-			return libpf.NullString, 0, libpf.NullString
+			return 0, nil
 		}
 	}
 
 	// Fast check for if within gopclntab code range
 	if pc < g.textStart || pc >= g.textEnd {
-		return libpf.NullString, 0, libpf.NullString
+		return 0, nil
 	}
 
 	// Binary search the sparse index for the window of the function lookup
@@ -811,7 +846,7 @@ func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, fu
 		return g.sparseIndex[i] > pcRel
 	}) - 1
 	if idx < 0 {
-		return libpf.NullString, 0, libpf.NullString
+		return 0, nil
 	}
 
 	// Then search the function lookup map entries in the window by reading
@@ -819,20 +854,34 @@ func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, fu
 	funcIdx := g.searchFuncMapWindow(idx, uint64(pc))
 	if funcIdx >= g.numFuncs {
 		// The pc is higher than any Go function address.
-		return libpf.NullString, 0, libpf.NullString
+		return 0, nil
 	}
 
 	mapPc, funcOff := g.readFuncMapEntry(funcIdx)
 	if mapPc == 0 {
-		return libpf.NullString, 0, libpf.NullString
+		return 0, nil
 	}
 	fd := g.getCachedFuncData(funcOff)
 	if fd == nil || fd.startPc != mapPc {
+		return 0, nil
+	}
+	endPc, _ := g.readFuncMapEntry(funcIdx + 1)
+	return endPc, fd
+}
+
+// Symbolize returns the file, line and function information for given PC.
+func (g *Gopclntab) Symbolize(pc uint64) (libpf.String, uint, libpf.String) {
+	_, fd := g.findFunc(pc)
+	if fd == nil {
 		return libpf.NullString, 0, libpf.NullString
 	}
-	pcDiff := uint(uint64(pc) - mapPc)
+	file, line := g.sourceLine(fd, pc)
+	return file, line, fd.funcName
+}
 
-	funcName = fd.funcName
+func (g *Gopclntab) sourceLine(fd *functionData, pc uint64) (sourceFile libpf.String, line uint) {
+	pcDiff := uint(pc - fd.startPc)
+
 	if fd.pcfileOff != 0 {
 		// Resolve the source file name from the pcfile table.
 		if fileIndex, err := g.pcval.mapValue(fd.pcfileOff, pcDiff); err == nil {
@@ -845,7 +894,7 @@ func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, fu
 			line = uint(lineNo)
 		}
 	}
-	return sourceFile, line, funcName
+	return sourceFile, line
 }
 
 func findTextStart(ef *pfelf.File) (uint64, error) {
@@ -1188,4 +1237,208 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		ee.hooks.golangHook(uintptr(start), uintptr(end))
 	}
 	return err
+}
+
+// goFuncOffset returns the byte offset of moduledata.gofunc, or zero for an
+// unknown layout. See the moduledata struct in go/src/runtime/symtab.go.
+func (g *Gopclntab) goFuncOffset(goVersion string) int {
+	if g.version == go1_18 {
+		return moduledataGoFuncOffset118
+	}
+	if g.version != go1_20 || version.Compare(goVersion, "go1.20") < 0 ||
+		version.Compare(goVersion, "go1.28") >= 0 {
+		return 0
+	}
+	if version.Compare(goVersion, "go1.27") >= 0 {
+		return moduledataGoFuncOffset127
+	}
+	return moduledataGoFuncOffset120
+}
+
+// findGoFunc scans moduledata records for the one referring to this pclntab.
+// gofuncOffset is the version-specific offset of the gofunc field.
+func (g *Gopclntab) findGoFunc(data []byte, pclntabAddr uintptr, gofuncOffset int) uintptr {
+	if gofuncOffset < 32 || gofuncOffset > len(data)-8 {
+		return 0
+	}
+	var needle [8]byte
+	binary.LittleEndian.PutUint64(needle[:], uint64(pclntabAddr))
+	for start := 0; start <= len(data)-gofuncOffset-8; start += 8 {
+		n := bytes.Index(data[start:], needle[:])
+		if n < 0 {
+			return 0
+		}
+		start += n &^ 7
+		if n&7 != 0 || len(data)-start < gofuncOffset+8 {
+			continue
+		}
+		// moduledata starts with pcHeader, followed by the funcnametab
+		// slice at byte 8 and the cutab slice at byte 32.
+		moduledata := data[start:]
+		if binary.LittleEndian.Uint64(moduledata[8:]) == uint64(pclntabAddr+uintptr(g.funcnameOffset)) &&
+			binary.LittleEndian.Uint64(moduledata[32:]) == uint64(pclntabAddr+uintptr(g.cuOffset)) {
+			return uintptr(binary.LittleEndian.Uint64(moduledata[gofuncOffset:]))
+		}
+	}
+	return 0
+}
+
+// mapInlineIndex decodes the inline table, whose first entry can retain -1.
+func (g *Gopclntab) mapInlineIndex(offs int32, startPc, pc uint) int32 {
+	if offs <= 0 || int64(offs) >= g.pclnOffset-g.pctabOffset {
+		return -1
+	}
+	g.pcval.reset(offs, -1)
+	for {
+		_, val, err := g.pcval.step()
+		if err != nil {
+			return -1
+		}
+		if pc-startPc < g.pcval.pc {
+			return val
+		}
+	}
+}
+
+// SymbolizeInlined visits frames from the innermost call to the containing function.
+func (g *Gopclntab) SymbolizeInlined(pc uint64, visit func(libpf.String, uint, libpf.String)) bool {
+	endPc, fd := g.findFunc(pc)
+	if fd == nil || fd.funcName == libpf.NullString {
+		return false
+	}
+	for depth := 0; fd.inlineTree != 0 && depth < maxInlineDepth; depth++ {
+		index := g.mapInlineIndex(fd.inlineIndexOff, uint(fd.startPc), uint(pc))
+		if index < 0 {
+			break
+		}
+		name, parent := g.getInlinedCall(fd.inlineTree, index)
+		callPc := fd.startPc + uint64(parent)
+		if name == libpf.NullString || parent < 0 || callPc >= endPc || callPc == pc {
+			break
+		}
+		file, line := g.sourceLine(fd, pc)
+		visit(file, line, name)
+		pc = callPc
+	}
+	file, line := g.sourceLine(fd, pc)
+	visit(file, line, fd.funcName)
+	return true
+}
+
+// getInlineTree resolves the inline index table and the tree's file offset.
+func (g *Gopclntab) getInlineTree(funcOff uintptr, fun *pclntabFunc) (int32, int64) {
+	if g.inlineSegmentSize == 0 || fun.nfuncData <= pcdataInlTreeIndex {
+		return 0, 0
+	}
+	pcdataOff := int64(funcOff) + int64(g.funSize) + 4
+	if g.version >= go1_20 {
+		pcdataOff += 4
+	}
+	base := g.pclntabOffset + g.pclnOffset
+	var buf [8]byte
+	if _, err := g.readerAt.ReadAt(buf[:1], base+pcdataOff-1); err != nil || buf[0] <= funcdataInlTree {
+		return 0, 0
+	}
+	if _, err := g.readerAt.ReadAt(buf[:4], base+pcdataOff+4*pcdataInlTreeIndex); err != nil {
+		return 0, 0
+	}
+	indexOff := int32(binary.LittleEndian.Uint32(buf[:]))
+	if indexOff <= 0 {
+		return 0, 0
+	}
+	dataOff := pcdataOff + 4*int64(fun.nfuncData)
+	var addr uint64
+	if g.version >= go1_18 {
+		if _, err := g.readerAt.ReadAt(buf[:4], base+dataOff+4*funcdataInlTree); err != nil {
+			return 0, 0
+		}
+		offset := binary.LittleEndian.Uint32(buf[:])
+		if offset == ^uint32(0) {
+			return 0, 0
+		}
+		addr = g.gofunc + uint64(offset)
+	} else {
+		dataOff += -(g.pclnOffset + dataOff) & 7
+		if _, err := g.readerAt.ReadAt(buf[:], base+dataOff+8*funcdataInlTree); err != nil {
+			return 0, 0
+		}
+		addr = binary.LittleEndian.Uint64(buf[:])
+	}
+	if addr < g.inlineSegmentAddr || addr-g.inlineSegmentAddr >= g.inlineSegmentSize {
+		return 0, 0
+	}
+	return indexOff, g.inlineSegmentOffset + int64(addr-g.inlineSegmentAddr)
+}
+
+// getInlinedCall reads one runtime.inlinedCall without retaining borrowed reader data.
+func (g *Gopclntab) getInlinedCall(tree int64, index int32) (libpf.String, int) {
+	size, nameOff, parentOff := 20, 12, 16
+	if g.version >= go1_20 {
+		size, nameOff, parentOff = 16, 4, 8
+	}
+	offset := tree + int64(index)*int64(size)
+	if index < 0 || offset < g.inlineSegmentOffset || uint64(offset-g.inlineSegmentOffset)+uint64(size) > g.inlineSegmentSize {
+		return libpf.NullString, -1
+	}
+	var buf [20]byte
+	if _, err := g.readerAt.ReadAt(buf[:size], offset); err != nil {
+		return libpf.NullString, -1
+	}
+	return g.readFuncName(int32(binary.LittleEndian.Uint32(buf[nameOff:]))), int(int32(binary.LittleEndian.Uint32(buf[parentOff:])))
+}
+
+// loadFuncData records the segment mapping for on-demand inline tree reads.
+func (g *Gopclntab) loadFuncData(ef *pfelf.File) {
+	var pclntabAddr uint64
+	for _, p := range ef.Progs {
+		if p.Type == elf.PT_LOAD && uint64(g.pclntabOffset) >= p.Off && uint64(g.pclntabOffset)-p.Off < p.Filesz {
+			pclntabAddr = p.Vaddr + uint64(g.pclntabOffset) - p.Off
+			break
+		}
+	}
+	if pclntabAddr == 0 {
+		return
+	}
+	addr := pclntabAddr
+	if g.version >= go1_18 {
+		offset := g.goFuncOffset(ef.GoVersion())
+		section := ef.Section(moduleDataSectionName)
+		if section == nil {
+			section = ef.Section(".noptrdata")
+		}
+		if offset == 0 || section == nil || section.Type == elf.SHT_NOBITS {
+			return
+		}
+		// A moduledata record fits in this fixed buffer. Scan aligned candidates
+		// through the cached reader rather than loading the entire section.
+		var record [moduledataGoFuncOffset127 + 8]byte
+		for pos := int64(0); pos+int64(offset)+8 <= int64(section.Size); pos += 8 {
+			if _, err := section.ReadAt(record[:8], pos); err != nil {
+				return
+			}
+			if binary.LittleEndian.Uint64(record[:8]) != pclntabAddr {
+				continue
+			}
+			if _, err := section.ReadAt(record[:offset+8], pos); err != nil {
+				return
+			}
+			g.gofunc = uint64(g.findGoFunc(record[:offset+8], uintptr(pclntabAddr), offset))
+			if g.gofunc != 0 {
+				break
+			}
+		}
+		if g.gofunc == 0 {
+			return
+		}
+		addr = g.gofunc
+	} else if section := ef.Section(".rodata"); section != nil {
+		addr = section.Addr
+	}
+	prog := ef.ProgByVirtualAddress(addr)
+	if prog == nil {
+		return
+	}
+	g.inlineSegmentOffset = int64(prog.Off)
+	g.inlineSegmentSize = prog.Filesz
+	g.inlineSegmentAddr = prog.Vaddr
 }
