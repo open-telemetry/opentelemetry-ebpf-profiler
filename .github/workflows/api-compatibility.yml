@@ -1,0 +1,47 @@
+name: "API Compatibility"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  check-api-compatibility:
+    runs-on: ubuntu-latest
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - name: Checkout Base Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: base
+
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          path: head
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: head/go.mod
+          cache-dependency-path: |
+            head/go.sum
+            head/internal/tools/go.sum
+
+      - name: Generate API Baseline Snapshot
+        run: |
+          cd base
+          make apidiff-build APIDIFF_DATA_DIR=/tmp/apidiff-baseline
+
+      - name: Check API Compatibility
+        env:
+          ALLOW_BREAKING_CHANGES: ${{ contains(github.event.pull_request.labels.*.name, 'allow-breaking-changes') }}
+        run: |
+          cd head
+          make apidiff-check APIDIFF_DATA_DIR=/tmp/apidiff-baseline

@@ -5,7 +5,8 @@
 	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
-	otel-from-tree otel-from-lib
+	otel-from-tree otel-from-lib \
+	apidiff-build apidiff-check apidiff-verify
 
 SHELL := /usr/bin/env bash
 
@@ -217,3 +218,14 @@ license-save:
 
 codespell:
 	@codespell
+
+APIDIFF_DATA_DIR ?= /tmp/apidiff-data
+
+apidiff-build:
+	./.github/workflows/scripts/api-compatibility.sh --generate $(APIDIFF_DATA_DIR)
+
+apidiff-check:
+	./.github/workflows/scripts/api-compatibility.sh --check $(APIDIFF_DATA_DIR)
+
+apidiff-verify:
+	./.github/workflows/scripts/api-compatibility.sh --local origin/main
