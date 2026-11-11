@@ -25,6 +25,8 @@ type ProbeContext struct {
 	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+	// maxConcurrentProgLoads caps how many eBPF programs are verified at once.
+	maxConcurrentProgLoads int
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -227,7 +229,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+		bpfVerifierLogLevel, c.maxConcurrentProgLoads, perfProgs.FD(), perCPURecords.FD(),
+		perCPURecordsKp)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -446,7 +449,8 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			t.processManager.RegisterProbeAttacher(a)
 			return nil
 		},
-		KernelSymbolizer: t.kernelSymbolizer,
+		KernelSymbolizer:       t.kernelSymbolizer,
+		maxConcurrentProgLoads: t.maxConcurrentProgLoads,
 	}
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
