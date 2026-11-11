@@ -753,6 +753,56 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
 }
 
+func TestGenerate_ErrorFrames(t *testing.T) {
+	cases := []struct {
+		frameType libpf.FrameType
+		address   libpf.AddressOrLineno
+		errorType string
+	}{
+		{libpf.DotnetFrame, 6002, ""},
+		{libpf.DotnetFrame.Error(), 6002, "6002"},
+		{libpf.UnknownFrame.Error(), 6001, "6001"},
+	}
+
+	var frames libpf.Frames
+	for _, tc := range cases {
+		frames.Append(&libpf.Frame{Type: tc.frameType, AddressOrLineno: tc.address})
+	}
+	tree := samples.TraceEventsTree{
+		samples.ResourceKey{}: {
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
+					{}: {Frames: frames, Timestamps: []uint64{uint64(testCollectionStart.UnixNano())}},
+				},
+			},
+		},
+	}
+	d, err := New(nil)
+	require.NoError(t, err)
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	dic := profiles.Dictionary()
+	sample := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0).Samples().At(0)
+	locations := dic.StackTable().At(int(sample.StackIndex())).LocationIndices().AsRaw()
+	require.Len(t, locations, len(cases))
+	for i, tc := range cases {
+		loc := dic.LocationTable().At(int(locations[i]))
+		attrs := make(map[string]string)
+		for _, index := range loc.AttributeIndices().AsRaw() {
+			attr := dic.AttributeTable().At(int(index))
+			attrs[dic.StringTable().At(int(attr.KeyStrindex()))] = attr.Value().Str()
+		}
+		if tc.errorType == "" {
+			assert.NotContains(t, attrs, string(semconv.ErrorTypeKey), "frame %d", i)
+			assert.Equal(t, uint64(tc.address), loc.Address(), "frame %d", i)
+		} else {
+			assert.Equal(t, tc.errorType, attrs[string(semconv.ErrorTypeKey)], "frame %d", i)
+			assert.EqualValues(t, 0, loc.Address(), "frame %d", i)
+		}
+	}
+}
+
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
