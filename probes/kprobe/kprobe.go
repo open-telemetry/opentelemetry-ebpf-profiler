@@ -78,7 +78,12 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 	originID, err := reg.Register(&tracer.OriginEntry{
 		Meta: &samples.TypeMetadata{
-			SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
+			SampleTypes: []samples.SampleType{{
+				Type: "events",
+				Unit: "count",
+				// Every probe hit is recorded.
+				Period: &samples.Period{Type: "probe_hit", Unit: "count", Value: 1},
+			}},
 			AppendValues: samples.AppendFirstContextValue,
 		},
 	})
