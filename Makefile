@@ -79,7 +79,7 @@ generate-collector:
 		--config cmd/otelcol-ebpf-profiler/manifest.yaml
 
 otelcol-ebpf-profiler: ebpf generate-collector
-	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
+	go -C cmd/otelcol-ebpf-profiler build -tags "$(GO_TAGS)" -o $(CURDIR)/$@
 
 # Sets opentelemetry collector modules to be pulled from local source tree.
 # This command allows you to make changes to your local checkout of otel core and build
@@ -148,7 +148,7 @@ test-luajit-offsets: generate
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
 	go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
-	cd tools/coredump && CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit-coredump.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go -C tools/coredump tool $(GO_TOOLS) gotestsum --junitfile $(abspath $(JUNIT_OUT_DIR))/junit-coredump.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
