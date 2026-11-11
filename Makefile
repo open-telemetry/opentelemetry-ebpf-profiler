@@ -4,7 +4,7 @@
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
-	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
+	vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
 
 SHELL := /usr/bin/env bash
@@ -59,7 +59,6 @@ clean:
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
-	@cargo clean
 
 generate:
 	GOARCH=$(NATIVE_ARCH) go generate ./...
@@ -93,15 +92,6 @@ otel-from-tree: generate-collector
 otel-from-lib:
 	./cmd/otelcol-ebpf-profiler/otel-from-lib.sh
 
-rust-targets:
-	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
-
-rust-components: rust-targets
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
-
-rust-tests: rust-targets
-	cargo test
-
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
@@ -117,10 +107,10 @@ format-ebpf:
 	$(MAKE) format -C support/ebpf
 
 vanity-import-check:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
