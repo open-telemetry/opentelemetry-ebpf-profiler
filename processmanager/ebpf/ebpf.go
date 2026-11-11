@@ -502,6 +502,8 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		ptrCastMarshaler[support.StackDelta](stackDeltas),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 	if err != nil {
+		// Undo the insertion enqueued above as the caller gets no mapID to clean up with.
+		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
 			fmt.Errorf("failed to batch insert %d elements for 0x%x "+
 				"into exeIDTostack_deltas: %v",
