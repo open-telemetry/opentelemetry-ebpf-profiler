@@ -1,4 +1,4 @@
-.PHONY: all all-common clean ebpf generate generate-collector test test-deps \
+.PHONY: all all-common clean ebpf ebpf-debug generate generate-collector test test-deps \
 	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint format format-ebpf format-go pprof-execs \
@@ -72,6 +72,10 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
+# Build the eBPF blob with the BTF debug info (line info) not stripped.
+ebpf-debug: generate
+	$(MAKE) $(EBPF_FLAGS) KEEP_BTF_DEBUGINFO=1 -C support/ebpf
+
 generate-collector:
 	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
@@ -127,11 +131,11 @@ vanity-import-check:
 vanity-import-fix:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go).*" --include-internal -w .
 
-test: generate ebpf test-deps test-coredump
+test: generate ebpf-debug test-deps test-coredump
 	# Without CGO the symblib C-API bindings are skipped as having no Go files.
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
-test-coredump: generate ebpf
+test-coredump: generate ebpf-debug
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
 	CGO_ENABLED=1 go test -C tools/coredump $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
@@ -140,7 +144,7 @@ test-coredump: generate ebpf
 test-luajit-offsets: generate
 	go test -C ./tools/luajitoffsets $(GO_FLAGS) -tags luajit_offsets_test ./...
 
-test-junit: generate ebpf test-deps
+test-junit: generate ebpf-debug test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
 	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 	CGO_ENABLED=1 go -C tools/coredump tool $(GO_TOOLS) gotestsum --junitfile $(abspath $(JUNIT_OUT_DIR))/junit-coredump.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
@@ -197,7 +201,7 @@ pprof_stable_cgo:
 pprof_stable_cgo_pie:
 	CGO_ENABLED=1 go test -C ./interpreter/go/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
-integration-test-binaries: generate ebpf pprof-execs
+integration-test-binaries: generate ebpf-debug pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
