@@ -1,5 +1,5 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets test-coredump protobuf docker-image agent license-check license-save \
+	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
@@ -44,7 +44,7 @@ EBPF_FLAGS :=
 
 GO_TOOLS := -modfile=$(CURDIR)/internal/tools/go.mod
 
-# Go modules to lint and format. The collector module is generated, and the
+# Go modules to lint, format and tidy. The collector module is generated, and the
 # testdata modules hold fixtures built by their own Makefiles.
 GO_MODULES := . internal/tools interpreter/go/integrationtests/pprof \
 	tools/coredump tools/luajitoffsets
@@ -107,7 +107,7 @@ rust-components: rust-targets
 rust-tests: rust-targets
 	cargo test
 
-lint: generate vanity-import-check pprof-execs
+lint: generate vanity-import-check pprof-execs tidy
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
 	# Without CGO the cgo bindings are skipped as having no Go files.
@@ -125,6 +125,11 @@ format-go:
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
+
+tidy:
+	for mod in $(GO_MODULES); do \
+		go -C $$mod mod tidy || exit ; \
+	done
 
 vanity-import-check:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
