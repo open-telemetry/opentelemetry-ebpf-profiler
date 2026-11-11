@@ -100,7 +100,7 @@ func stringFromView(v ViewAtReader, offs, endOff int64) ([]byte, bool, error) {
 	// The string spans multiple views: assemble it into a pooled buffer.
 	// Pooled buffers are larger than needed for a single string: the caller
 	// must copy the result before releasing it.
-	buf := GetBuffer(4096)
+	buf := GetBuffer(size4k)
 	used := len(chunk)
 	copy(buf, chunk)
 	offs += int64(len(chunk))
