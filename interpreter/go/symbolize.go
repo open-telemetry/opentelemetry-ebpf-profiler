@@ -44,22 +44,25 @@ func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
 	defer sfCounter.DefaultToFailure()
 
 	address := ef.Data()
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(address))
-	if fn == "" {
-		return fmt.Errorf("failed to symbolize 0x%x", address)
-	}
-	// See comment about return address handling in ProcessManager.convertFrame
+	// Resolve return addresses at the call site, before the following code.
+	// See ProcessManager.convertFrame for return address handling.
 	if ef.Flags().ReturnAddress() {
 		address--
 	}
-	frames.Append(&libpf.Frame{
-		Type:            libpf.GoFrame,
-		AddressOrLineno: libpf.AddressOrLineno(address),
-		Mapping:         mapping,
-		FunctionName:    libpf.Intern(fn),
-		SourceFile:      libpf.Intern(sourceFile),
-		SourceLine:      libpf.SourceLineno(lineNo),
-	})
+	found := g.d.pclntab.SymbolizeInlined(uintptr(address),
+		func(sourceFile string, lineNo uint, fn string) {
+			frames.Append(&libpf.Frame{
+				Type:            libpf.GoFrame,
+				AddressOrLineno: libpf.AddressOrLineno(address),
+				Mapping:         mapping,
+				FunctionName:    libpf.Intern(fn),
+				SourceFile:      libpf.Intern(sourceFile),
+				SourceLine:      libpf.SourceLineno(lineNo),
+			})
+		})
+	if !found {
+		return fmt.Errorf("failed to symbolize 0x%x", ef.Data())
+	}
 	sfCounter.ReportSuccess()
 	return nil
 }
