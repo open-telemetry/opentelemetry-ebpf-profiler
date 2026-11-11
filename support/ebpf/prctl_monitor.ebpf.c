@@ -10,6 +10,10 @@
 #define PR_SET_VMA           0x53564d41
 #define PR_SET_VMA_ANON_NAME 0
 
+// Process context header size and signature from OTEP 4719.
+#define OTEL_CTX_HEADER_SIZE 32
+#define OTEL_CTX_SIGNATURE   (*(u64 *)"OTEL_CTX")
+
 // tracepoint__sys_exit_prctl detects when a process names an anonymous VMA
 // "OTEL_CTX" and triggers a PID resynchronization so the profiler can discover
 // the newly published process context mapping.
@@ -35,21 +39,32 @@ int tracepoint__sys_exit_prctl(void *ctx)
   }
 
 // prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4,
-//       unsigned long arg5): we only need option, arg2 and arg5 (the name).
+//       unsigned long arg5): arg3 and arg4 describe the context mapping, and
+// arg5 points to its name.
 #if defined(__x86_64__)
   u64 option   = regs.di;
   u64 arg2     = regs.si;
+  u64 addr     = regs.dx;
+  u64 len      = regs.r10;
   u64 name_ptr = regs.r8;
 #elif defined(__aarch64__)
   // At exit x0 (regs[0]) holds the return value, arg1 is preserved in orig_x0.
   u64 option   = regs.orig_x0;
   u64 arg2     = regs.regs[1];
+  u64 addr     = regs.regs[2];
+  u64 len      = regs.regs[3];
   u64 name_ptr = regs.regs[4];
 #else
   #error unsupported architecture
 #endif
 
   if (option != PR_SET_VMA || arg2 != PR_SET_VMA_ANON_NAME) {
+    goto exit;
+  }
+
+  // A context header must start a mapping large enough to hold it. A NULL name
+  // removes the mapping's name, rather than announcing a context.
+  if (!name_ptr || !addr || (addr & 0xfff) != 0 || len < OTEL_CTX_HEADER_SIZE) {
     goto exit;
   }
 
@@ -72,15 +87,22 @@ int tracepoint__sys_exit_prctl(void *ctx)
 
   // Read the VMA name from user-space. We only need 9 bytes ("OTEL_CTX" + NUL).
   __attribute__((aligned(8))) char name[9] = {};
-  if (bpf_probe_read_user(name, sizeof(name), (void *)name_ptr)) {
-    goto exit;
-  }
-
-  // Check for an exact "OTEL_CTX" match. We avoid bpf_strncmp (kernel 5.17+).
-  // Instead, compare as a u64 for the 8 characters plus a byte check for the
-  // NUL terminator.
-  if (*(u64 *)name != *(u64 *)"OTEL_CTX" || name[8] != '\0') {
-    goto exit;
+  if (!bpf_probe_read_user(name, sizeof(name), (void *)name_ptr)) {
+    // A readable name must match exactly, regardless of the header signature.
+    // Compare directly to avoid bpf_strncmp, which requires kernel 5.17+.
+    if (*(u64 *)name != OTEL_CTX_SIGNATURE || name[8] != '\0') {
+      goto exit;
+    }
+  } else {
+    // A rejected prctl may never read the name, and bpf_probe_read_user cannot
+    // fault its page in. Fall back to the header, which the publisher has just
+    // written.
+    u64 signature = 0;
+    if (
+      bpf_probe_read_user(&signature, sizeof(signature), (void *)addr) ||
+      signature != OTEL_CTX_SIGNATURE) {
+      goto exit;
+    }
   }
 
   if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_PRIORITY)) {
