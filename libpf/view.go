@@ -47,14 +47,14 @@ type ViewAtReader interface {
 	// ErrNotContiguous is returned. If offs is at or beyond the end of the
 	// underlying data, io.EOF is returned. A non-positive minLen is
 	// treated as one.
-	ViewAt(offs, minLen int64) ([]byte, error)
+	ViewAt(offs int64, minLen int) ([]byte, error)
 
 	// PinAt returns a view like ViewAt, but pins the backing region: the
 	// view stays valid even across other read operations, and the backing
 	// storage will not be recycled. The returned handle must be released
 	// exactly once with Unpin. Implementations with naturally stable
 	// views (for example memory mappings) may pin trivially.
-	PinAt(offs, minLen int64) ([]byte, PinHandle, error)
+	PinAt(offs int64, minLen int) ([]byte, PinHandle, error)
 
 	// Unpin releases one pin, identified by a handle returned by PinAt.
 	// Unknown, stale or zero handles are ignored.
@@ -74,7 +74,7 @@ type StableViewer interface {
 	// carries no release obligation. It returns nil if the range is out
 	// of bounds or the storage cannot be borrowed; callers must fall
 	// back to copying in that case. A non-positive length is invalid.
-	StableViewAt(offs, length int64) []byte
+	StableViewAt(offs int64, length int) []byte
 }
 
 // stringFromView reads a NUL-terminated string at offs from v. The returned

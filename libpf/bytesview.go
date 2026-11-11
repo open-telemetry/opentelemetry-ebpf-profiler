@@ -43,18 +43,18 @@ func (b *BytesView) ReadAt(p []byte, off int64) (int, error) {
 
 // ViewAt returns a zero-copy view of at least minLen bytes starting at
 // offs. The view extends up to the end of the slice.
-func (b *BytesView) ViewAt(offs, minLen int64) ([]byte, error) {
+func (b *BytesView) ViewAt(offs int64, minLen int) ([]byte, error) {
 	if offs < 0 {
 		return nil, fmt.Errorf("offset %d is out of bounds (len %d)", offs, len(b.data))
 	}
-	if offs >= int64(len(b.data)) || int64(len(b.data))-offs < minLen {
+	if offs >= int64(len(b.data)) || len(b.data)-int(offs) < minLen {
 		return nil, io.EOF
 	}
 	return b.data[offs:], nil
 }
 
 // PinAt is trivial: the memory is stable for its lifetime.
-func (b *BytesView) PinAt(offs, minLen int64) ([]byte, PinHandle, error) {
+func (b *BytesView) PinAt(offs int64, minLen int) ([]byte, PinHandle, error) {
 	view, err := b.ViewAt(offs, minLen)
 	return view, 0, err
 }
@@ -67,10 +67,10 @@ var _ StableViewer = &BytesView{}
 // StableViewAt returns a zero-copy view of length bytes starting at offs.
 // The memory is stable for the lifetime of the BytesView. Returns nil if
 // the range is out of bounds.
-func (b *BytesView) StableViewAt(offs, length int64) []byte {
+func (b *BytesView) StableViewAt(offs int64, length int) []byte {
 	if offs < 0 || length <= 0 || offs >= int64(len(b.data)) ||
-		int64(len(b.data))-offs < length {
+		len(b.data)-int(offs) < length {
 		return nil
 	}
-	return b.data[offs : offs+length]
+	return b.data[offs : offs+int64(length)]
 }

@@ -64,14 +64,14 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 
 // ViewAt implements the libpf.ViewAtReader interface. The returned view
 // extends up to the end of the mapping.
-func (r *ReaderAt) ViewAt(offs, minLen int64) ([]byte, error) {
+func (r *ReaderAt) ViewAt(offs int64, minLen int) ([]byte, error) {
 	if offs < 0 {
 		return nil, fmt.Errorf("mmap: negative ViewAt offset %d", offs)
 	}
 	if minLen <= 0 {
 		minLen = 1
 	}
-	if offs >= int64(r.Len()) || int64(r.Len())-offs < minLen {
+	if offs >= int64(r.Len()) || int64(r.Len())-offs < int64(minLen) {
 		return nil, io.EOF
 	}
 	return r.data[offs:], nil
@@ -80,7 +80,7 @@ func (r *ReaderAt) ViewAt(offs, minLen int64) ([]byte, error) {
 // PinAt implements the libpf.ViewAtReader interface. The mapping is
 // naturally stable for its full lifetime, so pinning is trivial: the view
 // is valid until the mapping is closed.
-func (r *ReaderAt) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
+func (r *ReaderAt) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := r.ViewAt(offs, minLen)
 	return view, 0, err
 }
@@ -94,12 +94,12 @@ var _ libpf.StableViewer = &ReaderAt{}
 // StableViewAt returns a zero-copy view of length bytes starting at offs.
 // The mapping is naturally stable for its full lifetime. Returns nil if
 // the range is out of bounds.
-func (r *ReaderAt) StableViewAt(offs, length int64) []byte {
+func (r *ReaderAt) StableViewAt(offs int64, length int) []byte {
 	if offs < 0 || length <= 0 || offs >= int64(r.Len()) ||
-		int64(r.Len())-offs < length {
+		int64(r.Len())-offs < int64(length) {
 		return nil
 	}
-	return r.data[offs : offs+length]
+	return r.data[offs : offs+int64(length)]
 }
 
 // Open memory-maps the named file for reading.

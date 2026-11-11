@@ -112,8 +112,8 @@ func (r *Reader) InitFromView(source libpf.ViewAtReader, start, maxLen int64) {
 	r.dropBuf()
 	r.init(source, start, maxLen)
 
-	if maxLen > 0 {
-		view, h, err := source.PinAt(start, maxLen)
+	if maxLen > 0 && maxLen <= int64(math.MaxInt) {
+		view, h, err := source.PinAt(start, int(maxLen))
 		if err == nil && view != nil {
 			r.zeroCopy = true
 			r.buf = view[:maxLen]

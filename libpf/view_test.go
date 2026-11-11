@@ -26,7 +26,7 @@ func (f *fakeViewReader) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-func (f *fakeViewReader) ViewAt(offs, minLen int64) ([]byte, error) {
+func (f *fakeViewReader) ViewAt(offs int64, minLen int) ([]byte, error) {
 	f.lastOff = offs
 	if offs < 0 || uint64(offs) >= uint64(len(f.data)) {
 		return nil, fmt.Errorf("offset out of range: %d", offs)
@@ -42,7 +42,7 @@ func (f *fakeViewReader) ViewAt(offs, minLen int64) ([]byte, error) {
 	return f.data[offs:end], nil
 }
 
-func (f *fakeViewReader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
+func (f *fakeViewReader) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := f.ViewAt(offs, minLen)
 	return view, 0, err
 }

@@ -29,6 +29,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -716,7 +717,7 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 			// The view is stable, so it stays valid even if it outlives
 			// further reads on the File, mirroring the mmap semantics.
 			if s, ok := ph.elfReader.(libpf.StableViewer); ok {
-				if view := s.StableViewAt(int64(ph.Off)+offset, int64(sz)); view != nil {
+				if view := s.StableViewAt(int64(ph.Off)+offset, sz); view != nil {
 					return view, nil
 				}
 			}
@@ -1139,10 +1140,8 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	// The view is stable, so it stays valid even if it outlives further
-	// reads on the File, mirroring the mmap semantics.
-	if s, ok := ph.elfReader.(libpf.StableViewer); ok {
-		if view := s.StableViewAt(int64(ph.Off), int64(ph.Filesz)); view != nil {
+	if s, ok := ph.elfReader.(libpf.StableViewer); ok && ph.Filesz <= uint64(math.MaxInt) {
+		if view := s.StableViewAt(int64(ph.Off), int(ph.Filesz)); view != nil {
 			return view, nil
 		}
 	}
@@ -1179,10 +1178,8 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return nil, errors.New("compressed sections not supported")
 	}
 
-	// The view is stable, so it stays valid even if it outlives further
-	// reads on the File, mirroring the mmap semantics.
-	if s, ok := sh.elfReader.(libpf.StableViewer); ok {
-		if view := s.StableViewAt(int64(sh.Offset), int64(sh.FileSize)); view != nil {
+	if s, ok := sh.elfReader.(libpf.StableViewer); ok && sh.FileSize <= uint64(math.MaxInt) {
+		if view := s.StableViewAt(int64(sh.Offset), int(sh.FileSize)); view != nil {
 			return view, nil
 		}
 	}

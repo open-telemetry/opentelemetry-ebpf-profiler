@@ -499,7 +499,7 @@ func (f *regionReader) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-func (f *regionReader) ViewAt(offs, minLen int64) ([]byte, error) {
+func (f *regionReader) ViewAt(offs int64, minLen int) ([]byte, error) {
 	if offs < 0 || offs >= int64(len(f.data)) {
 		return nil, io.EOF
 	}
@@ -507,17 +507,17 @@ func (f *regionReader) ViewAt(offs, minLen int64) ([]byte, error) {
 		minLen = 1
 	}
 	regionStart := offs - offs%f.region
-	if offs-regionStart+minLen > f.region {
+	if offs-regionStart+int64(minLen) > f.region {
 		return nil, libpf.ErrNotContiguous
 	}
-	if int64(len(f.data))-offs < minLen {
+	if int64(len(f.data))-offs < int64(minLen) {
 		return nil, io.EOF
 	}
 	end := min(int64(len(f.data)), regionStart+f.region)
 	return f.data[offs:end], nil
 }
 
-func (f *regionReader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
+func (f *regionReader) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := f.ViewAt(offs, minLen)
 	return view, 0, err
 }

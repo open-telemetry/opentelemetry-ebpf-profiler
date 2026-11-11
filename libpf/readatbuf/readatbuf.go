@@ -192,7 +192,7 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 	return len(p), nil
 }
 
-func (reader *Reader) view(offs, minLen int64) ([]byte, error) {
+func (reader *Reader) view(offs int64, minLen int) ([]byte, error) {
 	if offs < 0 {
 		return nil, fmt.Errorf("negative offset value %d given", offs)
 	}
@@ -224,7 +224,7 @@ func (reader *Reader) view(offs, minLen int64) ([]byte, error) {
 }
 
 // ViewAt implements the libpf.ViewAtReader interface.
-func (reader *Reader) ViewAt(offs, minLen int64) ([]byte, error) {
+func (reader *Reader) ViewAt(offs int64, minLen int) ([]byte, error) {
 	return reader.view(offs, minLen)
 }
 
@@ -249,7 +249,7 @@ func (reader *Reader) addPin(pageIdx uint64) (libpf.PinHandle, error) {
 // to the GC, and a later re-read of the same page index creates a new
 // incarnation: Unpin of a stale handle does not affect it.
 // ErrTooManyPins is returned if maxPins views are already pinned.
-func (reader *Reader) PinAt(offs, minLen int64) ([]byte, libpf.PinHandle, error) {
+func (reader *Reader) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := reader.view(offs, minLen)
 	if err != nil {
 		return nil, 0, err
