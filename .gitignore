@@ -5,8 +5,6 @@
 /.idea
 /go
 ci-kernels
-# Ignore target directory
-target/*
 
 # auto-generated bin files
 cmd/otelcol-ebpf-profiler/*.go

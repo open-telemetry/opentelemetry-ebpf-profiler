@@ -2286,17 +2286,24 @@
     "id": 312
   },
   {
+    "description": "Number of times updating an element in usdt_specs failed",
+    "type": "counter",
+    "name": "USDTSpecsUpdate",
+    "field": "agent.errors.usdt_specs_update",
+    "id": 313
+  },
+  {
     "description": "Number of successfully symbolized native frames",
     "type": "counter",
     "name": "NativeSymbolizationSuccess",
     "field": "ha.native.symbolization.success",
-    "id": 313
+    "id": 314
   },
   {
     "description": "Number of native frames that failed symbolization",
     "type": "counter",
     "name": "NativeSymbolizationFailure",
     "field": "ha.native.symbolization.failure",
-    "id": 314
+    "id": 315
   }
 ]
