@@ -6,113 +6,267 @@
 #
 # This software may be used and distributed according to the terms
 # of the GNU General Public License, incorporated herein by reference.
+#
+# Refactored and extended to suit eBPF size change reporting.
 
-import sys, os
+import os
+import subprocess
+import sys
+import time
+
 
 def usage():
-    sys.stderr.write("usage: %s [-t] file1 file2 [-- <readelf options>]\n"
-                        % sys.argv[0])
-    sys.stderr.write("\t-t\tShow time spent on parsing/processing\n")
-    sys.stderr.write("\t--\tPass additional parameters to readelf\n")
+    sys.stderr.write(
+        "usage: %s [-t] [--markdown] (--arch NAME OLD NEW)... [-- <readelf options>]\n"
+        "\n"
+        "Compare old/new ELF file pairs and print a table with the size and the size\n"
+        "difference of every changed program/function per architecture, with\n"
+        "TOTAL and BLOB summary rows at the end.\n"
+        "\n"
+        "If the BLOATCHECK_REPORT environment variable is set, the markdown report is\n"
+        "additionally written to that file.\n"
+        "\n"
+        "Example:\n"
+        "  %s \\\n"
+        "    --arch amd64 tracer.ebpf.amd64.baseline tracer.ebpf.amd64 \\\n"
+        "    --arch arm64 tracer.ebpf.arm64.baseline tracer.ebpf.arm64\n"
+        % (sys.argv[0], sys.argv[0]))
     sys.exit(1)
 
-f1, f2 = (None, None)
-flag_timing, dashes = (False, False)
 
-for f in sys.argv[1:]:
-    if f.startswith("-"):
-        if f == "--": # sym_args
-            dashes = True
+def parse_args(args):
+    arches = []  # (name, old file, new file)
+    flag_timing = False
+    flag_markdown = False
+    sym_args = []
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            sym_args = args[i + 1:]
             break
-        if f == "-t": # timings
+        if arg == "-t":
             flag_timing = True
-    else:
-        if not os.path.exists(f):
-            sys.stderr.write("Error: file '%s' does not exist\n" % f)
-            usage()
-        if f1 is None:
-            f1 = f
-        elif f2 is None:
-            f2 = f
+        elif arg == "--markdown":
+            flag_markdown = True
+        elif arg == "--arch":
+            if i + 3 >= len(args):
+                usage()
+            name, old, new = args[i + 1:i + 4]
+            if not name or any(a[0] == name for a in arches):
+                usage()
+            for f in (old, new):
+                if not os.path.exists(f):
+                    sys.stderr.write("Error: file '%s' does not exist\n" % f)
+                    usage()
+            arches.append((name, old, new))
+            i += 3
         else:
             usage()
-if flag_timing:
-    import time
-if f1 is None or f2 is None:
-    usage()
+        i += 1
 
-sym_args = " ".join(sys.argv[3 + flag_timing + dashes:])
-def getsizes(file):
-    sym, alias = {}, {}
-    for l in os.popen("readelf -W -s %s %s" % (sym_args, file)).readlines():
-        l = l.strip()
-        if not (len(l) and l[0].isdigit() and len(l.split()) == 8):
+    if not arches:
+        usage()
+    return arches, flag_timing, flag_markdown, sym_args
+
+
+def getsizes(file, sym_args):
+    sym = {}
+    try:
+        out = subprocess.run(["readelf", "-W", "-s", *sym_args, file],
+                             capture_output=True, text=True, check=True).stdout
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write("Error: readelf failed on '%s':\n%s" % (file, e.stderr))
+        sys.exit(1)
+    for line in out.splitlines():
+        line = line.strip()
+        if not (len(line) and line[0].isdigit() and len(line.split()) == 8):
             continue
-        num, value, size, typ, bind, vis, ndx, name = l.split()
-        if ndx == "UND": continue # skip undefined
-        if typ in ["SECTION", "FILES"]: continue # skip sections and files
+        _, _, size, typ, bind, vis, ndx, name = line.split()
+        if ndx == "UND": continue  # skip undefined
+        if typ in ["SECTION", "FILES"]: continue  # skip sections and files
         if "." in name: name = "static." + name.split(".")[0]
-        value = int(value, 16)
         size = int(size, 16) if size.startswith('0x') else int(size)
         if vis == "DEFAULT" or bind == "GLOBAL":
-            sym[name] = {"addr" : value, "insn" : size // 8 }
+            sym[name] = size // 8  # eBPF instructions are 8 bytes
     return sym
 
-if flag_timing:
-    start_t1 = int(time.time() * 1e9)
-old = getsizes(f1)
-if flag_timing:
-    end_t1 = int(time.time() * 1e9)
-    start_t2 = int(time.time() * 1e9)
-new = getsizes(f2)
-if flag_timing:
-    end_t2 = int(time.time() * 1e9)
-    start_t3 = int(time.time() * 1e9)
-grow, shrink, add, remove, up, down = 0, 0, 0, 0, 0, 0
-delta, common = [], {}
 
-for name in iter(old.keys()):
-    if name in new:
-        common[name] = 1
-
-for name in old:
-    if name not in common:
-        remove += 1
-        insn = old[name]["insn"]
-        down += insn
-        delta.append((-insn, name))
-
-for name in new:
-    if name not in common:
-        add += 1
-        insn = new[name]["insn"]
-        up += insn
-        delta.append((insn, name))
-
-for name in common:
-        d = new[name].get("insn", 0) - old[name].get("insn", 0)
-        if d>0: grow, up = grow+1, up+d
-        elif d<0: shrink, down = shrink+1, down-d
-        else:
+def compute_deltas(old, new):
+    # Size delta in insns for every program/function that was added, removed
+    # or changed, plus the total function sizes.
+    delta = {}
+    for name in old:
+        if name not in new:
+            delta[name] = -old[name]
             continue
-        delta.append((d, name))
+        d = new[name] - old[name]
+        if d:
+            delta[name] = d
+    for name in new:
+        if name not in old:
+            delta[name] = new[name]
+    return delta, sum(old.values()), sum(new.values())
 
-delta.sort()
-delta.reverse()
-if flag_timing:
-    end_t3 = int(time.time() * 1e9)
 
-print("%-48s %7s %7s %+7s" % ("function", "old", "new", "delta"))
-for d, n in delta:
-    if d:
-        old_insn = old.get(n, {}).get("insn", "-")
-        new_insn = new.get(n, {}).get("insn", "-")
-        print("%-48s %7s %7s %+7d" % (n, old_insn, new_insn, d))
-print("-"*78)
-total="(add/remove: %s/%s grow/shrink: %s/%s up/down: %s/%s)%%sTotal: %s insns"\
-    % (add, remove, grow, shrink, up, -down, up-down)
-print(total % (" "*(80-len(total))))
-if flag_timing:
-    print("\n%d/%d; %d Parse origin/new; processing nsecs" %
-        (end_t1-start_t1, end_t2-start_t2, end_t3-start_t3))
-    print("total nsecs: %d" % (end_t3-start_t1))
+def build_rows(arches, deltas, sizes):
+    # Only program/functions that changed in at least one architecture.
+    names = set()
+    for arch_deltas in deltas.values():
+        names.update(arch_deltas.keys())
+    rows = []
+    for name in names:
+        cells = [name]
+        magnitude = 0
+        for arch, _, _ in arches:
+            if name in deltas[arch]:
+                size = sizes[(name, arch)]
+                cells.append("-" if size is None else str(size))
+                delta = deltas[arch][name]
+                cells.append("%+d" % delta)
+                magnitude = max(magnitude, abs(delta))
+            elif (name, arch) in sizes:
+                cells.append(str(sizes[(name, arch)]))
+                cells.append("0")
+            else:
+                cells.append("-")
+                cells.append("-")
+        rows.append((magnitude, name, cells))
+    # Biggest changes first, ties broken by name.
+    rows.sort(key=lambda r: (-r[0], r[1]))
+    return [cells for _, _, cells in rows]
+
+
+def get_rodata_size(file):
+    # Sum of the read-only data section sizes (e.g. DEBUG_PRINT strings).
+    try:
+        out = subprocess.run(["readelf", "-W", "-S", file],
+                             capture_output=True, text=True, check=True).stdout
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write("Error: readelf failed on '%s':\n%s" % (file, e.stderr))
+        sys.exit(1)
+    size = 0
+    for line in out.splitlines():
+        fields = line.split()
+        # Fields: [idx] name type address offset size ...; the name column
+        # can sit at different indexes depending on the index width.
+        for i, field in enumerate(fields):
+            if field.startswith(".rodata"):
+                if len(fields) > i + 4:
+                    size += int(fields[i + 4], 16)
+                break
+    return size
+
+
+def build_summary_rows(arches, summaries):
+    total_cells = ["Total insns"]
+    rodata_cells = [".rodata bytes"]
+    blob_cells = ["File bytes"]
+    for arch, _, _ in arches:
+        old_total, new_total, old_rodata, new_rodata, old_bytes, new_bytes = summaries[arch]
+        total_cells += [str(new_total), "%+d" % (new_total - old_total)]
+        rodata_cells += [str(new_rodata), "%+d" % (new_rodata - old_rodata)]
+        blob_cells += [str(new_bytes), "%+d" % (new_bytes - old_bytes)]
+    return [total_cells, rodata_cells, blob_cells]
+
+
+def render_text(rows, arches, summaries):
+    header = ["program/function"]
+    for arch, _, _ in arches:
+        header += [arch, "diff"]
+    summary_rows = build_summary_rows(arches, summaries)
+    widths = [len(h) for h in header]
+    for cells in rows + summary_rows:
+        for j, c in enumerate(cells):
+            widths[j] = max(widths[j], len(c))
+    lines = ["%-*s" % (widths[0], header[0]) +
+             "".join("  %*s" % (widths[j], header[j]) for j in range(1, len(header))),
+             "-" * (sum(widths) + 2 * (len(header) - 1))]
+    for cells in rows + summary_rows:
+        lines.append("%-*s" % (widths[0], cells[0]) +
+                     "".join("  %*s" % (widths[j], cells[j]) for j in range(1, len(header))))
+    lines.append("-" * (sum(widths) + 2 * (len(header) - 1)))
+    return "\n".join(lines)
+
+
+def render_markdown(rows, arches, summaries):
+    lines = ["| " + " | ".join(["program/function"] +
+                               [c for arch, _, _ in arches for c in (arch, "diff")]) + " |",
+             "|" + "|".join("---" if j == 0 else "---:" for j in range(1 + 2 * len(arches))) + "|"]
+    for cells in rows:
+        lines.append("| " + " | ".join(cells) + " |")
+    for cells in build_summary_rows(arches, summaries):
+        label = cells[0]
+        # Section name labels are rendered as-is; only the others are bold.
+        if not label.startswith("."):
+            label = "**%s**" % label
+        lines.append("| %s | %s |" % (label, " | ".join(cells[1:])))
+    return "\n".join(lines)
+
+
+def write_report(report):
+    # BLOATCHECK_REPORT mirrors the report to a file for CI to comment with.
+    path = os.environ.get("BLOATCHECK_REPORT")
+    if not path:
+        return
+    try:
+        with open(path, "w") as f:
+            f.write(report + "\n")
+    except OSError as e:
+        sys.stderr.write("Error: cannot write the report to '%s': %s\n" % (path, e))
+        sys.exit(1)
+
+
+def main():
+    arches, flag_timing, flag_markdown, sym_args = parse_args(sys.argv[1:])
+
+    if flag_timing:
+        start_parse = time.time()
+
+    deltas, sizes, summaries = {}, {}, {}
+    for arch, old_file, new_file in arches:
+        old = getsizes(old_file, sym_args)
+        new = getsizes(new_file, sym_args)
+        deltas[arch], old_total, new_total = compute_deltas(old, new)
+        # Summary: total function insns, rodata and full blob file sizes,
+        # old and new.
+        summaries[arch] = (old_total, new_total,
+                           get_rodata_size(old_file), get_rodata_size(new_file),
+                           os.path.getsize(old_file), os.path.getsize(new_file))
+        for name in set(old) | set(new):
+            sizes[(name, arch)] = new.get(name)
+
+    if flag_timing:
+        start_process = time.time()
+
+    rows = build_rows(arches, deltas, sizes)
+    blobs_differ = False
+    if not rows:
+        # No program/function moved, but the blobs can still differ (e.g.
+        # DEBUG_PRINT strings live in rodata and do not move any symbol).
+        for arch, old_file, new_file in arches:
+            with open(old_file, "rb") as fo, open(new_file, "rb") as fn:
+                if fo.read() != fn.read():
+                    blobs_differ = True
+                    break
+
+    if rows or blobs_differ:
+        markdown = render_markdown(rows, arches, summaries)
+        print(markdown if flag_markdown else render_text(rows, arches, summaries))
+        write_report(markdown)
+    else:
+        report = "No eBPF size differences."
+        print(report)
+        write_report(report)
+
+    if flag_timing:
+        end = time.time()
+        print("\nparse: %d msecs, processing: %d msecs, total: %d msecs" %
+              (int((start_process - start_parse) * 1000),
+               int((end - start_process) * 1000),
+               int((end - start_parse) * 1000)))
+
+
+if __name__ == "__main__":
+    main()
