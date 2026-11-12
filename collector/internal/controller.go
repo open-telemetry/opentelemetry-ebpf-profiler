@@ -75,15 +75,10 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	}
 
 	rep, err := cfg.ReporterFactory(&reporter.Config{
-		Name:                   metadata.ScopeName,
-		Version:                version,
-		MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
-		MaxGRPCRetries:         cfg.MaxGRPCRetries,
-		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		ReportInterval:         intervals.ReportInterval(),
-		ReportJitter:           cfg.ReporterJitter,
+		Name:           metadata.ScopeName,
+		Version:        version,
+		ReportInterval: intervals.ReportInterval(),
+		ReportJitter:   cfg.ReporterJitter,
 	}, nextConsumer)
 	if err != nil {
 		return nil, err
