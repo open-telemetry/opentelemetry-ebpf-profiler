@@ -155,9 +155,14 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
 		origins:                  cfg.Origins,
 		tracePool:                newTraceEventPool(),
+		traceOps:                 make(chan traceOp, traceEventQueueSize),
+		lifecycleCtx:             ctx,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
+	// HandleTrace is a drop point: submitted traces are processed on a
+	// dedicated worker goroutine.
+	go pm.traceWorker(ctx)
 
 	return pm, nil
 }
@@ -355,14 +360,39 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 }
 
 // HandleTrace is the drop point for a raw trace_events ring buffer record:
-// copied, validated, decoded, dispatched to the origin's hooks, symbolized
-// and reported.
+// copied, validated and queued; the worker decodes it, dispatches the
+// origin's hooks, symbolizes and reports it. Blocks while the queue is full.
 //
 // A returned error indicates a layout-breaking record; the caller should
 // stop processing traces.
 func (pm *ProcessManager) HandleTrace(raw []byte) error {
+	e, err := pm.copyAndValidateTrace(raw)
+	if err != nil {
+		return err
+	}
+
+	pm.submit(traceOp{event: e})
+	return nil
+}
+
+// HandleTraceSync processes a raw trace record inline, bypassing the queue.
+// Not safe while async traces are in flight (frameCache is not synced). For
+// the coredump test harness only.
+func (pm *ProcessManager) HandleTraceSync(raw []byte) error {
+	e, err := pm.copyAndValidateTrace(raw)
+	if err != nil {
+		return err
+	}
+
+	pm.processTrace(e)
+	return nil
+}
+
+// copyAndValidateTrace copies a raw record into a pooled trace event and
+// validates it; a returned error indicates a layout-breaking record.
+func (pm *ProcessManager) copyAndValidateTrace(raw []byte) (*traceEvent, error) {
 	if len(raw) > traceRecordMaxSize {
-		return fmt.Errorf("%d > %d: %w", len(raw), traceRecordMaxSize, ErrRecordUnexpectedSize)
+		return nil, fmt.Errorf("%d > %d: %w", len(raw), traceRecordMaxSize, ErrRecordUnexpectedSize)
 	}
 
 	e := pm.tracePool.Get().(*traceEvent)
@@ -371,11 +401,9 @@ func (pm *ProcessManager) HandleTrace(raw []byte) error {
 	// Validate the copy, so validation and decoding always see the same bytes.
 	if err := validateRecord(e.rawBytes()[:e.recordLen]); err != nil {
 		pm.tracePool.Put(e)
-		return err
+		return nil, err
 	}
-
-	pm.processTrace(e)
-	return nil
+	return e, nil
 }
 
 // processTrace decodes, dispatches and symbolizes a pooled trace event.
