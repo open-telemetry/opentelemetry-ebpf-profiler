@@ -73,13 +73,22 @@ type Config struct {
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
 	ProcessMetaEnrichers  []process.MetaEnricher
+	// Origins assigns origin IDs and their metadata and hooks; nil creates
+	// an empty registry.
+	Origins *OriginRegistry
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
 func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
+	if cfg.Origins == nil {
+		cfg.Origins = &OriginRegistry{}
+	}
 	if cfg.ExecutableReporter == nil {
 		cfg.ExecutableReporter = executableReporterStub{}
+	}
+	if cfg.TraceReporter == nil {
+		cfg.TraceReporter = traceReporterStub{}
 	}
 	if cfg.FrameCacheSize == 0 {
 		cfg.FrameCacheSize = DefaultFrameCacheSize
@@ -144,6 +153,8 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		filterErrorFrames:        cfg.FilterErrorFrames,
 		metaEnrichers:            metaEnrichers,
 		attachedProbes:           make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
+		origins:                  cfg.Origins,
+		tracePool:                newTraceEventPool(),
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
@@ -219,6 +230,8 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 
 		pm.eim.UpdateMetricSummary(summary)
 		pm.metricsAddSlice(metricSummaryToSlice(summary))
+		pm.metricsAddSlice(pm.customLabels.getAndResetMetrics())
+		pm.metricsAddSlice(pm.threadLabels.getAndResetMetrics())
 	})
 }
 
@@ -341,48 +354,107 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
-// HandleTrace processes and reports the given eBPF trace. Process metadata
-// is looked up here rather than at trace-receive time as EbpfTrace carries
-// only data sourced from eBPF. If the process has already exited and been evicted,
-// the trace is reported without that enrichment. This function is not re-entrant
-// due to frameCache not being synced. If the tracer is later updated to distribute
-// trace handling to a goroutine pool, the caching strategy needs to be updated
-// accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) *libpf.Trace {
-	procMeta, resourceAttrs := pm.metaForPID(bpfTrace.PID)
+// HandleTrace is the drop point for a raw trace_events ring buffer record:
+// copied, validated, decoded, dispatched to the origin's hooks, symbolized
+// and reported.
+//
+// A returned error indicates a layout-breaking record; the caller should
+// stop processing traces.
+func (pm *ProcessManager) HandleTrace(raw []byte) error {
+	if len(raw) > traceRecordMaxSize {
+		return fmt.Errorf("%d > %d: %w", len(raw), traceRecordMaxSize, ErrRecordUnexpectedSize)
+	}
+
+	e := pm.tracePool.Get().(*traceEvent)
+	*e = traceEvent{}
+	e.recordLen = copy(e.rawBytes(), raw)
+	// Validate the copy, so validation and decoding always see the same bytes.
+	if err := validateRecord(e.rawBytes()[:e.recordLen]); err != nil {
+		pm.tracePool.Put(e)
+		return err
+	}
+
+	pm.processTrace(e)
+	return nil
+}
+
+// processTrace decodes, dispatches and symbolizes a pooled trace event.
+func (pm *ProcessManager) processTrace(e *traceEvent) {
+	if err := pm.decodeTrace(e); err != nil {
+		log.Warnf("unexpected error handling trace: %v", err)
+		pm.tracePool.Put(e)
+		return
+	}
+	if ktime := times.KTime(e.KTime); ktime > pm.maxSeenKTime {
+		pm.maxSeenKTime = ktime
+	}
+
+	entry := pm.origins.Lookup(e.Origin)
+	if entry == nil {
+		log.Warnf("dropping trace with unknown origin %d", e.Origin)
+		pm.tracePool.Put(e)
+		return
+	}
+
+	// The trace context aliases the pooled event.
+	ctx := &TraceContext{
+		Origin:        e.Origin,
+		PID:           e.PID,
+		TID:           e.TID,
+		KTime:         times.KTime(e.KTime),
+		Comm:          e.Comm,
+		ContextValues: e.ContextValues,
+	}
+	if !entry.Hooks.PreHandleTrace(ctx) {
+		pm.tracePool.Put(e)
+		return
+	}
+
+	trace := pm.handleDecodedTrace(e, entry.Meta)
+	pm.tracePool.Put(e)
+
+	entry.Hooks.PostHandleTrace(ctx, trace)
+}
+
+// handleDecodedTrace processes and reports the given decoded trace event.
+// Process metadata is looked up here rather than at trace-receive time; if
+// the process already exited, the trace is reported without enrichment.
+// Not re-entrant: frameCache is not synced.
+func (pm *ProcessManager) handleDecodedTrace(e *traceEvent, profileType *samples.TypeMetadata) *libpf.Trace {
+	procMeta, resourceAttrs := pm.metaForPID(e.PID)
 	meta := &samples.TraceEventMeta{
-		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
-		Comm:           bpfTrace.Comm,
-		PID:            bpfTrace.PID,
-		TID:            bpfTrace.TID,
-		CPU:            bpfTrace.CpuID,
+		Timestamp:      libpf.UnixTime64(times.KTime(e.KTime).UnixNano()),
+		Comm:           e.Comm,
+		PID:            e.PID,
+		TID:            e.TID,
+		CPU:            e.CpuID,
 		ExecutablePath: procMeta.Executable,
 		ContainerID:    procMeta.ContainerID,
 		ProfileType:    profileType,
-		ContextValues:  bpfTrace.ContextValues,
+		ContextValues:  e.ContextValues,
 		EnvVars:        procMeta.EnvVariables,
 		ResourceAttrs:  resourceAttrs,
-		TraceID:        bpfTrace.TraceID,
-		SpanID:         bpfTrace.SpanID,
+		TraceID:        e.TraceID,
+		SpanID:         e.SpanID,
 		ExtraMeta:      procMeta.ExtraMeta,
 	}
 
-	pid := bpfTrace.PID
+	pid := e.PID
 	trace := &libpf.Trace{
-		Frames:       make(libpf.Frames, 0, len(bpfTrace.KernelFrames)+int(bpfTrace.NumFrames)),
-		CustomLabels: bpfTrace.CustomLabels,
+		Frames:       make(libpf.Frames, 0, len(e.KernelFrames)+int(e.NumFrames)),
+		CustomLabels: e.CustomLabels,
 	}
 
 	cacheMiss := uint64(0)
 	cacheHit := uint64(0)
 
-	if len(bpfTrace.KernelFrames) > 0 {
-		hits, misses := pm.appendKernelFrames(bpfTrace.KernelFrames, &trace.Frames)
+	if len(e.KernelFrames) > 0 {
+		hits, misses := pm.appendKernelFrames(e.KernelFrames, &trace.Frames)
 		cacheHit += hits
 		cacheMiss += misses
 	}
 
-	for frames := libpf.EbpfFrame(bpfTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
+	for frames := libpf.EbpfFrame(e.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
 		if frame.Flags().Error() {
 			if !pm.filterErrorFrames {

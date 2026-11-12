@@ -25,7 +25,7 @@ import (
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
 // int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx);
-// void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_resume);
+// void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_resume, u16 origin_id);
 import "C"
 
 // sliceBuffer creates a Go slice from C buffer
@@ -163,12 +163,25 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	ebpfCtx := newEBPFContext(pr, faultAddresses)
 	defer ebpfCtx.release()
 
+	// collect_trace rejects origin zero; register one and hand its ID to
+	// the eBPF code via RODATA.
+	origins := &pm.OriginRegistry{}
+	originID, err := origins.Register(&pm.OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes:  []samples.SampleType{{Type: "samples", Unit: "count"}},
+			AppendValues: samples.AppendFirstContextValue,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("registering sampling origin: %w", err)
+	}
+
 	inverse_pac_mask := ^(pr.GetMachineData().CodePACMask)
 	rubySkipNativeResume := C.int(0)
 	if interpretersConfig.Ruby.SkipNativeResume {
 		rubySkipNativeResume = 1
 	}
-	C.initialize_rodata_variables(C.u64(inverse_pac_mask), rubySkipNativeResume)
+	C.initialize_rodata_variables(C.u64(inverse_pac_mask), rubySkipNativeResume, C.u16(originID))
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}
@@ -182,6 +195,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
 		FrameCacheSize:        pm.DefaultFrameCacheSize,
 		IncludeEnvVars:        libpf.Set[string]{},
+		Origins:               origins,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
@@ -202,8 +216,10 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 			unsafe.Pointer(&thread.GPRegs[0])); rc != 0 {
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
-		// Symbolize traces with interpreter manager
-		manager.HandleTrace(&ebpfCtx.trace, nil)
+		// Symbolize the trace synchronously with the process manager.
+		if err := manager.HandleTraceSync(ebpfCtx.traceBuf); err != nil {
+			return nil, fmt.Errorf("failed to handle trace for lwp %v: %v", thread.LWP, err)
+		}
 		info = append(info, ThreadInfo{
 			LWP:    thread.LWP,
 			Frames: traceReporter.frames,

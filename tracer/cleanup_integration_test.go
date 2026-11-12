@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 )
 
 // countBPFObjects returns how many eBPF objects this process currently holds open.
@@ -69,7 +70,7 @@ func TestInitializeMapsAndProgramsCleansUpOnFailure(t *testing.T) {
 	// initialization did not add to the count.
 	before := countBPFObjects(t)
 	ebpfMaps, ebpfProgs, _, err := initializeMapsAndPrograms(kmod, cfg,
-		&originRegistry{}, &SysConfigVars{})
+		&pm.OriginRegistry{}, &SysConfigVars{})
 	require.ErrorContains(t, err, "failed to load unwinder eBPF programs")
 	require.Nil(t, ebpfMaps)
 	require.Nil(t, ebpfProgs)

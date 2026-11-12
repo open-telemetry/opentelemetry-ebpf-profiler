@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -24,6 +25,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -63,6 +65,49 @@ func isRoot() bool {
 	return os.Geteuid() == 0
 }
 
+// golabelHooks accumulates the custom labels seen on sampling traces, and
+// signals once all expected labels have been observed.
+type golabelHooks struct {
+	pm.StubTraceHandlerHooks
+	t    *testing.T
+	mu   sync.Mutex
+	hits int
+	seen chan libpf.Void
+}
+
+func (h *golabelHooks) PostHandleTrace(_ *pm.TraceContext, trace *libpf.Trace) {
+	// assert is safe off the test goroutine; require is not.
+	localHits := 0
+	for ks, vs := range trace.CustomLabels {
+		k := ks.String()
+		v := vs.String()
+		switch {
+		case strings.HasPrefix(k, "l1"):
+			assert.Len(h.t, v, 22)
+			assert.True(h.t, strings.HasPrefix(v, "label1"))
+			localHits |= (1 << 0)
+		case strings.HasPrefix(k, "l2"):
+			assert.Len(h.t, v, 30)
+			assert.True(h.t, strings.HasPrefix(v, "label2"))
+			localHits |= (1 << 1)
+		case strings.HasPrefix(k, "l3"):
+			assert.Len(h.t, v, 47)
+			assert.True(h.t, strings.HasPrefix(v, "label3"))
+			localHits |= (1 << 2)
+		}
+	}
+	h.mu.Lock()
+	h.hits |= localHits
+	complete := h.hits == (1<<0 | 1<<1 | 1<<2)
+	h.mu.Unlock()
+	if complete {
+		select {
+		case h.seen <- libpf.Void{}:
+		default:
+		}
+	}
+}
+
 func Test_Golabels(t *testing.T) {
 	if !isRoot() {
 		t.Skip("root privileges required")
@@ -98,6 +143,12 @@ func Test_Golabels(t *testing.T) {
 			metrics.Start(noop.Meter{})
 
 			log.SetLevel(slog.LevelDebug)
+			// The hooks run off the test goroutine and collect the custom
+			// labels of received traces.
+			hooks := &golabelHooks{
+				t:    t,
+				seen: make(chan libpf.Void, 1),
+			}
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
 				InterpretersConfig:     interpreterconfig.AllInterpreters(),
@@ -105,6 +156,7 @@ func Test_Golabels(t *testing.T) {
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
 				VerboseMode:            true,
+				SamplingTraceHooks:     hooks,
 			})
 			require.NoError(t, err)
 			defer trc.Close()
@@ -116,8 +168,7 @@ func Test_Golabels(t *testing.T) {
 			require.NoError(t, trc.EnableProfiling())
 			require.NoError(t, trc.AttachSchedMonitor())
 
-			traceCh := make(chan *libpf.EbpfTrace)
-			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
+			require.NoError(t, trc.StartMapMonitors(ctx))
 
 			wg := sync.WaitGroup{}
 			wg.Go(func() {
@@ -140,37 +191,16 @@ func Test_Golabels(t *testing.T) {
 				}
 			})
 
-			ok := false
-			for trace := range traceCh {
-				if trace == nil {
-					continue
-				}
-				if len(trace.CustomLabels) > 0 {
-					hits := 0
-					for ks, vs := range trace.CustomLabels {
-						k := ks.String()
-						v := vs.String()
-						if strings.HasPrefix(k, "l1") {
-							require.Len(t, v, 22)
-							require.True(t, strings.HasPrefix(v, "label1"))
-							hits |= (1 << 0)
-						} else if strings.HasPrefix(k, "l2") {
-							require.Len(t, v, 30)
-							require.True(t, strings.HasPrefix(v, "label2"))
-							hits |= (1 << 1)
-						} else if strings.HasPrefix(k, "l3") {
-							require.Len(t, v, 47)
-							require.True(t, strings.HasPrefix(v, "label3"))
-							hits |= (1 << 2)
-						}
-					}
-					if hits == (1<<0 | 1<<1 | 1<<2) {
-						t.Log("All labels received")
-						ok = true
-						cancel()
-						break
-					}
-				}
+			var ok bool
+			select {
+			case <-hooks.seen:
+				ok = true
+				cancel()
+			case <-time.After(30 * time.Second):
+				hooks.mu.Lock()
+				received := hooks.hits
+				hooks.mu.Unlock()
+				t.Logf("received label hits: %b", received)
 			}
 			t.Log("Exiting test case")
 			require.True(t, ok, "golabels not received")
