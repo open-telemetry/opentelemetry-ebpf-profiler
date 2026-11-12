@@ -51,13 +51,7 @@ type probe struct {
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&tracer.OriginEntry{
-		Meta: &samples.TypeMetadata{
-			SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
-			ReportValues: true,
-			AppendValues: samples.AppendFirstContextValue,
-		},
-	})
+	originID, err := reg.Register(&tracer.OriginEntry{Meta: typeMetadata(p.threshold)})
 	if err != nil {
 		return fmt.Errorf("registering off-CPU origin: %w", err)
 	}
@@ -150,6 +144,56 @@ func (p *probe) attachPrograms(ebpfProgs map[string]*cebpf.Program, probeCtx *tr
 	p.links = append(p.links, tpLink)
 
 	return nil
+}
+
+// typeMetadata describes the off-CPU profile for the given capture threshold.
+//
+// The eBPF program keeps each context switch with probability
+// threshold/MaxUint32, so reported durations are scaled by the inverse of that
+// probability to estimate the total off-CPU time. The period describes the
+// average number of context switches between captured samples. Waits dropped
+// by min_duration can't be accounted for by this scaling.
+func typeMetadata(threshold uint32) *samples.TypeMetadata {
+	scale := samplingScale(threshold)
+	return &samples.TypeMetadata{
+		SampleTypes: []samples.SampleType{{
+			Type: "off_cpu",
+			Unit: "nanoseconds",
+			Period: &samples.Period{
+				Type:  "context_switch",
+				Unit:  "count",
+				Value: int64(math.Round(scale)),
+			},
+		}},
+		ReportValues: true,
+		AppendValues: func(dst []int64, meta *samples.TraceEventMeta) []int64 {
+			if len(meta.ContextValues) == 0 {
+				// Keep Values aligned with Timestamps for origins without a value.
+				return append(dst, 0)
+			}
+			return append(dst, scaleValue(meta.ContextValues[0], scale))
+		},
+	}
+}
+
+// samplingScale returns the inverse of the capture probability encoded by
+// threshold.
+func samplingScale(threshold uint32) float64 {
+	if threshold == 0 {
+		// Config validation rejects a zero threshold, but rounding can still
+		// produce one for tiny thresholds. Avoid dividing by zero.
+		threshold = 1
+	}
+	return float64(math.MaxUint32) / float64(threshold)
+}
+
+// scaleValue multiplies v by scale, saturating at math.MaxInt64.
+func scaleValue(v uint64, scale float64) int64 {
+	scaled := math.Round(float64(v) * scale)
+	if scaled >= math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(scaled)
 }
 
 // schedTimesSize calculates the size of the sched_times map based on the
