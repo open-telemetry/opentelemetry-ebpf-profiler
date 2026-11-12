@@ -74,13 +74,6 @@ type Config struct {
 	Probes                      []component.ID                     `mapstructure:"probes"`
 	PIDNamespaceTranslationMode tracer.PIDNamespaceTranslationMode `mapstructure:"pid_namespace_translation_mode"`
 
-	// Deprecated: only passed to reporter factories wrapping the deprecated reporter.NewOTLP.
-	// Use the otlpexporter retry_on_failure setting instead.
-	MaxGRPCRetries uint32 `mapstructure:"max_grpc_retries"`
-	// Deprecated: only passed to reporter factories wrapping the deprecated reporter.NewOTLP.
-	// Use an otlpexporter gRPC middleware instead.
-	MaxRPCMsgSize int `mapstructure:"max_rpc_msg_size"`
-
 	// Configuration options that users can not set directly:
 	//
 	// PinnedCPUIDs is derived from TargetCPUIDs during Validate

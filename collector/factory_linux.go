@@ -37,7 +37,6 @@ func NewFactory() receiver.Factory {
 }
 
 func defaultConfig() component.Config {
-	//nolint:staticcheck // defaults for the deprecated MaxGRPCRetries and MaxRPCMsgSize.
 	return &config.Config{
 		ReporterInterval:       5 * time.Second,
 		ReporterJitter:         0.2,
@@ -48,8 +47,6 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Interpreters:           interpreterconfig.AllInterpreters(),
 		ClockSyncInterval:      3 * time.Minute,
-		MaxGRPCRetries:         5,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
 	}

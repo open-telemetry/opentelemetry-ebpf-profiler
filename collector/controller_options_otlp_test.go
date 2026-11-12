@@ -47,7 +47,7 @@ func (r *otlpExporterReporter) Stop() {
 }
 
 // newOTLPReporterFactory returns a reporter factory that exports profiles to
-// endpoint with the otlpexporter, configured like the deprecated reporter.NewOTLP.
+// endpoint with the otlpexporter, configured like the removed reporter.NewOTLP.
 // The receiver's next consumer is ignored as the exporter takes its place.
 func newOTLPReporterFactory(endpoint string, disableTLS bool,
 ) func(*reporter.Config, xconsumer.Profiles) (reporter.Reporter, error) {
@@ -60,7 +60,7 @@ func newOTLPReporterFactory(endpoint string, disableTLS bool,
 		expCfg.ClientConfig.TLS.MinVersion = "1.3"
 		expCfg.ClientConfig.WaitForReady = true
 		expCfg.TimeoutConfig.Timeout = 5 * time.Second
-		// NewOTLP sends each report synchronously and drops it on failure.
+		// The removed NewOTLP sent each report synchronously and dropped it on failure.
 		expCfg.QueueConfig = configoptional.None[exporterhelper.QueueBatchConfig]()
 		expCfg.RetryConfig.Enabled = false
 
