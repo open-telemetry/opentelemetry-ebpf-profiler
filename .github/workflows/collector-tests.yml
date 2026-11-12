@@ -104,7 +104,7 @@ jobs:
           cache-dependency-path: |
             go.sum
             internal/tools/go.sum
-            tools/coredump/go.sum
+            cmd/otelcol-ebpf-profiler/manifest.yaml
       - name: Clone Collector
         if: ${{ matrix.use-upstream }}
         run: |
