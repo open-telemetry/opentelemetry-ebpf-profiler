@@ -42,8 +42,25 @@ const (
 	// Offset of the text field in moduledata struct for Go 1.16+
 	// https://github.com/golang/go/blob/release-branch.go1.16/src/runtime/symtab.go#L370
 	textOffset = 22 * 8
+
+	// Offsets of moduledata.gofunc in the 64-bit runtime layouts.
+	// Go 1.20 added covctrs and ecovctrs before gofunc; Go 1.27 added
+	// typedesclen, itaboffset and itabsize.
+	// https://github.com/golang/go/blob/go1.27.0/src/runtime/symtab.go#L402
+	moduledataGoFuncOffset118 = 38 * 8
+	moduledataGoFuncOffset120 = 40 * 8
+	moduledataGoFuncOffset127 = 43 * 8
+
 	// section name for the module data for Go 1.26+
 	moduleDataSectionName = ".go.module"
+
+	// Inline table indexes in the function PCDATA and FUNCDATA arrays.
+	// See go/src/internal/abi/symtab.go.
+	pcdataInlTreeIndex = 2
+	funcdataInlTree    = 3
+
+	// maxInlineDepth bounds the inline tree walk of corrupt data.
+	maxInlineDepth = 64
 )
 
 // errNoPclntab is returned if the file has no .gopclntab data and
@@ -127,6 +144,26 @@ type pclntabFunc struct {
 	nfuncData, npcData           int32
 }
 
+// inlinedCall116 is the runtime.inlinedCall layout for Go 1.16 through 1.19.
+type inlinedCall116 struct {
+	parent   int16
+	funcID   uint8
+	_        uint8
+	file     int32
+	line     int32
+	nameOff  int32
+	parentPc int32
+}
+
+// inlinedCall120 is the runtime.inlinedCall layout introduced in Go 1.20.
+type inlinedCall120 struct {
+	funcID    uint8
+	_         [3]byte
+	nameOff   int32
+	parentPc  int32
+	startLine int32
+}
+
 // pcval describes a Program Counter (pc) and a value (val) associated with it,
 // as well as the slice containing the full pcval data. The meaning of the value
 // depends on which table is being processed. It can signify the Stack Delta in
@@ -207,6 +244,12 @@ func (p *pcval) step() bool {
 	if len(p.ptr) == 0 || p.ptr[0] == 0 {
 		return false
 	}
+	return p.decode()
+}
+
+// decode executes one line of the pcval table, including a zero value delta
+// that step treats as the end of the table. Returns true on success.
+func (p *pcval) decode() bool {
 	p.pcStart = p.pcEnd
 	d, ok := p.getInt()
 	if !ok {
@@ -387,6 +430,13 @@ type Gopclntab struct {
 	// and GC stress minimal the returned strings (symbol and file names) refer
 	// to this data directly (via unsafe.String).
 	functab, funcnametab, filetab, pctab, cutab []byte
+
+	// funcdata is the loaded segment at funcdataAddr holding the FUNCDATA,
+	// which Go 1.18+ refers to by offset from gofunc. It is nil if inlined
+	// calls cannot be expanded.
+	funcdata     []byte
+	funcdataAddr uintptr
+	gofunc       uintptr
 }
 
 // LookupSymbol searches for a given symbol in .gopclntab.
@@ -416,6 +466,12 @@ func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error)
 // NewGopclntab parses and returns the parsed data for further operations.
 // Returns ErrNoPclntab when the file contains no gopclntab data.
 func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
+	return newGopclntab(ef, true)
+}
+
+// newGopclntab also locates inline tree data when withInlineTree is set.
+// Stack-delta extraction only needs the pclntab itself.
+func newGopclntab(ef *pfelf.File, withInlineTree bool) (*Gopclntab, error) {
 	data, headerOffset, err := extractGoPclntab(ef)
 	if err != nil {
 		return nil, err
@@ -508,6 +564,9 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	g.filetab = data[g.filetabOffset:g.pctabOffset]
 	g.pctab = data[g.pctabOffset:g.pclnOffset]
 	g.functab = data[g.pclnOffset:]
+	if withInlineTree {
+		g.loadFuncData(ef)
+	}
 	g.dataRef = ef.Take()
 	g.setDontNeed = ef.SetDontNeed
 
@@ -604,29 +663,64 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 	return p.val, true
 }
 
-// Symbolize returns the file, line and function information for given PC
-func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+// mapInlineIndex returns the inline tree index at pc, or -1 outside inlined
+// calls. The first entry may have a zero delta that keeps the initial -1;
+// subsequent zero deltas mark the end of the table.
+func (g *Gopclntab) mapInlineIndex(offs int32, startPc, pc uint) int32 {
+	if offs <= 0 || int(offs) >= len(g.pctab) {
+		return -1
+	}
+	p := pcval{ptr: g.pctab[offs:], pcEnd: startPc, val: -1, quantum: g.quantum}
+	if !p.decode() {
+		return -1
+	}
+	for pc >= p.pcEnd {
+		if !p.step() {
+			return -1
+		}
+	}
+	return p.val
+}
+
+// findFunc returns the function map index, start address, data offset and
+// data of the function containing pc, or a nil function if there is none.
+func (g *Gopclntab) findFunc(pc uintptr) (index int, funcPc, funcOff uintptr, fun *pclntabFunc) {
 	// Binary search for the matching go function maps entry. The search
 	// lambda makes 'sort.Search' return the first entry that is larger
 	// than the pc. Thus -1 is needed to get index for the first entry
 	// which is equal or less than pc. The gopclntab has an extra entry in
 	// the end to indicate the end of Go code, use that to determine
 	// if the pc is higher than any Go function address.
-	index := sort.Search(g.numFuncs+1, func(i int) bool {
+	index = sort.Search(g.numFuncs+1, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
 	}) - 1
 	if index >= g.numFuncs || index < 0 {
-		return "", 0, ""
+		return 0, 0, 0, nil
 	}
 
 	mapPc, funcOff := g.getFuncMapEntry(index)
-	funcPc, fun := g.getFunc(funcOff)
+	funcPc, fun = g.getFunc(funcOff)
 	if fun == nil || mapPc != funcPc {
+		return 0, 0, 0, nil
+	}
+	return index, funcPc, funcOff, fun
+}
+
+// Symbolize returns the file, line and function information for given PC
+func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+	_, funcPc, _, fun := g.findFunc(pc)
+	if fun == nil {
 		return "", 0, ""
 	}
 
 	funcName = getString(g.funcnametab, int(fun.nameOff))
+	sourceFile, line = g.sourceLine(fun, funcPc, pc)
+	return sourceFile, line, funcName
+}
+
+// sourceLine returns the file and line of pc in the function starting at funcPc.
+func (g *Gopclntab) sourceLine(fun *pclntabFunc, funcPc, pc uintptr) (sourceFile string, line uint) {
 	if fun.pcfileOff != 0 {
 		if fileIndex, ok := g.mapPcval(fun.pcfileOff, uint(funcPc), uint(pc)); ok {
 			sourceFile = getString(g.filetab, getInt32(g.cutab, 4*int(fileIndex+fun.npcData)))
@@ -636,7 +730,214 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 		lineNo, _ := g.mapPcval(fun.pclnOff, uint(funcPc), uint(pc))
 		line = uint(lineNo)
 	}
-	return sourceFile, line, funcName
+	return sourceFile, line
+}
+
+// SymbolizeInlined calls visit for each frame at pc, from the innermost
+// inlined call to the containing function. It returns false if no named
+// function contains pc. Missing inline data yields only the containing frame.
+func (g *Gopclntab) SymbolizeInlined(pc uintptr,
+	visit func(sourceFile string, line uint, funcName string)) bool {
+	index, funcPc, funcOff, fun := g.findFunc(pc)
+	if fun == nil {
+		return false
+	}
+	funcName := getString(g.funcnametab, int(fun.nameOff))
+	if funcName == "" {
+		return false
+	}
+	funcEnd, _ := g.getFuncMapEntry(index + 1)
+	indexTable, tree := g.getInlineTree(funcOff, fun)
+	for depth := 0; tree != nil && depth < maxInlineDepth; depth++ {
+		inlineIndex := g.mapInlineIndex(indexTable, uint(funcPc), uint(pc))
+		if inlineIndex < 0 {
+			break
+		}
+		inlinedName, parentPc := g.getInlinedCall(tree, inlineIndex)
+		callPc := funcPc + uintptr(parentPc)
+		if inlinedName == "" || parentPc < 0 || callPc >= funcEnd || callPc == pc {
+			break
+		}
+		// Like the Go runtime, the inlined frame takes the source position at
+		// pc, and its caller the one at the call site given by parentPc.
+		sourceFile, line := g.sourceLine(fun, funcPc, pc)
+		visit(sourceFile, line, inlinedName)
+		pc = callPc
+	}
+	sourceFile, line := g.sourceLine(fun, funcPc, pc)
+	visit(sourceFile, line, funcName)
+	return true
+}
+
+// getInlineTree returns the inline-index table offset and inline tree,
+// or a nil tree if either table is unavailable.
+func (g *Gopclntab) getInlineTree(funcOff uintptr, fun *pclntabFunc) (int32, []byte) {
+	if g.funcdata == nil || g.version < go1_16 {
+		return 0, nil
+	}
+	// PCDATA follows funcID, flag, padding and nfuncdata. Go 1.20 also
+	// stores startLine before those fields. fun.nfuncData holds npcdata.
+	pcdataOff := int(funcOff) + int(g.funSize) + 4
+	if g.version >= go1_20 {
+		pcdataOff += 4
+	}
+	if pcdataOff > len(g.functab) || fun.nfuncData <= pcdataInlTreeIndex ||
+		g.functab[pcdataOff-1] <= funcdataInlTree {
+		return 0, nil
+	}
+	indexTable := getInt32(g.functab, pcdataOff+4*pcdataInlTreeIndex)
+	if indexTable <= 0 {
+		return 0, nil
+	}
+	funcdataOff := pcdataOff + 4*int(fun.nfuncData)
+	var treeAddr uintptr
+	if g.version >= go1_18 {
+		// A missing FUNCDATA entry is ^uint32(0), read as -1 by getInt32.
+		offset := getInt32(g.functab, funcdataOff+4*funcdataInlTree)
+		if offset < 0 {
+			return 0, nil
+		}
+		treeAddr = g.gofunc + uintptr(offset)
+	} else {
+		// Go 1.16 and 1.17 store pointer-aligned absolute addresses.
+		// Alignment is relative to the pointer-aligned pclntab header.
+		ptrSize := int(g.ptrSize)
+		funcdataOff += -(int(g.pclnOffset) + funcdataOff) & (ptrSize - 1)
+		pointerOff := funcdataOff + ptrSize*funcdataInlTree
+		if pointerOff+ptrSize > len(g.functab) {
+			return 0, nil
+		}
+		treeAddr = *(*uintptr)(unsafe.Pointer(&g.functab[pointerOff]))
+	}
+	if treeAddr < g.funcdataAddr || treeAddr-g.funcdataAddr >= uintptr(len(g.funcdata)) {
+		return 0, nil
+	}
+	return int32(indexTable), g.funcdata[treeAddr-g.funcdataAddr:]
+}
+
+// getInlinedCall returns the function name and the call site offset from the
+// function start of an inline tree entry (runtime.inlinedCall).
+func (g *Gopclntab) getInlinedCall(tree []byte, index int32) (funcName string, parentPc int) {
+	entrySize := int(unsafe.Sizeof(inlinedCall116{}))
+	nameOff := int(unsafe.Offsetof(inlinedCall116{}.nameOff))
+	parentPcOff := int(unsafe.Offsetof(inlinedCall116{}.parentPc))
+	if g.version >= go1_20 {
+		entrySize = int(unsafe.Sizeof(inlinedCall120{}))
+		nameOff = int(unsafe.Offsetof(inlinedCall120{}.nameOff))
+		parentPcOff = int(unsafe.Offsetof(inlinedCall120{}.parentPc))
+	}
+	entry := int(index) * entrySize
+	funcName = getString(g.funcnametab, getInt32(tree, entry+nameOff))
+	parentPc = getInt32(tree, entry+parentPcOff)
+	return funcName, parentPc
+}
+
+// goFuncOffset returns the byte offset of moduledata.gofunc, or zero for an
+// unknown layout. See the moduledata struct in go/src/runtime/symtab.go.
+func (g *Gopclntab) goFuncOffset(goVersion string) int {
+	if g.version == go1_18 {
+		return moduledataGoFuncOffset118
+	}
+	if g.version != go1_20 || version.Compare(goVersion, "go1.20") < 0 ||
+		version.Compare(goVersion, "go1.28") >= 0 {
+		return 0
+	}
+	if version.Compare(goVersion, "go1.27") >= 0 {
+		return moduledataGoFuncOffset127
+	}
+	return moduledataGoFuncOffset120
+}
+
+// findGoFunc scans moduledata records for the one referring to this pclntab.
+// gofuncOffset is the version-specific offset of the gofunc field.
+func (g *Gopclntab) findGoFunc(data []byte, pclntabAddr uintptr, gofuncOffset int) uintptr {
+	if gofuncOffset < 32 || gofuncOffset > len(data)-8 {
+		return 0
+	}
+	var needle [8]byte
+	binary.LittleEndian.PutUint64(needle[:], uint64(pclntabAddr))
+	for start := 0; start <= len(data)-gofuncOffset-8; start += 8 {
+		n := bytes.Index(data[start:], needle[:])
+		if n < 0 {
+			return 0
+		}
+		start += n &^ 7
+		if n&7 != 0 || len(data)-start < gofuncOffset+8 {
+			continue
+		}
+		// moduledata starts with pcHeader, followed by the funcnametab
+		// slice at byte 8 and the cutab slice at byte 32.
+		moduledata := data[start:]
+		if binary.LittleEndian.Uint64(moduledata[8:]) == uint64(pclntabAddr+g.funcnameOffset) &&
+			binary.LittleEndian.Uint64(moduledata[32:]) == uint64(pclntabAddr+g.cuOffset) {
+			return uintptr(binary.LittleEndian.Uint64(moduledata[gofuncOffset:]))
+		}
+	}
+	return 0
+}
+
+// loadFuncData loads the segment containing the inline data, leaving funcdata
+// nil if the segment cannot be located or read.
+func (g *Gopclntab) loadFuncData(ef *pfelf.File) {
+	if g.version < go1_16 {
+		return
+	}
+	pclntabAddr, ok := fileOffsetToAddress(ef, g.headerOffset)
+	if !ok {
+		return
+	}
+	dataAddr := pclntabAddr
+	if g.version >= go1_18 {
+		gofuncOffset := g.goFuncOffset(ef.GoVersion())
+		if gofuncOffset == 0 {
+			return
+		}
+		// Go 1.26 moved moduledata into its own section.
+		section := ef.Section(moduleDataSectionName)
+		if section == nil {
+			section = ef.Section(".noptrdata")
+		}
+		if section == nil || section.Type == elf.SHT_NOBITS {
+			return
+		}
+		data, err := section.Data(maxBytesGoPclntab)
+		if err != nil {
+			return
+		}
+		g.gofunc = g.findGoFunc(data, pclntabAddr, gofuncOffset)
+		if g.gofunc == 0 {
+			return
+		}
+		dataAddr = g.gofunc
+	} else if g.version == go1_16 {
+		// Go 1.16 and 1.17 store inline data in .rodata, which PIE binaries
+		// can load in a different segment from the pclntab.
+		if s := ef.Section(".rodata"); s != nil {
+			dataAddr = uintptr(s.Addr)
+		}
+	}
+	prog := ef.ProgByVirtualAddress(uint64(dataAddr))
+	if prog == nil {
+		return
+	}
+	data, err := prog.Data(maxBytesGoPclntab)
+	if err != nil {
+		return
+	}
+	g.funcdata = data
+	g.funcdataAddr = uintptr(prog.Vaddr)
+}
+
+// fileOffsetToAddress returns the virtual address the file offset is loaded at.
+// Go metadata can reside in non-executable load segments.
+func fileOffsetToAddress(ef *pfelf.File, offset int64) (uintptr, bool) {
+	for i := range ef.Progs {
+		p := &ef.Progs[i]
+		if p.Type == elf.PT_LOAD && uint64(offset) >= p.Off && uint64(offset) < p.Off+p.Filesz {
+			return uintptr(p.Vaddr + uint64(offset) - p.Off), true
+		}
+	}
+	return 0, false
 }
 
 func findTextStart(ef *pfelf.File) (uintptr, error) {
@@ -843,7 +1144,7 @@ func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, us
 // Parse Golang .gopclntab spdelta tables and try to produce minified intervals
 // by using large frame pointer ranges when possible
 func (ee *elfExtractor) parseGoPclntab() error {
-	g, err := NewGopclntab(ee.file)
+	g, err := newGopclntab(ee.file, false)
 	if errors.Is(err, errNoPclntab) {
 		return nil
 	}
