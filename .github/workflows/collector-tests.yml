@@ -29,16 +29,15 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            tools/coredump/go.sum
       - name: Set up Go Stable
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
-          # The "Setup replace statement" step runs "go mod tidy" for these
-          # modules; include their go.sum files in the cache key.
-          cache-dependency-path: |
-            go.sum
-            internal/tools/go.sum
-            tools/coredump/go.sum
+          cache: false
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -95,16 +94,16 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+            cmd/otelcol-ebpf-profiler/manifest.yaml
       - name: Set up Go Stable
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
-          # "Setup replace statements" may rewrite go.mod files; include the
-          # go.sum files of the touched modules in the cache key.
-          cache-dependency-path: |
-            go.sum
-            internal/tools/go.sum
-            cmd/otelcol-ebpf-profiler/manifest.yaml
+          cache: false
       - name: Clone Collector
         if: ${{ matrix.use-upstream }}
         run: |
