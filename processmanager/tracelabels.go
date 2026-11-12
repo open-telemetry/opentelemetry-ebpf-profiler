@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
+package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
 	"sync/atomic"

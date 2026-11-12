@@ -11,7 +11,6 @@ import (
 	cebpf "github.com/cilium/ebpf"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -288,7 +287,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kin
 		return nil, fmt.Errorf("invalid probe kind: %d", kind)
 	}
 
-	originID, err := c.reg.Register(&OriginEntry{Meta: meta})
+	originID, err := c.reg.Register(&pm.OriginEntry{Meta: meta})
 	if err != nil {
 		return nil, fmt.Errorf("registering collect trampoline origin: %w", err)
 	}
@@ -379,32 +378,10 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 	return c.registerAttacher(a)
 }
 
-// TraceHandlerHooks is a set of trace handler hooks that may be attached to a
-// freshly registered origin ID via ProbeRegistrar.Register. It
-// allows probes to intercept traces with a matching origin either before
-// symbolization (e.g. heap free events that need only update a tracker and
-// should never be symbolized or reported) or after symbolization and
-// reporting (e.g. feeding alloc events into a live-heap correlator).
-type TraceHandlerHooks interface {
-	// PreHandleTrace is called for each incoming trace (with matching origin)
-	// before symbolization.
-	//
-	// Return true to continue with normal symbolization and reporting, or
-	// false to consume the trace (it will not be symbolized or reported).
-	PreHandleTrace(trace *libpf.EbpfTrace) bool
-
-	// PostHandleTrace is called after symbolization and reporting for traces
-	// with a matching origin. Handlers that need the trace hash should call
-	// trace.Hash(), which memoizes the result across callers.
-	PostHandleTrace(trace *libpf.Trace)
-}
-
-// ProbeRegistrar lets a Probe register one or more origin IDs during Load.
-// Each call to Register allocates a unique ID backed by the supplied
-// OriginEntry. Trace handler hooks attached to the entry make the tracer
-// dispatch traces emitted with that origin to them.
+// ProbeRegistrar lets a Probe register origin IDs during Load; each ID is
+// backed by the given pm.OriginEntry.
 type ProbeRegistrar interface {
-	Register(entry *OriginEntry) (uint16, error)
+	Register(entry *pm.OriginEntry) (uint16, error)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
@@ -425,8 +402,7 @@ type Probe interface {
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
 //
-// Trace handler hooks are attached to registered origin IDs via the
-// ProbeRegistrar; the tracer dispatches traces with a matching origin to them.
+// Trace handler hooks are attached via the ProbeRegistrar.
 //
 // If p implements samples.SnapshotSource, its snapshots are included in the
 // tracer's ProduceSnapshots at each collection interval.

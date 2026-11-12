@@ -695,7 +695,7 @@ typedef struct Trace {
   // pushed by push_context_values before unwinding. The first entry, if any, is
   // the primary profile value (e.g. off-CPU time in nanoseconds); origins
   // without a value (e.g. sampling) push none. Userspace exposes them as
-  // libpf.EbpfTrace.ContextValues.
+  // processmanager.TraceContext.ContextValues.
   u16 context_value_end;
   u16 kernel_frame_end;
   u16 frame_data_end;
@@ -709,7 +709,7 @@ typedef struct Trace {
   // RODATA variable at load time.
   u16 origin;
 
-  // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `variable_data`
+  // NOTE: both send_trace in BPF and the user space trace decoding require `variable_data`
   // to be the last item in the struct. When sending via the ringbuffer, only the
   // elements up to 'variable_data_end' are sent.
 #ifndef EBPF_TRACE_HEADER_ONLY

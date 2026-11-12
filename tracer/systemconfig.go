@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -692,7 +693,7 @@ func stripProgramExtInfos(insns asm.Instructions) {
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
-	major, minor uint32, origins *originRegistry, out *SysConfigVars,
+	major, minor uint32, origins *pm.OriginRegistry, out *SysConfigVars,
 ) error {
 	if cfg.FilterMinProcessAge < 0 {
 		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
@@ -842,8 +843,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 // setOriginIDs assigns an origin ID to every kind of sample the tracer's
 // eBPF programs can produce and writes each ID into the corresponding
 // RODATA variable.
-func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegistry) error {
-	sampling, err := origins.Register(&OriginEntry{
+func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *pm.OriginRegistry) error {
+	sampling, err := origins.Register(&pm.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes: []samples.SampleType{{
 				Type: "samples",
@@ -856,6 +857,7 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 			}},
 			AppendValues: samples.AppendFirstContextValue,
 		},
+		Hooks: cfg.SamplingTraceHooks,
 	})
 	if err != nil {
 		return err

@@ -13,6 +13,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -76,7 +77,7 @@ func (g *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 		return fmt.Errorf("kprobe already loaded")
 	}
 
-	originID, err := reg.Register(&tracer.OriginEntry{
+	originID, err := reg.Register(&pm.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
 			AppendValues: samples.AppendFirstContextValue,

@@ -18,7 +18,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 )
@@ -158,13 +157,9 @@ func __bpf_copy_frame(id C.u64, trace *C.Trace) C.long {
 		log.Errorf("coredump trace unexpectedly has kernel_frame_end %d", trace.kernel_frame_end)
 		return -1
 	}
-	// Context values precede the frames. Copy both once and expose
-	// non-overlapping slices of the pooled buffer.
-	sz := trace.frame_data_end
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz/8]), pfunsafe.FromSlice(trace.variable_data[:sz]))
-	numContextValues := trace.context_value_end / 8
-	ctx.trace.ContextValues = ctx.trace.FrameDataBuf[:numContextValues:numContextValues]
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[numContextValues : sz/8 : sz/8]
-	ctx.trace.NumFrames = uint16(trace.num_frames)
+	// Copy the raw record the eBPF send_trace would hand to the ring
+	// buffer.
+	sz := unsafe.Offsetof(trace.variable_data) + uintptr(trace.variable_data_end)
+	ctx.traceBuf = append(ctx.traceBuf[:0], sliceBuffer(unsafe.Pointer(trace), C.int(sz))...)
 	return 0
 }

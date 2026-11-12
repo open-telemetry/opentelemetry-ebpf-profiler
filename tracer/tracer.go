@@ -9,14 +9,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand/v2"
 	"os"
 	"path"
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -32,7 +30,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/perfutil"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -43,6 +40,7 @@ import (
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -171,9 +169,6 @@ type Tracer struct {
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
 
-	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
-	tracePool sync.Pool
-
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
 	// when process events take place (new, exit, unknown PC).
@@ -197,12 +192,6 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 
-	// customLabels validates custom label keys/values pulled from eBPF and
-	// tracks how many were dropped due to invalid UTF-8.
-	customLabels customLabelValidator
-
-	threadLabels threadLabelResolver
-
 	// sysConfigVars holds kernel struct offsets determined at startup, passed
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
@@ -211,9 +200,8 @@ type Tracer struct {
 	// also when custom probes are loaded via Enable.
 	maxConcurrentProgLoads int
 
-	// origins is the tracer-wide registry origin IDs are assigned from and
-	// profile type metadata is looked up by.
-	origins *originRegistry
+	// origins is the registry of trace origin IDs and their metadata.
+	origins *pm.OriginRegistry
 
 	// snapshotSources are probes that implement samples.SnapshotSource and produce
 	// additional profiles at each collection interval. Probes can be enabled
@@ -291,6 +279,9 @@ type Config struct {
 	// It supports None (disabled, default), Auto (translates recursively when kernel BTF
 	// layout is available, otherwise Exact), Exact, and Recursive (requires BTF).
 	PIDNamespaceTranslationMode PIDNamespaceTranslationMode
+	// SamplingTraceHooks overrides the sampling origin's default no-op
+	// hooks; meant for tests.
+	SamplingTraceHooks pm.TraceHandlerHooks
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -328,14 +319,6 @@ func schedProcessFreeHookName(progNames libpf.Set[string]) string {
 	return schedProcessFreeV2
 }
 
-func newTracePool() sync.Pool {
-	return sync.Pool{
-		New: func() any {
-			return &libpf.EbpfTrace{}
-		},
-	}
-}
-
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
@@ -348,7 +331,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
-	origins := &originRegistry{}
+	origins := &pm.OriginRegistry{}
 	var sysConfigVars SysConfigVars
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, origins, &sysConfigVars)
@@ -376,6 +359,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
 		ProcessMetaEnrichers:  cfg.ProcessMetaEnrichers,
+		Origins:               origins,
 	})
 	if err != nil {
 		lifecycleCancel()
@@ -391,7 +375,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
-		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
@@ -450,7 +433,7 @@ func (t *Tracer) Close() {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *originRegistry,
+func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *pm.OriginRegistry,
 	sysVars *SysConfigVars,
 ) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program,
@@ -1278,123 +1261,9 @@ func (t *Tracer) eBPFMetricsCollector(
 	return metricsUpdates
 }
 
-// Various bpf trace handling related errors:
-var (
-	errRecordTooSmall       = errors.New("trace record too small")
-	errRecordUnexpectedSize = errors.New("unexpected record size")
-	errOriginUnexpected     = errors.New("unexpected origin")
-)
-
-type variableDataDecoder struct {
-	raw []uint8
-	dst []uint64
-	pos uint16
-}
-
-func (vd *variableDataDecoder) decodeBytes(end uint16, field string) ([]uint8, error) {
-	if end == 0 {
-		return nil, nil
-	}
-	if vd.pos > end || int(end) > len(vd.raw) {
-		return nil, fmt.Errorf("%s end %d: not in range [%d, %d]: %w",
-			field, end, vd.pos, len(vd.raw), errRecordUnexpectedSize)
-	}
-	data := vd.raw[vd.pos:end:end]
-	vd.pos = (end + 7) &^ 7
-	return data, nil
-}
-
-func (vd *variableDataDecoder) copyUint64(end uint16, field string) ([]uint64, error) {
-	val, err := vd.decodeBytes(end, field)
-	if val == nil {
-		return nil, err
-	}
-	n := len(val) / 8
-	if len(val)%8 != 0 || n > len(vd.dst) {
-		return nil, fmt.Errorf("%s copy fail (size %d, max %d): %w",
-			field, len(val), 8*len(vd.dst), errRecordUnexpectedSize)
-	}
-
-	src := unsafe.Slice((*uint64)(unsafe.Pointer(unsafe.SliceData(val))), n)
-	dst := vd.dst[:n:n]
-	copy(dst, src)
-	vd.dst = vd.dst[n:]
-	return dst, nil
-}
-
-// loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
-func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
-	traceHeaderSize := int(support.Sizeof_TraceHeader)
-	if len(raw) < traceHeaderSize {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize, errRecordTooSmall)
-	}
-
-	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
-
-	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < traceHeaderSize+int(ptr.Variable_data_end) {
-		return nil, fmt.Errorf("%d < %d: %w", len(raw), traceHeaderSize+int(ptr.Variable_data_end),
-			errRecordUnexpectedSize)
-	}
-	variableData := raw[traceHeaderSize : traceHeaderSize+int(ptr.Variable_data_end)]
-
-	trace := t.tracePool.Get().(*libpf.EbpfTrace)
-	*trace = libpf.EbpfTrace{
-		Comm:      libpf.NewComm(ptr.Comm),
-		TraceID:   *(*libpf.TraceID)(unsafe.Pointer(&ptr.Trace_id)),
-		SpanID:    *(*libpf.SpanID)(unsafe.Pointer(&ptr.Span_id)),
-		PID:       libpf.PID(ptr.Pid),
-		TID:       libpf.PID(ptr.Tid),
-		Origin:    ptr.Origin,
-		KTime:     int64(ptr.Ktime),
-		CpuID:     ptr.Cpu_id,
-		NumFrames: ptr.Num_frames,
-	}
-
-	if t.origins.lookup(trace.Origin) == nil {
-		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
-	}
-
-	vd := variableDataDecoder{raw: variableData, dst: trace.FrameDataBuf[:]}
-
-	// Context values precede the kernel/user frames; the region is empty for
-	// origins without a value.
-	var err error
-	trace.ContextValues, err = vd.copyUint64(ptr.Context_value_end, "context value")
-	if err != nil {
-		return nil, err
-	}
-
-	trace.KernelFrames, err = vd.copyUint64(ptr.Kernel_frame_end, "kernel_frame")
-	if err != nil {
-		return nil, err
-	}
-
-	trace.FrameData, err = vd.copyUint64(ptr.Frame_data_end, "frame")
-	if err != nil {
-		return nil, err
-	}
-
-	goLabelData, err := vd.decodeBytes(ptr.Golang_label_end, "golang label")
-	if err != nil {
-		return nil, err
-	}
-	if payload, err := vd.decodeBytes(ptr.Thread_label_end, "thread label"); err != nil {
-		return nil, err
-	} else if len(payload) > 0 {
-		decoder := t.processManager.ThreadLabelDecoderForPID(trace.PID)
-		trace.CustomLabels = t.threadLabels.resolve(payload, decoder)
-	}
-	// Merge Go labels last so they take precedence on duplicate keys.
-	if len(goLabelData) > 0 {
-		trace.CustomLabels = t.customLabels.decode(goLabelData, trace.CustomLabels)
-	}
-	return trace, nil
-}
-
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace) error {
+func (t *Tracer) StartMapMonitors(ctx context.Context) error {
 	onlineCPUs, err := onlineCPUsOnce()
 	if err != nil {
 		return fmt.Errorf("failed to get online cpus: %w", err)
@@ -1407,7 +1276,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	if err != nil {
 		return err
 	}
-	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan)
+	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx)
 	if err != nil {
 		return err
 	}
@@ -1446,8 +1315,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			metrics.AddSlice(eventMetricCollector())
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
-			metrics.AddSlice(t.customLabels.getAndResetMetrics())
-			metrics.AddSlice(t.threadLabels.getAndResetMetrics())
 		})
 	}
 
@@ -1585,84 +1452,4 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
 		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 	})
-}
-
-func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	// Handlers registered with the trace origin may consume traces before
-	// symbolization.
-	entry := t.origins.lookup(bpfTrace.Origin)
-	if entry == nil || !entry.Hooks.PreHandleTrace(bpfTrace) {
-		t.tracePool.Put(bpfTrace)
-		return
-	}
-
-	trace := t.processManager.HandleTrace(bpfTrace, entry.Meta)
-	t.tracePool.Put(bpfTrace)
-
-	// Handlers registered with the trace origin receive the symbolized
-	// result after symbolization and reporting.
-	entry.Hooks.PostHandleTrace(trace)
-}
-
-// originRegistry is the tracer-wide registry origin IDs are assigned from
-// and profile type metadata is looked up by. IDs are handed out by
-// atomically incrementing lastID, which guarantees they never collide, even
-// when profile types are registered dynamically after load time.
-type originRegistry struct {
-	// lastID is the most recently assigned origin ID.
-	lastID atomic.Uint32
-
-	// entries maps a trace origin (uint16) to its *OriginEntry.
-	entries sync.Map
-}
-
-// OriginEntry bundles the profile type metadata and the trace handler hooks
-// registered for a single origin ID. It is passed to
-// ProbeRegistrar.Register, which assigns a fresh origin ID to the entry.
-type OriginEntry struct {
-	// Meta is the profile type metadata for the origin. It must be set.
-	Meta *samples.TypeMetadata
-
-	// Hooks receive traces emitted with the origin's ID. If Hooks is nil,
-	// no-op stubs are registered, and traces with the origin are processed
-	// normally.
-	Hooks TraceHandlerHooks
-}
-
-// StubTraceHandlerHooks provides no-op TraceHandlerHooks implementations. It
-// can be embedded by probe implementations that only need to override a
-// subset of the hooks. It is also used for origins registered without hooks.
-type StubTraceHandlerHooks struct{}
-
-func (StubTraceHandlerHooks) PreHandleTrace(*libpf.EbpfTrace) bool { return true }
-func (StubTraceHandlerHooks) PostHandleTrace(*libpf.Trace)         {}
-
-// Register hands out a fresh origin ID and stores the entry for it, keyed by
-// that ID.
-func (r *originRegistry) Register(entry *OriginEntry) (uint16, error) {
-	if len(entry.Meta.SampleTypes) == 0 {
-		return 0, fmt.Errorf("origin registry entry needs at least one sample type")
-	}
-	if entry.Meta.AppendValues == nil {
-		return 0, fmt.Errorf("origin registry entry needs AppendValues")
-	}
-	if last := r.lastID.Load(); last >= math.MaxUint16 {
-		return 0, fmt.Errorf("maximum number of origin registry entries exceeded")
-	}
-	if entry.Hooks == nil {
-		entry.Hooks = StubTraceHandlerHooks{}
-	}
-	id := uint16(r.lastID.Add(1))
-	r.entries.Store(id, entry)
-	return id, nil
-}
-
-// lookup returns the OriginEntry registered for origin. It returns nil if
-// origin is unknown.
-func (r *originRegistry) lookup(origin uint16) *OriginEntry {
-	v, ok := r.entries.Load(origin)
-	if !ok {
-		return nil
-	}
-	return v.(*OriginEntry)
 }
