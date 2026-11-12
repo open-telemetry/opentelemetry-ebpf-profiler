@@ -18,7 +18,7 @@ require (
 	github.com/klauspost/compress v1.20.4
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261109092835-f894ee81d1e5
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261111105900-0fa7216d5d04
 	github.com/stretchr/testify v1.12.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.71.0
