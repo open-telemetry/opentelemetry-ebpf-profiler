@@ -33,6 +33,12 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+          # The "Setup replace statement" step runs "go mod tidy" for these
+          # modules; include their go.sum files in the cache key.
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+            tools/coredump/go.sum
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -93,6 +99,12 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
+          # "Setup replace statements" may rewrite go.mod files; include the
+          # go.sum files of the touched modules in the cache key.
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+            tools/coredump/go.sum
       - name: Clone Collector
         if: ${{ matrix.use-upstream }}
         run: |

@@ -26,5 +26,13 @@ runs:
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: go.mod
-        cache-dependency-path: go.sum
+        # Include the go.sum files of all nested modules (see GO_MODULES in the
+        # Makefile) so their dependencies are covered by the cache key, too.
+        # interpreter/go/integrationtests/pprof has no dependencies and thus
+        # no go.sum file.
+        cache-dependency-path: |
+          go.sum
+          internal/tools/go.sum
+          tools/coredump/go.sum
+          tools/luajitoffsets/go.sum
       id: go
