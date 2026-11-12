@@ -30,21 +30,30 @@ struct v8_procs_t {
 
 // Record a V8 frame
 static EBPF_INLINE ErrorCode push_v8(
-  UnwindState *state, Trace *trace, u64 pointer_and_type, u64 delta_or_marker, bool return_address)
+  UnwindState *state,
+  Trace *trace,
+  u8 frame_type,
+  u64 sfi,
+  u64 delta_or_marker,
+  u64 code,
+  bool return_address)
 {
+  const u64 sfi_and_type = sfi | frame_type;
   DEBUG_PRINT(
-    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx",
+    "Pushing v8 frame sfi_and_type=%lx, delta_or_marker=%lx, code=%lx",
+    sfi_and_type,
     delta_or_marker,
-    pointer_and_type);
+    code);
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2);
+  u64 *data = push_frame(
+    state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, delta_or_marker, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = pointer_and_type;
-  data[1] = delta_or_marker;
+  data[0] = sfi_and_type;
+  data[1] = code;
   return ERR_OK;
 }
 
@@ -94,11 +103,12 @@ static EBPF_INLINE u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
 }
 
 // Unwind one V8 frame
-static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
+static EBPF_INLINE ErrorCode
+unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, u64 isolate_group, bool top)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
-  unsigned long sp = state->sp, fp = state->fp, pc = state->pc;
+  u64 sp = state->sp, fp = state->fp, pc = state->pc;
   V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
 
   // All V8 frames have frame pointer. Check that the FP looks valid.
@@ -117,14 +127,14 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
   if (
-    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
+    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(u64) ||
+    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(u64)) {
     return ERR_UNREACHABLE;
   }
-  unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
-  unsigned long fp_function        = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
-  unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  u64 fp_marker          = *(u64 *)(scratch->fp_ctx + vi->fp_marker);
+  u64 fp_function        = *(u64 *)(scratch->fp_ctx + vi->fp_function);
+  u64 fp_bytecode_offset = *(u64 *)(scratch->fp_ctx + vi->fp_bytecode_offset);
   DEBUG_PRINT(
     "v8 VALUES: marker: %lx, func: %lx, bytecode offset: %lx",
     fp_marker,
@@ -132,7 +142,8 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
-  uintptr_t pointer_and_type = 0, delta_or_marker = 0;
+  u8 frame_type = V8_FRAME_TYPE_MARKER;
+  uintptr_t sfi = 0, delta_or_marker = 0, code = 0;
 
   // Frames can be either be "standard", in which case they have a pointer to a context
   // in `fp_marker` here, or non-standard, in which case they have a "marker" indicating their type.
@@ -146,8 +157,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   // The special coding was done to reduce the frame marker push <immed64> to <immed32>.
   if ((fp_marker & V8_SmiTagMask) == V8_SmiTag) {
     // Shift with the tag length only (shift on normal SMI is different).
-    pointer_and_type = V8_FILE_TYPE_MARKER;
-    delta_or_marker  = fp_marker >> V8_SmiTagShift;
+    delta_or_marker = fp_marker >> V8_SmiTagShift;
     DEBUG_PRINT("v8:  -> stub frame, tag %ld", delta_or_marker);
     goto frame_done;
   }
@@ -169,7 +179,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   // Read the SFI to identify the function.
-  uintptr_t sfi = v8_read_object_ptr(jsfunc + vi->off_JSFunction_shared);
+  sfi = v8_read_object_ptr(jsfunc + vi->off_JSFunction_shared);
   if (v8_read_object_type(vi, sfi) != vi->type_SharedFunctionInfo) {
     DEBUG_PRINT("v8:  -> no SharedFunctionInfo");
     increment_metric(metricID_UnwindV8ErrBadJSFunc);
@@ -177,11 +187,70 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   // At this point we can at least report the SFI if other things fail.
-  pointer_and_type = V8_FILE_TYPE_NATIVE_SFI | sfi;
+  frame_type = V8_FRAME_TYPE_NATIVE_SFI;
 
-  // Try to determine the Code object from JSFunction.
-  uintptr_t code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
-  u16 code_type  = v8_read_object_type(vi, code);
+  if (vi->leaptiering) {
+    // Under leaptiering the JSFunction no longer stores a Code pointer. Instead it
+    // holds a 32-bit JSDispatchHandle (at the same offset the Code pointer used to
+    // occupy) that indexes the per-IsolateGroup JSDispatchTable, whose entry encodes
+    // the current Code pointer.
+    if (!isolate_group) {
+      DEBUG_PRINT("v8: leaptiering: default isolate group not initialized");
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    u32 dispatch_handle = 0;
+    if (bpf_probe_read_user(
+          &dispatch_handle, sizeof(dispatch_handle), (void *)(jsfunc + vi->off_JSFunction_code))) {
+      DEBUG_PRINT("v8: leaptiering: failed to read dispatch handle, jsfunc = %lx", jsfunc);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The JSDispatchTable base pointer (SegmentedTable::base_) is the first field of
+    // the js_dispatch_table_ member embedded in the IsolateGroup.
+    uintptr_t table_base = 0;
+    if (bpf_probe_read_user(
+          &table_base,
+          sizeof(table_base),
+          (void *)(isolate_group + vi->js_dispatch_table_offset))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch table base, isolate group = %lx, offset = %x",
+        isolate_group,
+        vi->js_dispatch_table_offset);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    u32 index       = dispatch_handle >> V8_JSDISPATCH_HANDLE_SHIFT;
+    uintptr_t entry = table_base + (uintptr_t)index * V8_JSDISPATCH_ENTRY_SIZE;
+
+    uintptr_t encoded_word = 0;
+    if (bpf_probe_read_user(
+          &encoded_word,
+          sizeof(encoded_word),
+          (void *)(entry + V8_JSDISPATCH_ENCODED_WORD_OFFSET))) {
+      DEBUG_PRINT(
+        "v8: leaptiering: failed to read dispatch entry, handle = %x, table base = %lx, entry = %lx",
+        dispatch_handle,
+        table_base,
+        entry);
+      increment_metric(metricID_UnwindV8ErrBadCode);
+      goto frame_done;
+    }
+
+    // The Code pointer occupies the high bits of the encoded word. V8 reuses the
+    // pointer's tag bit as the GC marking bit, so it may be 0 or 1 here; mask it
+    // off to get the untagged pointer (see JSDispatchEntry::GetCodePointer).
+    code = (encoded_word >> V8_JSDISPATCH_OBJECT_POINTER_SHIFT) & ~V8_HeapObjectTagMask;
+    DEBUG_PRINT(
+      "v8: leaptiering: handle = %x, entry = %lx, code = %lx", dispatch_handle, entry, code);
+  } else {
+    // Try to determine the Code object from JSFunction.
+    code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
+  }
+  u16 code_type = v8_read_object_type(vi, code);
   if (code_type != vi->type_Code) {
     // If the object type tag does not match, it might be some new functionality
     // in the VM. Report the JSFunction for function name, but report no line
@@ -194,6 +263,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Read the Code blob type and size
   if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void *)code)) {
+    DEBUG_PRINT("v8: failed to read code at %lx", code);
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
@@ -217,7 +287,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
     if (delta_or_marker != 0) {
       DEBUG_PRINT("v8:  -> interpreted, bytecode_delta %lx", delta_or_marker);
-      pointer_and_type = V8_FILE_TYPE_BYTECODE | sfi;
+      frame_type = V8_FRAME_TYPE_BYTECODE;
       goto frame_done;
     }
   }
@@ -244,7 +314,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     //   or other deoptimization reasons. This case is currently not handled.
 
     if (top && !state->return_address) {
-      unsigned long stk[3];
+      u64 stk[3];
       if (bpf_probe_read_user(stk, sizeof(stk), (void *)(sp - sizeof(stk)))) {
         DEBUG_PRINT("v8:  --> bad stack pointer");
         increment_metric(metricID_UnwindV8ErrBadFP);
@@ -274,19 +344,14 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   // Code matches RIP, report it.
-  if (code_kind == vi->codekind_baseline) {
-    // Baseline Code does not have backpointer to SFI, so give the JSFunc.
-    pointer_and_type = V8_FILE_TYPE_NATIVE_JSFUNC | jsfunc;
-  } else {
-    pointer_and_type = V8_FILE_TYPE_NATIVE_CODE | code;
-  }
+  frame_type = V8_FRAME_TYPE_NATIVE_CODE;
 
-  // Use cookie that differentiates different types of Code objects
-  u32 cookie      = (code_size << 4) | code_kind;
-  delta_or_marker = (pc - code_start) | ((uintptr_t)cookie << V8_LINE_COOKIE_SHIFT);
+  // Send the CodeKind with the PC delta so the agent can validate its cached Code data
+  delta_or_marker = (pc - code_start) | ((u64)code_kind << V8_DATA_CODE_KIND_SHIFT);
 
 frame_done:;
-  ErrorCode error = push_v8(state, trace, pointer_and_type, delta_or_marker, state->return_address);
+  ErrorCode error =
+    push_v8(state, trace, frame_type, sfi, delta_or_marker, code, state->return_address);
   if (error) {
     return error;
   }
@@ -304,7 +369,7 @@ frame_done:;
   // Recover it for Entry frames which return to native code and
   // for which the stack size is known.
   // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
-  if (pointer_and_type == V8_FILE_TYPE_MARKER && delta_or_marker == 1)
+  if (frame_type == V8_FRAME_TYPE_MARKER && delta_or_marker == 1)
     state->sp = fp + 20 * sizeof(u64);
 #endif
 
@@ -346,10 +411,20 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   unwinder_analyze_frame_pointer(&record->state);
 
+  // IsolateGroup::default_isolate_group_ is set in V8::Initialize(), so read it
+  // here instead of at attach time. It is zero until V8 has been initialized.
+  u64 isolate_group = 0;
+  if (
+    vi->leaptiering &&
+    bpf_probe_read_user(
+      &isolate_group, sizeof(isolate_group), (void *)vi->default_isolate_group_addr)) {
+    isolate_group = 0;
+  }
+
   for (u64 i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
-    error = unwind_one_v8_frame(record, vi, i == 0);
+    error = unwind_one_v8_frame(record, vi, isolate_group, i == 0);
     if (error) {
       break;
     }
@@ -362,8 +437,6 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("v8: tail call for next frame unwinder (%d) failed", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_v8)

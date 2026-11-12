@@ -5,6 +5,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
@@ -24,6 +25,8 @@ type ProbeContext struct {
 	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+	// maxConcurrentProgLoads caps how many eBPF programs are verified at once.
+	maxConcurrentProgLoads int
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -118,7 +121,7 @@ func (c *ProbeContext) sysVarSetters() []sysVar {
 		{"vma_vm_file_offset", sv.vma_vm_file_offset},
 		{"vma_vm_flags_offset", sv.vma_vm_flags_offset},
 		{"task_group_leader_offset", sv.task_group_leader_offset},
-		{"task_start_time_offset", sv.task_start_time_offset},
+		{"task_start_boottime_offset", sv.task_start_boottime_offset},
 	}
 	return append(vars, sv.pidNamespaceVars()...)
 }
@@ -226,7 +229,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+		bpfVerifierLogLevel, c.maxConcurrentProgLoads, perfProgs.FD(), perCPURecords.FD(),
+		perCPURecordsKp)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -236,22 +240,55 @@ type CollectTrampolineRef struct {
 	// which the external entry program writes its payload (slot 0) before tail-calling.
 	CtxMap *cebpf.Map
 
-	// TailCallDestinationID is the kernel program ID of the loaded trampoline.
-	// Use it to populate a BPF_MAP_TYPE_PROG_ARRAY entry so the external entry program
-	// can bpf_tail_call into it.
-	TailCallDestinationID uint32
+	// Retaining the trampoline program prevents the program fd from
+	// being closed by the garbage collector.
+	trampoline *cebpf.Program
 }
+
+// Close releases the trampoline program and its context map.
+func (r *CollectTrampolineRef) Close() error {
+	return errors.Join(r.trampoline.Close(), r.CtxMap.Close())
+}
+
+// InsertInto writes the trampoline program into progArray at key. The eBPF program
+// of the external probe must tail-call into progArray at key to trigger stack
+// trace collection.
+func (r *CollectTrampolineRef) InsertInto(progArray *cebpf.Map, key uint32) error {
+	return progArray.Put(key, r.trampoline)
+}
+
+// ProbeKind specifies the eBPF program type used to trigger the stack collection.
+type ProbeKind uint8
+
+const (
+	probeUnspec ProbeKind = iota
+	ProbeKProbe
+	ProbePerfEvent
+)
 
 // RegisterCollectTrampoline prepares and loads the eBPF programs and maps
 // needed for external probes trigger stack trace collection.
-func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*CollectTrampolineRef, error) {
+//
+// The caller owns the returned CollectTrampolineRef and must call its Close
+// method once the external probe no longer uses the trampoline, e.g. after it
+// has been detached.
+func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kind ProbeKind) (*CollectTrampolineRef, error) {
 	const (
-		trampolineProgName = "kprobe__external"
-		ctxMapName         = "ext_probe_value"
-		originVarName      = "origin_id_probe"
+		ctxMapName    = "ext_probe_value"
+		originVarName = "origin_id_probe"
 	)
 
-	originID, err := c.reg.Register(meta)
+	var trampolineProgName string
+	switch kind {
+	case ProbeKProbe:
+		trampolineProgName = "kprobe__external"
+	case ProbePerfEvent:
+		trampolineProgName = "perf_event__external"
+	default:
+		return nil, fmt.Errorf("invalid probe kind: %d", kind)
+	}
+
+	originID, err := c.reg.Register(&OriginEntry{Meta: meta})
 	if err != nil {
 		return nil, fmt.Errorf("registering collect trampoline origin: %w", err)
 	}
@@ -330,20 +367,9 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata) (*C
 		return nil, fmt.Errorf("program %q not found after loading", trampolineProgName)
 	}
 
-	info, err := prog.Info()
-	if err != nil {
-		ctxMap.Close()
-		return nil, fmt.Errorf("querying trampoline program info: %w", err)
-	}
-	progID, ok := info.ID()
-	if !ok {
-		ctxMap.Close()
-		return nil, fmt.Errorf("trampoline program ID not available")
-	}
-
 	return &CollectTrampolineRef{
-		CtxMap:                ctxMap,
-		TailCallDestinationID: uint32(progID),
+		CtxMap:     ctxMap,
+		trampoline: prog,
 	}, nil
 }
 
@@ -353,10 +379,32 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 	return c.registerAttacher(a)
 }
 
+// TraceHandlerHooks is a set of trace handler hooks that may be attached to a
+// freshly registered origin ID via ProbeRegistrar.Register. It
+// allows probes to intercept traces with a matching origin either before
+// symbolization (e.g. heap free events that need only update a tracker and
+// should never be symbolized or reported) or after symbolization and
+// reporting (e.g. feeding alloc events into a live-heap correlator).
+type TraceHandlerHooks interface {
+	// PreHandleTrace is called for each incoming trace (with matching origin)
+	// before symbolization.
+	//
+	// Return true to continue with normal symbolization and reporting, or
+	// false to consume the trace (it will not be symbolized or reported).
+	PreHandleTrace(trace *libpf.EbpfTrace) bool
+
+	// PostHandleTrace is called after symbolization and reporting for traces
+	// with a matching origin. Handlers that need the trace hash should call
+	// trace.Hash(), which memoizes the result across callers.
+	PostHandleTrace(trace *libpf.Trace)
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
-// Each call to Register allocates a unique ID backed by the supplied metadata;
+// Each call to Register allocates a unique ID backed by the supplied
+// OriginEntry. Trace handler hooks attached to the entry make the tracer
+// dispatch traces emitted with that origin to them.
 type ProbeRegistrar interface {
-	Register(meta *samples.TypeMetadata) (uint16, error)
+	Register(entry *OriginEntry) (uint16, error)
 }
 
 // Probe defines the interface that allows custom stack unwinding trigger points.
@@ -373,53 +421,12 @@ type Probe interface {
 	Unload() error
 }
 
-// PreTraceHandler is an optional interface that Probe implementations may
-// satisfy to intercept traces before symbolization. This allows probes to
-// consume traces entirely (e.g. heap free events that need only update a
-// tracker and should never be symbolized or reported).
-//
-// The tracer checks whether a Probe satisfies PreTraceHandler after Enable
-// and registers it for the origins returned by PreOrigins(). The handler is
-// only invoked for traces whose origin matches one of the registered values.
-type PreTraceHandler interface {
-	// PreOrigins returns the set of origin IDs this handler wants to receive.
-	// The tracer dispatches only traces with a matching origin to this handler.
-	PreOrigins() []uint16
-
-	// PreHandleTrace is called for each incoming trace (with matching origin)
-	// before symbolization.
-	//
-	// Return true to continue with normal symbolization and reporting, or
-	// false to consume the trace (it will not be symbolized or reported).
-	PreHandleTrace(trace *libpf.EbpfTrace) bool
-}
-
-// PostTraceHandler is an optional interface that Probe implementations may
-// satisfy to receive traces after symbolization and reporting. This allows
-// probes to perform post-processing on the symbolized trace (e.g. feeding
-// alloc events into a live-heap correlator).
-//
-// The tracer checks whether a Probe satisfies PostTraceHandler after Enable
-// and registers it for the origins returned by PostOrigins(). The handler is
-// only invoked for traces whose origin matches one of the registered values.
-type PostTraceHandler interface {
-	// PostOrigins returns the set of origin IDs this handler wants to receive.
-	// The tracer dispatches only traces with a matching origin to this handler.
-	PostOrigins() []uint16
-
-	// PostHandleTrace is called after symbolization and reporting for traces
-	// with a matching origin. Handlers that need the trace hash should call
-	// trace.Hash(), which memoizes the result across callers.
-	PostHandleTrace(trace *libpf.Trace)
-}
-
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
 // Attachers registered via AddAttacher receive per-process lifecycle callbacks
 // from the ProcessManager.
 //
-// If the probe satisfies PreTraceHandler and/or PostTraceHandler, it is
-// registered to intercept traces before symbolization or receive them after
-// symbolization, respectively.
+// Trace handler hooks are attached to registered origin IDs via the
+// ProbeRegistrar; the tracer dispatches traces with a matching origin to them.
 //
 // Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
 // startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
@@ -442,23 +449,12 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			t.processManager.RegisterProbeAttacher(a)
 			return nil
 		},
-		KernelSymbolizer: t.kernelSymbolizer,
+		KernelSymbolizer:       t.kernelSymbolizer,
+		maxConcurrentProgLoads: t.maxConcurrentProgLoads,
 	}
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
-	}
-
-	if pth, ok := p.(PreTraceHandler); ok {
-		for _, origin := range pth.PreOrigins() {
-			t.preTraceHandlers[origin] = append(t.preTraceHandlers[origin], pth)
-		}
-	}
-
-	if pth, ok := p.(PostTraceHandler); ok {
-		for _, origin := range pth.PostOrigins() {
-			t.postTraceHandlers[origin] = append(t.postTraceHandlers[origin], pth)
-		}
 	}
 
 	return nil

@@ -109,9 +109,8 @@ func TestWithReporterFactoryOTLPExporter(t *testing.T) {
 
 	option := WithReporterFactory(newOTLPReporterFactory(lis.Addr().String(), true))
 	rep, err := option.apply(&controllerOption{}).reporterFactory(&reporter.Config{
-		Name:             "test",
-		SamplesPerSecond: 20,
-		ReportInterval:   50 * time.Millisecond,
+		Name:           "test",
+		ReportInterval: 50 * time.Millisecond,
 	}, nil)
 	require.NoError(t, err)
 
@@ -128,10 +127,16 @@ func TestWithReporterFactoryOTLPExporter(t *testing.T) {
 		Timestamp: libpf.UnixTime64(time.Now().UnixNano()),
 		PID:       1,
 		ProfileType: &samples.TypeMetadata{
-			PeriodType: "cpu",
-			PeriodUnit: "nanoseconds",
-			SampleType: "samples",
-			SampleUnit: "count",
+			SampleTypes: []samples.SampleType{{
+				Type: "samples",
+				Unit: "count",
+				Period: &samples.Period{
+					Type:  "cpu",
+					Unit:  "nanoseconds",
+					Value: 1e9 / 20,
+				},
+			}},
+			AppendValues: samples.AppendFirstContextValue,
 		},
 	}))
 

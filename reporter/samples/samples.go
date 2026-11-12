@@ -17,16 +17,18 @@ type TraceEventMeta struct {
 	// ExtraMeta holds key-value pairs produced by a processmanager.ProcessMetaEnricher.
 	// It is nil when no enricher is configured. Consumers can access this via
 	// SampleAttrProducer.CollectExtraSampleMeta to attach process-level attributes.
-	ExtraMeta      map[libpf.String]string
-	APMServiceName string
-	ResourceAttrs  attribute.Set
-	Timestamp      libpf.UnixTime64
-	CPU            uint32
-	ProfileType    *TypeMetadata
-	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	ExtraMeta     map[libpf.String]string
+	ResourceAttrs attribute.Set
+	Timestamp     libpf.UnixTime64
+	CPU           uint32
+	ProfileType   *TypeMetadata
+	// ContextValues aliases the origin-specific value prefix in the pooled
+	// libpf.EbpfTrace. It is valid only while the trace event is being handled
+	// and must not be retained by the reporter.
+	ContextValues []uint64
+	PID, TID      libpf.PID
+	SpanID        libpf.SpanID
+	TraceID       libpf.TraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -34,7 +36,9 @@ type TraceEvents struct {
 	Labels     map[libpf.String]libpf.String
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
-	Values     []int64
+	// Values stores one contiguous group per event, with one value for each
+	// TypeMetadata.SampleTypes entry. Groups are index-aligned with Timestamps.
+	Values []int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -74,9 +78,6 @@ type ResourceKey struct {
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
 
-	// APMServiceName is provided by the eBPF programs
-	APMServiceName string
-
 	PID int64
 }
 
@@ -94,27 +95,60 @@ type SampleKey struct {
 	TID int64
 	CPU int64
 
-	SpanID  libpf.APMSpanID
-	TraceID libpf.APMTraceID
+	SpanID  libpf.SpanID
+	TraceID libpf.TraceID
 }
 
-// TypeMetadata describes how profiling events of a particular kind
-// should be interpreted and exported as an OTel profile.
+// SampleType describes one profile emitted from an event type: what its
+// sample values measure, their unit, and how the profile was sampled.
+type SampleType struct {
+	// Type describes what the sample values measure (e.g. "samples").
+	Type string
+
+	// Unit is the unit of the sample values (e.g. "count").
+	Unit string
+
+	// Period is the profile's sampling period. Nil means the profile has no
+	// period (e.g. event-driven kinds).
+	Period *Period
+}
+
+// Period describes how a profile was sampled.
+type Period struct {
+	// Type describes what is measured per period (e.g. "cpu").
+	Type string
+
+	// Unit is the unit of Type and Value (e.g. "nanoseconds").
+	Unit string
+
+	// Value is the sampling period, in Unit.
+	Value int64
+}
+
+// TypeMetadata describes how profiling events of a particular kind should be
+// interpreted and exported as OTel profiles.
 type TypeMetadata struct {
-	// PeriodType describes what is measured per period (e.g. "cpu").
-	// Empty means this profile type has no period (e.g. event-driven kinds).
-	PeriodType string
+	// SampleTypes has one entry per profile emitted from this event type.
+	SampleTypes []SampleType
 
-	// PeriodUnit is the unit for PeriodType (e.g. "nanoseconds").
-	PeriodUnit string
-
-	// SampleType describes what a single sample represents (e.g. "samples").
-	SampleType string
-
-	// SampleUnit is the unit for SampleType (e.g. "count").
-	SampleUnit string
-
-	// ReportValues indicates whether a sample's value should be included
-	// in the exported sample (e.g. off-CPU durations).
+	// ReportValues indicates whether sample values should be included in the
+	// exported profiles (e.g. off-CPU durations).
 	ReportValues bool
+
+	// AppendValues appends one reportable value per SampleTypes entry for a
+	// single event. It is required; AppendFirstContextValue suits origins with
+	// a single sample type. The function must consume ContextValues
+	// synchronously because they alias a pooled trace.
+	AppendValues func(dst []int64, meta *TraceEventMeta) []int64
+}
+
+// AppendFirstContextValue is the AppendValues for origins with a single sample
+// type. It appends int64(meta.ContextValues[0]), or 0 if there are no context
+// values.
+func AppendFirstContextValue(dst []int64, meta *TraceEventMeta) []int64 {
+	if len(meta.ContextValues) == 0 {
+		// Keep Values aligned with Timestamps for origins without a value.
+		return append(dst, 0)
+	}
+	return append(dst, int64(meta.ContextValues[0]))
 }

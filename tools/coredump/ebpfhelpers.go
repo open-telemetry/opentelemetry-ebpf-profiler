@@ -12,15 +12,15 @@ package main
 // this, definitions must be placed in preambles in other files, or in C source files.
 
 import (
-	"fmt"
 	"math/bits"
 	"unsafe"
 
+	"golang.org/x/sys/unix"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 /*
@@ -36,8 +36,17 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export bpf_ktime_get_ns
-func bpf_ktime_get_ns() C.ulonglong {
-	return C.ulonglong(times.GetKTime())
+func bpf_ktime_get_ns() C.u64 {
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
+		return 0
+	}
+	return C.u64(ts.Nano())
+}
+
+//export bpf_ktime_get_boot_ns
+func bpf_ktime_get_boot_ns() C.u64 {
+	return C.u64(times.GetKTime())
 }
 
 //export bpf_get_current_comm
@@ -98,7 +107,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 			key.prefixLen--
 			shiftBits := support.BitWidthPID + support.BitWidthPage - key.prefixLen
 			mask := uint64(0xffffffffffffffff) << shiftBits
-			key.page &= C.ulonglong(bits.ReverseBytes64(mask))
+			key.page &= C.u64(bits.ReverseBytes64(mask))
 		}
 	case unsafe.Pointer(&C.per_cpu_records):
 		return ctx.perCPURecord
@@ -108,10 +117,11 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 				return val
 			}
 		}
-	case unsafe.Pointer(&C.dotnet_procs), unsafe.Pointer(&C.perl_procs),
+	case unsafe.Pointer(&C.beam_procs), unsafe.Pointer(&C.perl_procs),
 		unsafe.Pointer(&C.php_procs), unsafe.Pointer(&C.py_procs),
 		unsafe.Pointer(&C.hotspot_procs), unsafe.Pointer(&C.ruby_procs),
-		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_procs):
+		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_procs),
+		unsafe.Pointer(&C.thread_context_procs):
 		if innerMap, ok := ctx.maps[mapdef]; ok {
 			if val, ok := innerMap[*(*C.u32)(keyptr)]; ok {
 				return val
@@ -142,15 +152,19 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 }
 
 //export __bpf_copy_frame
-func __bpf_copy_frame(id C.u64, trace *C.Trace) {
+func __bpf_copy_frame(id C.u64, trace *C.Trace) C.long {
 	ctx := ebpfContextMap[id]
 	if trace.kernel_frame_end != 0 {
-		panic(fmt.Sprintf("coredump trace unexpectedly contains %d kernel frames",
-			trace.kernel_frame_end))
+		log.Errorf("coredump trace unexpectedly has kernel_frame_end %d", trace.kernel_frame_end)
+		return -1
 	}
+	// Context values precede the frames. Copy both once and expose
+	// non-overlapping slices of the pooled buffer.
 	sz := trace.frame_data_end
-	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.variable_data[:sz]))
-	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
+	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz/8]), pfunsafe.FromSlice(trace.variable_data[:sz]))
+	numContextValues := trace.context_value_end / 8
+	ctx.trace.ContextValues = ctx.trace.FrameDataBuf[:numContextValues:numContextValues]
+	ctx.trace.FrameData = ctx.trace.FrameDataBuf[numContextValues : sz/8 : sz/8]
 	ctx.trace.NumFrames = uint16(trace.num_frames)
-	ctx.trace.NumKernelFrames = 0
+	return 0
 }

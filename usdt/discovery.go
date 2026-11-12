@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"slices"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // Discover returns the USDT attachment points for an ELF file identified by
@@ -19,7 +19,7 @@ import (
 // backing-file identity, including empty and partial results.
 func (d *Discoverer) Discover(
 	ref *pfelf.Reference,
-	fileID util.OnDiskFileIdentifier,
+	fileID libpf.FileID,
 ) ([]AttachmentPoint, error) {
 	if cached, ok := d.parseCache.Get(fileID); ok {
 		return slices.Clone(cached), nil
@@ -56,13 +56,13 @@ func attachmentPointsFromNotes(
 	points := make([]AttachmentPoint, 0, len(notes))
 	var discoveryErrs []error
 	for _, note := range notes {
-		location, err := adjustedSDTAddress(sectionBase, note.base, note.location)
+		elfAddress, err := adjustedSDTAddress(sectionBase, note.base, note.location)
 		if err != nil {
 			discoveryErrs = append(discoveryErrs, fmt.Errorf("adjust %s:%s location: %v",
 				note.provider, note.name, err))
 			continue
 		}
-		location, err = elfFileOffset(f, location, true)
+		location, err := elfFileOffset(f, elfAddress, true)
 		if err != nil {
 			discoveryErrs = append(discoveryErrs, fmt.Errorf("resolve %s:%s location: %v",
 				note.provider, note.name, err))
@@ -90,6 +90,8 @@ func attachmentPointsFromNotes(
 			Name:            note.name,
 			Location:        location,
 			SemaphoreOffset: semaphoreOffset,
+			Arguments:       note.arguments,
+			Machine:         f.Machine,
 		})
 	}
 	return points, errors.Join(discoveryErrs...)

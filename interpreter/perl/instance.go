@@ -96,7 +96,6 @@ func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 	}
 	vms := &d.vmStructs
 	data := support.PerlProcInfo{
-		Version:    d.version,
 		StateAddr:  uint64(d.stateAddr) + uint64(i.bias),
 		StateInTSD: stateInTSD,
 		TsdInfo:    libcInfo.TSDInfo,
@@ -217,7 +216,9 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	}
 	vms := &i.d.vmStructs
 
-	var buf [hekLenLimit]byte
+	// Temporary scratch space for reading
+	buf := libpf.GetBuffer(65536)
+	defer libpf.PutBuffer(buf)
 
 	// Read the Hash Element Key (HEK) length and readahead bytes in
 	// attempt to avoid second system call to read the target string.
@@ -227,22 +228,24 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	if err := i.rm.Read(addr, buf[:hekInitialRead]); err != nil {
 		return libpf.NullString, err
 	}
-	hekLen := npsr.Uint32(buf[:], vms.hek.hek_len)
+	hekLen := npsr.Uint32(buf, vms.hek.hek_len)
 
 	// For our better understanding and future improvement we track the maximum value we get for
 	// hekLen and report it.
 	util.AtomicUpdateMaxUint32(&i.hekLen, hekLen)
 
-	if hekSize := uint32(vms.hek.hek_key) + hekLen; hekSize > hekInitialRead {
-		if hekSize > hekLenLimit {
-			return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
-		}
-		if err := i.rm.Read(addr+hekInitialRead, buf[hekInitialRead:]); err != nil {
+	if hekLen > uint32(len(buf))-uint32(vms.hek.hek_key) {
+		return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
+	}
+
+	hekSize := uint32(vms.hek.hek_key) + hekLen
+	if hekSize > hekInitialRead {
+		if err := i.rm.Read(addr+hekInitialRead, buf[hekInitialRead:hekSize]); err != nil {
 			return libpf.NullString, err
 		}
 	}
 
-	s := pfunsafe.ToString(buf[vms.hek.hek_key : vms.hek.hek_key+uint(hekLen)])
+	s := pfunsafe.ToString(buf[vms.hek.hek_key:hekSize])
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted invalid hek string at 0x%x '%v'", addr, []byte(s))
 		return libpf.NullString, fmt.Errorf("extracted invalid hek string at 0x%x", addr)

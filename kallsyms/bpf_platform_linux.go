@@ -27,6 +27,17 @@ import (
 // symbols in /proc/kallsyms and PERF_RECORD_KSYMBOL events.
 const bpfProgPrefix = "bpf_prog_"
 
+// ksymbolEventRingPages sizes the per-CPU perf ring buffer used for ksymbol events.
+// Eight data pages accommodate bursts of program unloads while keeping per-CPU
+// memory usage below the default of 128 pages. With 4 KiB pages, the buffer holds
+// roughly 400 events, depending on symbol names.
+//
+// A loss report triggers a full rescan, but the kernel only emits one when a
+// subsequent record fits in the buffer. If no more events arrive after an
+// overflow, the loss goes unreported and stale symbols can remain.
+// A periodic full rescan could be added to recover from these unreported losses.
+const ksymbolEventRingPages = 8
+
 // bpfSymbolizerPlatform is responsible for getting updates from `PERF_RECORD_KSYMBOL`.
 // The symbolizer is not ready to use until startMonitor is called to load the symbols.
 type bpfSymbolizerPlatform struct {
@@ -127,7 +138,8 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 	s.platform.records = make(chan *perf.KSymbolRecord)
 
 	reader, err := perfutil.Start(ctx, onlineCPUs, perfutil.Config{
-		Name: "ksymbol",
+		Name:      "ksymbol",
+		RingPages: ksymbolEventRingPages,
 		Configure: func(attr *perf.Attr) {
 			attr.Options.KSymbol = true
 		},

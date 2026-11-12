@@ -5,8 +5,6 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
-const BPFMapName = "dotnet_procs"
-
 type Config struct {
 	interpreter.BaseConfig `mapstructure:",squash"`
 }

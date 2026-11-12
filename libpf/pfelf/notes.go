@@ -58,6 +58,7 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 		}
 
 		id := NamespaceUnknown
+		allowLarge := false
 		alignedSize := alignNoteSize(int(note.Namesz))
 		namespace, err := rdr.ReadN(alignedSize)
 		switch err {
@@ -65,6 +66,7 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			switch strings.TrimRight(pfunsafe.ToString(namespace[:note.Namesz]), "\x00") {
 			case "CORE":
 				id = NamespaceCore
+				allowLarge = true
 			case "LINUX":
 				id = NamespaceLinux
 			case "GNU":
@@ -88,12 +90,25 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 		case nil:
 			// Nothing
 		case pfbufio.ErrBufferTooSmall:
+			// Only CORE.NT_FILE note can be large as it contains entry per-mapping
+			// everything else should fit in the reader buffer.
+			if !allowLarge || alignedSize >= 1<<24 {
+				_, err = rdr.Discard(alignedSize)
+				if err != nil {
+					return err
+				}
+				continue
+			}
 			if cap(buf) < alignedSize {
 				buf = make([]byte, alignedSize)
 			}
 			buf = buf[:alignedSize]
-			if _, err = rdr.Read(buf); err != nil {
+			n, err := rdr.Read(buf)
+			if err != nil {
 				return err
+			}
+			if n != alignedSize {
+				return io.EOF
 			}
 			desc = buf
 		default:
@@ -112,10 +127,10 @@ func alignNoteSize(size int) int {
 
 func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 	rdr := pfbufio.NewReader(r, 0, 1<<63-1)
-	defer pfbufio.PutReader(rdr)
+	defer rdr.Release()
 
 	var buildId string
-	err := visitNotes(rdr, func(note uint64, desc []byte) bool {
+	err := visitNotes(&rdr, func(note uint64, desc []byte) bool {
 		if note == NoteGnuBuildId {
 			buildId = hex.EncodeToString(desc)
 			return false

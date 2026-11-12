@@ -1,7 +1,6 @@
 // References to the map definitions in the BPF C code.
 
-#ifndef OPTI_EXTMAPS_H
-#define OPTI_EXTMAPS_H
+#pragma once
 
 // References to map definitions in *.ebpf.c.
 extern struct perf_progs_t perf_progs;
@@ -17,6 +16,7 @@ extern struct interpreter_offsets_t interpreter_offsets;
 extern struct trace_events_t trace_events;
 extern struct go_procs_t go_procs;
 extern struct thread_context_procs_t thread_context_procs;
+extern struct usdt_specs_t usdt_specs;
 
 extern struct exe_id_to_8_stack_deltas_t exe_id_to_8_stack_deltas;
 extern struct exe_id_to_9_stack_deltas_t exe_id_to_9_stack_deltas;
@@ -41,10 +41,8 @@ extern struct unwind_info_array_t unwind_info_array;
 
 // References to maps in alphabetical order that
 // are needed only for testing.
-extern struct apm_int_procs_t apm_int_procs;
 extern struct beam_procs_t beam_procs;
 extern struct hotspot_procs_t hotspot_procs;
-extern struct dotnet_procs_t dotnet_procs;
 extern struct luajit_procs_t luajit_procs;
 extern struct perl_procs_t perl_procs;
 extern struct php_procs_t php_procs;
@@ -52,5 +50,3 @@ extern struct py_procs_t py_procs;
 extern struct ruby_procs_t ruby_procs;
 extern struct v8_procs_t v8_procs;
 #endif // TESTING_COREDUMP
-
-#endif // OPTI_EXTMAPS_H

@@ -22,15 +22,6 @@
 #define DOTNET_CODE_JIT       0x1f
 #define DOTNET_CODE_FLAG_LEAF 0x80
 
-// Map from dotnet process IDs to a structure containing addresses of variables
-// we require in order to build the stack trace
-struct dotnet_procs_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u32);
-  __type(value, DotnetProcInfo);
-  __uint(max_entries, 1024);
-} dotnet_procs SEC(".maps");
-
 typedef ErrorCode (*find_code_start_f)(PerCPURecord *record, u64 pc, u64 *code_start);
 
 // Nibble map tunables
@@ -65,15 +56,15 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
 
   DEBUG_PRINT(
     "dotnet:  --> find code start for %lx: pc_base %lx, map_start %lx",
-    (unsigned long)pc_delta,
-    (unsigned long)pc_base,
-    (unsigned long)map_start);
+    pc_delta,
+    pc_base,
+    map_start);
   pc_delta &= ~(DOTNET_CODE_ALIGN - 1);
 
   // Read the nibble map data
 
   // Calculate read to offset based on map_start so that end of scratch->map corresponds to pc_delta
-  long offs = (long)map_elements - pc_delta / DOTNET_CODE_BYTES_PER_ENTRY - 1;
+  s64 offs = map_elements - pc_delta / DOTNET_CODE_BYTES_PER_ENTRY - 1;
   if (offs < 0) {
     // We can read full scratch buffer, adjust map_start so that last entry read corresponds
     // pc_delta
@@ -89,7 +80,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   // Determine if the first map entry contains the start region
   u64 pos = map_elements;
   u32 val = scratch->map[--pos];
-  DEBUG_PRINT("dotnet:  --> find code start for %lx: first entry %x", (unsigned long)pc_delta, val);
+  DEBUG_PRINT("dotnet:  --> find code start for %lx: first entry %x", pc_delta, val);
   val >>= 28 - ((pc_delta / DOTNET_CODE_BYTES_PER_NIBBLE) % DOTNET_CODE_NIBBLES_PER_ENTRY) * 4;
   if (val != 0) {
     // Adjust pc_delta to beginning of the positioned nibble of 'val'
@@ -99,8 +90,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     pc_delta &= ~(DOTNET_CODE_BYTES_PER_ENTRY - 1);
     pc_delta -= DOTNET_CODE_BYTES_PER_NIBBLE;
     val = scratch->map[--pos];
-    DEBUG_PRINT(
-      "dotnet:  --> find code start for %lx: second entry %x", (unsigned long)pc_delta, val);
+    DEBUG_PRINT("dotnet:  --> find code start for %lx: second entry %x", pc_delta, val);
 
     // Find backwards the first non-zero entry as it marks function start
     // This is unrolled several times, so it needs to be minimal in size.
@@ -139,10 +129,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     }
     pc_delta -= pc_skipped;
     DEBUG_PRINT(
-      "dotnet:  --> find code start for %lx: skipped %lu, entry %x",
-      (unsigned long)pc_delta,
-      (unsigned long)(orig_pos - pos),
-      val);
+      "dotnet:  --> find code start for %lx: skipped %lu, entry %x", pc_delta, orig_pos - pos, val);
     if (val == 0) {
       increment_metric(metricID_UnwindDotnetErrCodeTooLarge);
       return ERR_DOTNET_CODE_TOO_LARGE;
@@ -154,11 +141,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     u8 nybble = val & 0xf;
     if (nybble != 0) {
       *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
-      DEBUG_PRINT(
-        "dotnet:  --> pc_delta = %lx, val=%x, ret=%lx",
-        (unsigned long)pc_delta,
-        nybble,
-        (unsigned long)*code_start);
+      DEBUG_PRINT("dotnet:  --> pc_delta = %lx, val=%x, ret=%lx", pc_delta, nybble, *code_start);
       return ERR_OK;
     }
     val >>= 4;
@@ -227,7 +210,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
   u32 val = scratch->map[1];
   if (val) {
     // #2 if DWORD is a pointer, calculate code start from it
-    DEBUG_PRINT("dotnet10: --> pc_delta %lx: first entry %x", (unsigned long)pc_delta, val);
+    DEBUG_PRINT("dotnet10: --> pc_delta %lx: first entry %x", pc_delta, val);
     if (DOTNET10_IS_POINTER(val)) {
       goto decode_pointer;
     }
@@ -250,7 +233,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
   // #5.1 read previous DWORD
   startPos = ((startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) << DOTNET10_LOG2_NIBBLES_PER_DWORD) - 1;
   val      = scratch->map[0];
-  DEBUG_PRINT("dotnet10: --> pc_delta %lx: prev entry %x", (unsigned long)pc_delta, val);
+  DEBUG_PRINT("dotnet10: --> pc_delta %lx: prev entry %x", pc_delta, val);
   if (!val) {
     goto bad_code_header;
   }
@@ -259,7 +242,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
   if (DOTNET10_IS_POINTER(val)) {
   decode_pointer:
     *code_start = pc_base + DOTNET10_DECODE_POINTER(val);
-    DEBUG_PRINT("dotnet10: --> find code start via pointer %lx", (unsigned long)*code_start);
+    DEBUG_PRINT("dotnet10: --> find code start via pointer %lx", *code_start);
     return ERR_OK;
   }
 
@@ -274,7 +257,7 @@ decode_nibble_map:
   }
 decode_nibble:
   *code_start = pc_base + DOTNET10_POSOFF2ADDR(startPos, val & DOTNET10_NIBBLE_MASK);
-  DEBUG_PRINT("dotnet10: --> find code start via nibble %lx", (unsigned long)*code_start);
+  DEBUG_PRINT("dotnet10: --> find code start via nibble %lx", *code_start);
   return ERR_OK;
 
 bad_code_header:
@@ -383,8 +366,7 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
   // Validate code_header_ptr looks like a valid userspace address as a
   // defense-in-depth measure against reading stale or invalid data.
   if (is_kernel_address(code_header_ptr) || code_header_ptr < 0x1000) {
-    DEBUG_PRINT(
-      "dotnet: invalid code_header_ptr 0x%lx, skipping frame", (unsigned long)code_header_ptr);
+    DEBUG_PRINT("dotnet: invalid code_header_ptr 0x%lx, skipping frame", code_header_ptr);
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
     return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
   }
@@ -394,9 +376,9 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
 push_frame:
   DEBUG_PRINT(
     "dotnet:  --> code_start = %lx, code_header = %lx, pc_offset = %lx",
-    (unsigned long)code_start,
-    (unsigned long)code_header_ptr,
-    (unsigned long)(pc - code_start));
+    code_start,
+    code_header_ptr,
+    pc - code_start);
   error = push_dotnet(state, trace, (code_header_ptr << 5) + type, pc - code_start, return_address);
   if (error) {
     return error;
@@ -420,19 +402,10 @@ static EBPF_INLINE int unwind_dotnet_core(
     return -1;
   }
 
-  Trace *trace = &record->trace;
-  u32 pid      = trace->pid;
+  Trace *trace    = &record->trace;
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
   DEBUG_PRINT("==== unwind_dotnet %d ====", trace->num_frames);
-
-  int unwinder       = PROG_UNWIND_STOP;
-  ErrorCode error    = ERR_OK;
-  DotnetProcInfo *vi = bpf_map_lookup_elem(&dotnet_procs, &pid);
-  if (!vi) {
-    DEBUG_PRINT("dotnet: no DotnetProcInfo for this pid");
-    error = ERR_DOTNET_NO_PROC_INFO;
-    increment_metric(metricID_UnwindDotnetErrNoProcInfo);
-    goto exit;
-  }
 
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
@@ -455,9 +428,7 @@ static EBPF_INLINE int unwind_dotnet_core(
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("dotnet: tail call for next frame unwinder (%d) failed", unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 
 static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)

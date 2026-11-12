@@ -116,12 +116,6 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
-	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int) ([]ThreadInfo, error) {
-	return ExtractTracesWithInterpreters(ctx, pr, debug, lwpFilter, faultAddresses,
-		interpreterconfig.AllInterpreters())
-}
-
-func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int,
 	interpretersConfig interpreterconfig.Config) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
@@ -204,7 +198,6 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 		}
 
 		// Get traces by calling ebpf code via CGO
-		ebpfCtx.resetTrace()
 		if rc := C.unwind_traces(ebpfCtx.PIDandTGID, debugFlag, C.u64(thread.TPBase),
 			unsafe.Pointer(&thread.GPRegs[0])); rc != 0 {
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)

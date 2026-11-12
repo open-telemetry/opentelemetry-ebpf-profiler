@@ -296,7 +296,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	data := support.BEAMProcInfo{
 		R:                     uint64(bias + d.r),
 		The_active_code_index: uint64(bias + d.theActiveCodeIndex),
-		Beam_normal_exit:      uint64(bias + d.beamNormalExit),
+		Beam_normal_exit:      rm.Uint64(bias + d.beamNormalExit),
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.sizeOf),
 	}
 
@@ -391,8 +391,8 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 	return nil
 }
 
-func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
-	return nil
+func (i *beamInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	return ebpf.DeleteProcData(libpf.BEAM, pid)
 }
 
 func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {

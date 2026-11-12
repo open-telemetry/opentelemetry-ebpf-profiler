@@ -14,10 +14,6 @@ func TestSizeOfCGoStruct(t *testing.T) {
 		input uintptr
 		want  uintptr
 	}{
-		{name: "ApmIntProcInfo", input: unsafe.Sizeof(ApmIntProcInfo{}),
-			want: sizeof_ApmIntProcInfo},
-		{name: "DotnetProcInfo", input: unsafe.Sizeof(DotnetProcInfo{}),
-			want: sizeof_DotnetProcInfo},
 		{name: "PHPProcInfo", input: unsafe.Sizeof(PHPProcInfo{}),
 			want: sizeof_PHPProcInfo},
 		{name: "RubyProcInfo", input: unsafe.Sizeof(RubyProcInfo{}),

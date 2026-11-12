@@ -100,7 +100,8 @@ func calculateRmb(currentVal, end uint64) uint64 {
 		// possible block; the loop below shrinks it to fit [currentVal, end).
 		rmb = 1 << 63
 	}
-	for currentVal+rmb > end {
+	// Compare against the remaining range to avoid overflowing currentVal+rmb.
+	for rmb > end-currentVal {
 		rmb >>= 1
 	}
 	return rmb

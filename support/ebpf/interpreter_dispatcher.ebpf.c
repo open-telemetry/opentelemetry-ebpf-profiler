@@ -140,13 +140,6 @@ struct traces_ctx_v1_t {
   __uint(max_entries, 1 << 14);
 } traces_ctx_v1 SEC(".maps");
 
-struct apm_int_procs_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u32);
-  __type(value, ApmIntProcInfo);
-  __uint(max_entries, 128);
-} apm_int_procs SEC(".maps");
-
 struct thread_context_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, u32);
@@ -154,38 +147,21 @@ struct thread_context_procs_t {
   __uint(max_entries, 1024);
 } thread_context_procs SEC(".maps");
 
+// go_procs stores Go runtime-specific offsets per Go process.
+struct go_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u32);
+  __type(value, GoRuntimeOffsets);
+  __uint(max_entries, 1024);
+} go_procs SEC(".maps");
+
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
-// go_labels_disabled gates Go custom-label extraction. It mirrors the Go labels
+// go_labels_disabled gates Go label extraction. It mirrors the Go labels
 // configuration (Config.IsLabelsDisabled). The Go runtime offsets are loaded
 // independently whenever Go support is enabled.
 BPF_RODATA_VAR(bool, go_labels_disabled, true)
-
-static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
-{
-  if (go_labels_disabled) {
-    return;
-  }
-
-  if (record->goOffsets.m_offset == 0) {
-    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", record->trace.pid);
-    return;
-  }
-  GoRuntimeOffsets *offsets = &record->goOffsets;
-
-  void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
-  if (!m_ptr_addr) {
-    return;
-  }
-  record->golangLabelsState.go_m_ptr = m_ptr_addr;
-
-  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
-  increment_metric(metricID_UnwindGoLabelsAttempts);
-  // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
-  // it is tail_call'd.
-  tail_call(ctx, PROG_GO_LABELS);
-}
 
 // Implements the specification to share span/trace IDs according to:
 // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
@@ -198,74 +174,300 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
     return;
   }
 
-  // The structure of apm_[transaction|trace]_id happens to be the same
-  // as proposed in
-  // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
-
-  trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
-  trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
-  trace->apm_transaction_id.as_int = info->span_id.as_int;
+  trace->trace_id = info->trace_id;
+  trace->span_id  = info->span_id;
 }
 
-static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
+// maybe_add_thread_context_info copies the interrupted thread's trace context
+// and attribute payload, published through otel_thread_ctx_v1, into trace.
+static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 {
-  u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
-  ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
+  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &trace->pid);
   if (!proc) {
     return;
   }
 
-  DEBUG_PRINT("Trace is within a process with APM integration enabled");
+  // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
+  if (!tls_var_valid(&proc->tls)) {
+    DEBUG_PRINT("Thread context pointer not located yet");
+    return;
+  }
 
   u64 tsd_base;
+  // tsd_get_base counts metricID_UnwindErrBadTPBaseAddr itself.
   if (tsd_get_base((void **)&tsd_base) != 0) {
-    increment_metric(metricID_UnwindApmIntErrReadTsdBase);
-    DEBUG_PRINT("Failed to get TSD base for APM integration");
+    DEBUG_PRINT("Failed to get TSD base for the thread context");
     return;
   }
 
-  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
+  void *thread_context_buf_ptr;
+  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &thread_context_buf_ptr);
+  if (rc != TLS_READ_OK) {
+    // TLS_READ_ABSENT is no failure: glibc allocates a thread's block for a
+    // dlopen'd module on its first access.
+    if (rc == TLS_READ_ERR) {
+      // On top of the metricID_UnwindErrBadDTVRead tls_read_var counts on the
+      // DTV arm, to attribute the failure to its consumer.
+      increment_metric(metricID_UnwindThreadContextErrReadTlsPtr);
+      DEBUG_PRINT("Failed to read the thread context pointer");
+    }
+    return;
+  }
 
-  void *apm_corr_buf_ptr;
+  // Null until the thread publishes, which must not count as a read error.
+  if (!thread_context_buf_ptr) {
+    DEBUG_PRINT("Thread context unpublished: null TLS pointer");
+    return;
+  }
+
+  // Per OTEP #4947 only the owning thread writes the buffer, and that is the
+  // thread we interrupted, so no write races these reads. valid flags a write
+  // interrupted midway.
+  ThreadContextBuf thread_context_buf;
   if (bpf_probe_read_user(
-        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
-    increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
-    DEBUG_PRINT("Failed to read APM correlation buffer pointer");
+        &thread_context_buf, sizeof(thread_context_buf), thread_context_buf_ptr)) {
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+    DEBUG_PRINT("Failed to read the thread context buffer");
     return;
   }
 
-  ApmCorrelationBuf corr_buf;
-  if (bpf_probe_read_user(&corr_buf, sizeof(corr_buf), apm_corr_buf_ptr)) {
-    increment_metric(metricID_UnwindApmIntErrReadCorrBuf);
-    DEBUG_PRINT("Failed to read APM correlation buffer");
+  if (!thread_context_buf.valid) {
+    DEBUG_PRINT("Thread context buffer mid-update, skipping");
     return;
   }
 
-  if (corr_buf.trace_present && corr_buf.valid) {
-    trace->apm_trace_id.as_int.hi    = corr_buf.trace_id.as_int.hi;
-    trace->apm_trace_id.as_int.lo    = corr_buf.trace_id.as_int.lo;
-    trace->apm_transaction_id.as_int = corr_buf.transaction_id.as_int;
+  // Thread context overrides the IDs set by maybe_add_otel_span_trace_id.
+  // Replace both IDs when either is nonzero. When both are zero, indicating no
+  // active span, preserve the previously collected IDs.
+  if (
+    thread_context_buf.trace_id.as_int.hi | thread_context_buf.trace_id.as_int.lo |
+    thread_context_buf.span_id.as_int) {
+    trace->trace_id = thread_context_buf.trace_id;
+    trace->span_id  = thread_context_buf.span_id;
   }
 
-  increment_metric(metricID_UnwindApmIntReadSuccesses);
+  u16 attrs_data_size = thread_context_buf.attrs_data_size;
+  if (attrs_data_size > MAX_THREAD_LABEL_DATA_SZ) {
+    // Counted, not dropped: a truncated payload is still usable.
+    increment_metric(metricID_UnwindThreadContextAttrsTruncated);
+    attrs_data_size = MAX_THREAD_LABEL_DATA_SZ;
+  }
+  if (attrs_data_size != 0) {
+    void *attrs_data = reserve_variable_data(trace, attrs_data_size, 0);
+    if (!attrs_data) {
+      return;
+    }
+    if (bpf_probe_read_user(
+          attrs_data, attrs_data_size, thread_context_buf_ptr + sizeof(thread_context_buf))) {
+      increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+      return;
+    }
+    commit_variable_data(trace, attrs_data_size);
+  }
+
+  // Keep the exact payload end before aligning the total trace size.
+  trace->thread_label_end = end_variable_data(trace, 1);
+  increment_metric(metricID_UnwindThreadContextReadSuccesses);
 
   // WARN: we print this as little endian
   DEBUG_PRINT(
-    "APM transaction ID: %016llX, flags: 0x%02X",
-    trace->apm_transaction_id.as_int,
-    corr_buf.trace_flags);
+    "Thread context trace ID: %016lX%016lX, span ID: %016lX",
+    trace->trace_id.as_int.hi,
+    trace->trace_id.as_int.lo,
+    trace->span_id.as_int);
 }
 
-// Stub: only looks the process up, so thread_context_procs stays loaded
-// regardless of whether the tracer is enabled. Reading and decoding the
-// thread context lands in a later change.
-static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
+// Golang label extraction
+static EBPF_INLINE bool golabel_push(Trace *trace, struct GoString *k, struct GoString *v)
 {
-  u32 pid                     = trace->pid;
-  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &pid);
-  if (!proc) {
+  GolangLabel *l = reserve_variable_data(trace, sizeof(GolangLabel), 0);
+  if (!l) {
+    return false;
+  }
+
+  // Use volatile for key and value length to force localized memory load. This allows the verifier
+  // to infer the size bounds on older kernels that would lose it on stack spills.
+  _Static_assert(sizeof l->key < 256, "Golang label key length must fit u8");
+  volatile u8 klen = MIN(k->len, sizeof l->key - 1);
+  if (bpf_probe_read_user(l->key, klen, k->str)) {
+    DEBUG_PRINT("cl: failed to read label key (%lx)", (unsigned long)k->str);
+    return false;
+  }
+  l->key[klen] = 0;
+
+  _Static_assert(sizeof l->val < 256, "Golang label value length must fit u8");
+  volatile u8 vlen = MIN(v->len, sizeof l->val - 1);
+  if (bpf_probe_read_user(l->val, vlen, v->str)) {
+    DEBUG_PRINT("cl: failed to read label value (%lx)", (unsigned long)v->str);
+    return false;
+  }
+  l->val[vlen] = 0;
+  commit_variable_data(trace, sizeof(GolangLabel));
+
+  return true;
+}
+
+static EBPF_INLINE bool go_labels_get_from_slice(PerCPURecord *record, void *labels_slice_ptr)
+{
+  // https://github.com/golang/go/blob/80e2e474/src/runtime/pprof/label.go#L20
+  struct GoSlice labels_slice;
+  if (bpf_probe_read_user(&labels_slice, sizeof(struct GoSlice), labels_slice_ptr)) {
+    DEBUG_PRINT("cl: failed to read value for labels slice (%lx)", (unsigned long)labels_slice_ptr);
+    return false;
+  }
+
+  // len is number of pairs, ie its a vector of key/val structs.
+  u64 num = 2 * (u64)MIN(labels_slice.len, MAX_GO_LABELS);
+  if (bpf_probe_read_user(
+        &record->goLabels, sizeof(struct GoString) * (u32)num, labels_slice.array)) {
+    DEBUG_PRINT(
+      "cl: failed to read strings from labels slice (%lx)", (unsigned long)labels_slice.array);
+    return false;
+  }
+
+  // Convert the data from the scratch array to event label data payload
+  bool ret = false;
+  for (u64 i = 0; i < 2 * MAX_GO_LABELS; i += 2) {
+    if (i >= num)
+      break;
+    if (!golabel_push(&record->trace, &record->goLabels[i], &record->goLabels[i + 1]))
+      goto done;
+  }
+  ret = true;
+done:
+  return ret;
+}
+
+static EBPF_INLINE bool go_labels_get_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  void *labels_map_ptr;
+  if (bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr)) {
+    DEBUG_PRINT(
+      "cl: failed to read value for labels_map_ptr (%lx)", (unsigned long)labels_map_ptr_ptr);
+    return false;
+  }
+
+  u64 labels_count = 0;
+  if (bpf_probe_read_user(&labels_count, sizeof(labels_count), labels_map_ptr + offs->hmap_count)) {
+    DEBUG_PRINT("cl: failed to read value for labels_count");
+    return false;
+  }
+  if (labels_count == 0) {
+    DEBUG_PRINT("cl: no labels");
+    return true;
+  }
+
+  unsigned char log_2_bucket_count;
+  if (bpf_probe_read_user(
+        &log_2_bucket_count,
+        sizeof(log_2_bucket_count),
+        labels_map_ptr + offs->hmap_log2_bucket_count)) {
+    DEBUG_PRINT("cl: failed to read value for bucket_count");
+    return false;
+  }
+  GoMapBucket *label_buckets;
+  if (bpf_probe_read_user(
+        &label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets)) {
+    DEBUG_PRINT("cl: failed to read value for label_buckets");
+    return false;
+  }
+
+  // Limit extracted labels to MAX_GO_LABELS
+  const u16 max_end = record->trace.variable_data_end + MAX_GO_LABEL_DATA_SZ;
+
+  // If the map has more than 16 buckets we just don't support it, pprof maps are typically
+  // small and if its a problem upgrading to Go 1.24+ is a potential solution.
+  u64 bucket_count = 1UL << log_2_bucket_count;
+  bool ret         = false;
+  for (u64 b = 0; b < 16; b++) {
+    if (b >= bucket_count)
+      break;
+
+    GoMapBucket *bucket = &record->goMapBucket;
+    if (bpf_probe_read_user(bucket, sizeof(GoMapBucket), &label_buckets[b])) {
+      goto done;
+    }
+
+    for (u64 i = 0; i < GO_MAP_BUCKET_SIZE; i++) {
+      // map tophash values for Go 1.12 (first supported) to 1.23 (last used in pprof)
+      // https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L82-L87
+      const u8 emptyRest = 0, minTopHash = 5;
+
+      u8 tophash = bucket->tophash[i];
+      if (tophash == emptyRest)
+        break;
+      if (tophash < minTopHash)
+        continue;
+      if (!golabel_push(&record->trace, &bucket->keys[i], &bucket->values[i]))
+        goto done;
+      if (record->trace.variable_data_end >= max_end)
+        goto success;
+    }
+  }
+success:
+  ret = true;
+done:
+  return ret;
+}
+
+// Go processes store the current goroutine in thread local store. From there
+// this reads the g (aka goroutine) struct, then the m (the actual operating
+// system thread) of that goroutine, and finally curg (current goroutine). This
+// chain is necessary because getg().m.curg points to the current user g
+// assigned to the thread (curg == getg() when not on the system stack). curg
+// may be nil if there is no user g, such as when running in the scheduler. If
+// curg is nil, then g is either a system stack (called g0) or a signal handler
+// g (gsignal). Neither one will ever have label.
+static EBPF_INLINE bool add_golang_labels(PerCPURecord *record, void *m_ptr)
+{
+  GoRuntimeOffsets *offs = &record->goOffsets;
+  size_t curg_ptr_addr;
+  if (bpf_probe_read_user(&curg_ptr_addr, sizeof(void *), m_ptr + offs->curg)) {
+    DEBUG_PRINT("cl: failed to read value for m_ptr->curg");
+    return false;
+  }
+
+  void *labels_ptr;
+  if (bpf_probe_read_user(&labels_ptr, sizeof(void *), (void *)(curg_ptr_addr + offs->labels))) {
+    DEBUG_PRINT(
+      "cl: failed to read value for curg->labels (%lx->%lx)",
+      (unsigned long)curg_ptr_addr,
+      (unsigned long)offs->labels);
+    return false;
+  }
+
+  if (offs->hmap_buckets == 0) {
+    // go 1.24+ labels is a slice
+    return go_labels_get_from_slice(record, labels_ptr);
+  }
+  // go 1.23- labels is a map
+  return go_labels_get_from_map(record, labels_ptr);
+}
+
+static EBPF_INLINE void maybe_add_golang_labels(PerCPURecord *record)
+{
+  if (go_labels_disabled) {
     return;
   }
+
+  GoRuntimeOffsets *offsets = &record->goOffsets;
+  if (offsets->m_offset == 0) {
+    DEBUG_PRINT("cl: %d not a go binary", record->trace.pid);
+    return;
+  }
+
+  void *m_ptr = go_get_m_ptr(offsets, &record->state);
+  if (!m_ptr) {
+    return;
+  }
+
+  DEBUG_PRINT("cl: collecting Go labels");
+  increment_metric(metricID_UnwindGoLabelsAttempts);
+  if (!add_golang_labels(record, m_ptr)) {
+    increment_metric(metricID_UnwindGoLabelsFailures);
+  }
+  record->trace.golang_label_end = end_variable_data(&record->trace, sizeof(GolangLabel));
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
@@ -277,17 +479,11 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
-  maybe_add_apm_info(trace);
-  if (
-    trace->apm_trace_id.as_int.hi == 0 && trace->apm_trace_id.as_int.lo == 0 &&
-    trace->apm_transaction_id.as_int == 0) {
-    // Populate OTel span/trace ID only if span/trace ID is not yet set.
-    maybe_add_otel_span_trace_id(trace);
-  }
+  maybe_add_otel_span_trace_id(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.
-  if (trace->variable_data_end == 0) {
+  if (trace->num_frames == 0 && trace->kernel_frame_end == 0) {
     DEBUG_PRINT("unwind_stop called but the stack is empty");
     increment_metric(metricID_ErrEmptyStack);
     if (!state->unwind_error) {
@@ -333,14 +529,12 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
-  trace->frame_data_end = trace->variable_data_end;
+  trace->frame_data_end = end_variable_data(trace, sizeof(u64));
 
-  // Does not return once it dispatches, so anything below runs only when the
-  // Go path did not fill custom labels.
-  maybe_add_go_custom_labels(ctx, record);
-
+  maybe_add_golang_labels(record);
+  // Thread context overrides both IDs from maybe_add_otel_span_trace_id unless
+  // both thread context IDs are zero.
   maybe_add_thread_context_info(trace);
-
   send_trace(ctx, trace);
 
   return 0;

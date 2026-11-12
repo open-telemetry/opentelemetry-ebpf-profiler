@@ -19,8 +19,7 @@ func decodeStubArgumentAMD64(
 ) (
 	libpf.SymbolValue, error,
 ) {
-	it := amd.NewInterpreterWithCode(code)
-	it.CodeAddress = e.Imm(codeAddress)
+	it := amd.NewInterpreterWithCodeAt(code, e.Imm(codeAddress))
 	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
 		return op.Op == x86asm.JMP || op.Op == x86asm.CALL
 	})

@@ -48,10 +48,7 @@ type OTLPReporter struct {
 // with the collector's otlpexporter instead. See ExampleWithReporterFactory
 // in collector/controller_options_otlp_test.go for a setup equivalent to this reporter.
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
@@ -21,7 +20,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // dotnetCdacHeader is the Dotnet CDAC header
@@ -217,13 +215,6 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 	addrToMethod, err := freelru.New[libpf.Address, *dotnetMethod](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {
-		return nil, err
-	}
-
-	procInfo := support.DotnetProcInfo{
-		Version: d.version,
-	}
-	if err = ebpf.UpdateProcData(libpf.Dotnet, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
 

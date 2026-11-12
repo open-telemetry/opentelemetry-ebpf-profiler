@@ -16,30 +16,26 @@ import (
 type Interpreter struct {
 	Regs        Registers
 	code        []byte
-	CodeAddress expression.Expression
+	codeAddress expression.Expression
 	pc          uint64
 }
 
-func NewInterpreter() *Interpreter {
-	it := &Interpreter{}
+func NewInterpreterWithCode(code []byte) *Interpreter {
+	it := &Interpreter{code: code}
 	it.initRegs()
+	it.codeAddress = it.Regs.Get(PC)
 	return it
 }
 
-func NewInterpreterWithCode(code []byte) *Interpreter {
-	it := &Interpreter{code: code, CodeAddress: expression.Named("code address")}
+func NewInterpreterWithCodeAt(code []byte, address expression.Expression) *Interpreter {
+	it := &Interpreter{code: code, codeAddress: address}
 	it.initRegs()
+	it.Regs.setPC(address)
 	return it
 }
 
 func (i *Interpreter) PC() uint64 {
 	return i.pc
-}
-
-func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
-	i.code = code
-	i.CodeAddress = address
-	i.pc = 0
 }
 
 func (i *Interpreter) Loop() (arm64asm.Inst, error) {
@@ -153,7 +149,7 @@ func (i *Interpreter) Step() (arm64asm.Inst, error) {
 	oldPC := i.Regs.Get(PC)
 	i.pc += uint64(InstSz)
 	i.code = i.code[InstSz:]
-	i.Regs.setPC(expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
+	i.Regs.setPC(expression.Add(i.codeAddress, expression.Imm(uint64(i.pc))))
 	if ok, err := i.maybeHandleLoadStore(inst, oldPC); ok {
 		return inst, err
 	}

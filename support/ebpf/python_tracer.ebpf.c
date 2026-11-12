@@ -70,7 +70,7 @@ static EBPF_INLINE ErrorCode process_python_frame(
 
   // Read PyFrameObject
   if (bpf_probe_read_user(pss->frame, sizeof(pss->frame), py_frameobject)) {
-    DEBUG_PRINT("Failed to read PyFrameObject 0x%lx", (unsigned long)py_frameobject);
+    DEBUG_PRINT("Failed to read PyFrameObject 0x%lx", (u64)py_frameobject);
     increment_metric(metricID_UnwindPythonErrBadFrameCodeObjectAddr);
     return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
   }
@@ -133,8 +133,8 @@ static EBPF_INLINE ErrorCode process_python_frame(
   if (!py_codeobject) {
     DEBUG_PRINT(
       "Null codeobject for PyFrameObject 0x%lx 0x%lx",
-      (unsigned long)py_frameobject,
-      (unsigned long)(py_frameobject + pyinfo->PyFrameObject_f_code));
+      (u64)py_frameobject,
+      (u64)py_frameobject + pyinfo->PyFrameObject_f_code);
     increment_metric(metricID_UnwindPythonZeroFrameCodeObject);
     goto push_frame;
   }
@@ -150,7 +150,7 @@ static EBPF_INLINE ErrorCode process_python_frame(
 
   // Read PyCodeObject
   if (bpf_probe_read_user_with_test_fault(pss->code, sizeof(pss->code), py_codeobject)) {
-    DEBUG_PRINT("Failed to read PyCodeObject at 0x%lx", (unsigned long)(py_codeobject));
+    DEBUG_PRINT("Failed to read PyCodeObject at 0x%lx", (u64)py_codeobject);
     increment_metric(metricID_UnwindPythonErrBadCodeObjectArgCountAddr);
     // Push the frame with the code object address so the agent can try to
     // read it in userspace (which can take page faults unlike BPF).
@@ -172,7 +172,7 @@ static EBPF_INLINE ErrorCode process_python_frame(
   lineno  = py_encode_lineno(codeobject_id, (u32)py_f_lasti);
 
 push_frame:
-  DEBUG_PRINT("Pushing Python %lx %lu", (unsigned long)file_id, (unsigned long)lineno);
+  DEBUG_PRINT("Pushing Python %lx %lu", file_id, lineno);
   ErrorCode error = push_python(&record->state, trace, file_id, lineno);
   if (error) {
     DEBUG_PRINT("failed to push python frame");
@@ -193,9 +193,7 @@ static EBPF_INLINE ErrorCode get_PyThreadState(
   if (pyinfo->tls_offset != 0) {
     if (bpf_probe_read_user(thread_state, sizeof(void *), tsd_base + pyinfo->tls_offset)) {
       DEBUG_PRINT(
-        "Failed to read direct TLS at base 0x%lx offset %d",
-        (unsigned long)tsd_base,
-        pyinfo->tls_offset);
+        "Failed to read direct TLS at base 0x%lx offset %d", (u64)tsd_base, pyinfo->tls_offset);
       increment_metric(metricID_UnwindPythonErrReadThreadStateAddr);
       return ERR_PYTHON_READ_THREAD_STATE_ADDR;
     }
@@ -205,7 +203,7 @@ static EBPF_INLINE ErrorCode get_PyThreadState(
   // Python 3.12 and earlier: use pthread TLS
   u32 key;
   if (bpf_probe_read_user(&key, sizeof(key), autoTLSkeyAddr)) {
-    DEBUG_PRINT("Failed to read autoTLSkey from 0x%lx", (unsigned long)autoTLSkeyAddr);
+    DEBUG_PRINT("Failed to read autoTLSkey from 0x%lx", (u64)autoTLSkeyAddr);
     increment_metric(metricID_UnwindPythonErrBadAutoTlsKeyAddr);
     return ERR_PYTHON_BAD_AUTO_TLS_KEY_ADDR;
   }
@@ -226,10 +224,7 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
     increment_metric(metricID_UnwindPythonErrReadTsdBase);
     return ERR_PYTHON_READ_TSD_BASE;
   }
-  DEBUG_PRINT(
-    "TSD Base 0x%lx, autoTLSKeyAddr 0x%lx",
-    (unsigned long)tsd_base,
-    (unsigned long)pyinfo->autoTLSKeyAddr);
+  DEBUG_PRINT("TSD Base 0x%lx, autoTLSKeyAddr 0x%lx", (u64)tsd_base, pyinfo->autoTLSKeyAddr);
 
   // Get the PyThreadState from TSD
   void *py_tsd_thread_state;
@@ -250,7 +245,7 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
         frame, sizeof(void *), py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
     DEBUG_PRINT(
       "Failed to read PyThreadState.frame at 0x%lx",
-      (unsigned long)(py_tsd_thread_state + pyinfo->PyThreadState_frame));
+      (u64)py_tsd_thread_state + pyinfo->PyThreadState_frame);
     increment_metric(metricID_UnwindPythonErrBadThreadStateFrameAddr);
     return ERR_PYTHON_BAD_THREAD_STATE_FRAME_ADDR;
   }
@@ -259,7 +254,7 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
     if (bpf_probe_read_user(frame, sizeof(void *), *frame + pyinfo->PyCFrame_current_frame)) {
       DEBUG_PRINT(
         "Failed to read _PyCFrame.current_frame at 0x%lx",
-        (unsigned long)(*frame + pyinfo->PyCFrame_current_frame));
+        (u64)*frame + pyinfo->PyCFrame_current_frame);
       increment_metric(metricID_UnwindPythonErrBadCFrameFrameAddr);
       return ERR_PYTHON_BAD_CFRAME_CURRENT_FRAME_ADDR;
     }
@@ -351,7 +346,6 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
   if (!record->pythonUnwindState.py_frame) {
     increment_metric(metricID_UnwindPythonAttempts);
     error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
@@ -394,7 +388,6 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_python)

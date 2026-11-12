@@ -19,6 +19,26 @@ func TestExtractTLSOffset(t *testing.T) {
 		expectedError string
 	}{
 		{
+			// rb_current_ec_noinline from statically linked Ruby 4.0.
+			name: "Ruby 4.0 static x86_64",
+			code: []byte{
+				0x64, 0x48, 0x8b, 0x04, 0x25, 0x88, 0xff, 0xff, 0xff, // mov rax, QWORD PTR fs:[0xffffffffffffff88]
+				0xc3, // ret
+			},
+			baseAddr: 0x1000,
+			expected: -120,
+		},
+		{
+			// rb_current_ec_noinline from statically linked Ruby 3.4.7.
+			name: "Ruby 3.4.7 static x86_64",
+			code: []byte{
+				0x64, 0x48, 0x8b, 0x04, 0x25, 0xf8, 0xff, 0xff, 0xff, // mov rax, QWORD PTR fs:[0xfffffffffffffff8]
+				0xc3, // ret
+			},
+			baseAddr: 0x1000,
+			expected: -8,
+		},
+		{
 			name: "Python 3.13 x86_64 direct FS access with negative offset",
 			code: []byte{
 				0xf3, 0x0f, 0x1e, 0xfa, // endbr64

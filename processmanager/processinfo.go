@@ -230,13 +230,15 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 // for every attacher whose Match returns true for the given mapping.
 // Attach may be called multiple times for the same attacher if the process
 // has more than one matching mapping. The caller must hold pm.mu for writing.
-func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping) {
+func (pm *ProcessManager) attachProbesForMapping(pr process.Process, m *process.RawMapping,
+	fileID libpf.FileID, elfRef *pfelf.Reference,
+) {
 	pid := pr.PID()
 	for _, a := range pm.probeAttachers {
 		if !a.Match(pr, m) {
 			continue
 		}
-		if err := a.Attach(pr, m); err != nil {
+		if err := a.Attach(pr, m, fileID, elfRef); err != nil {
 			log.Errorf("Failed to attach probe for PID %d, mapping %s: %v", pid, m.Path, err)
 			continue
 		}
@@ -455,7 +457,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 			anonymousMappingsWanted = updatedAnonymousMappingsWanted
 		}
 	}
-	pm.attachProbesForMapping(pr, m)
+	pm.attachProbesForMapping(pr, m, info.mappingFile.Value().FileID, elfRef)
 	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -901,6 +903,18 @@ func (pm *ProcessManager) metaForPID(pid libpf.PID) (process.Meta, attribute.Set
 		return procInfo.meta, procInfo.processContext.ResourceAttrs
 	}
 	return process.Meta{}, attribute.Set{}
+}
+
+// ThreadLabelDecoderForPID returns a decoder for pid's per-thread labels, or nil
+// when pid is untracked or publishes no schema. Safe to use after the lock
+// drops, see processcontext.Info.
+func (pm *ProcessManager) ThreadLabelDecoderForPID(pid libpf.PID) libpf.ThreadLabelDecoder {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		return procInfo.processContext.ThreadLabelDecoder()
+	}
+	return nil
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

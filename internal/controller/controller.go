@@ -17,8 +17,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
-const MiB = 1 << 20
-
 // Controller is an instance that runs, manages and stops the agent.
 type Controller struct {
 	config   *Config
@@ -96,6 +94,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		KernelVersionCheck:          !c.config.NoKernelVersionCheck,
 		VerboseMode:                 c.config.VerboseMode,
 		BPFVerifierLogLevel:         uint32(c.config.BPFVerifierLogLevel),
+		MaxConcurrentProgLoads:      int(c.config.MaxConcurrentProgLoads),
 		ProbabilisticInterval:       c.config.ProbabilisticInterval,
 		ProbabilisticThreshold:      c.config.ProbabilisticThreshold,
 		IncludeEnvVars:              envVars,

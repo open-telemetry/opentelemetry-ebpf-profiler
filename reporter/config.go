@@ -33,9 +33,6 @@ type Config struct {
 	// Deprecated: only used by NewOTLP. Use the otlpexporter tls setting instead.
 	DisableTLS bool
 
-	// samplesPerSecond defines the number of samples per second.
-	SamplesPerSecond int
-
 	// Number of connection attempts to the collector after which we give up retrying.
 	//
 	// Deprecated: only used by NewOTLP. Use the otlpexporter retry_on_failure setting instead.

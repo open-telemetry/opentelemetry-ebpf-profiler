@@ -1,0 +1,162 @@
+{
+  "coredump-ref": "c2b0fc239a6f0dfe89c7063f52658024f5b6ba64e7d99b0af90f3f18a9690a6e",
+  "threads": [
+    {
+      "lwp": 49,
+      "frames": [
+        "canonical_beam:target/1+0 in canonical_beam.erl:6",
+        "canonical_beam:caller/1+0 in canonical_beam.erl:5",
+        "canonical_beam:loop/1+0 in canonical_beam.erl:4",
+        "erl_eval:do_apply/7+0 in erl_eval.erl:915",
+        "init:start_it/1+0 in :0",
+        "init:start_em/1+0 in :0",
+        "init:do_boot/3+0 in :0"
+      ]
+    },
+    {
+      "lwp": 36,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8f6ac",
+        "libc.so.6+0x10e286",
+        "beam.smp+0x44c81f",
+        "beam.smp+0x2fe1cf",
+        "beam.smp+0x2035f9",
+        "libc.so.6+0x29ca7",
+        "libc.so.6+0x29d64",
+        "beam.smp+0x204770"
+      ]
+    },
+    {
+      "lwp": 53,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8f6ac",
+        "libc.so.6+0x110aac",
+        "beam.smp+0x45e088",
+        "beam.smp+0x463f2e",
+        "beam.smp+0x206e19",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 52,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8f6ac",
+        "libc.so.6+0x103ead",
+        "beam.smp+0x470031",
+        "beam.smp+0x463f8c",
+        "beam.smp+0x20f07b",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 51,
+      "frames": [
+        "libc.so.6+0x10e7b9",
+        "beam.smp+0x4d7de4",
+        "beam.smp+0x20fedb",
+        "beam.smp+0x21a712",
+        "beam.smp+0x2c27e6",
+        "beam.smp+0x204de7",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 50,
+      "frames": [
+        "libc.so.6+0x10e7b9",
+        "beam.smp+0x4d7de4",
+        "beam.smp+0x20fedb",
+        "beam.smp+0x21a712",
+        "beam.smp+0x2c2a73",
+        "beam.smp+0x2096b1",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 41,
+      "frames": [
+        "libc.so.6+0x10e7b9",
+        "beam.smp+0x4d7bef",
+        "beam.smp+0x3d5f8a",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 40,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8fc8b",
+        "libc.so.6+0x92157",
+        "beam.smp+0x4d5c48",
+        "beam.smp+0x329010",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    },
+    {
+      "lwp": 39,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8f6ac",
+        "libc.so.6+0x103ee5",
+        "beam.smp+0x44b533",
+        "beam.smp+0x4d7129",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1107f7"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "972bb2a18b71140dab0240f8a1f68ab3fb1d56bcd4c4f824a91b70888faf5a00",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "4013e7651ac68f547d8333517def25b2366c97eec7de7f06e105dbf3444ffebf",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtinfo.so.6.5"
+    },
+    {
+      "ref": "30c61ab012a4241bed033725a09b61f5fdd3bb7df95ee852d0b096520524c7af",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "6d567d53e895273ca14a1f9dc164fc6c8d39aed2f60aa46a733c2784228915f3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "438c546d8e8cc48496bf3a95f753051afd9db66a629a74e31a9ded71586b56e0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "2e51097e0b3c2d9e88d68f09499fef1e1125bed177a9b0b845272cc5acf95c2e",
+      "local-path": "/usr/lib/erlang/erts-15.2.7/bin/beam.smp"
+    },
+    {
+      "ref": "fa430b8f298f817a266046af84a77533185ad6fc4406c7d3787b5a0a0c207826",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    }
+  ]
+}

@@ -8,15 +8,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 func TestDiscoverReturnsCacheCopy(t *testing.T) {
 	discoverer, err := NewDiscoverer()
 	require.NoError(t, err)
 
-	fileID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 2}
+	fileID := libpf.NewFileID(1, 2)
 	discoverer.parseCache.Add(fileID, []AttachmentPoint{{
 		Provider: "provider",
 		Name:     "probe",

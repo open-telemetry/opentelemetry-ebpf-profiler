@@ -5,7 +5,7 @@
     'helpers:pinGitHubActionDigestsToSemver',
   ],
   postUpdateOptions: [
-    'gomodTidy',
+    'gomodTidyAll',
   ],
   ignorePaths: [
     'LICENSES/**',
@@ -48,15 +48,6 @@
         'before 8am every weekday',
       ],
       automerge: true,
-    },
-    {
-      groupName: 'Rust dependencies',
-      matchManagers: [
-        'cargo',
-      ],
-      schedule: [
-        'before 8am every weekday',
-      ],
     },
     {
       groupName: 'OCB (manifest) dependencies',

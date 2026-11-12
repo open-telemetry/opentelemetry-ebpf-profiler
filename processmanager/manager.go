@@ -19,7 +19,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -215,6 +214,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		summary.Add(dotnet.GetAndResetMetrics())
+		summary.Add(processcontext.GetAndResetMetrics())
 		summary.Add(pm.ebpf.CollectMetrics())
 
 		pm.eim.UpdateMetricSummary(summary)
@@ -337,43 +337,6 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 	return false
 }
 
-func (pm *ProcessManager) maybeNotifyAPMAgent(
-	rawTrace *libpf.EbpfTrace, trace *libpf.Trace, count uint16,
-) string {
-	traceHash := libpf.InvalidTraceHash
-
-	pm.mu.RLock()
-	// Keeping the lock until end of the function is needed because inner map can be modified
-	// concurrently (by synchronizeMappings/newFrameMapping).
-	defer pm.mu.RUnlock()
-
-	pidInterp, ok := pm.interpreters[rawTrace.PID]
-	if !ok {
-		return ""
-	}
-
-	var serviceName string
-	for _, mapping := range pidInterp {
-		if apm, ok := mapping.(*apmint.Instance); ok {
-			if traceHash == libpf.InvalidTraceHash {
-				traceHash = trace.APMHash()
-			}
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
-			if serviceName != "" {
-				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
-					serviceName,
-					apm.APMServiceName(),
-					rawTrace.PID)
-			}
-			// It's pretty unusual to have more than one APM agent in a
-			// single process, but in case there is, just pick the last one.
-			serviceName = apm.APMServiceName()
-		}
-	}
-
-	return serviceName
-}
-
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
@@ -392,41 +355,34 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		Comm:           bpfTrace.Comm,
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
-		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CpuID,
 		ExecutablePath: procMeta.Executable,
 		ContainerID:    procMeta.ContainerID,
 		ProfileType:    profileType,
-		Value:          bpfTrace.Value,
+		ContextValues:  bpfTrace.ContextValues,
 		EnvVars:        procMeta.EnvVariables,
 		ResourceAttrs:  resourceAttrs,
-		TraceID:        bpfTrace.APMTraceID,
-		SpanID:         bpfTrace.APMTransactionID,
+		TraceID:        bpfTrace.TraceID,
+		SpanID:         bpfTrace.SpanID,
 		ExtraMeta:      procMeta.ExtraMeta,
 	}
 
 	pid := bpfTrace.PID
 	trace := &libpf.Trace{
-		Frames:       make(libpf.Frames, 0, int(bpfTrace.NumKernelFrames)+int(bpfTrace.NumFrames)),
+		Frames:       make(libpf.Frames, 0, len(bpfTrace.KernelFrames)+int(bpfTrace.NumFrames)),
 		CustomLabels: bpfTrace.CustomLabels,
 	}
 
 	cacheMiss := uint64(0)
 	cacheHit := uint64(0)
 
-	numKernelFrames := int(bpfTrace.NumKernelFrames)
-	if numKernelFrames > len(bpfTrace.FrameData) {
-		log.Errorf("Kernel frame count %d exceeds frame data length %d", numKernelFrames, len(bpfTrace.FrameData))
-		numKernelFrames = len(bpfTrace.FrameData)
-	}
-	if numKernelFrames > 0 {
-		hits, misses := pm.appendKernelFrames(bpfTrace.FrameData[:numKernelFrames], &trace.Frames)
+	if len(bpfTrace.KernelFrames) > 0 {
+		hits, misses := pm.appendKernelFrames(bpfTrace.KernelFrames, &trace.Frames)
 		cacheHit += hits
 		cacheMiss += misses
 	}
 
-	userFrameData := bpfTrace.FrameData[numKernelFrames:]
-	for frames := libpf.EbpfFrame(userFrameData); len(frames) > 0; frames = frames[frames.Length():] {
+	for frames := libpf.EbpfFrame(bpfTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
 		if frame.Flags().Error() {
 			if !pm.filterErrorFrames {
@@ -470,8 +426,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 		}
 	}
 	pm.mu.RUnlock()
-
-	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)

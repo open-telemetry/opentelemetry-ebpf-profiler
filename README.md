@@ -31,10 +31,12 @@ eBPF.
 
 ## Supported Linux kernel version
 
+The current minimum requirement is Linux kernel version 5.10 or greater.
+
 The minimum required Linux kernel version has increased with certain commits. Specifically:
 
-- Commit [8047150e](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/8047150e3f325f852874591356c69d0487b67d7c) was the last to support kernel version 5.4. Subsequent changes may require a minimal Linux kernel version of 5.10 or greater.
-- Commit [7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) was the last to support kernel version 4.19. Subsequent changes may require a minimal Linux kernel version of at least 5.4.
+- Commit [8047150e](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/8047150e3f325f852874591356c69d0487b67d7c) was the last to support kernel version 5.4. Subsequent changes may require version 5.10 or greater.
+- Commit [7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) was the last to support kernel version 4.19. Subsequent changes may require version 5.4 or greater.
 
 ### Updating the supported Linux kernel version
 
@@ -137,9 +139,10 @@ For more information about the maintainer role, see the
 
 ### Approvers
 
-- [Roger Coll](https://github.com/rogercoll), Elastic
+- [Roger Coll](https://github.com/rogercoll), Grafana Labs
 - [Florian Lehner](https://github.com/florianl), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
+- [Nicolas Savoire](https://github.com/nsavoire), Datadog
 
 For more information about the approver role, see the
 [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).

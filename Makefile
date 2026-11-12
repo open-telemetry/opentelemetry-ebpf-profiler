@@ -1,10 +1,10 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets protobuf docker-image agent license-check license-save \
+	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint format format-ebpf format-go pprof-execs \
-	processctx-execs host-integration-tests \
+	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
-	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
+	vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
 
 SHELL := /usr/bin/env bash
@@ -42,7 +42,12 @@ GO_TAGS := osusergo,netgo
 GO_FLAGS ?=
 EBPF_FLAGS :=
 
-GO_TOOLS := -modfile=internal/tools/go.mod
+GO_TOOLS := -modfile=$(CURDIR)/internal/tools/go.mod
+
+# Go modules to lint, format and tidy. The collector module is generated, and the
+# testdata modules hold fixtures built by their own Makefiles.
+GO_MODULES := . internal/tools interpreter/go/integrationtests/pprof \
+	tools/coredump tools/luajitoffsets
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -55,10 +60,10 @@ clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
 	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
+	@$(MAKE) -C tls/testdata clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
-	@cargo clean
 
 generate:
 	GOARCH=$(NATIVE_ARCH) go generate ./...
@@ -73,7 +78,7 @@ generate-collector:
 		--config cmd/otelcol-ebpf-profiler/manifest.yaml
 
 otelcol-ebpf-profiler: ebpf generate-collector
-	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
+	go -C cmd/otelcol-ebpf-profiler build -tags "$(GO_TAGS)" -o $(CURDIR)/$@
 
 # Sets opentelemetry collector modules to be pulled from local source tree.
 # This command allows you to make changes to your local checkout of otel core and build
@@ -92,38 +97,43 @@ otel-from-tree: generate-collector
 otel-from-lib:
 	./cmd/otelcol-ebpf-profiler/otel-from-lib.sh
 
-rust-targets:
-	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
-
-rust-components: rust-targets
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
-
-rust-tests: rust-targets
-	cargo test
-
-lint: generate vanity-import-check pprof-execs
+lint: generate vanity-import-check pprof-execs tidy
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
-	# tools/coredump tests require CGO_ENABLED
-	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	# Without CGO the cgo bindings are skipped as having no Go files.
+	for mod in $(GO_MODULES); do \
+		CGO_ENABLED=1 go -C $$mod tool $(GO_TOOLS) golangci-lint run \
+			--max-issues-per-linter -1 --max-same-issues -1 || exit ; \
+	done
 
 format: format-go format-ebpf
 
 format-go:
-	go tool $(GO_TOOLS) golangci-lint fmt
+	for mod in $(GO_MODULES); do \
+		go -C $$mod tool $(GO_TOOLS) golangci-lint fmt || exit ; \
+	done
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
 
+tidy:
+	for mod in $(GO_MODULES); do \
+		go -C $$mod mod tidy || exit ; \
+	done
+
 vanity-import-check:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix:
-	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go).*" --include-internal -w .
 
-test: generate ebpf test-deps
-	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+test: generate ebpf test-deps test-coredump
+	# Without CGO the symblib C-API bindings are skipped as having no Go files.
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+test-coredump: generate ebpf
+	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+	CGO_ENABLED=1 go test -C tools/coredump $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # Lives in its own module to keep heavy dependencies (testcontainers,
 # Docker, etc.) out of the main go.mod.
@@ -133,6 +143,7 @@ test-luajit-offsets: generate
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
 	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go -C tools/coredump tool $(GO_TOOLS) gotestsum --junitfile $(abspath $(JUNIT_OUT_DIR))/junit-coredump.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -151,10 +162,14 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support inte
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
 
+tlsvar-execs:
+	$(MAKE) -C tls/testdata
+
 # Host-only: the qemu initramfs cannot load shared libraries, which the
 # lib/dlopen testdata variants will need.
-host-integration-tests: processctx-execs
+host-integration-tests: processctx-execs tlsvar-execs
 	go test -exec sudo -v -tags host_integration ./process/processcontext/integrationtests/
+	go test -v -tags host_integration ./tls/
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
 

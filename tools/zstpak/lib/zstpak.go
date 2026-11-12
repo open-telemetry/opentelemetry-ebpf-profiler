@@ -30,6 +30,8 @@ import (
 	"os"
 
 	"github.com/klauspost/compress/zstd"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // footerSize is the size of the static portion of the footer (without the index data).
@@ -116,8 +118,10 @@ func (ftr *footer) write(out io.Writer) error {
 // determines how often to create new chunks. Higher numbers increase compression rates, but come
 // at the cost of making random access less efficient.
 func CompressInto(in io.Reader, out io.Writer, chunkSize uint64) error {
-	readBuf := make([]byte, chunkSize)
-	compressBuf := make([]byte, chunkSize)
+	readBuf := libpf.GetBuffer(int(chunkSize))
+	compressBuf := libpf.GetBuffer(int(chunkSize))
+	defer libpf.PutBuffer(readBuf)
+	defer libpf.PutBuffer(compressBuf)
 
 	// Compress chunks, memorizing their start offsets.
 	index := []uint64{0}
@@ -165,8 +169,9 @@ func CompressInto(in io.Reader, out io.Writer, chunkSize uint64) error {
 
 // Reader allows random access reads within zstpak files. Created via the `Open` method.
 type Reader struct {
-	file   *os.File
-	footer *footer
+	file    *os.File
+	footer  *footer
+	decoder *zstd.Decoder
 }
 
 // Open a zstpak file for random access reading.
@@ -186,9 +191,15 @@ func Open(path string) (*Reader, error) {
 		return nil, err
 	}
 
+	decoder, err := zstd.NewReader(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create decoder: %w", err)
+	}
+
 	return &Reader{
-		file:   file,
-		footer: hdr,
+		file:    file,
+		footer:  hdr,
+		decoder: decoder,
 	}, nil
 }
 
@@ -252,12 +263,7 @@ func (reader *Reader) getDecompressedChunk(start, length uint64) ([]byte, error)
 		return nil, fmt.Errorf("failed to read chunk data: %w", err)
 	}
 
-	dec, err := zstd.NewReader(nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create decoder: %w", err)
-	}
-
-	decompressed, err := dec.DecodeAll(compressedChunk, nil)
+	decompressed, err := reader.decoder.DecodeAll(compressedChunk, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decompress chunk: %w", err)
 	}

@@ -6,6 +6,7 @@ package pfelf
 import (
 	"bytes"
 	"debug/buildinfo"
+	"debug/elf"
 	"go/version"
 	"os"
 	"os/exec"
@@ -50,14 +51,67 @@ func TestPFELFSymbols(t *testing.T) {
 	require.NoError(t, err)
 	defer ef.Close()
 
+	stdELF, err := elf.Open(exePath)
+	require.NoError(t, err)
+	defer stdELF.Close()
+	dynSyms, err := stdELF.DynamicSymbols()
+	require.NoError(t, err)
+	sections := make(map[libpf.SymbolName]uint16, len(dynSyms))
+	for _, sym := range dynSyms {
+		sections[libpf.SymbolName(sym.Name)] = uint16(sym.Section)
+	}
+	checkSection := func() {
+		sym, err := ef.LookupSymbol("func")
+		require.NoError(t, err)
+		require.Contains(t, sections, sym.Name)
+		assert.Equal(t, sections[sym.Name], sym.Shndx)
+	}
+
 	// Test GNU hash lookup
+	checkSection()
 	assert.Equal(t, libpf.SymbolValue(0x1000), lookupSymbolAddress(ef, "func"))
 	assert.Equal(t, libpf.SymbolValueInvalid, lookupSymbolAddress(ef, "not_existent"))
 
 	// Test SYSV lookup
 	ef.gnuHash.addr = 0
+	checkSection()
 	assert.Equal(t, libpf.SymbolValue(0x1000), lookupSymbolAddress(ef, "func"))
 	assert.Equal(t, libpf.SymbolValueInvalid, lookupSymbolAddress(ef, "not_existent"))
+
+	visited := 0
+	require.NoError(t, ef.VisitDynamicSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name != "" {
+			require.Contains(t, sections, sym.Name)
+			assert.Equal(t, sections[sym.Name], sym.Shndx)
+			visited++
+		}
+		return true
+	}))
+	require.Positive(t, visited)
+}
+
+func TestReadSymbolData(t *testing.T) {
+	exePath, err := testsupport.WriteSharedLibrary()
+	require.NoError(t, err)
+	defer os.Remove(exePath)
+
+	ef, err := Open(exePath)
+	require.NoError(t, err)
+	defer ef.Close()
+
+	sym, err := ef.LookupSymbol("func")
+	require.NoError(t, err)
+
+	data, err := ef.ReadSymbolData(sym, 4)
+	require.NoError(t, err)
+	assert.Len(t, data, int(min(sym.Size, 4)))
+
+	// A crafted st_size that overflows int must not panic.
+	huge := *sym
+	huge.Size = 1 << 63
+	data, err = ef.ReadSymbolData(&huge, 4)
+	require.NoError(t, err)
+	assert.Len(t, data, 4)
 }
 
 func TestPFELFSections(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 	"structs"
+	"sync/atomic"
 	"unsafe"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -26,6 +27,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -67,6 +69,21 @@ var (
 	// errNoUpdate indicates the ProcessContext has not been updated since it was last published.
 	errNoUpdate = errors.New("ProcessContext has not been updated")
 )
+
+// schemaRejected counts processes that published a thread-context schema the
+// agent refused. Swapped into the process manager's periodic metric summary.
+var schemaRejected atomic.Int64
+
+// GetAndResetMetrics returns the process-context counters and resets them to zero.
+// It is intended to be called once per metrics collection interval by the process manager.
+func GetAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextSchemaRejected,
+			Value: metrics.MetricValue(schemaRejected.Swap(0)),
+		},
+	}
+}
 
 // Info is a snapshot of process context. Copies are safe to share across
 // goroutines: attribute.Set is immutable and threadCtx is never mutated after
@@ -164,6 +181,8 @@ func readOnce(mappingAddr libpf.Address, pid libpf.PID, rm remotememory.RemoteMe
 	// torn read.
 	threadCtx, err := readThreadContextInfo(ctx.GetAttributes())
 	if err != nil {
+		// A publisher fault an operator can fix, unlike the absence of a schema.
+		schemaRejected.Add(1)
 		log.Debugf("PID %d: failed to read thread context: %v", pid, err)
 	}
 

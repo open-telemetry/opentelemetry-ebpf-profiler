@@ -1,8 +1,6 @@
 // This file contains helpers for reading Go runtime structures from eBPF programs.
 
-#ifndef OPTI_GO_RUNTIME_H
-#define OPTI_GO_RUNTIME_H
-
+#pragma once
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -45,13 +43,12 @@ static inline EBPF_INLINE u64 go_get_g_ptr(struct GoRuntimeOffsets *offs, Unwind
     DEBUG_PRINT("go: failed to get tsd base; using register fallback if available");
     return g_register;
   }
-  DEBUG_PRINT(
-    "go: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
+  DEBUG_PRINT("go: read tsd_base at 0x%lx, g offset: %d", (u64)tls_base, offs->tls_offset);
 
   if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
     DEBUG_PRINT(
       "go: failed to read g_addr, tls_base(%lx); using register fallback if available",
-      (unsigned long)tls_base);
+      (u64)tls_base);
   }
 
   return g_addr ? g_addr : g_register;
@@ -66,13 +63,13 @@ static inline EBPF_INLINE void *go_get_m_ptr(struct GoRuntimeOffsets *offs, Unwi
     return NULL;
   }
 
-  DEBUG_PRINT("go: reading m_ptr_addr at 0x%lx + 0x%x", (unsigned long)g_addr, offs->m_offset);
+  DEBUG_PRINT("go: reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
   void *m_ptr_addr;
   if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
     DEBUG_PRINT("go: failed m_ptr_addr");
     return NULL;
   }
-  DEBUG_PRINT("go: m_ptr_addr 0x%lx", (unsigned long)m_ptr_addr);
+  DEBUG_PRINT("go: m_ptr_addr 0x%lx", (u64)m_ptr_addr);
   return m_ptr_addr;
 }
 
@@ -205,11 +202,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
   // of the call into it, so the frame is a non-leaf one.
   unwinder_mark_nonleaf_frame(state);
 
-  DEBUG_PRINT(
-    "morestack: sp 0x%lx, pc 0x%lx, fp 0x%lx",
-    (unsigned long)state->sp,
-    (unsigned long)state->pc,
-    (unsigned long)state->fp);
+  DEBUG_UNWIND_STATE(state);
 
   // The recovered frame is stopped in the stack check that runs ahead of its
   // prologue, so it has neither pushed its return address nor set up its own
@@ -258,8 +251,7 @@ static inline EBPF_INLINE ErrorCode go_unwind_morestack(PerCPURecord *record, Un
 #endif
   // state->fp is gobuf.bp, which already is this frame's frame pointer.
   unwinder_mark_nonleaf_frame(state);
-  DEBUG_PRINT(
-    "morestack: caller sp 0x%lx, pc 0x%lx", (unsigned long)state->sp, (unsigned long)state->pc);
+  DEBUG_PRINT("morestack: caller sp 0x%lx, pc 0x%lx", state->sp, state->pc);
   return ERR_OK;
 }
 
@@ -391,5 +383,3 @@ unwind_failure_err:
   return err;
 }
 #endif // __aarch64__
-
-#endif // OPTI_GO_RUNTIME_H

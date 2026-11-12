@@ -267,18 +267,18 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
     frame_addr = me_or_cref;
 
     if (cfunc) {
-      if (rubyinfo->version < 0x20600) {
-        // With Ruby version 2.6 the scope of our entry symbol ruby_current_execution_context_ptr
-        // got extended. We need this extension to jump back unwinding Ruby VM frames if we
-        // continue at this point with unwinding native frames.
+      if (
+        ruby_skip_native_resume || rubyinfo->no_native_resume ||
+        record->rubyUnwindState.jit_detected) {
+        // With Ruby version 2.6 (!no_native_resume) the scope of our entry symbol
+        // ruby_current_execution_context_ptr got extended. We need this extension to jump back
+        // unwinding Ruby VM frames if we continue at this point with unwinding native frames.
         // As this is not available for Ruby versions < 2.6 we just push the cfunc frame and
         // continue unwinding Ruby VM frames. Due to this issue, the ordering of Ruby and native
-        // frames will almost certainly be incorrect for Ruby versions < 2.6.
-        frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
-      } else if (ruby_skip_native_resume || record->rubyUnwindState.jit_detected) {
-        // Push cfunc inline when native resume is disabled. Also push it inline
-        // if JIT is active but frame pointers are not available, because we
-        // cannot unwind through JIT frames to get back to native code.
+        // frames will almost certainly be incorrect for Ruby versions < 2.6 (no_native_resume).
+        //
+        // Push cfunc inline when native resume is disabled. Also push it inline if JIT is active,
+        // but frame pointers are not available, because we cannot unwind JIT frames back to native.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
@@ -544,7 +544,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   // Pointer for an address to a rb_execution_context_struct struct.
   void *current_ctx_addr = NULL;
 
-  if (rubyinfo->current_ec_tpbase_tls_offset != 0) {
+  if (tls_var_valid(&rubyinfo->tls_ec)) {
     // With Ruby 3.x and its internal change of the execution model, we can no longer
     // access rb_execution_context_struct directly. We will look up the
     // ruby_current_ec from thread local storage, analogous to how it is done
@@ -552,42 +552,17 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     // https://github.com/ruby/ruby/blob/6c0315d99a93bdea947f821bd337000420ab41d1/vm_core.h#L2024
     u64 tsd_base;
     if (tsd_get_base((void **)&tsd_base) != 0) {
-      DEBUG_PRINT("ruby: failed to get TSD base for TLS symbol lookup");
+      DEBUG_PRINT("ruby: failed to get TSD base for TLS lookup");
       error = ERR_RUBY_READ_TSD_BASE;
       goto exit;
     }
 
-    u64 tls_current_ec_addr = tsd_base + (u64)rubyinfo->current_ec_tpbase_tls_offset;
-
-    if (bpf_probe_read_user(
-          &current_ctx_addr, sizeof(current_ctx_addr), (void *)(tls_current_ec_addr))) {
+    if (tls_read_var(&rubyinfo->tls_ec, (void *)tsd_base, &current_ctx_addr) != TLS_READ_OK) {
+      DEBUG_PRINT("ruby: failed to read EC from TLS");
       goto exit;
     }
-    DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
-  } else if (rubyinfo->tls_module_id != 0 && rubyinfo->dtv_info.multiplier != 0) {
-    // DTV-based TLS access: traverse the Dynamic Thread Vector to find ruby_current_ec.
-    // Used when TLSDESC relocations are unavailable (e.g. some musl setups,
-    // or when TLS is allocated dynamically).
-    u64 tsd_base;
-    if (tsd_get_base((void **)&tsd_base) != 0) {
-      DEBUG_PRINT("ruby: failed to get TSD base for DTV lookup");
-      error = ERR_RUBY_READ_TSD_BASE;
-      goto exit;
-    }
-
-    void *ec_ptr;
-    if (dtv_read(
-          &rubyinfo->dtv_info,
-          (void *)tsd_base,
-          rubyinfo->tls_module_id,
-          rubyinfo->current_ec_tls_offset,
-          &ec_ptr)) {
-      DEBUG_PRINT("ruby: failed to read EC from DTV");
-      goto exit;
-    }
-    current_ctx_addr = ec_ptr;
-    DEBUG_PRINT("ruby: EC from DTV: 0x%llx", (u64)current_ctx_addr);
-  } else if (rubyinfo->version >= 0x30000) {
+    DEBUG_PRINT("ruby: EC from TLS: 0x%lx", (u64)current_ctx_addr);
+  } else if (rubyinfo->running_ec) {
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(
           &single_main_ractor, sizeof(single_main_ractor), (void *)rubyinfo->current_ctx_ptr)) {
@@ -629,7 +604,6 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   error = walk_ruby_stack(record, rubyinfo, current_ctx_addr, &unwinder);
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  return -1;
+  return tail_call(ctx, record, unwinder);
 }
 MULTI_USE_FUNC(unwind_ruby)

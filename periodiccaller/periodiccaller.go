@@ -7,8 +7,6 @@ package periodiccaller // import "go.opentelemetry.io/ebpf-profiler/periodiccall
 import (
 	"context"
 	"time"
-
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
@@ -58,29 +56,6 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 			case <-ctx.Done():
 				return
 			}
-		}
-	}()
-
-	return ticker.Stop
-}
-
-// StartWithJitter starts a timer that calls <callback> every <baseDuration+jitter>
-// until the <ctx> is canceled. <jitter>, [0..1], is used to add +/- jitter
-// to <baseDuration> at every iteration of the timer.
-func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter float64,
-	callback func()) func() {
-	ticker := time.NewTicker(libpf.AddJitter(baseDuration, jitter))
-	go func() {
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				callback()
-			case <-ctx.Done():
-				return
-			}
-			ticker.Reset(libpf.AddJitter(baseDuration, jitter))
 		}
 	}()
 

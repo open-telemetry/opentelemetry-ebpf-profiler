@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"time"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -23,10 +24,13 @@ import (
 // Config holds the YAML configuration for the off-CPU probe.
 //
 //	extensions:
-//	   offcpu:
-//	     threshold: 0.1		# capture probability in ]0.0, 1.0]
+//	  offcpu:
+//	    threshold: 0.1      # capture probability in ]0.0, 1.0]
+//	    min_duration: 0s    # optional; 0 = keep all sampled waits.
+//	                        # Drops shorter off-CPU waits before stack unwinding.
 type Config struct {
-	Threshold float64 `mapstructure:"threshold"`
+	Threshold   float64       `mapstructure:"threshold"`
+	MinDuration time.Duration `mapstructure:"min_duration"`
 }
 
 // Validate implements confmap.Validator.
@@ -34,19 +38,25 @@ func (cfg *Config) Validate() error {
 	if cfg.Threshold <= 0.0 || cfg.Threshold > 1.0 {
 		return fmt.Errorf("offcpu: threshold %f is out of range ]0.0, 1.0]", cfg.Threshold)
 	}
+	if cfg.MinDuration < 0 {
+		return fmt.Errorf("offcpu: min_duration %s must be >= 0", cfg.MinDuration)
+	}
 	return nil
 }
 
 type probe struct {
-	threshold uint32
-	links     []link.Link
+	threshold   uint32
+	minDuration time.Duration
+	links       []link.Link
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&samples.TypeMetadata{
-		SampleType:   "off_cpu",
-		SampleUnit:   "nanoseconds",
-		ReportValues: true,
+	originID, err := reg.Register(&tracer.OriginEntry{
+		Meta: &samples.TypeMetadata{
+			SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
+			ReportValues: true,
+			AppendValues: samples.AppendFirstContextValue,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("registering off-CPU origin: %w", err)
@@ -55,7 +65,7 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 	coll, err := probeCtx.CollectionSpecWith(
 		[]string{"sched_times"},
 		[]string{"finish_task_switch", "tracepoint__sched_switch"},
-		[]string{"off_cpu_threshold", "origin_id_off_cpu"},
+		[]string{"off_cpu_threshold", "off_cpu_min_duration_ns", "origin_id_off_cpu"},
 	)
 	if err != nil {
 		return err
@@ -63,6 +73,9 @@ func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tra
 
 	if err := coll.Variables["off_cpu_threshold"].Set(p.threshold); err != nil {
 		return fmt.Errorf("set off_cpu_threshold: %w", err)
+	}
+	if err := coll.Variables["off_cpu_min_duration_ns"].Set(uint64(p.minDuration.Nanoseconds())); err != nil {
+		return fmt.Errorf("set off_cpu_min_duration_ns: %w", err)
 	}
 	if err := coll.Variables["origin_id_off_cpu"].Set(originID); err != nil {
 		return fmt.Errorf("set origin_id_off_cpu: %w", err)
