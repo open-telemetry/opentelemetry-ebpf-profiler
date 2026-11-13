@@ -18,12 +18,16 @@ import (
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
 		metadata.Type,
-		func() component.Config { return &struct{}{} },
+		func() component.Config { return &Config{MapScaleFactor: defaultMapScaleFactor} },
 		createExtension,
 		metadata.ExtensionsStability,
 	)
 }
 
-func createExtension(_ context.Context, _ extension.Settings, _ component.Config) (extension.Extension, error) {
-	return &heapExtension{p: New()}, nil
+func createExtension(_ context.Context, _ extension.Settings, cfg component.Config) (extension.Extension, error) {
+	p, err := New(*cfg.(*Config))
+	if err != nil {
+		return nil, err
+	}
+	return &heapExtension{p: p}, nil
 }

@@ -49,7 +49,6 @@ linters:
       - design-docs
       - doc
       - LICENSES
-      - target
 
   settings:
     goconst:

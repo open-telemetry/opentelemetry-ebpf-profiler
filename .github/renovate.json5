@@ -50,15 +50,6 @@
       automerge: true,
     },
     {
-      groupName: 'Rust dependencies',
-      matchManagers: [
-        'cargo',
-      ],
-      schedule: [
-        'before 8am every weekday',
-      ],
-    },
-    {
       groupName: 'OCB (manifest) dependencies',
       matchManagers: [
         'ocb',

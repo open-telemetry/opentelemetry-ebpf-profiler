@@ -7,7 +7,10 @@ package heap // import "go.opentelemetry.io/ebpf-profiler/probes/heap"
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"math"
 	"sync"
 
 	cebpf "github.com/cilium/ebpf"
@@ -16,10 +19,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	"go.opentelemetry.io/ebpf-profiler/usdt"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
@@ -28,29 +35,69 @@ const (
 	allocOriginVar    = "origin_id_heap_alloc"
 )
 
+// attachmentKey identifies one uprobe link within a single process. It is
+// only unique within the per-PID attachments map and must not be used as a
+// global key. It uses the on-disk identity rather than FileID because the
+// kernel registers uprobes against an inode and file offset: separate inodes
+// with identical contents share a FileID but each needs its own link.
 type attachmentKey struct {
-	fileID libpf.FileID
+	odfi   util.OnDiskFileIdentifier
 	name   string
 	offset uint64
 }
 
+func attachmentKeyFor(mapping *process.RawMapping, name string, offset uint64) attachmentKey {
+	return attachmentKey{
+		odfi:   mapping.GetOnDiskFileIdentifier(),
+		name:   name,
+		offset: offset,
+	}
+}
+
+type attachment struct {
+	lnk       io.Closer
+	specKeys  map[support.USDTSpecKey]libpf.Void
+	detaching bool
+}
+
 // Probe implements tracer.Probe and processmanager.ProbeAttacher for USDT heap profiling.
 type Probe struct {
-	discoverer *usdt.Discoverer
-	programs   map[string]*cebpf.Program
+	discoverer     *usdt.Discoverer
+	programs       map[string]*cebpf.Program
+	usdtSpecs      *cebpf.Map
+	mapScaleFactor uint
 
 	mu          sync.Mutex
-	attachments map[libpf.PID]map[attachmentKey]link.Link
+	unloaded    bool
+	attachments map[libpf.PID]map[attachmentKey]*attachment
 
 	// originAlloc is the dynamically-assigned origin ID for heap allocations.
 	originAlloc uint16
 }
 
 // New creates a heap probe.
-func New() *Probe {
-	return &Probe{
-		attachments: make(map[libpf.PID]map[attachmentKey]link.Link),
+func New(cfg Config) (*Probe, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
+	return &Probe{
+		attachments:    make(map[libpf.PID]map[attachmentKey]*attachment),
+		mapScaleFactor: cfg.MapScaleFactor,
+	}, nil
+}
+
+// probeVirtualAddress translates a file offset to its runtime virtual address.
+// The boolean reports whether the offset is contained in mapping. An address
+// that would overflow is treated as not contained.
+func probeVirtualAddress(mapping *process.RawMapping, fileOffset uint64) (uint64, bool) {
+	if fileOffset < mapping.FileOffset {
+		return 0, false
+	}
+	delta := fileOffset - mapping.FileOffset
+	if delta >= mapping.Length || mapping.Vaddr > math.MaxUint64-delta {
+		return 0, false
+	}
+	return mapping.Vaddr + delta, true
 }
 
 // Derive an unbiased object-count estimator from the
@@ -91,9 +138,10 @@ func appendAllocValues(dst []int64, meta *samples.TraceEventMeta) []int64 {
 
 // Load implements tracer.Probe. It loads the heap eBPF programs and creates
 // the USDT discoverer used during per-process attachment.
-func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
+func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar,
+	pctx *tracer.ProbeContext,
+) (err error) {
 	// Register origin ID. The eBPF program reads this from RODATA.
-	var err error
 	hp.originAlloc, err = reg.Register(&tracer.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes: []samples.SampleType{
@@ -110,13 +158,15 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 
 	// Load eBPF programs via ProbeContext.
 	coll, err := pctx.CollectionSpecWith(
-		nil,
+		[]string{"usdt_specs"},
 		[]string{allocProgName},
 		[]string{allocOriginVar},
 	)
 	if err != nil {
 		return fmt.Errorf("building collection spec: %w", err)
 	}
+	// Probe-owned maps bypass the tracer's normal map-size adaptation.
+	coll.Maps["usdt_specs"].MaxEntries <<= uint32(hp.mapScaleFactor)
 
 	// Set origin ID in RODATA so the eBPF program emits the correct value.
 	if v, ok := coll.Variables[allocOriginVar]; ok {
@@ -125,11 +175,37 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 		}
 	}
 
-	if err := pctx.RewriteMaps(coll, nil); err != nil {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return fmt.Errorf("adjusting memlock rlimit: %w", err)
+	}
+	defer restoreRlimit()
+
+	specMap, err := cebpf.NewMap(coll.Maps["usdt_specs"])
+	if err != nil {
+		return fmt.Errorf("creating usdt_specs map: %w", err)
+	}
+
+	// Everything created from here on is owned by Load until it returns
+	// successfully, so release it on any error.
+	ebpfProgs := make(map[string]*cebpf.Program)
+	defer func() {
+		if err == nil {
+			return
+		}
+		hp.usdtSpecs = nil
+		hp.programs = nil
+		hp.discoverer = nil
+		for _, p := range ebpfProgs {
+			_ = p.Close()
+		}
+		_ = specMap.Close()
+	}()
+
+	if err := pctx.RewriteMaps(coll, map[string]*cebpf.Map{"usdt_specs": specMap}); err != nil {
 		return fmt.Errorf("rewriting maps: %w", err)
 	}
 
-	ebpfProgs := make(map[string]*cebpf.Program)
 	progs := []tracer.ProgLoaderHelper{{
 		Name:             allocProgName,
 		NoTailCallTarget: true,
@@ -149,7 +225,11 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar, pctx *tracer
 	}
 
 	// Register for per-process callbacks via ProbeAttacher.
-	return pctx.AddAttacher(hp)
+	hp.usdtSpecs = specMap
+	if err := pctx.AddAttacher(hp); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Match implements processmanager.ProbeAttacher. The heap probe matches all
@@ -176,14 +256,15 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 			pid, mapping.Path, err)
 	}
 
-	// Filter to our provider and probe names, and skip sites we've
-	// already attached. A single mapping may contain multiple USDT
-	// sites; Attach may also be retried for the same mapping, so dedup
-	// by (fileID, name, offset).
+	// Filter to our provider and probe names, and to sites contained in this
+	// mapping. Discovery returns every site in the backing ELF, while runtime
+	// addresses are specific to each process mapping.
 	type candidate struct {
-		key   attachmentKey
-		point usdt.AttachmentPoint
-		prog  *cebpf.Program
+		key     attachmentKey
+		point   usdt.AttachmentPoint
+		prog    *cebpf.Program
+		specKey support.USDTSpecKey
+		spec    support.USDTSpec
 	}
 	candidates := make([]candidate, 0, len(points))
 	for _, point := range points {
@@ -194,15 +275,38 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		if !ok {
 			continue
 		}
-		key := attachmentKey{fileID: fileID, name: point.Name, offset: point.Location}
+		// USDT notes identify sites by file offset, while the spec map is keyed by
+		// the runtime PC. Ignore sites that belong to another mapping of this ELF.
+		virtualAddress, contained := probeVirtualAddress(mapping, point.Location)
+		if !contained {
+			continue
+		}
+		spec, err := parseAllocSpec(point)
+		if err != nil {
+			log.Warnf("heap probe: invalid arguments for %s:%s at offset %#x: %v",
+				point.Provider, point.Name, point.Location, err)
+			continue
+		}
+		key := attachmentKeyFor(mapping, point.Name, point.Location)
+		// ProcessManager PIDs originate from the translated pid_events path,
+		// matching get_pid_tgid_leader() in the firing BPF program.
+		specKey := support.USDTSpecKey{
+			Pid:     uint32(pid),
+			Address: virtualAddress,
+		}
+		// This pre-check avoids reopening an already registered site in the common
+		// case. The locked check in the attachment loop remains authoritative.
 		hp.mu.Lock()
-		// Bare read: for an unseen PID the inner map is nil, which reads as
-		// not-attached. The nil check and allocation only matter on the write
-		// path below, where writing to a nil map would panic.
-		_, attached := hp.attachments[pid][key]
+		attached := hp.attachments[pid][key]
+		registered := false
+		if attached != nil {
+			_, registered = attached.specKeys[specKey]
+		}
 		hp.mu.Unlock()
-		if !attached {
-			candidates = append(candidates, candidate{key: key, point: point, prog: prog})
+		if !registered {
+			candidates = append(candidates, candidate{
+				key: key, point: point, prog: prog, specKey: specKey, spec: spec,
+			})
 		}
 	}
 	if len(candidates) == 0 {
@@ -227,32 +331,102 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 		return fmt.Errorf("open mapping %s as executable: %w", mapping.Path, err)
 	}
 
-	// Attach a PID-scoped uprobe for each candidate site.
+	// Reserve each site and register its argument layout before attaching the
+	// uprobe. Multiple mappings of the same file share one PID-scoped link but
+	// each runtime address gets its own specification.
 	for _, candidate := range candidates {
+		hp.mu.Lock()
+		if hp.unloaded {
+			hp.mu.Unlock()
+			return nil
+		}
+		attached := hp.attachments[pid][candidate.key]
+		if attached != nil {
+			if attached.detaching {
+				hp.mu.Unlock()
+				log.Warnf("heap probe: skip mapping for detaching %s:%s PID %d at address %#x",
+					candidate.point.Provider, candidate.point.Name, pid,
+					candidate.specKey.Address)
+				continue
+			}
+			if _, exists := attached.specKeys[candidate.specKey]; exists {
+				hp.mu.Unlock()
+				continue
+			}
+			if err := hp.usdtSpecs.Put(candidate.specKey, candidate.spec); err != nil {
+				hp.mu.Unlock()
+				metrics.Add(metrics.IDUSDTSpecsUpdate, 1)
+				log.Warnf("heap probe: register arguments for %s:%s PID %d at address %#x: %v",
+					candidate.point.Provider, candidate.point.Name, pid,
+					candidate.specKey.Address, err)
+				continue
+			}
+			attached.specKeys[candidate.specKey] = libpf.Void{}
+			hp.mu.Unlock()
+			// In some cases, e.g. with dlmopen, a library may be mapped in multiple
+			// times. A PID-scoped uprobe is registered by inode and file offset, so
+			// the existing link fires for every mapping of that site in this process.
+			continue
+		}
+		if err := hp.usdtSpecs.Put(candidate.specKey, candidate.spec); err != nil {
+			hp.mu.Unlock()
+			metrics.Add(metrics.IDUSDTSpecsUpdate, 1)
+			log.Warnf("heap probe: register arguments for %s:%s PID %d at address %#x: %v",
+				candidate.point.Provider, candidate.point.Name, pid,
+				candidate.specKey.Address, err)
+			continue
+		}
+		if hp.attachments[pid] == nil {
+			hp.attachments[pid] = make(map[attachmentKey]*attachment)
+		}
+		pending := &attachment{specKeys: map[support.USDTSpecKey]libpf.Void{
+			candidate.specKey: {},
+		}}
+		hp.attachments[pid][candidate.key] = pending
+		hp.mu.Unlock()
+
 		lnk, err := ex.Uprobe("", candidate.prog, &link.UprobeOptions{
 			PID:          int(pid),
 			Address:      candidate.point.Location,
 			RefCtrOffset: candidate.point.SemaphoreOffset,
 		})
 		if err != nil {
+			hp.mu.Lock()
+			if hp.attachments[pid][candidate.key] == pending {
+				// A matching reservation means neither Detach nor Unload has removed
+				// the attachment state or taken ownership of the spec map.
+				delete(hp.attachments[pid], candidate.key)
+				if len(hp.attachments[pid]) == 0 {
+					delete(hp.attachments, pid)
+				}
+				for specKey := range pending.specKeys {
+					if deleteErr := hp.usdtSpecs.Delete(specKey); deleteErr != nil &&
+						!errors.Is(deleteErr, cebpf.ErrKeyNotExist) {
+						log.Warnf("heap probe: roll back arguments for PID %d at address %#x: %v",
+							pid, specKey.Address, deleteErr)
+					}
+				}
+			}
+			hp.mu.Unlock()
 			log.Warnf("heap probe: attach %s:%s for PID %d at offset %#x: %v",
 				candidate.point.Provider, candidate.point.Name, pid,
 				candidate.point.Location, err)
 			continue
 		}
 
-		// Double-check under lock: another goroutine may have attached
-		// the same site between our candidate check and now.
 		hp.mu.Lock()
-		if hp.attachments[pid] == nil {
-			hp.attachments[pid] = make(map[attachmentKey]link.Link)
-		}
-		if _, exists := hp.attachments[pid][candidate.key]; exists {
+		if hp.unloaded || pending.detaching || hp.attachments[pid][candidate.key] != pending {
+			// Detach or Unload claimed or removed the reservation while the
+			// kernel attachment was being created. Its cleanup owns the specs;
+			// only the unpublished link remains for this goroutine to close.
 			hp.mu.Unlock()
-			_ = lnk.Close()
+			if closeErr := lnk.Close(); closeErr != nil {
+				log.Errorf("heap probe: close unpublished %s:%s link for PID %d: %v",
+					candidate.point.Provider, candidate.point.Name, pid, closeErr)
+			}
 			continue
 		}
-		hp.attachments[pid][candidate.key] = lnk
+		pending.lnk = lnk
 		hp.mu.Unlock()
 	}
 	return nil
@@ -260,16 +434,57 @@ func (hp *Probe) Attach(pr process.Process, mapping *process.RawMapping,
 
 // Detach implements processmanager.ProbeAttacher.
 func (hp *Probe) Detach(pid libpf.PID) {
+	type cleanup struct {
+		key      attachmentKey
+		attached *attachment
+		lnk      io.Closer
+	}
+
 	hp.mu.Lock()
-	attachments := hp.attachments[pid]
-	delete(hp.attachments, pid)
+	cleanups := make([]cleanup, 0, len(hp.attachments[pid]))
+	for key, attached := range hp.attachments[pid] {
+		if attached.detaching {
+			continue
+		}
+		attached.detaching = true
+		cleanups = append(cleanups, cleanup{key: key, attached: attached, lnk: attached.lnk})
+		// Unload may take ownership of the remaining state while Close runs, so
+		// make it clear that this goroutine owns the link from this point.
+		attached.lnk = nil
+	}
 	hp.mu.Unlock()
 
-	for key, lnk := range attachments {
-		if err := lnk.Close(); err != nil {
-			log.Errorf("heap probe: detach PID %d probe %s at offset %#x: %v",
-				pid, key.name, key.offset, err)
+	for _, cleanup := range cleanups {
+		if cleanup.lnk != nil {
+			if err := cleanup.lnk.Close(); err != nil {
+				log.Errorf("heap probe: detach PID %d probe %s at offset %#x: %v",
+					pid, cleanup.key.name, cleanup.key.offset, err)
+			}
 		}
+	}
+
+	hp.mu.Lock()
+	defer hp.mu.Unlock()
+	for _, cleanup := range cleanups {
+		// Pointer identity prevents an old cleanup from deleting a replacement
+		// attachment and its specs if the same PID and key are reused.
+		if hp.attachments[pid][cleanup.key] != cleanup.attached {
+			// Unload or another cleanup already removed this reservation and its specs.
+			continue
+		}
+		if hp.usdtSpecs != nil {
+			for specKey := range cleanup.attached.specKeys {
+				if err := hp.usdtSpecs.Delete(specKey); err != nil &&
+					!errors.Is(err, cebpf.ErrKeyNotExist) {
+					log.Errorf("heap probe: delete USDT arguments for PID %d at address %#x: %v",
+						pid, specKey.Address, err)
+				}
+			}
+		}
+		delete(hp.attachments[pid], cleanup.key)
+	}
+	if len(hp.attachments[pid]) == 0 {
+		delete(hp.attachments, pid)
 	}
 }
 
@@ -280,17 +495,39 @@ func (hp *Probe) Detach(pid libpf.PID) {
 // during shutdown.
 func (hp *Probe) Unload() error {
 	hp.mu.Lock()
+	if hp.unloaded {
+		hp.mu.Unlock()
+		return nil
+	}
+	hp.unloaded = true
 	attachments := hp.attachments
-	hp.attachments = make(map[libpf.PID]map[attachmentKey]link.Link)
+	specMap := hp.usdtSpecs
+	hp.attachments = make(map[libpf.PID]map[attachmentKey]*attachment)
+	hp.usdtSpecs = nil
 	hp.mu.Unlock()
 
+	var errs error
 	for pid, byKey := range attachments {
-		for key, lnk := range byKey {
-			if err := lnk.Close(); err != nil {
-				log.Errorf("heap probe: unload PID %d probe %s at offset %#x: %v",
-					pid, key.name, key.offset, err)
+		for key, attached := range byKey {
+			if attached.lnk != nil {
+				if err := attached.lnk.Close(); err != nil {
+					log.Errorf("heap probe: unload PID %d probe %s at offset %#x: %v",
+						pid, key.name, key.offset, err)
+					errs = errors.Join(errs, err)
+				}
+			}
+			if specMap != nil {
+				for specKey := range attached.specKeys {
+					if err := specMap.Delete(specKey); err != nil &&
+						!errors.Is(err, cebpf.ErrKeyNotExist) {
+						errs = errors.Join(errs, err)
+					}
+				}
 			}
 		}
 	}
-	return nil
+	if specMap != nil {
+		errs = errors.Join(errs, specMap.Close())
+	}
+	return errs
 }
