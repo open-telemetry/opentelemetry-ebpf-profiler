@@ -1,5 +1,11 @@
 name: Common environment setup
 
+inputs:
+  go-cache-dependency-path:
+    description: 'Files hashed into the setup-go cache key. Jobs with different Go module needs must pass different lists.'
+    required: false
+    default: go.sum
+
 runs:
   using: composite
   steps:
@@ -26,5 +32,5 @@ runs:
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: go.mod
-        cache-dependency-path: go.sum
+        cache-dependency-path: ${{ inputs.go-cache-dependency-path }}
       id: go

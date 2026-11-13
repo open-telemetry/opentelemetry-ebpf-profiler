@@ -25,7 +25,10 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          # make license-check runs tools from internal/tools (-modfile).
+          cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
       - name: Check licenses of dependencies
         run: make license-check
       - name: Check LICENSES is up to date
@@ -51,6 +54,12 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+            tools/coredump/go.sum
+            tools/luajitoffsets/go.sum
       - name: Install binutils-gold
         # Work around for https://github.com/golang/go/issues/22040
         # until the project moved on to Go 1.27.
@@ -71,6 +80,12 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            internal/tools/go.sum
+            tools/coredump/go.sum
+            tools/luajitoffsets/go.sum
       - name: formatter
         env:
           CGO_ENABLED: 1
@@ -90,8 +105,23 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up environment
-        uses: $/.github/workflows/env
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Go module cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/go/pkg/mod
+          key: go-mod-crosscompile-${{ hashFiles('go.sum') }}
+          restore-keys: go-mod-crosscompile-
+      - name: Go build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/go-build
+          key: go-build-cross-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('go.sum') }}
+          restore-keys: go-build-cross-${{ matrix.goos }}-${{ matrix.goarch }}-
       - name: Cross compile
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./collector/...
 
@@ -113,6 +143,10 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            tools/coredump/go.sum
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -135,6 +169,10 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.sum
+            tools/luajitoffsets/go.sum
       - name: Tests
         run: make test-luajit-offsets
 
@@ -276,6 +314,10 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
+        with:
+          go-cache-dependency-path: |
+            go.mod
+            go.sum
       - name: Install musl-dev
         run: |
           sudo apt-get update -y
