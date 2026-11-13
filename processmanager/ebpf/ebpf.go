@@ -455,11 +455,9 @@ var (
 func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	deltas []ebpfapi.StackDelta, pageDescs []ebpfapi.StackDeltaPageDesc,
 	firstPage uint64,
-) (
-	uint16, error,
-) {
+) (mapID uint16, err error) {
 	numEntries := len(pageDescs) + (len(deltas)+1)/2
-	mapID, err := getMapID(uint32(numEntries))
+	mapID, err = getMapID(uint32(numEntries))
 	if err != nil {
 		return 0, err
 	}
@@ -482,8 +480,8 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		return 0, fmt.Errorf("failed to create inner map: %v", err)
 	}
 	defer func() {
-		if err = innerMap.Close(); err != nil {
-			log.Errorf("Failed to close FD of inner map for 0x%x: %v", fileID, err)
+		if closeErr := innerMap.Close(); closeErr != nil {
+			log.Errorf("Failed to close FD of inner map for 0x%x: %v", fileID, closeErr)
 		}
 	}()
 
@@ -499,6 +497,11 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	}
 
 	impl.updateWorkers.EnqueueUpdate(outerMap, fileID, innerMapCloned)
+	defer func() {
+		if err != nil {
+			impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
+		}
+	}()
 
 	// Write the page descriptors first, then the stack delta pairs. The
 	// compile-time assertions above let the flat delta list be reinterpreted
@@ -543,8 +546,6 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		ptrCastMarshaler[support.StackDeltaPageDesc](pageDescs),
 		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 	if err != nil {
-		// Undo the insertion enqueued above as the caller gets no mapID to clean up with.
-		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
 			fmt.Errorf("failed to batch insert %d page descriptors for 0x%x "+
 				"into exeIDTostack_deltas: %v",
@@ -558,9 +559,6 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	}
 	if err = impl.ExeIDToStackDeltaMeta.Update(unsafe.Pointer(&fileID), unsafe.Pointer(&meta),
 		cebpf.UpdateAny); err != nil {
-		// Roll back the enqueued outer map update so the inner map is not
-		// leaked. The updater pool preserves the ordering of updates per key.
-		impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
 		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltaMetaUpdate,
 			fmt.Errorf("failed to insert stack delta meta for 0x%x: %v", fileID, err))
 	}
