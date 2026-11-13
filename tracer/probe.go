@@ -95,8 +95,8 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 		}
 		return &ProbeSpec{
-			Mode:     probeType,
-			Symbol:   parts[1],
+			Mode:   probeType,
+			Symbol: parts[1],
 		}, nil
 
 	case ProbeModeUprobe, ProbeModeUretprobe:
@@ -104,9 +104,9 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
-			Mode:     probeType,
-			Target:   parts[1],
-			Symbol:   parts[2],
+			Mode:   probeType,
+			Target: parts[1],
+			Symbol: parts[2],
 		}, nil
 
 	default:

@@ -20,34 +20,34 @@ func TestParseProbe(t *testing.T) {
 		"kprobe_valid": {
 			input: "kprobe:vfs_read",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeKprobe,
-				Symbol:   "vfs_read",
+				Mode:   ProbeModeKprobe,
+				Symbol: "vfs_read",
 			},
 			wantErr: false,
 		},
 		"kretprobe_valid": {
 			input: "kretprobe:vfs_read",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeKretprobe,
-				Symbol:   "vfs_read",
+				Mode:   ProbeModeKretprobe,
+				Symbol: "vfs_read",
 			},
 			wantErr: false,
 		},
 		"uprobe_valid": {
 			input: "uprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeUprobe,
-				Target:   "/usr/lib/libc.so.6",
-				Symbol:   "malloc",
+				Mode:   ProbeModeUprobe,
+				Target: "/usr/lib/libc.so.6",
+				Symbol: "malloc",
 			},
 			wantErr: false,
 		},
 		"uretprobe_valid": {
 			input: "uretprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeUretprobe,
-				Target:   "/usr/lib/libc.so.6",
-				Symbol:   "malloc",
+				Mode:   ProbeModeUretprobe,
+				Target: "/usr/lib/libc.so.6",
+				Symbol: "malloc",
 			},
 			wantErr: false,
 		},
