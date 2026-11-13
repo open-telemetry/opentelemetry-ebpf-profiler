@@ -702,8 +702,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	pidNamespaceMode := cfg.PIDNamespaceTranslationMode
 	pidNamespaceTranslation := pidNamespaceMode != PIDNamespaceTranslationModeNone
 
+	var withDebugOutput uint32
 	if cfg.VerboseMode {
-		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+		withDebugOutput = 1
+		if err := coll.Variables["with_debug_output"].Set(withDebugOutput); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
 	}
@@ -767,7 +769,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
-	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
+	filterMinProcessAgeNs := uint64(cfg.FilterMinProcessAge.Nanoseconds())
+	if err := coll.Variables["filter_min_process_age_ns"].Set(filterMinProcessAgeNs); err != nil {
 		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
 	}
 
