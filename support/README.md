@@ -7,22 +7,25 @@ translation.
 From the repository root, run the QEMU integration tests on a specific kernel:
 
 ```sh
-make integration-tests TARGET_ARCH=amd64 KERNEL_VERSION=5.10.217
+make integration-tests TARGET_ARCH=amd64 KERNEL_VERSIONS=5.10.217
 ```
 
 To run on every kernel in the CI matrix for an architecture:
 
 ```sh
-make integration-tests-all TARGET_ARCH=amd64
-make integration-tests-all TARGET_ARCH=arm64
+make integration-tests TARGET_ARCH=amd64
+make integration-tests TARGET_ARCH=arm64
 ```
 
-`TARGET_ARCH` defaults to the host architecture. The all-kernels target reads
-kernel versions from `.github/workflows/unit-test-on-pull-request.yml`, builds
-the test binaries once, runs every kernel, and fails if any kernel fails.
+`TARGET_ARCH` defaults to the host architecture. If `KERNEL_VERSIONS` is omitted,
+the target reads kernel versions from `.github/workflows/unit-test-on-pull-request.yml`.
+To select several kernels, use `KERNEL_VERSIONS="5.10.217 6.12.16"`. The target
+builds the test binaries once, runs every selected kernel, and fails if any
+kernel fails, with a summary of the failed kernels.
 
 `run-tests.sh` always reads test binaries from the repository's `support/`
-directory, regardless of the working directory. It defaults to the Linux host's
+directory, regardless of the working directory, and accepts one or more kernel
+versions as arguments. It defaults to the Linux host's
 architecture; set `QEMU_ARCH=x86_64` or `QEMU_ARCH=aarch64` to override it.
 
 Missing images are downloaded from `ghcr.io/cilium/ci-kernels` into

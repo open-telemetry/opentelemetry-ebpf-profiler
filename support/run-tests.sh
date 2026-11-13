@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test the current package under a different kernel.
+# Run prebuilt integration tests on one or more kernels.
 # Requires qemu-system-$QEMU_ARCH and bluebox to be installed.
 # Missing kernel images are downloaded from Cilium using Docker.
 
@@ -23,11 +23,11 @@ if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
 fi
 readonly sudo
 
-readonly kernel_version="${1:-}"
-if [[ -z "${kernel_version}" ]]; then
-  echo "Expecting kernel version as first argument"
-  exit 1
-fi
+(( $# > 0 )) || fail "Expecting one or more kernel versions as arguments"
+for kernel_version in "$@"
+do
+  [[ "$kernel_version" =~ ^[0-9][a-zA-Z0-9._-]*$ ]] || fail "Invalid kernel version: $kernel_version"
+done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "$qemu_arch" == x86_64 ]]
@@ -41,32 +41,28 @@ else
 fi
 readonly kern_dir="${KERN_DIR:-$repo_root/ci-kernels/$kernel_arch}"
 
+for dependency in bluebox "qemu-system-$qemu_arch"
+do
+  command -v "$dependency" >/dev/null || fail "Missing dependency: $dependency (see support/README.md)"
+done
+
 download_kernel() (
   kernel_dir="$kern_dir/$kernel_version"
   if [[ -s "$kernel_dir/vmlinuz" ]]
   then
     return
   fi
-  [[ "$kernel_version" =~ ^[0-9][a-zA-Z0-9._-]*$ ]] || fail "Invalid kernel version: $kernel_version"
   command -v docker >/dev/null || fail "Docker is required to download kernel $kernel_version (see support/README.md)"
-  mkdir -p "$kernel_dir"
-  download_dir="$(mktemp -d "$kernel_dir/.download.XXXXXX")"
-  kernel_container=""
-  trap '
-    if [[ -n "$kernel_container" ]]
-    then
-      docker rm "$kernel_container" >/dev/null || true
-    fi
-    rm -rf "$download_dir"
-  ' EXIT
+  # The caller checks this function's status, so failures must return explicitly.
+  mkdir -p "$kernel_dir" || return
+  download_dir="$(mktemp -d "$kernel_dir/.download.XXXXXX")" || return
+  trap 'rm -rf "$download_dir"' EXIT
 
   echo "Downloading Linux $kernel_version for $kernel_arch"
- echo "FROM ghcr.io/cilium/ci-kernels:$kernel_version" |
-   docker buildx build --platform "linux/$kernel_arch" --quiet --pull --output "$tmp" -
- mv "$tmp/boot/vmlinuz" "$kernel_dir/vmlinuz"
+  echo "FROM ghcr.io/cilium/ci-kernels:$kernel_version" |
+    docker buildx build --platform "linux/$kernel_arch" --quiet --pull --output "$download_dir" - || return
+  mv "$download_dir/boot/vmlinuz" "$kernel_dir/vmlinuz"
 )
-
-download_kernel
 
 echo Generating initramfs
 expected=0
@@ -76,7 +72,9 @@ while IFS='' read -r -d '' line ; do
     ((expected=expected+1))
 done < <(find "$repo_root/support" -name '*.test' -print0)
 ((expected > 0)) || fail "No test binaries in $repo_root/support"
-readonly output="$(mktemp -d --suffix=-output)"
+output="$(mktemp -d --suffix=-output)"
+readonly output
+trap '$sudo rm -rf "$output"' EXIT
 bb_args+=(-o "${output}/initramfs.cpio")
 
 additionalQemuArgs=""
@@ -103,35 +101,47 @@ case "$qemu_arch" in
         ;;
 esac
 
-bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
+bluebox "${bb_args[@]}" || fail "failed to generate initramfs"
 
-echo Testing on "${kernel_version}"
-$sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
+failed_kernels=()
+for kernel_version in "$@"
+do
+  if ! download_kernel
+  then
+    failed_kernels+=("$kernel_version")
+    continue
+  fi
+
+  echo Testing on "${kernel_version}"
+  test_log="$output/$kernel_version.log"
+  qemu_status=0
+  $sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-nographic \
 	-monitor none \
-	-chardev stdio,id=char0,logfile="${output}/test.log",signal=off \
+	-chardev stdio,id=char0,logfile="${test_log}",signal=off \
 	-serial chardev:char0 \
 	-no-user-config \
 	-m 4G \
 	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
-	-initrd "${output}/initramfs.cpio"
+	-initrd "${output}/initramfs.cpio" || qemu_status=$?
 
-# Qemu will produce an escape sequence that disables line-wrapping in the terminal,
-# end result being truncated output. This restores line-wrapping after the fact.
-if [[ -t 1 && -n "${TERM:-}" ]]; then
-  tput smam || true
+  # Qemu disables terminal line-wrapping; restore it after each run.
+  if [[ -t 1 && -n "${TERM:-}" ]]; then
+    tput smam || true
+  fi
+
+  passes=$(grep -c "stdout: PASS" "$test_log" || true)
+
+  if [[ "$qemu_status" -ne 0 || "$passes" -ne "$expected" ]]; then
+    echo "Test ${color_red}failed${color_default} on ${kernel_version}"
+    failed_kernels+=("$kernel_version")
+  else
+    echo "Test ${color_green}successful${color_default} on ${kernel_version}"
+  fi
+done
+
+if [[ "${#failed_kernels[@]}" -gt 0 ]]
+then
+  fail "Integration tests failed on $kernel_arch kernels: ${failed_kernels[*]}"
 fi
-
-passes=$(grep -c "stdout: PASS" "${output}/test.log" || true)
-
-if [[ "$passes" -ne "$expected" ]]; then
-  echo "Test ${color_red}failed${color_default} on ${kernel_version}"
-  EXIT_CODE=1
-else
-  echo "Test ${color_green}successful${color_default} on ${kernel_version}"
-  EXIT_CODE=0
-fi
-
-$sudo rm -rf "${output}"
-
-exit $EXIT_CODE
+echo "Integration tests passed on $kernel_arch kernels: $*"

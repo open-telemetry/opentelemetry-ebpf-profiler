@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
-	integration-test-binaries integration-tests integration-tests-all \
+	integration-test-binaries integration-tests \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
@@ -159,14 +159,14 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
 
- CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^ ,}]+) \}.*/\1/p' \
-         .github/workflows/unit-test-on-pull-request.yml)
+CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^ ,}]+) \}.*/\1/p' \
+		.github/workflows/unit-test-on-pull-request.yml)
+
 # Run on one kernel, or every CI kernel for TARGET_ARCH.
+KERNEL_VERSIONS ?= $(CI_KERNELS)
 
-  KERNEL_VERSION ?= $(CI_KERNELS)
-
- integration-tests: integration-test-binaries
-         QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh $(KERNEL_VERSION)
+integration-tests: integration-test-binaries
+	QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh $(KERNEL_VERSIONS)
 
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
