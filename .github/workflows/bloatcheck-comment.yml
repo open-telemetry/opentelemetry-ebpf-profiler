@@ -1,0 +1,52 @@
+name: "CI-EBPF bloatcheck report"
+
+# Posts the eBPF blob size report on pull requests; runs from the default
+# branch, as fork PR runs get a read-only token and cannot comment.
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers] only posts a comment from trusted default-branch code with hardened checks
+    workflows: ["CI-EBPF"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  comment:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.path == '.github/workflows/unit-test-ebpf.yml' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-26.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Clone code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the bloatcheck report
+        # No report when the build failed; the comment step is skipped then.
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: bloatcheck-report
+          path: artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Post or update the bloatcheck report comment
+        if: hashFiles('artifact/bloatcheck.md') != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          # The report artifact is PR controlled; the PR number is checked
+          # against this head commit before posting.
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          # Metadata: the pull request number and the base commit.
+          read -r PR_NUMBER BASE_COMMIT < artifact/metadata
+          export PR_NUMBER BASE_COMMIT
+          export BLOATCHECK_REPORT="$PWD/artifact/bloatcheck.md"
+          python3 .github/workflows/scripts/bloatcheck-comment.py

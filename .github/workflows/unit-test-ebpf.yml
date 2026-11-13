@@ -20,6 +20,11 @@ jobs:
     defaults:
       run:
         shell: bash --login {0}
+    permissions:
+      contents: read
+    env:
+      # Written by bloat-o-meter; posted on the PR by bloatcheck-comment.
+      BLOATCHECK_REPORT: ${{ github.workspace }}/bloatcheck.md
     steps:
       - name: Clone code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,9 +44,31 @@ jobs:
             echo "Please rebuild and commit the updated binary blobs."
             exit 1
           fi
+      - name: Bloatcheck against the base commit
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git fetch --depth=1 origin "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          export BASE_COMMIT=$(git rev-parse "origin/$BASE_REF")
+          make -C support/ebpf bloatcheck
+          # Metadata for the comment workflow; the workflow_run event does
+          # not carry the pull request number.
+          printf '%s %s\n' "$PR_NUMBER" "$BASE_COMMIT" > metadata
+      - name: Upload the bloatcheck report
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bloatcheck-report
+          path: |
+            bloatcheck.md
+            metadata
+          if-no-files-found: ignore
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binary-blobs
           path: support/ebpf/tracer.ebpf.*
-
