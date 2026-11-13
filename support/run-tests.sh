@@ -61,10 +61,9 @@ download_kernel() (
   ' EXIT
 
   echo "Downloading Linux $kernel_version for $kernel_arch"
-  kernel_container="$(docker create --pull=always --platform "linux/$kernel_arch" "ghcr.io/cilium/ci-kernels:$kernel_version" /bin/true)"
-  docker cp "$kernel_container:/boot/vmlinuz" "$download_dir/vmlinuz"
-  [[ -s "$download_dir/vmlinuz" ]] || fail "Downloaded kernel image is empty"
-  mv "$download_dir/vmlinuz" "$kernel_dir/vmlinuz"
+ echo "FROM ghcr.io/cilium/ci-kernels:$kernel_version" |
+   docker buildx build --platform "linux/$kernel_arch" --quiet --pull --output "$tmp" -
+ mv "$tmp/boot/vmlinuz" "$kernel_dir/vmlinuz"
 )
 
 download_kernel
