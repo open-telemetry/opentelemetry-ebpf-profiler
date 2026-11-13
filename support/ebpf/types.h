@@ -395,10 +395,9 @@ typedef enum TracePrograms {
   NUM_TRACER_PROGS,
 } TracePrograms;
 
-// Maximum number of unique stack deltas needed on a system. This is based on
-// normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
-// Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
-#define UNWIND_INFO_MAX_ENTRIES 16384
+// Maximum number of unique stack deltas needed on a system. The maximum
+// we can use since STACK_DELTA_COMMAND_FLAG uses the top bit.
+#define UNWIND_INFO_MAX_ENTRIES 32768
 
 // TSDInfo contains data needed to extract Thread Specific Data (TSD) values
 typedef struct TSDInfo {
