@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 178" width="960" height="178" role="img" aria-label="Host thread with short launches and long waits, above a GPU busy with kernels">
+<style>
+.bg { fill: #FFFFFF; }
+.d-zone { fill: #EEF1F5; }
+.d-box { fill: #FFFFFF; stroke: #BFC7D3; stroke-width: 1; }
+.d-ven { fill: #FBE8D7; stroke: #B3530E; stroke-width: 1.3; }
+.d-neu { fill: #DCF0EC; stroke: #0A7A74; stroke-width: 1.3; }
+.d-gpu { fill: #E5E4FA; stroke: #4B43C7; stroke-width: 1.3; }
+.d-host { fill: #DFEBF8; stroke: #286BAF; stroke-width: 1.3; }
+.d-wait { fill: #FFFFFF; stroke: #BFC7D3; stroke-width: 1.1; stroke-dasharray: 4 3; }
+.d-kern { fill: #4B43C7; opacity: 0.7; }
+.d-t { fill: #121722; font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.d-s { fill: #5E6B7E; font: 400 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.d-m { fill: #374153; font: 500 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.d-zl { fill: #5E6B7E; font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.08em; }
+.d-a { fill: none; stroke: #374153; stroke-width: 1.4; }
+.d-a.gpu { stroke: #4B43C7; }
+.d-dash { stroke-dasharray: 5 4; }
+.d-badge circle { fill: #121722; }
+.d-badge text { fill: #FFFFFF; font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.mk { fill: #374153; }
+.mk.gpu { fill: #4B43C7; }
+.fg-root { fill: #E3E7ED; }
+.fg-gpu { fill: #CFCAF5; }
+.fg-range { fill: #E6D6F6; }
+.fg-python { fill: #CFE1F5; }
+.fg-producer { fill: #F7D9BE; }
+.fg-t { fill: #121722; font: 500 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" class="mk"/></marker>
+  <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" class="mk gpu"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="960" height="178" rx="12"/>
+
+        <text x="20" y="62" class="d-zl">HOST THREAD</text>
+        <text x="20" y="142" class="d-zl">GPU</text>
+        <rect x="130" y="36" width="810" height="44" rx="7" class="d-zone"/>
+        <rect x="130" y="116" width="810" height="44" rx="7" class="d-zone"/>
+        <text x="140" y="26" class="d-s">launches return in microseconds</text>
+        <rect x="140" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="174" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="208" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="242" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="282" y="44" width="330" height="28" rx="4" class="d-wait"/>
+        <text x="447" y="62" text-anchor="middle" class="d-s">waiting for the GPU</text>
+        <rect x="626" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="660" y="44" width="26" height="28" rx="4" class="d-host"/>
+        <rect x="700" y="44" width="230" height="28" rx="4" class="d-wait"/>
+        <text x="815" y="62" text-anchor="middle" class="d-s">waiting for the GPU</text>
+        <rect x="160" y="124" width="116" height="28" rx="4" class="d-gpu"/>
+        <rect x="278" y="124" width="156" height="28" rx="4" class="d-gpu"/>
+        <rect x="436" y="124" width="94" height="28" rx="4" class="d-gpu"/>
+        <rect x="532" y="124" width="80" height="28" rx="4" class="d-gpu"/>
+        <rect x="660" y="124" width="120" height="28" rx="4" class="d-gpu"/>
+        <rect x="782" y="124" width="148" height="28" rx="4" class="d-gpu"/>
+        <text x="218" y="142" text-anchor="middle" class="d-m">kernel 1</text>
+        <text x="356" y="142" text-anchor="middle" class="d-m">kernel 2</text>
+        <text x="483" y="142" text-anchor="middle" class="d-m">kernel 3</text>
+        <text x="572" y="142" text-anchor="middle" class="d-m">kernel 4</text>
+        <text x="720" y="142" text-anchor="middle" class="d-m">kernel 5</text>
+        <text x="856" y="142" text-anchor="middle" class="d-m">kernel 6</text>
+        <path d="M153,72 L166,122" class="d-a gpu d-dash" marker-end="url(#ahg)"/>
+        <path d="M187,72 L284,122" class="d-a gpu d-dash" marker-end="url(#ahg)"/>
+        <path d="M639,72 L664,122" class="d-a gpu d-dash" marker-end="url(#ahg)"/>
+      
+</svg>

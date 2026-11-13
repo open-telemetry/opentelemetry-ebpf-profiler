@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 490" width="1000" height="490" role="img" aria-label="Architecture: a library inside the application, eBPF programs, and the profiler">
+<style>
+.bg { fill: #FFFFFF; }
+.d-zone { fill: #EEF1F5; }
+.d-box { fill: #FFFFFF; stroke: #BFC7D3; stroke-width: 1; }
+.d-ven { fill: #FBE8D7; stroke: #B3530E; stroke-width: 1.3; }
+.d-neu { fill: #DCF0EC; stroke: #0A7A74; stroke-width: 1.3; }
+.d-gpu { fill: #E5E4FA; stroke: #4B43C7; stroke-width: 1.3; }
+.d-host { fill: #DFEBF8; stroke: #286BAF; stroke-width: 1.3; }
+.d-wait { fill: #FFFFFF; stroke: #BFC7D3; stroke-width: 1.1; stroke-dasharray: 4 3; }
+.d-kern { fill: #4B43C7; opacity: 0.7; }
+.d-t { fill: #121722; font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.d-s { fill: #5E6B7E; font: 400 11.5px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.d-m { fill: #374153; font: 500 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.d-zl { fill: #5E6B7E; font: 600 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.08em; }
+.d-a { fill: none; stroke: #374153; stroke-width: 1.4; }
+.d-a.gpu { stroke: #4B43C7; }
+.d-dash { stroke-dasharray: 5 4; }
+.d-badge circle { fill: #121722; }
+.d-badge text { fill: #FFFFFF; font: 600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.mk { fill: #374153; }
+.mk.gpu { fill: #4B43C7; }
+.fg-root { fill: #E3E7ED; }
+.fg-gpu { fill: #CFCAF5; }
+.fg-range { fill: #E6D6F6; }
+.fg-python { fill: #CFE1F5; }
+.fg-producer { fill: #F7D9BE; }
+.fg-t { fill: #121722; font: 500 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+</style>
+<defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" class="mk"/></marker>
+  <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" class="mk gpu"/></marker>
+</defs>
+<rect class="bg" x="0" y="0" width="1000" height="490" rx="12"/>
+
+  <rect x="16" y="16" width="330" height="420" rx="14" class="d-zone"/>
+  <text x="36" y="44" class="d-zl">APPLICATION PROCESS · UNCHANGED</text>
+  <rect x="36" y="60" width="290" height="52" rx="9" class="d-box"/>
+  <text x="52" y="82" class="d-t">Application code</text>
+  <text x="52" y="100" class="d-s">Python, C++, …</text>
+  <path d="M181,112 V134" class="d-a" marker-end="url(#ah)"/>
+  <rect x="36" y="136" width="290" height="52" rx="9" class="d-box"/>
+  <text x="52" y="158" class="d-t">CUDA</text>
+  <text x="52" y="176" class="d-s">NVIDIA's runtime; gives every GPU call an id</text>
+  <path d="M181,188 V210" class="d-a" marker-end="url(#ah)"/>
+  <text x="191" y="204" class="d-s">calls it at every GPU call</text>
+  <rect x="36" y="212" width="290" height="96" rx="9" class="d-ven"/>
+  <text x="52" y="236" class="d-t">Producer library</text>
+  <text x="52" y="256" class="d-s">NVIDIA specific, loaded through</text>
+  <text x="52" y="274" class="d-m">CUDA_INJECTION64_PATH</text>
+  <text x="52" y="294" class="d-s">samples calls, fires a USDT probe</text>
+  <path d="M36,162 H24 V388 H34" class="d-a gpu" marker-end="url(#ahg)"/>
+  <text x="44" y="338" class="d-s">launch: returns at once</text>
+  <path d="M300,356 V312" class="d-a gpu d-dash" marker-end="url(#ahg)"/>
+  <text x="292" y="338" text-anchor="end" class="d-s">timings, later</text>
+  <rect x="36" y="356" width="290" height="64" rx="9" class="d-gpu"/>
+  <text x="52" y="380" class="d-t">GPU</text>
+  <rect x="100" y="368" width="56" height="11" rx="3" class="d-kern"/>
+  <rect x="160" y="368" width="88" height="11" rx="3" class="d-kern"/>
+  <rect x="252" y="368" width="58" height="11" rx="3" class="d-kern"/>
+  <rect x="120" y="384" width="104" height="11" rx="3" class="d-kern"/>
+  <rect x="228" y="384" width="64" height="11" rx="3" class="d-kern"/>
+  <text x="52" y="410" class="d-s">runs the kernels later</text>
+
+  <rect x="370" y="16" width="250" height="420" rx="14" class="d-zone"/>
+  <text x="390" y="44" class="d-zl">LINUX KERNEL · eBPF</text>
+  <text x="394" y="112" class="d-m">event: LAUNCH</text>
+  <rect x="390" y="120" width="210" height="64" rx="9" class="d-neu"/>
+  <text x="406" y="144" class="d-t">Capture the stack</text>
+  <text x="406" y="162" class="d-s">at each GPU call,</text>
+  <text x="406" y="177" class="d-s">like a CPU sample</text>
+  <text x="394" y="252" class="d-m">event: KERNEL, FILL, …</text>
+  <rect x="390" y="260" width="210" height="64" rx="9" class="d-neu"/>
+  <text x="406" y="286" class="d-t">Forward GPU timings</text>
+  <text x="406" y="304" class="d-s">as the producer reports them</text>
+  <path d="M326,236 H350 V152 H388" class="d-a" marker-end="url(#ah)"/>
+  <path d="M326,284 H350 V292 H388" class="d-a" marker-end="url(#ah)"/>
+
+  <rect x="644" y="16" width="340" height="420" rx="14" class="d-zone"/>
+  <text x="664" y="44" class="d-zl">PROFILER · VENDOR NEUTRAL</text>
+  <rect x="664" y="120" width="300" height="64" rx="9" class="d-box"/>
+  <text x="680" y="146" class="d-t">Resolve function names</text>
+  <text x="680" y="166" class="d-s">Python, Java, Go, native code, …</text>
+  <rect x="664" y="232" width="300" height="92" rx="9" class="d-neu"/>
+  <text x="680" y="258" class="d-t">Pair GPU time with its stack</text>
+  <text x="680" y="278" class="d-s">by process and call id,</text>
+  <text x="680" y="296" class="d-s">multiplied by the sample weight</text>
+  <rect x="664" y="356" width="300" height="64" rx="9" class="d-box"/>
+  <text x="680" y="382" class="d-t">Export OTLP profiles</text>
+  <text x="680" y="400" class="d-s">next to the CPU profiles</text>
+  <path d="M600,152 H662" class="d-a" marker-end="url(#ah)"/>
+  <path d="M814,184 V230" class="d-a" marker-end="url(#ah)"/>
+  <path d="M600,292 H662" class="d-a" marker-end="url(#ah)"/>
+  <path d="M814,324 V354" class="d-a" marker-end="url(#ah)"/>
+
+  <rect x="16" y="458" width="14" height="14" rx="4" class="d-ven"/>
+  <text x="38" y="470" class="d-s">Vendor specific</text>
+  <rect x="160" y="458" width="14" height="14" rx="4" class="d-neu"/>
+  <text x="182" y="470" class="d-s">Vendor neutral</text>
+  <rect x="300" y="458" width="14" height="14" rx="4" class="d-gpu"/>
+  <text x="322" y="470" class="d-s">GPU work</text>
+
+</svg>
