@@ -91,11 +91,10 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   u32 lo          = desc->firstPair;
   u32 hi          = lo + desc->numPairs;
 
-  // Binary search the page's own delta pairs, up to 15 iterations: pairs
-  // halve the entry count of a 64kB page. But since we have opcode merging
-  // and no sane program needs a delta for each opcode, allow up to 13
-  // iterations. And account for machine opcode size also.
-  for (u64 i = 0; i < 13 - MACHINE_OPCODE_SZ_LOG2; i++) {
+  // Binary search the page's own pairs. For each address up to 15 iterations
+  // are required: pairs halve the entry count of a 64kB page. Reduce iteration
+  // count based on minimal size of a machine opcode if possible.
+  for (u64 i = 0; i < 15 - MACHINE_OPCODE_SZ_LOG2; i++) {
     if (hi - lo < 2) {
       break;
     }

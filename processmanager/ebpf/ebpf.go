@@ -524,7 +524,8 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	}
 	if len(deltas)%2 == 1 {
 		tailKey := uint32(numPages + len(deltas)/2)
-		tailPair := support.StackDeltaPair{First: deltas[len(deltas)-1]}
+		lastDelta := deltas[len(deltas)-1]
+		tailPair := support.StackDeltaPair{First: lastDelta, Second: lastDelta}
 		if err = innerMap.Update(unsafe.Pointer(&tailKey), unsafe.Pointer(&tailPair),
 			cebpf.UpdateAny); err != nil {
 			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasUpdate,

@@ -367,18 +367,6 @@ func (state *executableInfoManagerState) loadDeltas(
 	// that resolves via the descriptor's fallback unwind info: the covering
 	// delta's info with its merge opcode adjustment resolved. Merges never
 	// cross page boundaries, so one info covers the whole fallback range.
-	//
-	// Every page slice is padded to a pair boundary with a duplicate of the
-	// last delta, so the eBPF side can always run its binary search on the
-	// first element of a pair, and the pads double as the covering deltas
-	// of the delta-free pages that follow.
-	//
-	// The deltas are emitted in address order, and the last one is always the
-	// sentinel of the last block, so the block span gives the number of pages
-	// for preallocating the descriptor slice. The actual first and last page
-	// are still derived from the emitted deltas, as a signal handler delta at
-	// the very start of the data shifts the first page by one with its -1
-	// fixup if the first block starts on a page boundary.
 	var fallbackInfo sdtypes.UnwindInfo
 	var firstPage, lastPage, lastAddr uint64
 	ebpfDeltas := make([]pmebpf.StackDelta, 0, numDeltas)
@@ -386,7 +374,8 @@ func (state *executableInfoManagerState) loadDeltas(
 		int(intervals.Blocks[len(intervals.Blocks)-1].End>>support.StackDeltaPageBits-
 			intervals.Blocks[0].Start>>support.StackDeltaPageBits)+1)
 	closePage := func() {
-		// Pad the open page slice to a pair boundary.
+		// Every page slice must be padded to a pair boundary for the binary
+		// search to work. Duplicate the page's last delta for padding if needed.
 		if len(ebpfDeltas)%2 == 1 {
 			ebpfDeltas = append(ebpfDeltas, ebpfDeltas[len(ebpfDeltas)-1])
 		}
