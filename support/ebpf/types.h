@@ -1011,12 +1011,48 @@ typedef struct UnwindInfo {
 //  7 bits  the difference to next 'addrLow'
 #define MERGEOPCODE_NEGATIVE 0x80
 
-// An array entry that we will bsearch into that keeps address and stack unwind
-// info, per executable.
+// StackDelta an array entry that we will bsearch into that keeps address and stack
+// unwind info, per executable.
 typedef struct StackDelta {
   u16 addrLow;    // the low 16-bits of the ELF virtual address to which this stack delta applies
   u16 unwindInfo; // index of UnwindInfo, or UNWIND_COMMAND_* if STACK_DELTA_COMMAND_FLAG is set
 } StackDelta;
+
+// StackDeltaPair is the ebpf array map entry for stack deltas: the kernel
+// rounds the element size up to 8 bytes, so pack two deltas into one element.
+typedef struct StackDeltaPair {
+  StackDelta first;
+  StackDelta second;
+} StackDeltaPair;
+
+// StackDeltaPageDesc locates the stack deltas of a single 64kB page in the
+// per-executable stack delta array. Page slices are padded to pair boundaries,
+// so the bsearch compares pair first elements only.
+typedef struct StackDeltaPageDesc {
+  u32 firstPair;    // absolute index of the first StackDeltaPair of the page slice
+  u16 numPairs;     // number of StackDeltaPair entries in the page slice
+  u16 fallbackInfo; // unwind info covering the addresses below the page's first own delta
+} StackDeltaPageDesc;
+
+_Static_assert(sizeof(struct StackDelta) == 4, "StackDelta must be a u16 pair");
+_Static_assert(
+  sizeof(struct StackDeltaPair) == 8, "StackDeltaPair must pack two StackDelta entries");
+_Static_assert(
+  sizeof(struct StackDeltaPageDesc) == sizeof(struct StackDeltaPair),
+  "StackDeltaPageDesc and StackDeltaPair sizes must equal");
+
+// StackDeltaMeta locates the stack delta data of an executable in the nested
+// stack delta maps: the inner map holds the page descriptors first, and the
+// stack delta pairs after them. All values fit 32 bits: the page numbers are
+// 64kB offsets of the user space text, and the mapID is bounded by
+// STACK_DELTA_BUCKET_LARGEST.
+typedef struct StackDeltaMeta {
+  u32 firstPage; // page number of the first StackDeltaPageDesc entry
+  u32 numPages;  // number of StackDeltaPageDesc entries
+  u32 mapID;     // outer map bucket that holds the inner map with the data
+} StackDeltaMeta;
+
+_Static_assert(sizeof(struct StackDeltaMeta) == 12, "StackDeltaMeta must pack to 12 bytes");
 
 // unwindInfo flag indicating that the value is UNWIND_COMMAND_* value and not an index to
 // the unwind info array.
@@ -1046,20 +1082,6 @@ typedef struct StackDelta {
 // Unwind past Go runtime.morestack by reading the caller registers it saved
 // into the goroutine's gobuf
 #define UNWIND_COMMAND_GO_MORESTACK  (STACK_DELTA_NATIVE_COMMAND_BIT | 6)
-
-// StackDeltaPageKey is the look up key for stack delta page map.
-typedef struct StackDeltaPageKey {
-  u64 fileID;
-  u64 page;
-} StackDeltaPageKey;
-
-// StackDeltaPageInfo contains information of stack delta page so the correct map
-// and range of StackDelta entries can be found.
-typedef struct StackDeltaPageInfo {
-  u32 firstDelta;
-  u16 numDeltas;
-  u16 mapID;
-} StackDeltaPageInfo;
 
 // Keep stack deltas in 64kB pages to limit search space and to fit the low address
 // bits into the addrLow field of struct StackDelta.

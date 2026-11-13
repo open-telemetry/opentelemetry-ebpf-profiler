@@ -11,28 +11,15 @@
 // The number of native frames to unwind per frame-unwinding eBPF program.
 #define NATIVE_FRAMES_PER_PROGRAM 5
 
-// A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
-// step, built in a way to update the value of *lo and *hi. This function will be called repeatedly
-// (since we cannot do loops). The return value signals whether the bsearch came to an end / found
-// the right element or whether it needs to continue.
-static EBPF_INLINE bool bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
-{
-  u32 pivot         = (*lo + *hi) >> 1;
-  StackDelta *delta = bpf_map_lookup_elem(inner_map, &pivot);
-  if (!delta) {
-    *hi = 0;
-    return false;
-  }
-  if (page_offset >= delta->addrLow) {
-    *lo = pivot + 1;
-  } else {
-    *hi = pivot;
-  }
-  return *lo < *hi;
-}
+// The minimal size of a machine opcode
+#if defined(__aarch64__)
+  #define MACHINE_OPCODE_SZ_LOG2 2 // 4 bytes
+#else
+  #define MACHINE_OPCODE_SZ_LOG2 0 // 1 bytes
+#endif
 
 // Get the outer map based on the number of stack delta entries.
-static EBPF_INLINE void *get_stack_delta_map(int mapID)
+static EBPF_INLINE void *get_stack_delta_map(u32 mapID)
 {
   switch (mapID) {
   case 8: return &exe_id_to_8_stack_deltas;
@@ -61,22 +48,20 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   u64 exe_id = state->text_section_id;
   u64 offset = state->text_section_offset - (u64)state->return_address;
 
-  // Look up the stack delta page information for this address.
-  StackDeltaPageKey key = {};
-  key.fileID            = exe_id;
-  key.page              = offset & ~STACK_DELTA_PAGE_MASK;
+  // Look up the stack delta data location for this executable.
   DEBUG_PRINT("Look up stack delta for %lx:%lx", exe_id, offset);
-  StackDeltaPageInfo *info = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
-  if (!info) {
-    DEBUG_PRINT("Failure to look up stack delta page fileID %lx, page %lx", exe_id, offset);
+  StackDeltaMeta *meta = bpf_map_lookup_elem(&exe_id_to_stackdelta_meta, &exe_id);
+  if (!meta) {
+  err_lookup_text_section:
+    DEBUG_PRINT("No stack delta data for %lx:%lx", exe_id, offset);
     state->error_metric = metricID_UnwindNativeErrLookupTextSection;
     return ERR_NATIVE_LOOKUP_TEXT_SECTION;
   }
 
-  void *outer_map = get_stack_delta_map(info->mapID);
+  void *outer_map = get_stack_delta_map(meta->mapID);
   if (!outer_map) {
     DEBUG_PRINT(
-      "Failure to look up outer map for text section %lx in mapID %d", exe_id, (int)info->mapID);
+      "Failure to look up outer map for text section %lx in mapID %d", exe_id, (int)meta->mapID);
     state->error_metric = metricID_UnwindNativeErrLookupStackDeltaOuterMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_OUTER_MAP;
   }
@@ -88,68 +73,90 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     return ERR_NATIVE_LOOKUP_STACK_DELTA_INNER_MAP;
   }
 
-  // Preinitialize the idx for the index to use for page without any deltas.
-  u32 idx         = info->firstDelta;
-  u16 page_offset = offset & STACK_DELTA_PAGE_MASK;
-  if (info->numDeltas) {
-    // Page has deltas, so find the correct one to use using binary search.
-    u32 lo = info->firstDelta;
-    u32 hi = lo + info->numDeltas;
+  // PCs outside the pages with stack delta data have no unwind info: report
+  // them as invalid. The unsigned subtraction wraps for pages below
+  // firstPage, rejecting both ranges with a single comparison.
+  u64 firstPage = meta->firstPage;
+  u64 page      = offset >> STACK_DELTA_PAGE_BITS;
+  if (page - firstPage >= meta->numPages) {
+    goto stack_delta_invalid;
+  }
+  u32 pageIdx              = (u32)(page - firstPage);
+  StackDeltaPageDesc *desc = bpf_map_lookup_elem(inner_map, &pageIdx);
+  if (!desc) {
+    goto err_lookup_text_section;
+  }
 
-    DEBUG_PRINT("Intervals should be from %u to %u (mapID %u)", lo, hi, info->mapID);
+  u16 page_offset = (u16)offset;
+  u32 lo          = desc->firstPair;
+  u32 hi          = lo + desc->numPairs;
 
-    // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
-    // They can contain at most 64kB deltas even if everything is single byte opcodes.
-    u64 i;
-    for (i = 0; i < 16; i++) {
-      if (!bsearch_step(inner_map, &lo, &hi, page_offset)) {
-        break;
+  // Binary search the page's own pairs. For each address up to 15 iterations
+  // are required: pairs halve the entry count of a 64kB page. Reduce iteration
+  // count based on minimal size of a machine opcode if possible.
+  for (u64 i = 0; i < 15 - MACHINE_OPCODE_SZ_LOG2; i++) {
+    if (hi - lo < 2) {
+      break;
+    }
+    u32 q                = (lo + hi) >> 1;
+    StackDeltaPair *pair = bpf_map_lookup_elem(inner_map, &q);
+    if (!pair) {
+      break;
+    }
+    if (page_offset >= pair->first.addrLow) {
+      lo = q;
+    } else {
+      hi = q;
+    }
+  }
+  if (hi - lo >= 2) {
+    DEBUG_PRINT("Stack delta iterations exceeded for %lx:%lx", exe_id, offset);
+    state->error_metric = metricID_UnwindNativeErrLookupIterations;
+    return ERR_NATIVE_EXCEEDED_DELTA_LOOKUP_ITERATIONS;
+  }
+
+  // The answer pair is pair lo. Its first delta matches page_offset unless
+  // the PC is below all own deltas of the page, in which case the page
+  // descriptor's fallbackInfo carries the covering unwind info, resolved
+  // by user space. Delta-free pages use it for the whole page, and the
+  // first page's fallback is STACK_DELTA_INVALID, as the code below its
+  // first delta is not instrumented.
+  u32 pairIdx     = lo;
+  int deltaOffset = 0;
+  u32 info        = desc->fallbackInfo;
+
+  if (desc->numPairs != 0) {
+    StackDeltaPair *pair = bpf_map_lookup_elem(inner_map, &pairIdx);
+    if (!pair) {
+      DEBUG_PRINT("Failed to look up the stack delta pair for %lx:%lx", exe_id, offset);
+      state->error_metric = metricID_UnwindNativeErrLookupRange;
+      return ERR_NATIVE_LOOKUP_RANGE;
+    }
+    if (page_offset >= pair->first.addrLow) {
+      // The second delta of the pair is the closer match when it also
+      // covers page_offset. This is the only first/second selection.
+      StackDelta *delta = &pair->first;
+      if (page_offset >= pair->second.addrLow) {
+        delta = &pair->second;
       }
+      DEBUG_PRINT(
+        "delta index %d, addrLow 0x%x, unwindInfo %d", pairIdx, delta->addrLow, delta->unwindInfo);
+      deltaOffset = (int)page_offset - (int)delta->addrLow;
+      info        = delta->unwindInfo;
     }
-    if (i >= 16 || hi == 0) {
-      DEBUG_PRINT("Failed bsearch in 16 steps. Corrupt data?");
-      state->error_metric = metricID_UnwindNativeErrLookupIterations;
-      return ERR_NATIVE_EXCEEDED_DELTA_LOOKUP_ITERATIONS;
-    }
-    // After bsearch, 'hi' points to the first entry greater than the requested.
-    idx = hi;
-  }
-
-  // The code above found the first entry with greater address than requested,
-  // so it needs to be decremented by one to get the entry with equal-or-less.
-  // This makes also the logic work cross-pages: if the first entry in within
-  // the page is too large, this actually gets the entry from the previous page.
-  idx--;
-
-  StackDelta *delta = bpf_map_lookup_elem(inner_map, &idx);
-  if (!delta) {
-    state->error_metric = metricID_UnwindNativeErrLookupRange;
-    return ERR_NATIVE_LOOKUP_RANGE;
-  }
-
-  DEBUG_PRINT(
-    "delta index %d, addrLow 0x%x, unwindInfo %d", idx, delta->addrLow, delta->unwindInfo);
-
-  // Calculate PC delta from stack delta for merged delta comparison
-  int deltaOffset = (int)page_offset - (int)delta->addrLow;
-  if (idx < info->firstDelta) {
-    // PC is below the first delta of the corresponding page. This means that
-    // delta->addrLow contains address relative to one page before the page_offset.
-    // Fix up the deltaOffset with this difference of base pages.
-    deltaOffset += 1 << STACK_DELTA_PAGE_BITS;
   }
 
   *addrDiff   = deltaOffset;
-  *unwindInfo = delta->unwindInfo;
+  *unwindInfo = info;
 
-  if (delta->unwindInfo == STACK_DELTA_INVALID) {
+  if (info == STACK_DELTA_INVALID) {
+  stack_delta_invalid:
     state->error_metric = metricID_UnwindNativeErrStackDeltaInvalid;
     return ERR_NATIVE_STACK_DELTA_INVALID;
   }
-  if (delta->unwindInfo == STACK_DELTA_STOP) {
+  if (info == STACK_DELTA_STOP) {
     increment_metric(metricID_UnwindNativeStackDeltaStop);
   }
-
   return ERR_OK;
 }
 

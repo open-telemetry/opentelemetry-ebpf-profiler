@@ -749,14 +749,13 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	const (
 		// The following sizes X are used as 2^X, and determined empirically.
 		// 1 million executable pages / 4GB of executable address space
-		pidPageMappingInfoSize   = 20
-		stackDeltaPageToInfoSize = 16
-		exeIDToStackDeltasSize   = 16
+		pidPageMappingInfoSize = 20
+		exeIDToStackDeltasSize = 16
 	)
 
 	adaption["pid_page_to_mapping_info"] = 1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
 
-	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
+	adaption["exe_id_to_stackdelta_meta"] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
 
 	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case).
 	// As CPU hot-plugging during runtime is currently not supported use the number of online CPUs
