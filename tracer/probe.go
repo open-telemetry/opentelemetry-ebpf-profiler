@@ -51,8 +51,6 @@ type ProbeSpec struct {
 	Target string
 	// Symbol specifies the function or symbol name to probe.
 	Symbol string
-	// ProgName specifies the eBPF program name to attach.
-	ProgName string
 }
 
 const genericProgName = "kprobe__generic"
@@ -99,18 +97,16 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 		return &ProbeSpec{
 			Mode:     probeType,
 			Symbol:   parts[1],
-			ProgName: genericProgName,
 		}, nil
 
 	case ProbeModeUprobe, ProbeModeUretprobe:
-		if n != 3 || parts[2] == "" {
+		if n != 3 || parts[1] == "" || parts[2] == "" {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
 			Mode:     probeType,
 			Target:   parts[1],
 			Symbol:   parts[2],
-			ProgName: genericProgName,
 		}, nil
 
 	default:

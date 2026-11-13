@@ -174,8 +174,7 @@ func (c *Controller) Shutdown() {
 }
 
 // EnableProbe enables a probe on the running tracer. It must be called after
-// Start has completed. The probe requires the kprobe unwinder chain, which is
-// loaded automatically when probes is non-empty in the config.
+// Start has completed.
 func (c *Controller) EnableProbe(ctx context.Context, p tracer.Probe) error {
 	return c.tracer.Enable(ctx, p)
 }

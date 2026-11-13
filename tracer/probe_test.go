@@ -22,7 +22,6 @@ func TestParseProbe(t *testing.T) {
 			expected: &ProbeSpec{
 				Mode:     ProbeModeKprobe,
 				Symbol:   "vfs_read",
-				ProgName: "kprobe__generic",
 			},
 			wantErr: false,
 		},
@@ -31,7 +30,6 @@ func TestParseProbe(t *testing.T) {
 			expected: &ProbeSpec{
 				Mode:     ProbeModeKretprobe,
 				Symbol:   "vfs_read",
-				ProgName: "kprobe__generic",
 			},
 			wantErr: false,
 		},
@@ -41,7 +39,6 @@ func TestParseProbe(t *testing.T) {
 				Mode:     ProbeModeUprobe,
 				Target:   "/usr/lib/libc.so.6",
 				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
 			},
 			wantErr: false,
 		},
@@ -51,7 +48,6 @@ func TestParseProbe(t *testing.T) {
 				Mode:     ProbeModeUretprobe,
 				Target:   "/usr/lib/libc.so.6",
 				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
 			},
 			wantErr: false,
 		},
@@ -82,13 +78,8 @@ func TestParseProbe(t *testing.T) {
 		},
 		"uprobe_missing_target": {
 			input:   "uprobe::malloc",
-			wantErr: false, // This will parse but target will be empty
-			expected: &ProbeSpec{
-				Mode:     ProbeModeUprobe,
-				Target:   "",
-				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
-			},
+			wantErr: true,
+			errMsg:  "invalid format",
 		},
 		"uretprobe_empty_symbol": {
 			input:   "uretprobe:/bin/bash:",
@@ -127,9 +118,6 @@ func TestParseProbe(t *testing.T) {
 				assert.Equal(t, tc.expected.Symbol, got.Symbol)
 				if tc.expected.Target != "" {
 					assert.Equal(t, tc.expected.Target, got.Target)
-				}
-				if tc.expected.ProgName != "" {
-					assert.Equal(t, tc.expected.ProgName, got.ProgName)
 				}
 			}
 		})
