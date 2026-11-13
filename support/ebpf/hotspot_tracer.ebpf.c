@@ -909,6 +909,7 @@ hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_t
 // unwind_hotspot is the entry point for tracing when invoked from the native tracer
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
+SEC("multi/unwind_hotspot")
 static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -946,4 +947,3 @@ exit:
   record->state.unwind_error = error;
   return tail_call(ctx, record, unwinder);
 }
-MULTI_USE_FUNC(unwind_hotspot)
