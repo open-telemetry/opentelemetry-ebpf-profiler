@@ -777,7 +777,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" || mapName == "usdt_specs" {
+		if mapName == "sched_times" || mapName == "usdt_specs" || mapName == "ext_probe_value" {
 			// Probe-owned maps are created by their consuming probes on demand.
 			continue
 		}
