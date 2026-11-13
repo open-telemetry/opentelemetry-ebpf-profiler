@@ -53,8 +53,6 @@ type ProbeSpec struct {
 	Symbol string
 }
 
-const genericProgName = "kprobe__generic"
-
 // ParseProbe parses a probe specification string and returns a ProbeSpec.
 //
 // The expected format is:
