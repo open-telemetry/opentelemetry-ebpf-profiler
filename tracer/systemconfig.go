@@ -38,6 +38,8 @@ const (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
+	with_debug_output          uint32
+	filter_min_process_age_ns  uint64
 	inverse_pac_mask           uint64
 	tpbase_offset              uint64
 	task_stack_offset          uint32
@@ -780,10 +782,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	rodataVars := SysConfigVars{
-		inverse_pac_mask:        ^pacMask,
-		pid_ns_translation_mode: ebpfMode,
-		target_pid_ns_dev:       targetPIDNamespaceDev,
-		target_pid_ns_inode:     targetPIDNamespaceInode,
+		with_debug_output:         withDebugOutput,
+		filter_min_process_age_ns: filterMinProcessAgeNs,
+		inverse_pac_mask:          ^pacMask,
+		pid_ns_translation_mode:   ebpfMode,
+		target_pid_ns_dev:         targetPIDNamespaceDev,
+		target_pid_ns_inode:       targetPIDNamespaceInode,
 	}
 	configureVMALookup(coll, cfg, &rodataVars)
 

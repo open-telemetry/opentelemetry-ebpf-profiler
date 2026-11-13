@@ -113,6 +113,8 @@ type sysVar struct {
 func (c *ProbeContext) sysVarSetters() []sysVar {
 	sv := c.sysVars
 	vars := []sysVar{
+		{"with_debug_output", sv.with_debug_output},
+		{"filter_min_process_age_ns", sv.filter_min_process_age_ns},
 		{"inverse_pac_mask", sv.inverse_pac_mask},
 		{"tpbase_offset", sv.tpbase_offset},
 		{"task_stack_offset", sv.task_stack_offset},
