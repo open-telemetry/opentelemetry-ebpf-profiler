@@ -38,6 +38,8 @@ const (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
+	with_debug_output          uint32
+	filter_min_process_age_ns  uint64
 	inverse_pac_mask           uint64
 	tpbase_offset              uint64
 	task_stack_offset          uint32
@@ -700,8 +702,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	pidNamespaceMode := cfg.PIDNamespaceTranslationMode
 	pidNamespaceTranslation := pidNamespaceMode != PIDNamespaceTranslationModeNone
 
+	var withDebugOutput uint32
 	if cfg.VerboseMode {
-		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+		withDebugOutput = 1
+		if err := coll.Variables["with_debug_output"].Set(withDebugOutput); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
 	}
@@ -765,7 +769,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
-	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
+	filterMinProcessAgeNs := uint64(cfg.FilterMinProcessAge.Nanoseconds())
+	if err := coll.Variables["filter_min_process_age_ns"].Set(filterMinProcessAgeNs); err != nil {
 		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
 	}
 
@@ -780,10 +785,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	rodataVars := SysConfigVars{
-		inverse_pac_mask:        ^pacMask,
-		pid_ns_translation_mode: ebpfMode,
-		target_pid_ns_dev:       targetPIDNamespaceDev,
-		target_pid_ns_inode:     targetPIDNamespaceInode,
+		with_debug_output:         withDebugOutput,
+		filter_min_process_age_ns: filterMinProcessAgeNs,
+		inverse_pac_mask:          ^pacMask,
+		pid_ns_translation_mode:   ebpfMode,
+		target_pid_ns_dev:         targetPIDNamespaceDev,
+		target_pid_ns_inode:       targetPIDNamespaceInode,
 	}
 	configureVMALookup(coll, cfg, &rodataVars)
 
