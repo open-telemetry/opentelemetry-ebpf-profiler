@@ -215,6 +215,11 @@ type Tracer struct {
 	// profile type metadata is looked up by.
 	origins *originRegistry
 
+	// snapshotSources are probes that implement samples.SnapshotSource and produce
+	// additional profiles at each collection interval. Probes can be enabled
+	// while the reporter is already collecting snapshots, so access is guarded.
+	snapshotSources xsync.RWMutex[[]samples.SnapshotSource]
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -772,8 +777,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" {
-			// sched_times is owned by the off-CPU probe and created there on demand.
+		if mapName == "sched_times" || mapName == "usdt_specs" {
+			// Probe-owned maps are created by their consuming probes on demand.
 			continue
 		}
 		if mapName == obiSpanTracesMap {

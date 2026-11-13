@@ -2290,17 +2290,24 @@
     "id": 312
   },
   {
+    "description": "Number of times updating an element in usdt_specs failed",
+    "type": "counter",
+    "name": "USDTSpecsUpdate",
+    "field": "agent.errors.usdt_specs_update",
+    "id": 313
+  },
+  {
     "description": "Number of times updating an element in exeIDToStackDeltaMeta failed",
     "type": "counter",
     "name": "ExeIDToStackDeltaMetaUpdate",
     "field": "agent.errors.exe_id_to_stackdelta_meta_update",
-    "id": 313
+    "id": 314
   },
   {
     "description": "Number of times deleting an element from exeIDToStackDeltaMeta failed",
     "type": "counter",
     "name": "ExeIDToStackDeltaMetaDelete",
     "field": "agent.errors.exe_id_to_stackdelta_meta_delete",
-    "id": 314
+    "id": 315
   }
 ]

@@ -698,12 +698,15 @@ const (
 	// Number of processes whose published thread-context label schema was rejected
 	IDThreadContextSchemaRejected = 312
 
+	// Number of times updating an element in usdt_specs failed
+	IDUSDTSpecsUpdate = 313
+
 	// Number of times updating an element in exeIDToStackDeltaMeta failed
-	IDExeIDToStackDeltaMetaUpdate = 313
+	IDExeIDToStackDeltaMetaUpdate = 314
 
 	// Number of times deleting an element from exeIDToStackDeltaMeta failed
-	IDExeIDToStackDeltaMetaDelete = 314
+	IDExeIDToStackDeltaMetaDelete = 315
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 315
+	IDMax = 316
 )
