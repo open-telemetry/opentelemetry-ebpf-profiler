@@ -281,11 +281,12 @@ func TestHandleNewInterpreterRecordsAnonymousMappingInterestLocally(t *testing.T
 		},
 	}
 
-	anonymousMappingsWanted, err := pm.handleNewInterpreter(
+	anonymousMappingsWanted, newInterpreterAttached, err := pm.handleNewInterpreter(
 		process.New(pid, pid), 0, oid, data, false)
 	require.NoError(err)
 	require.Contains(pm.interpreters[pid], oid)
 	require.True(anonymousMappingsWanted)
+	require.True(newInterpreterAttached)
 }
 
 func TestHandleNewInterpreterDoesNotAssignOnAttachFailure(t *testing.T) {
@@ -306,10 +307,11 @@ func TestHandleNewInterpreterDoesNotAssignOnAttachFailure(t *testing.T) {
 		},
 	}
 
-	anonymousMappingsWanted, err := pm.handleNewInterpreter(
+	anonymousMappingsWanted, newInterpreterAttached, err := pm.handleNewInterpreter(
 		process.New(pid, pid), 0, oid, data, false)
 	require.ErrorIs(err, attachErr)
 	require.False(anonymousMappingsWanted)
+	require.False(newInterpreterAttached)
 	require.NotContains(pm.interpreters, pid)
 }
 
@@ -333,12 +335,13 @@ func TestHandleNewInterpreterKeepsExistingInterpreter(t *testing.T) {
 		},
 	}
 
-	anonymousMappingsWanted, err := pm.handleNewInterpreter(
+	anonymousMappingsWanted, newInterpreterAttached, err := pm.handleNewInterpreter(
 		process.New(pid, pid), 0, newOID, data, true)
 	require.NoError(err)
 	require.Contains(pm.interpreters[pid], oldOID)
 	require.Contains(pm.interpreters[pid], newOID)
 	require.True(anonymousMappingsWanted)
+	require.True(newInterpreterAttached)
 }
 
 func TestProcessRemovedInterpretersClearsAnonymousMappingInterest(t *testing.T) {
@@ -598,4 +601,173 @@ func TestSynchronizeProcessRunEnrichers(t *testing.T) {
 	require.Equal(2, enricherCalls)
 	meta, _ = pm.metaForPID(pid)
 	require.Equal("foobarbaz", meta.ExtraMeta[key])
+}
+
+// TestSynchronizeMappingIgnoresNonELFTargets verifies that mappings which cannot
+// be a file-backed ELF probe/unwind target are ignored without touching eBPF
+// state or creating process info.
+func TestSynchronizeMappingIgnoresNonELFTargets(t *testing.T) {
+	pid := libpf.PID(123)
+	for _, tc := range []struct {
+		name string
+		m    process.RawMapping
+	}{
+		{"non-executable", process.RawMapping{
+			Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R,
+			Device: 1, Inode: 2, Path: "/usr/lib/libc.so.6",
+		}},
+		{"anonymous executable", process.RawMapping{
+			Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		}},
+		{"memfd executable", process.RawMapping{
+			Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+			Device: 1, Inode: 2, Path: "/memfd:jit",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ebpf := &testEbpfHandler{}
+			pm := &ProcessManager{
+				ebpf:             ebpf,
+				interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+				pidToProcessInfo: make(map[libpf.PID]*processInfo),
+				exitEvents:       make(map[libpf.PID]times.KTime),
+			}
+			pm.SynchronizeMapping(&testProcess{pid: pid}, &tc.m)
+			require.Empty(t, ebpf.pidPageMappingInfoUpdates)
+			require.NotContains(t, pm.pidToProcessInfo, pid)
+		})
+	}
+}
+
+// TestSynchronizeMappingIgnoresUntrackedProcess verifies that an mmap event for
+// a not-yet-tracked process is a no-op: bootstrapping is left to the CPU
+// profiler's reported_pids path (a full SynchronizeProcess on first sample).
+func TestSynchronizeMappingIgnoresUntrackedProcess(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	ebpf := &testEbpfHandler{}
+	pm := &ProcessManager{
+		ebpf:             ebpf,
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: make(map[libpf.PID]*processInfo),
+		exitEvents:       make(map[libpf.PID]times.KTime),
+	}
+	m := process.RawMapping{
+		Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		Device: 1, Inode: 2, Path: "/usr/lib/libc.so.6",
+	}
+
+	pm.SynchronizeMapping(&testProcess{pid: pid}, &m)
+
+	require.NotContains(pm.pidToProcessInfo, pid)
+	require.Empty(ebpf.pidPageMappingInfoUpdates)
+}
+
+// TestSynchronizeMappingSkipsKnownMapping verifies that a repeated mmap event
+// for a mapping already recorded is a no-op: no eBPF churn and no re-attach.
+func TestSynchronizeMappingSkipsKnownMapping(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	ebpf := &testEbpfHandler{}
+	attacher := &recordingProbeAttacher{}
+	m := process.RawMapping{
+		Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		Device: 1, Inode: 2, Path: "/usr/lib/libc.so.6",
+	}
+	pm := &ProcessManager{
+		ebpf:           ebpf,
+		probeAttachers: []ProbeAttacher{attacher},
+		attachedProbes: make(map[libpf.PID]map[ProbeAttacher]libpf.Void),
+		interpreters:   make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		exitEvents:     make(map[libpf.PID]times.KTime),
+		pidToProcessInfo: map[libpf.PID]*processInfo{
+			pid: {mappings: []Mapping{{
+				Vaddr: libpf.Address(m.Vaddr), Length: m.Length,
+				Device: m.Device, Inode: m.Inode,
+			}}},
+		},
+	}
+
+	pm.SynchronizeMapping(&testProcess{pid: pid}, &m)
+
+	require.Empty(ebpf.pidPageMappingInfoUpdates)
+	require.Nil(attacher.attachedMapping)
+}
+
+// TestSynchronizeMappingAbortsDuringCleanup verifies that a mapping for a tracked
+// PID pending exit cleanup is dropped without mutating its mapping set.
+func TestSynchronizeMappingAbortsDuringCleanup(t *testing.T) {
+	pid := libpf.PID(123)
+	ebpf := &testEbpfHandler{}
+	info := &processInfo{}
+	pm := &ProcessManager{
+		ebpf:             ebpf,
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: map[libpf.PID]*processInfo{pid: info},
+		exitEvents:       map[libpf.PID]times.KTime{pid: 1},
+	}
+	m := process.RawMapping{
+		Vaddr: 0x1000, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		Device: 1, Inode: 2, Path: "/usr/lib/libc.so.6",
+	}
+
+	pm.SynchronizeMapping(&testProcess{pid: pid}, &m)
+
+	require.Empty(t, ebpf.pidPageMappingInfoUpdates)
+	require.Empty(t, info.mappings)
+}
+
+// TestSynchronizeMappingResyncsOnVaddrConflict verifies that when a different
+// mapping reuses an address already tracked (munmap/dlclose then a new mmap),
+// SynchronizeMapping falls back to a full SynchronizeProcess to replace the
+// stale entry rather than dropping the event. Proven here via the process-meta
+// refresh that only a full sync performs; the removal/reconcile itself is
+// covered by SynchronizeProcess's own tests.
+func TestSynchronizeMappingResyncsOnVaddrConflict(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	const vaddr = 0x1000
+
+	// Mapping A, already tracked, with a valid FrameMapping so the full sync's
+	// diff can match and reuse it (no executable-info manager needed).
+	rawA := process.RawMapping{
+		Vaddr: vaddr, Length: 0x1000, Flags: elf.PF_R | elf.PF_X,
+		Device: 1, Inode: 2, Path: "/lib/libA.so",
+	}
+	mappingA := Mapping{
+		Vaddr: libpf.Address(vaddr), Length: rawA.Length,
+		Device: rawA.Device, Inode: rawA.Inode,
+		FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID: libpf.NewFileID(1, 2), FileName: libpf.Intern("libA.so"),
+			}),
+			Start: 0, End: libpf.Address(rawA.Length),
+		}),
+	}
+	info := &processInfo{
+		mappings: []Mapping{mappingA},
+		meta:     process.Meta{Executable: libpf.Intern("old")},
+	}
+	pm := &ProcessManager{
+		ebpf:             &testEbpfHandler{},
+		interpreters:     make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance),
+		pidToProcessInfo: map[libpf.PID]*processInfo{pid: info},
+		exitEvents:       make(map[libpf.PID]times.KTime),
+	}
+
+	// Mapping B reuses A's address with a different device/inode/length.
+	rawB := process.RawMapping{
+		Vaddr: vaddr, Length: 0x2000, Flags: elf.PF_R | elf.PF_X,
+		Device: 9, Inode: 9, Path: "/lib/libB.so",
+	}
+
+	// The process still maps A but now reports a new executable; the exe change
+	// forces the process-meta refresh that only SynchronizeProcess performs.
+	pm.SynchronizeMapping(&testProcess{
+		pid:      pid,
+		exe:      libpf.Intern("new"),
+		mappings: []process.RawMapping{rawA},
+	}, &rawB)
+
+	require.Equal(libpf.Intern("new"), pm.pidToProcessInfo[pid].meta.Executable)
 }

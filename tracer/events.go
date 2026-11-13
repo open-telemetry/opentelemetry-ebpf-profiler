@@ -51,6 +51,8 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 		select {
 		case pidTid := <-t.pidEvents:
 			t.processManager.SynchronizeProcess(process.New(pidTid.PID(), pidTid.TID()))
+		case ev := <-t.mmapEvents:
+			t.processManager.SynchronizeMapping(process.New(ev.pid, ev.tid), &ev.mapping)
 		case <-pidCleanupTicker.C:
 			t.processManager.CleanupPIDs()
 		case <-ctx.Done():
