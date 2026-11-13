@@ -23,20 +23,24 @@ var ErrBufferTooSmall = errors.New("buffer too small")
 // maxBufferSize is a build-time constant for the internal buffer size.
 const maxBufferSize = 64 * 1024
 
-// Reader implements a pooled, buffered io.Reader on top of io.ReaderAt.
-// After Init() call the Reader must not be copied.
+// Reader implements a pooled, buffered io.Reader on top of a
+// libpf.ViewAtReader.
+// After Init()/InitFromView()/InitSlideView() the Reader must not be copied.
 type Reader struct {
-	source io.ReaderAt
+	source libpf.ViewAtReader
 
 	start  int64 // Original start offset
 	off    int64 // Source offset where the next ReadAt will start
 	limit  int64 // Maximum source offset allowed
 	slimit int64 // Current section limit
 
-	pos     int // Current read position in buf
-	nbuf    int // Valid data currently in buf
-	nlim    int // Valid data in buf before sub-section limit
-	bufSize int // Configured read-ahead buffer size
+	pos       int             // Current read position in buf
+	nbuf      int             // Valid data currently in buf
+	nlim      int             // Valid data in buf before sub-section limit
+	bufSize   int             // Configured read-ahead buffer size
+	zeroCopy  bool            // buf is a borrowed view, not owned by the Reader
+	slideView bool            // fill() borrows zero-copy views from a libpf.ViewAtReader
+	pinnedPin libpf.PinHandle // Handle of the pinned borrowed view, 0 if none
 
 	sectionEnds []int64
 
@@ -45,7 +49,7 @@ type Reader struct {
 
 // NewReader returns a new reader using given source within the start
 // and maxLen bounds.
-func NewReader(source io.ReaderAt, start, maxLen int64) Reader {
+func NewReader(source libpf.ViewAtReader, start, maxLen int64) Reader {
 	r := Reader{}
 	r.Init(source, start, maxLen)
 	return r
@@ -53,14 +57,29 @@ func NewReader(source io.ReaderAt, start, maxLen int64) Reader {
 
 // Release clears references and returns the buffer to the pool.
 func (r *Reader) Release() {
-	libpf.PutBuffer(r.buf)
-	r.buf = nil
+	r.dropBuf()
 	r.source = nil
 	r.off = 0
 	r.limit = 0
 	r.slimit = 0
+	r.slideView = false
 	r.sectionEnds = r.sectionEnds[:0]
 	r.flush()
+}
+
+// dropBuf forgets the current buffer. Owned buffers are returned to the
+// pool, borrowed zero-copy views are just released, and explicit pins of
+// borrowed views are removed.
+func (r *Reader) dropBuf() {
+	if r.buf != nil && !r.zeroCopy {
+		libpf.PutBuffer(r.buf)
+	}
+	if r.pinnedPin != 0 && r.source != nil {
+		r.source.Unpin(r.pinnedPin)
+	}
+	r.pinnedPin = 0
+	r.buf = nil
+	r.zeroCopy = false
 }
 
 func (r *Reader) flush() {
@@ -72,17 +91,111 @@ func (r *Reader) flush() {
 // Init initializes the reader source. An initialized Reader must not
 // be duplicated: both the shared buffer and the source reader position
 // would get corrupted.
-func (r *Reader) Init(source io.ReaderAt, start, maxLen int64) {
+func (r *Reader) Init(source libpf.ViewAtReader, start, maxLen int64) {
+	r.dropBuf()
+	r.init(source, start, maxLen)
+	if r.buf == nil {
+		r.buf = libpf.GetBuffer(maxBufferSize)
+	}
+	r.flush()
+}
+
+// InitFromView initializes the reader like Init, but if the source
+// implements libpf.ViewAtReader and the whole area is available in one
+// contiguous region, the Reader borrows a zero-copy view of the area from
+// the source instead of copying the data into its own buffer.
+//
+// Handed-out slices of a borrowed view are invalidated not only by the
+// next read on the Reader, but also by any read operation on the source
+// that could evict the backing region.
+func (r *Reader) InitFromView(source libpf.ViewAtReader, start, maxLen int64) {
+	r.dropBuf()
+	r.init(source, start, maxLen)
+
+	if maxLen > 0 && maxLen <= int64(math.MaxInt) {
+		view, h, err := source.PinAt(start, int(maxLen))
+		if err == nil && view != nil {
+			r.zeroCopy = true
+			r.buf = view[:maxLen]
+			r.pos = 0
+			r.nbuf = int(maxLen)
+			r.nlim = int(maxLen)
+			r.off = start + maxLen
+			r.pinnedPin = h
+			return
+		}
+	}
+	if r.buf == nil {
+		r.buf = libpf.GetBuffer(maxBufferSize)
+	}
+	r.flush()
+}
+
+// InitSlideView initializes the reader like InitFromView, but if the whole
+// area is not available in one contiguous region, fill() slides a zero-copy
+// window over the source with libpf.ViewAtReader.ViewAt, instead of copying
+// the data into its own buffer. This serves sequential readers on top of a
+// page cache without double buffering.
+func (r *Reader) InitSlideView(source libpf.ViewAtReader, start, maxLen int64) {
+	r.InitFromView(source, start, maxLen)
+	r.slideView = true
+}
+
+// InitSubReader initializes sub as a Reader over the same source with the
+// same area bounds as r, positioned at offset relative to the start. While
+// the sub-reader is active, the parent must not be used, and the parent
+// must remain valid until the sub-reader is released. A previously used
+// sub is reset.
+//
+// If the parent holds a fully loaded zero-copy view, the sub-reader borrows
+// a sub-view of it: no I/O is performed, and the view is read-only. In all
+// other cases the sub-reader gets its own buffer and reads through the
+// source. The current implementation never invalidates the parent on
+// Release: the parent stays usable after the sub-reader is released.
+func (r *Reader) InitSubReader(sub *Reader, offset int64) error {
+	if offset < 0 || offset > r.limit-r.start {
+		return errOffset
+	}
+	sub.dropBuf()
+	abs := r.start + offset
+	if r.zeroCopy && r.off == r.limit && abs >= r.off-int64(r.nbuf) {
+		// The parent's view fully covers [abs, limit): lend a read-only
+		// sub-view of it.
+		sub.zeroCopy = true
+		sub.source = r.source
+		sub.pinnedPin = 0
+		sub.buf = r.buf[abs-(r.off-int64(r.nbuf)):]
+		sub.start = r.start
+		sub.limit = r.limit
+		sub.slimit = r.limit
+		sub.off = r.limit
+		sub.nbuf = int(r.limit - abs)
+		sub.nlim = sub.nbuf
+		sub.bufSize = r.bufSize
+		return nil
+	}
+	// Serve from the source with an own buffer. Sliding is deliberately
+	// not inherited: the sub-reader must not move the source's view pin
+	// while the parent holds a view.
+	sub.init(r.source, r.start, r.limit-r.start)
+	sub.off = abs
+	sub.bufSize = r.bufSize
+	if sub.buf == nil {
+		sub.buf = libpf.GetBuffer(maxBufferSize)
+	}
+	return nil
+}
+
+// init sets the reader source and area bounds.
+func (r *Reader) init(source libpf.ViewAtReader, start, maxLen int64) {
 	r.source = source
 	r.start = start
 	r.off = start
 	r.limit = start + maxLen
 	r.slimit = r.limit
 	r.bufSize = maxBufferSize
-	if r.buf == nil {
-		r.buf = libpf.GetBuffer(maxBufferSize)
-	}
-	r.flush()
+	r.slideView = false
+	r.pinnedPin = 0
 }
 
 // SetBufferSize configures the read-ahead buffer size.
@@ -115,6 +228,20 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	if offset < r.start {
 		return 0, errOffset
 	}
+	if r.zeroCopy {
+		// The borrowed view must never be written to, as it may alias the
+		// internal storage of the source. If the target is within the
+		// loaded view, just adjust the position. Otherwise drop the window
+		// contents and let the next fill() serve the new position.
+		viewStart := r.off - int64(r.nbuf)
+		if offset >= viewStart && offset <= r.off {
+			r.pos = int(offset - viewStart)
+			return offset - r.start, nil
+		}
+		r.off = offset
+		r.flush()
+		return offset - r.start, nil
+	}
 	r.off = offset
 	r.flush()
 	return offset - r.start, nil
@@ -139,14 +266,52 @@ func (r *Reader) fill() error {
 		return io.EOF
 	}
 
-	// Move unconsumed bytes to the start of the buffer
 	preserve := r.nbuf - r.pos
+
+	// Slide the zero-copy window forward if the whole area is not already
+	// loaded in a borrowed view.
+	if preserve == 0 && r.slideView {
+		view, h, err := r.source.PinAt(r.off, 1)
+		if err == nil && view != nil {
+			r.dropBuf()
+			r.zeroCopy = true
+			r.buf = view
+			r.pos = 0
+			r.nbuf = len(view)
+			r.off += int64(len(view))
+			r.updateBufferLimit()
+			r.pinnedPin = h
+			return nil
+		}
+	}
+
+	if r.zeroCopy {
+		// The borrowed view must never be written to: move any unconsumed
+		// bytes into an owned buffer, and continue from there. The callers
+		// of fill() must limit their reads so that the unconsumed bytes
+		// leave room to read into the owned buffer; refuse to serve a fill
+		// that would overrun it.
+		if preserve >= maxBufferSize {
+			return ErrBufferTooSmall
+		}
+		owned := libpf.GetBuffer(maxBufferSize)
+		copy(owned[:preserve], r.buf[r.pos:r.nbuf])
+		r.dropBuf()
+		r.buf = owned
+		r.pos = 0
+	}
+
+	// Move unconsumed bytes to the start of the buffer
 	if preserve > 0 && r.pos > 0 {
 		copy(r.buf[:preserve], r.buf[r.pos:r.pos+preserve])
 	}
 
 	r.pos = 0
-	toRead := min(int64(r.bufSize-preserve), r.limit-r.off)
+	// Read ahead in chunks of bufSize, accumulating up to the owned buffer
+	// capacity: a fill on a partially consumed borrowed view grows the
+	// buffered data beyond a single read-ahead chunk, regardless of how
+	// small the borrowed view was.
+	toRead := min(int64(r.bufSize), int64(maxBufferSize-preserve), r.limit-r.off)
 
 	n, err := r.source.ReadAt(r.buf[preserve:preserve+int(toRead)], r.off)
 	r.nbuf = n + preserve
@@ -290,16 +455,30 @@ func (r *Reader) Peek(n int) ([]byte, error) {
 	if n < 0 {
 		return nil, errNegativeCount
 	}
-	if n > r.bufSize {
+	// The request must fit the owned buffer even when fills accumulate
+	// across small borrowed views.
+	if n > maxBufferSize {
 		return nil, ErrBufferTooSmall
 	}
-	if r.nlim-r.pos < n {
+	for r.nlim-r.pos < n {
+		// A fill() on a sliding zero-copy view can return a short window
+		// when the current position is near a page boundary (a borrowed
+		// view never straddles pages). Keep filling while progress is
+		// made, so a small view at the end of a page is combined with the
+		// data from the next page.
+		before := r.nbuf - r.pos
 		if err := r.fill(); err != nil {
-			return nil, err
+			if r.nbuf-r.pos == before {
+				return nil, err
+			}
+			break
 		}
-		if r.nlim-r.pos < n {
-			return nil, io.EOF
+		if r.nbuf-r.pos == before {
+			break
 		}
+	}
+	if r.nlim-r.pos < n {
+		return nil, io.EOF
 	}
 	return r.buf[r.pos : r.pos+n], nil
 }
@@ -337,8 +516,10 @@ func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
 			return res, io.EOF
 		}
 
-		// If buffer is full and no delim, we must clear it to find the delim
-		if r.nlim != r.nbuf || (r.pos == 0 && r.nbuf == r.bufSize) {
+		// If the unconsumed data already fills the owned buffer without a
+		// delimiter, a fill could not carry it: give up with the buffered
+		// data.
+		if r.nlim != r.nbuf || r.nbuf-r.pos >= maxBufferSize {
 			pos := r.pos
 			r.pos = r.nlim
 			return r.buf[pos:r.nlim], ErrBufferTooSmall
@@ -383,11 +564,19 @@ func (r *Reader) WalkAllStrings(fn func(offset int64, s string) error) error {
 }
 
 // SearchSlice moves the reader position to immediately AFTER the pattern.
-// Returns the absolute offset of the START of the pattern.
+// Returns the absolute offset of the START of the pattern. Patterns longer
+// than the owned buffer cannot be found across buffer boundaries,
+// and are refused with ErrBufferTooSmall.
 func (r *Reader) SearchSlice(pattern []byte) (int64, error) {
 	plen := len(pattern)
 	if plen == 0 {
 		return r.Tell(), nil
+	}
+	// A pattern that leaves no room in the owned buffer to keep its tail
+	// and read new data cannot be found across buffer boundaries: refuse
+	// it up front instead of silently missing matches.
+	if plen > maxBufferSize {
+		return -1, ErrBufferTooSmall
 	}
 
 	for {

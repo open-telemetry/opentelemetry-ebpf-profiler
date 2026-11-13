@@ -4,10 +4,10 @@
 package elfunwindinfo
 
 import (
-	"bytes"
 	"debug/elf"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -179,7 +179,7 @@ func TestParseCIE(t *testing.T) {
 				debugFrame: tc.debugFrame,
 			}
 			defer fakeReader.Release()
-			fakeReader.Init(bytes.NewReader(tc.data), 0, int64(len(tc.data)))
+			fakeReader.Init(libpf.NewBytesView(tc.data), 0, int64(len(tc.data)))
 
 			length, marker, err := fakeReader.parseLengthAndMarker()
 			require.NoError(t, err)

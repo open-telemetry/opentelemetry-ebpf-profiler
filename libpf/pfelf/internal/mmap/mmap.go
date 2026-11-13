@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"sync/atomic"
 	"syscall"
-	"unsafe"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // ReaderAt reads a memory-mapped file.
@@ -18,25 +18,13 @@ import (
 // Like any io.ReaderAt, clients can execute parallel ReadAt calls, but it is
 // not safe to call Close and reading methods concurrently.
 type ReaderAt struct {
-	// refCount is the number of references
-	refCount atomic.Int32
-
 	data []byte
 }
 
-// Take takes a reference on the data
-func (r *ReaderAt) Take() io.Closer {
-	r.refCount.Add(1)
-	return r
-}
+var _ libpf.ViewAtReader = &ReaderAt{}
 
 // Close closes the reader.
 func (r *ReaderAt) Close() error {
-	// Drop reference
-	if r.refCount.Add(-1) > 0 {
-		return nil
-	}
-	// No more references - unmap data
 	if r.data == nil {
 		return nil
 	} else if len(r.data) == 0 {
@@ -74,15 +62,44 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-// Subslice returns a subset of the mmapped backed data.
-func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
-	// Compare without overflowing: corrupt ELF headers can carry huge or
-	// negative values that would wrap around in a plain offset+length sum.
-	if offset < 0 || length < 0 || offset > r.Len() || length > r.Len()-offset {
-		return nil, fmt.Errorf("requested data %x-%x exceeds %x: %w",
-			offset, offset+length, r.Len(), io.EOF)
+// ViewAt implements the libpf.ViewAtReader interface. The returned view
+// extends up to the end of the mapping.
+func (r *ReaderAt) ViewAt(offs int64, minLen int) ([]byte, error) {
+	if offs < 0 {
+		return nil, fmt.Errorf("mmap: negative ViewAt offset %d", offs)
 	}
-	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offset])), length), nil
+	if minLen <= 0 {
+		minLen = 1
+	}
+	if offs >= int64(r.Len()) || int64(r.Len())-offs < int64(minLen) {
+		return nil, io.EOF
+	}
+	return r.data[offs:], nil
+}
+
+// PinAt implements the libpf.ViewAtReader interface. The mapping is
+// naturally stable for its full lifetime, so pinning is trivial: the view
+// is valid until the mapping is closed.
+func (r *ReaderAt) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
+	view, err := r.ViewAt(offs, minLen)
+	return view, 0, err
+}
+
+// Unpin implements the libpf.ViewAtReader interface. It is a no-op, as
+// the mapping is naturally stable.
+func (r *ReaderAt) Unpin(h libpf.PinHandle) {}
+
+var _ libpf.StableViewer = &ReaderAt{}
+
+// StableViewAt returns a zero-copy view of length bytes starting at offs.
+// The mapping is naturally stable for its full lifetime. Returns nil if
+// the range is out of bounds.
+func (r *ReaderAt) StableViewAt(offs int64, length int) []byte {
+	if offs < 0 || length <= 0 || offs >= int64(r.Len()) ||
+		int64(r.Len())-offs < int64(length) {
+		return nil
+	}
+	return r.data[offs : offs+int64(length)]
 }
 
 // Open memory-maps the named file for reading.
@@ -127,7 +144,6 @@ func OpenFile(f *os.File) (*ReaderAt, error) {
 	}
 
 	r := &ReaderAt{data: data}
-	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
 	r.setRandom()
 	return r, nil
