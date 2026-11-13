@@ -431,16 +431,16 @@ exit:
   return tail_call(ctx, record, unwinder);
 }
 
+SEC("multi/unwind_dotnet")
 static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
 {
   return unwind_dotnet_core(
     ctx, PROG_UNWIND_DOTNET, DOTNET_FRAMES_PER_PROGRAM, dotnet_find_code_start);
 }
-MULTI_USE_FUNC(unwind_dotnet)
 
+SEC("multi/unwind_dotnet10")
 static EBPF_INLINE int unwind_dotnet10(struct pt_regs *ctx)
 {
   return unwind_dotnet_core(
     ctx, PROG_UNWIND_DOTNET10, DOTNET10_FRAMES_PER_PROGRAM, dotnet10_find_code_start);
 }
-MULTI_USE_FUNC(unwind_dotnet10)

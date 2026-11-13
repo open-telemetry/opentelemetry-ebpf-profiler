@@ -551,10 +551,10 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		}
 	}
 
-	// The perf and the probe unwinders refer to disjoint sets of program
-	// specifications ("perf_" and "kprobe_" prefixed), and the probe unwinders only
-	// depend on already loaded maps, not on the loaded perf programs. Collect the load
-	// jobs of both so that all of them are verified by the kernel concurrently.
+	// The perf and the probe unwinders verify the same program specifications
+	// (the probe loads kprobe-typed alias copies), and the probe unwinders
+	// only depend on already loaded maps. Collect the load jobs of both so
+	// that all of them are verified by the kernel concurrently.
 	var perfJobs, probeJobs []progEntry
 	perfJobs, err = perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
 	if err != nil {
@@ -848,6 +848,34 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	return nil
 }
 
+// progSpecForJob resolves the program specification for a load job, prepared
+// for loading as the given program type.
+//
+// Unwinders are emitted once into the type-less "multi" section, named after
+// the unwinder function itself: the program type is not encoded in the ELF,
+// so type and name are overridden per load. Kprobe-typed loads rewrite map
+// references and therefore work on a copy of the specification; perf_event
+// loads override the shared specification in place. Entry programs
+// (NoTailCallTarget) are loaded as parsed from the blob.
+func progSpecForJob(coll *cebpf.CollectionSpec, job ProgLoaderHelper,
+	progType cebpf.ProgramType, namePrefix string,
+) (*cebpf.ProgramSpec, error) {
+	progSpec, ok := coll.Programs[job.Name]
+	if !ok {
+		return nil, fmt.Errorf("program %s does not exist", job.Name)
+	}
+
+	if job.NoTailCallTarget {
+		return progSpec, nil
+	}
+	if progType != cebpf.PerfEvent {
+		progSpec = progSpec.Copy()
+	}
+	progSpec.Type = progType
+	progSpec.Name = namePrefix + "_" + job.Name
+	return progSpec, nil
+}
+
 // perfUnwinderJobs collects the load jobs for all perf eBPF programs and their tail
 // call targets. It only prepares the jobs, it does not load anything into the kernel.
 func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
@@ -880,14 +908,9 @@ func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			continue
 		}
 
-		unwindProgName := unwindProg.Name
-		if !unwindProg.NoTailCallTarget {
-			unwindProgName = "perf_" + unwindProg.Name
-		}
-
-		progSpec, ok := coll.Programs[unwindProgName]
-		if !ok {
-			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
+		progSpec, err := progSpecForJob(coll, unwindProg, cebpf.PerfEvent, "perf")
+		if err != nil {
+			return nil, err
 		}
 
 		jobs = append(jobs, progEntry{
@@ -921,9 +944,9 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 	return insNos
 }
 
-// loadProbeUnwinders reuses large parts of perfUnwinderJobs. By default all eBPF programs
-// are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
-// specification of these programs to xProbe eBPF programs and adjusts tail call maps if needed.
+// loadProbeUnwinders reuses large parts of perfUnwinderJobs. Unwinder programs
+// live in the type-less "multi" section; the probe path loads kprobe-typed
+// alias copies and adjusts the tail call maps if needed.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
 	bpfVerifierLogLevel uint32, maxConcurrentLoads int, perfTailCallMapFD int,
@@ -949,18 +972,13 @@ func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			continue
 		}
 
-		unwindProgName := unwindProg.Name
-		if !unwindProg.NoTailCallTarget {
-			unwindProgName = "kprobe_" + unwindProg.Name
-		}
-
-		progSpec, ok := coll.Programs[unwindProgName]
-		if !ok {
-			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
+		progSpec, err := progSpecForJob(coll, unwindProg, cebpf.Kprobe, "kprobe")
+		if err != nil {
+			return nil, err
 		}
 
 		// Skip rewriting tail call maps for external perf_event based probes.
-		if unwindProgName != "perf_event__external" {
+		if unwindProg.Name != "perf_event__external" {
 			// Replace the prog array for the tail calls.
 			insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
 			for _, ins := range insns {
