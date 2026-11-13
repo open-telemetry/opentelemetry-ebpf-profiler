@@ -159,12 +159,14 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
 
+ CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^ ,}]+) \}.*/\1/p' \
+         .github/workflows/unit-test-on-pull-request.yml)
 # Run on one kernel, or every CI kernel for TARGET_ARCH.
-integration-tests: integration-test-binaries
-	bash ./support/run-kernel-tests.sh "$(TARGET_ARCH)" "$(KERNEL_VERSION)"
 
-integration-tests-all: integration-test-binaries
-	bash ./support/run-kernel-tests.sh "$(TARGET_ARCH)" --all
+  KERNEL_VERSION ?= $(CI_KERNELS)
+
+ integration-tests: integration-test-binaries
+         QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh $(KERNEL_VERSION)
 
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
