@@ -522,6 +522,7 @@ save_state:
 }
 
 // unwind_ruby is the tail call destination for PROG_UNWIND_RUBY.
+SEC("multi/unwind_ruby")
 static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -606,4 +607,3 @@ exit:
   record->state.unwind_error = error;
   return tail_call(ctx, record, unwinder);
 }
-MULTI_USE_FUNC(unwind_ruby)

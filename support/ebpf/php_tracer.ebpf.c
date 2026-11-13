@@ -200,6 +200,7 @@ static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo
 }
 
 // unwind_php is the tail call destination for PROG_UNWIND_PHP.
+SEC("multi/unwind_php")
 static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -259,4 +260,3 @@ static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
 exit:
   return tail_call(ctx, record, unwinder);
 }
-MULTI_USE_FUNC(unwind_php)

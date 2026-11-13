@@ -7,29 +7,6 @@
 #include "frametypes.h"
 #include "types.h"
 
-#if defined(TESTING_COREDUMP)
-
-  #define MULTI_USE_FUNC(func_name)
-
-#else // TESTING_COREDUMP
-
-  // MULTI_USE_FUNC generates perf event and kprobe eBPF programs
-  // for a given function.
-  #define MULTI_USE_FUNC(func_name)                                                                \
-    SEC("perf_event/" #func_name)                                                                  \
-    static int EBPF_INLINE perf_##func_name(struct pt_regs *ctx)                                   \
-    {                                                                                              \
-      return func_name(ctx);                                                                       \
-    }                                                                                              \
-                                                                                                   \
-    SEC("kprobe/" #func_name)                                                                      \
-    static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                 \
-    {                                                                                              \
-      return func_name(ctx);                                                                       \
-    }
-
-#endif // TESTING_COREDUMP
-
 #define DEBUG_UNWIND_STATE(state)                                                                  \
   DEBUG_PRINT("pc: %lx sp: %lx fp: %lx", (state)->pc, (state)->sp, (state)->fp)
 

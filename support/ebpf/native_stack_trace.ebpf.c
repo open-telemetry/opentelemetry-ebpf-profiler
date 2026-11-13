@@ -142,6 +142,7 @@ struct stack_delta_page_to_info_t {
 #include "native_stack_trace.h"
 
 // unwind_native is the tail call destination for PROG_UNWIND_NATIVE.
+SEC("multi/unwind_native")
 static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -216,4 +217,3 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   return collect_trace(
     (struct pt_regs *)&ctx->regs, origin_id_sampling, pid, tid, group_leader, ts);
 }
-MULTI_USE_FUNC(unwind_native)

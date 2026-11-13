@@ -13,6 +13,7 @@ struct luajit_procs_t {
 } luajit_procs SEC(".maps");
 
 // Unimplemented; just a stub that compiles and references the map.
+SEC("multi/unwind_luajit")
 static EBPF_INLINE int unwind_luajit([[maybe_unused]] struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -31,4 +32,3 @@ static EBPF_INLINE int unwind_luajit([[maybe_unused]] struct pt_regs *ctx)
 exit:
   return -1;
 }
-MULTI_USE_FUNC(unwind_luajit)
