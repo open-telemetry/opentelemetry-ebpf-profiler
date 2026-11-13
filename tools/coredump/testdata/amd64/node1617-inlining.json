@@ -5,24 +5,24 @@
       "lwp": 13591,
       "frames": [
         "ld-musl-x86_64.so.1+0x554a3",
-        "ld-musl-x86_64.so.1+0x526f9",
-        "ld-musl-x86_64.so.1+0x51cf4",
-        "ld-musl-x86_64.so.1+0x52b03",
+        "ld-musl-x86_64.so.1+0x526f9 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x51cf4 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x52b03 (__pthread_cond_timedwait)",
         "node+0x1193d48",
         "node+0x771dca",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     },
     {
       "lwp": 13589,
       "frames": [
-        "ld-musl-x86_64.so.1+0x566d8",
+        "ld-musl-x86_64.so.1+0x566d8 (__clock_gettime)",
         "node+0x119812a",
         "node+0x119748e",
         "node+0x1185d76",
         "node+0x7750a7",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     },
@@ -30,12 +30,12 @@
       "lwp": 13594,
       "frames": [
         "ld-musl-x86_64.so.1+0x554a3",
-        "ld-musl-x86_64.so.1+0x526f9",
-        "ld-musl-x86_64.so.1+0x51cf4",
-        "ld-musl-x86_64.so.1+0x55005",
+        "ld-musl-x86_64.so.1+0x526f9 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x51cf4 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x55005 (sem_timedwait)",
         "node+0x1193bd1",
         "node+0x7f7920",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     },
@@ -82,7 +82,7 @@
         "node+0x746acd",
         "node+0x746eef",
         "node+0x6cc146",
-        "ld-musl-x86_64.so.1+0x1ca21",
+        "ld-musl-x86_64.so.1+0x1ca21 (libc_start_main_stage2)",
         "node+0x618c1c"
       ]
     },
@@ -90,12 +90,12 @@
       "lwp": 13590,
       "frames": [
         "ld-musl-x86_64.so.1+0x554a3",
-        "ld-musl-x86_64.so.1+0x526f9",
-        "ld-musl-x86_64.so.1+0x51cf4",
-        "ld-musl-x86_64.so.1+0x52b03",
+        "ld-musl-x86_64.so.1+0x526f9 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x51cf4 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x52b03 (__pthread_cond_timedwait)",
         "node+0x1193d48",
         "node+0x771dca",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     },
@@ -103,12 +103,12 @@
       "lwp": 13592,
       "frames": [
         "ld-musl-x86_64.so.1+0x554a3",
-        "ld-musl-x86_64.so.1+0x526f9",
-        "ld-musl-x86_64.so.1+0x51cf4",
-        "ld-musl-x86_64.so.1+0x52b03",
+        "ld-musl-x86_64.so.1+0x526f9 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x51cf4 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x52b03 (__pthread_cond_timedwait)",
         "node+0x1193d48",
         "node+0x771dca",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     },
@@ -116,12 +116,12 @@
       "lwp": 13593,
       "frames": [
         "ld-musl-x86_64.so.1+0x554a3",
-        "ld-musl-x86_64.so.1+0x526f9",
-        "ld-musl-x86_64.so.1+0x51cf4",
-        "ld-musl-x86_64.so.1+0x52b03",
+        "ld-musl-x86_64.so.1+0x526f9 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x51cf4 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x52b03 (__pthread_cond_timedwait)",
         "node+0x1193d48",
         "node+0x771dca",
-        "ld-musl-x86_64.so.1+0x531f4",
+        "ld-musl-x86_64.so.1+0x531f4 (start)",
         "ld-musl-x86_64.so.1+0x5546f"
       ]
     }

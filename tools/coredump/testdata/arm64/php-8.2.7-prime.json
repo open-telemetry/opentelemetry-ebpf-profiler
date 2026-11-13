@@ -6,15 +6,15 @@
       "frames": [
         "is_prime+13 in /pwd/testsources/php/prime.php:16",
         "<top-level>+33 in /pwd/testsources/php/prime.php:34",
-        "php8.2+0x3637b0",
-        "php8.2+0x36b7cb",
-        "php8.2+0x2e7c13",
-        "php8.2+0x28156f",
+        "php8.2+0x3637b0 (execute_ex)",
+        "php8.2+0x36b7cb (zend_execute)",
+        "php8.2+0x2e7c13 (zend_execute_scripts)",
+        "php8.2+0x28156f (php_execute_script)",
         "php8.2+0x3ddc6f",
         "php8.2+0x10d73f",
         "libc.so.6+0x2777f",
-        "libc.so.6+0x27857",
-        "php8.2+0x10d82f"
+        "libc.so.6+0x27857 (__libc_start_main)",
+        "php8.2+0x10d82f (_start)"
       ]
     }
   ],

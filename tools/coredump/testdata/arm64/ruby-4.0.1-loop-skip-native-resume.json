@@ -9,7 +9,7 @@
     {
       "lwp": 13420,
       "frames": [
-        "libruby.so.4.0.1+0x31e660",
+        "libruby.so.4.0.1+0x31e660 (vm_exec_core)",
         "Object#is_prime+0 in /tmp/loop.rb:13",
         "Range#each+0 in <cfunc>:0",
         "Object#is_prime+0 in /tmp/loop.rb:12",
@@ -24,8 +24,8 @@
     {
       "lwp": 13436,
       "frames": [
-        "libc.so.6+0xebe34",
-        "libruby.so.4.0.1+0x2c18bf",
+        "libc.so.6+0xebe34 (epoll_pwait)",
+        "libruby.so.4.0.1+0x2c18bf (timer_thread_func)",
         "libc.so.6+0x8595b",
         "libc.so.6+0xebb0b"
       ]

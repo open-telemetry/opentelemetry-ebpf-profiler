@@ -4,14 +4,14 @@
     {
       "lwp": 67475,
       "frames": [
-        "libc-2.33.so+0xa4b60",
-        "stackalign+0x95f",
-        "stackalign+0x96f",
-        "stackalign+0x96f",
-        "stackalign+0x96f",
-        "stackalign+0x70f",
-        "libc-2.33.so+0x21613",
-        "stackalign+0x777"
+        "libc-2.33.so+0xa4b60 (pause)",
+        "stackalign+0x95f (calc)",
+        "stackalign+0x96f (calc)",
+        "stackalign+0x96f (calc)",
+        "stackalign+0x96f (calc)",
+        "stackalign+0x70f (main)",
+        "libc-2.33.so+0x21613 (__libc_start_main)",
+        "stackalign+0x777 (_start)"
       ]
     }
   ],

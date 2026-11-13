@@ -4,9 +4,9 @@
     {
       "lwp": 32071,
       "frames": [
-        "brokenstack+0x768",
-        "brokenstack+0x77f",
-        "brokenstack+0x7a7",
+        "brokenstack+0x768 (a)",
+        "brokenstack+0x77f (b)",
+        "brokenstack+0x7a7 (c)",
         "<unwinding aborted due to error native_small_pc>"
       ]
     }

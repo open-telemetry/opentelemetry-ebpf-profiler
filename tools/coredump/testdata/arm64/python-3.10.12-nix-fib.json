@@ -4,8 +4,8 @@
     {
       "lwp": 33070,
       "frames": [
-        "libpython3.10.so.1.0+0x6977c",
-        "libpython3.10.so.1.0+0xbdbd7",
+        "libpython3.10.so.1.0+0x6977c (long_richcompare)",
+        "libpython3.10.so.1.0+0xbdbd7 (PyObject_RichCompare)",
         "recur_fibo+1 in /media/psf/Development/prodfiler/utils/coredump/testsources/python/./fib.py:4",
         "recur_fibo+1 in /media/psf/Development/prodfiler/utils/coredump/testsources/python/./fib.py:4",
         "recur_fibo+1 in /media/psf/Development/prodfiler/utils/coredump/testsources/python/./fib.py:4",

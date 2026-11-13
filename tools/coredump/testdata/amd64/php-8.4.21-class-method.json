@@ -6,15 +6,15 @@
       "frames": [
         "PrimeChecker::isPrime+11 in /tmp/tmp.ZVugDmXE19/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/class_method.php:16",
         "<top-level>+29 in /tmp/tmp.ZVugDmXE19/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/class_method.php:30",
-        "php8.4+0x3cbe0a",
-        "php8.4+0x3c9b30",
-        "php8.4+0x435895",
-        "php8.4+0x2c6147",
+        "php8.4+0x3cbe0a (execute_ex)",
+        "php8.4+0x3c9b30 (zend_execute)",
+        "php8.4+0x435895 (zend_execute_script)",
+        "php8.4+0x2c6147 (php_execute_script_ex)",
         "php8.4+0x43785e",
         "php8.4+0x138c42",
         "libc.so.6+0x2a1c9",
-        "libc.so.6+0x2a28a",
-        "php8.4+0x139dc4"
+        "libc.so.6+0x2a28a (__libc_start_main)",
+        "php8.4+0x139dc4 (_start)"
       ]
     }
   ],

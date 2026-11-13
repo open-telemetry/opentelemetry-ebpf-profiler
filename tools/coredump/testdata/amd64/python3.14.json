@@ -33,17 +33,17 @@
         "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
         "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
         "<module>+9 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:10",
-        "python3.14+0x5454c6",
-        "python3.14+0x53ffa0",
+        "python3.14+0x5454c6 (_PyEval_EvalFrameDefault)",
+        "python3.14+0x53ffa0 (PyEval_EvalCode)",
         "python3.14+0x6b741e",
         "python3.14+0x6b3dcf",
         "python3.14+0x6b377d",
         "python3.14+0x6b3271",
-        "python3.14+0x6b0552",
-        "python3.14+0x65ea68",
+        "python3.14+0x6b0552 (Py_RunMain)",
+        "python3.14+0x65ea68 (Py_BytesMain)",
         "libc.so.6+0x29f74",
-        "libc.so.6+0x2a026",
-        "python3.14+0x65de70"
+        "libc.so.6+0x2a026 (__libc_start_main)",
+        "python3.14+0x65de70 (_start)"
       ]
     }
   ],

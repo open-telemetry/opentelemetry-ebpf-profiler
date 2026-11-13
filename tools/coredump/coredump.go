@@ -77,6 +77,11 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 		return fmt.Sprintf("<error %s>", errName), nil
 	}
 
+	if frame.Type.IsInterpType(libpf.Native) && frame.FunctionName != libpf.NullString &&
+		frame.Mapping.Valid() {
+		return fmt.Sprintf("%s+0x%x (%s)", frame.Mapping.Value().File.Value().FileName,
+			frame.AddressOrLineno, frame.FunctionName), nil
+	}
 	if frame.FunctionName != libpf.NullString {
 		columnInfo := ""
 		if frame.SourceColumn != 0 {

@@ -7,15 +7,15 @@
         "php8.2+0x322dfd",
         "is_prime+13 in /pwd/utils/coredump/testsources/php/prime.php:16",
         "<top-level>+33 in /pwd/utils/coredump/testsources/php/prime.php:34",
-        "php8.2+0x361a38",
-        "php8.2+0x36b434",
-        "php8.2+0x2f872f",
-        "php8.2+0x292619",
+        "php8.2+0x361a38 (execute_ex)",
+        "php8.2+0x36b434 (zend_execute)",
+        "php8.2+0x2f872f (zend_execute_scripts)",
+        "php8.2+0x292619 (php_execute_script)",
         "php8.2+0x3e0f66",
         "php8.2+0x1281af",
         "libc.so.6+0x276c9",
-        "libc.so.6+0x27784",
-        "php8.2+0x129320"
+        "libc.so.6+0x27784 (__libc_start_main)",
+        "php8.2+0x129320 (_start)"
       ]
     }
   ],

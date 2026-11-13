@@ -713,6 +713,12 @@ const (
 	// Number of times updating an element in usdt_specs failed
 	IDUSDTSpecsUpdate = 313
 
+	// Number of successfully symbolized native frames
+	IDNativeSymbolizationSuccess = 314
+
+	// Number of native frames that failed symbolization
+	IDNativeSymbolizationFailure = 315
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 314
+	IDMax = 316
 )

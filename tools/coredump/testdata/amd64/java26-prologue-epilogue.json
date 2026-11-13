@@ -4,14 +4,14 @@
     {
       "lwp": 28749,
       "frames": [
-        "libc.so.6+0x11b4fd",
+        "libc.so.6+0x11b4fd (__poll)",
         "gdb+0x7849dd",
         "gdb+0x7854f7",
         "gdb+0x3d3ea9",
         "gdb+0x3d6f04",
         "gdb+0x11ddab",
         "libc.so.6+0x2a1c9",
-        "libc.so.6+0x2a28a",
+        "libc.so.6+0x2a28a (__libc_start_main)",
         "gdb+0x12c1f4"
       ]
     },
@@ -19,7 +19,7 @@
       "lwp": 28758,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -30,7 +30,7 @@
       "lwp": 28757,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -41,7 +41,7 @@
       "lwp": 28756,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -52,7 +52,7 @@
       "lwp": 28755,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -63,7 +63,7 @@
       "lwp": 28754,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -74,7 +74,7 @@
       "lwp": 28753,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -85,7 +85,7 @@
       "lwp": 28752,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
@@ -96,7 +96,7 @@
       "lwp": 28751,
       "frames": [
         "libc.so.6+0x98d71",
-        "libc.so.6+0x9b7ec",
+        "libc.so.6+0x9b7ec (pthread_cond_wait)",
         "gdb+0x790f5a",
         "libstdc++.so.6.0.33+0xecdb3",
         "libc.so.6+0x9caa3",
