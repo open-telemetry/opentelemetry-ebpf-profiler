@@ -184,28 +184,18 @@ func (c *Controller) EnableProbe(ctx context.Context, p tracer.Probe) error {
 }
 
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
-	// Spawn monitors for the various result maps
-	traceCh := make(chan *libpf.EbpfTrace)
-
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
+	// Spawn monitors for the result maps; the tracer hands traces to the
+	// process manager itself.
+	if err := trc.StartMapMonitors(ctx); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
 	go func() {
-		// Poll the output channels
-		for {
-			select {
-			case trace := <-traceCh:
-				if trace != nil {
-					trc.HandleTrace(trace)
-				}
-			case <-trc.Done():
-				log.Errorf("Shutting down controller due to unrecoverable tracer error")
-				c.Shutdown()
-				return
-			case <-ctx.Done():
-				return
-			}
+		select {
+		case <-trc.Done():
+			log.Errorf("Shutting down controller due to unrecoverable tracer error")
+			c.Shutdown()
+		case <-ctx.Done():
 		}
 	}()
 

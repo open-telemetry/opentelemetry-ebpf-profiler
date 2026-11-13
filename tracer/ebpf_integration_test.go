@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/probes/heap"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -126,10 +127,66 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	require.NoError(t, event.Close())
 }
 
-type trace struct {
+// observedTrace is the trace data captured by testTraceHooks, keyed by the
+// test case ID in COMM[3].
+type observedTrace struct {
 	numKernelFrames int
-	contextValues   []uint64
-	frames          libpf.EbpfFrame
+	numUserFrames   int
+	// firstUserAddress is the raw address of the first non-kernel frame.
+	firstUserAddress libpf.AddressOrLineno
+	contextValues    []uint64
+}
+
+// testTraceHooks records traces of the integration test probe (0xAA 0xBB
+// 0xCC COMM prefix).
+type testTraceHooks struct {
+	pm.StubTraceHandlerHooks
+	traces *sync.Map // keyed by the test case ID encoded in COMM[3]
+}
+
+func (h *testTraceHooks) PostHandleTrace(ctx *pm.TraceContext, tr *libpf.Trace) {
+	comm := ctx.Comm.String()
+	if len(comm) < 4 || comm[:3] != "\xAA\xBB\xCC" {
+		return
+	}
+	observed := observedTrace{contextValues: slices.Clone(ctx.ContextValues)}
+	for _, uniqueFrame := range tr.Frames {
+		switch frame := uniqueFrame.Value(); frame.Type {
+		case libpf.KernelFrame:
+			observed.numKernelFrames++
+		default:
+			if observed.numUserFrames == 0 {
+				observed.firstUserAddress = frame.AddressOrLineno
+			}
+			observed.numUserFrames++
+		}
+	}
+	h.traces.Store(comm[3], observed)
+}
+
+// probeTrace is a TraceContext snapshot; it is only valid during the hook
+// call.
+type probeTrace struct {
+	comm string
+	pid  libpf.PID
+	tid  libpf.PID
+}
+
+// forwardProbeTraces forwards probe traces to the test goroutine.
+type forwardProbeTraces struct {
+	pm.StubTraceHandlerHooks
+	traces chan<- probeTrace
+}
+
+func (f *forwardProbeTraces) PostHandleTrace(ctx *pm.TraceContext, _ *libpf.Trace) {
+	comm := ctx.Comm.String()
+	if len(comm) < 4 || comm[:3] != "\xAA\xBB\xCC" {
+		return
+	}
+	select {
+	case f.traces <- probeTrace{comm: comm, pid: ctx.PID, tid: ctx.TID}:
+	default:
+	}
 }
 
 func TestTracerErrorPropagation(t *testing.T) {
@@ -170,8 +227,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 
 	tr.GetEbpfMaps()["pid_events"] = badMap
 
-	traceChan := make(chan *libpf.EbpfTrace, 16)
-	require.NoError(t, tr.StartMapMonitors(ctx, traceChan))
+	require.NoError(t, tr.StartMapMonitors(ctx))
 	<-tr.Done()
 }
 
@@ -198,13 +254,14 @@ func TestTracerMapMonitorsError(t *testing.T) {
 	// force error by removing a required map during map monitor start up
 	delete(tr.GetEbpfMaps(), "report_events")
 
-	traceChan := make(chan *libpf.EbpfTrace, 16)
-	require.Error(t, tr.StartMapMonitors(ctx, traceChan))
+	require.Error(t, tr.StartMapMonitors(ctx))
 }
 
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(t.Context())
 	defer cancelFn()
+
+	var traces sync.Map
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
@@ -218,45 +275,23 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		ProbabilisticThreshold: 100,
 
 		VerboseMode: true,
+		SamplingTraceHooks: &testTraceHooks{
+			traces: &traces,
+		},
 	})
 	require.NoError(t, err)
 	defer tr.Close()
 
-	traceChan := make(chan *libpf.EbpfTrace, 16)
-	err = tr.StartMapMonitors(ctx, traceChan)
-	require.NoError(t, err)
+	require.NoError(t, tr.StartMapMonitors(ctx))
 
 	runKernelFrameProbe(t, tr)
 
-	traces := make(map[uint8]trace)
-	timeout := time.NewTimer(1 * time.Second)
-
-	// Wait 1 second for traces to arrive.
-Loop:
-	for {
-		select {
-		case <-timeout.C:
-			break Loop
-		case <-tr.Done():
-			t.Fatal("tracer encountered an unrecoverable error")
-		case ebpfTrace := <-traceChan:
-			if ebpfTrace == nil {
-				// Flush marker sent before ProcessedUntil.
-				continue
-			}
-			comm := ebpfTrace.Comm.String()
-			require.GreaterOrEqual(t, len(comm), 4)
-			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
-			traces[comm[3]] = trace{
-				numKernelFrames: len(ebpfTrace.KernelFrames),
-				contextValues:   slices.Clone(ebpfTrace.ContextValues),
-				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData)),
-			}
-		}
-	}
-
-	nativeFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, 21)
-	nativeFrame[1] = 1337
+	// Wait up to 1 second for both probe traces to arrive.
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		_, ok1 := traces.Load(uint8(1))
+		_, ok2 := traces.Load(uint8(2))
+		assert.True(ct, ok1 && ok2, "probe traces not received")
+	}, 1*time.Second, 10*time.Millisecond)
 
 	tests := map[string]struct {
 		// id identifies the trace to inspect (encoded in COMM[3]).
@@ -265,14 +300,10 @@ Loop:
 		hasKernelFrames bool
 		// contextValues are expected before the kernel-frame region in variable_data.
 		contextValues []uint64
-		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
-		// that will be verified against the returned Trace.
-		userSpaceTrace libpf.EbpfFrame
 	}{
 		"Single Native Frame": {
-			id:             1,
-			contextValues:  nil,
-			userSpaceTrace: nativeFrame,
+			id:            1,
+			contextValues: nil,
 		},
 		"Single Native Frame with Kernel Frames": {
 			id:              2,
@@ -282,14 +313,14 @@ Loop:
 				0x2222222222222222,
 				0x3333333333333333,
 			},
-			userSpaceTrace: nativeFrame,
 		},
 	}
 
 	for name, testcase := range tests {
 		t.Run(name, func(t *testing.T) {
-			trace, ok := traces[testcase.id]
+			raw, ok := traces.Load(testcase.id)
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
+			trace := raw.(observedTrace)
 			require.Equal(t, testcase.contextValues, trace.contextValues)
 
 			numKernelFrames := trace.numKernelFrames
@@ -306,9 +337,11 @@ Loop:
 			assert.Falsef(t, testcase.hasKernelFrames && numKernelFrames < 2,
 				"expected at least 2 kernel frames, but got %d", numKernelFrames)
 
-			t.Logf("Received %d framedata and %d kernel frames",
-				len(trace.frames), numKernelFrames)
-			assert.Equal(t, testcase.userSpaceTrace, trace.frames)
+			// The probe pushes a single native frame with address 21.
+			t.Logf("Received %d user frames and %d kernel frames",
+				trace.numUserFrames, numKernelFrames)
+			assert.Equal(t, 1, trace.numUserFrames)
+			assert.Equal(t, libpf.AddressOrLineno(21), trace.firstUserAddress)
 		})
 	}
 }
@@ -373,6 +406,9 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	require.Equal(t, selfPIDNamespace, procPIDNamespace, "procfs must represent the profiler namespace")
 
 	_, btfErr := os.Stat("/sys/kernel/btf/vmlinux")
+	// Forward probe traces (0xAA 0xBB 0xCC COMM prefix) to the test goroutine.
+	traceCh := make(chan probeTrace, 1024)
+
 	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
 		Intervals:                   &mockIntervals{},
 		InterpretersConfig:          interpreterconfig.AllInterpreters(),
@@ -380,6 +416,7 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 		ProbabilisticInterval:       100,
 		ProbabilisticThreshold:      100,
 		PIDNamespaceTranslationMode: tracer.PIDNamespaceTranslationModeRecursive,
+		SamplingTraceHooks:          &forwardProbeTraces{traces: traceCh},
 	})
 	if os.IsNotExist(btfErr) {
 		require.ErrorContains(t, err, "recursive PID namespace translation requires readable kernel BTF")
@@ -389,8 +426,7 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	require.NoError(t, err)
 	defer tr.Close()
 
-	traceChan := make(chan *libpf.EbpfTrace, 1024)
-	require.NoError(t, tr.StartMapMonitors(t.Context(), traceChan))
+	require.NoError(t, tr.StartMapMonitors(t.Context()))
 
 	event := attachKernelFrameProbe(t, tr)
 	defer event.Close()
@@ -412,23 +448,15 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 			t.Fatalf("no trace received for descendant namespace PID %d", targetPID)
 		case <-tr.Done():
 			t.Fatal("tracer encountered an unrecoverable error")
-		case trace := <-traceChan:
-			if trace == nil {
-				// Flush marker sent before ProcessedUntil.
-				continue
-			}
-			comm := trace.Comm.String()
-			if len(comm) < 4 || comm[:3] != "\xAA\xBB\xCC" {
-				continue
-			}
-			if comm[4:] == pidNamespaceSibling[4:] {
+		case pt := <-traceCh:
+			if pt.comm[4:] == pidNamespaceSibling[4:] {
 				t.Fatal("received trace from sibling PID namespace")
 			}
-			if comm[4:] != pidNamespaceTarget[4:] ||
-				trace.PID != targetPID || trace.TID == targetPID {
+			if pt.comm[4:] != pidNamespaceTarget[4:] ||
+				pt.pid != targetPID || pt.tid == targetPID {
 				continue
 			}
-			_, err := os.Stat(fmt.Sprintf("/proc/%d/task/%d", trace.PID, trace.TID))
+			_, err := os.Stat(fmt.Sprintf("/proc/%d/task/%d", pt.pid, pt.tid))
 			require.NoError(t, err, "translated TID does not belong to the target process")
 			return
 		}

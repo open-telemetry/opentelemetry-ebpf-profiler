@@ -6,7 +6,6 @@ package main
 import (
 	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -22,8 +21,8 @@ import "C"
 
 // ebpfContext is the context for EBPF code regarding the process it's unwinding.
 type ebpfContext struct {
-	// trace will contain the trace from the CGO executed eBPF unwinding code
-	trace libpf.EbpfTrace
+	// traceBuf holds the raw trace record for the process manager.
+	traceBuf []byte
 
 	// remotememory provides access to the target process memory space
 	remoteMemory remotememory.RemoteMemory
@@ -80,7 +79,6 @@ var ebpfContextMap = map[C.u64]*ebpfContext{}
 func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfContext {
 	pid := pr.PID()
 	ctx := &ebpfContext{
-		trace:                 libpf.EbpfTrace{PID: pid},
 		remoteMemory:          pr.GetRemoteMemory(),
 		PIDandTGID:            C.u64(pid) << 32,
 		pidToPageMapping:      make(map[C.PIDPage]unsafe.Pointer),

@@ -22,9 +22,8 @@ type TraceEventMeta struct {
 	Timestamp     libpf.UnixTime64
 	CPU           uint32
 	ProfileType   *TypeMetadata
-	// ContextValues aliases the origin-specific value prefix in the pooled
-	// libpf.EbpfTrace. It is valid only while the trace event is being handled
-	// and must not be retained by the reporter.
+	// ContextValues alias the pooled trace buffer; valid only during
+	// handling, never retained.
 	ContextValues []uint64
 	PID, TID      libpf.PID
 	SpanID        libpf.SpanID
