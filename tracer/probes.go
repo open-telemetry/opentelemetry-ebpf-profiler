@@ -403,6 +403,9 @@ type Probe interface {
 // Trace handler hooks are attached to registered origin IDs via the
 // ProbeRegistrar; the tracer dispatches traces with a matching origin to them.
 //
+// If p implements samples.SnapshotSource, its snapshots are included in the
+// tracer's ProduceSnapshots at each collection interval.
+//
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
@@ -431,5 +434,27 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
+	if ss, ok := p.(samples.SnapshotSource); ok {
+		sources := t.snapshotSources.WLock()
+		*sources = append(*sources, ss)
+		t.snapshotSources.WUnlock(&sources)
+	}
+
 	return nil
+}
+
+// ProduceSnapshots implements samples.SnapshotSource by combining the snapshots
+// of all enabled probes that implement it. Called by the reporter once per
+// collection interval.
+// The read lock is held while producers run, so a future source removal can't
+// race with an in-flight collection.
+func (t *Tracer) ProduceSnapshots() []samples.SnapshotProfile {
+	sources := t.snapshotSources.RLock()
+	defer t.snapshotSources.RUnlock(&sources)
+
+	var profiles []samples.SnapshotProfile
+	for _, ss := range *sources {
+		profiles = append(profiles, ss.ProduceSnapshots()...)
+	}
+	return profiles
 }
