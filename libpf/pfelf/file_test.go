@@ -254,9 +254,10 @@ func TestGetGoBuildID(t *testing.T) {
 func TestFileTakeRefcount(t *testing.T) {
 	ef := getPFELF(t, "testdata/go-binary")
 
-	// Open() maps the file: the mapping stands in for the closed source
-	// file descriptor as the owned closer.
-	require.IsType(t, &mmap.ReaderAt{}, ef.resources.closer)
+	// Open() owns the source file, its page cache, and a memory mapping.
+	require.IsType(t, &os.File{}, ef.resources.closer)
+	assert.NotNil(t, ef.resources.cache)
+	assert.NotNil(t, ef.resources.mmap)
 
 	dataRef := ef.Take()
 	// Close the File: the reference keeps the underlying reader open.
@@ -267,8 +268,9 @@ func TestFileTakeRefcount(t *testing.T) {
 	_, err := ef.Underlying().ReadAt(progs, 0)
 	require.NoError(t, err)
 
-	// Dropping the last reference closes the underlying reader.
+	// Dropping the last reference closes the reader and unmaps the mapping.
 	require.NoError(t, dataRef.Close())
+	assert.Nil(t, dataRef.(*fileResources).mmap)
 	_, err = ef.Underlying().ReadAt(progs, 0)
 	assert.Error(t, err)
 }

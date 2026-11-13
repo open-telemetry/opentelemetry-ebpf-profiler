@@ -423,7 +423,19 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	if data == nil {
 		return nil, errNoPclntab
 	}
-	defer ef.SetDontNeed()
+
+	dataRef := ef.Take()
+	succeeded := false
+	setDontNeed := func() {}
+	if dn, ok := dataRef.(interface{ SetDontNeed() }); ok {
+		setDontNeed = dn.SetDontNeed
+	}
+	defer func() {
+		setDontNeed()
+		if !succeeded {
+			dataRef.Close()
+		}
+	}()
 
 	hdrSize := uintptr(pclntabHeaderSize())
 	dataLen := uintptr(len(data))
@@ -433,6 +445,8 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 
 	hdr := (*pclntabHeader)(unsafe.Pointer(&data[0]))
 	g := &Gopclntab{
+		dataRef:      dataRef,
+		setDontNeed:  setDontNeed,
 		headerOffset: headerOffset,
 		data:         data,
 		version:      goMagicToVersion(hdr.magic),
@@ -508,8 +522,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	g.filetab = data[g.filetabOffset:g.pctabOffset]
 	g.pctab = data[g.pctabOffset:g.pclnOffset]
 	g.functab = data[g.pclnOffset:]
-	g.dataRef = ef.Take()
-	g.setDontNeed = ef.SetDontNeed
+	succeeded = true
 
 	return g, nil
 }
