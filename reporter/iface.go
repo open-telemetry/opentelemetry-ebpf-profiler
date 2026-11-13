@@ -15,6 +15,9 @@ import (
 type Reporter interface {
 	TraceReporter
 
+	// SetSnapshotSource configures the source of probe-produced snapshots.
+	SetSnapshotSource(samples.SnapshotSource)
+
 	// Start starts the reporter in the background.
 	//
 	// If the reporter needs to perform a long-running starting operation then it
