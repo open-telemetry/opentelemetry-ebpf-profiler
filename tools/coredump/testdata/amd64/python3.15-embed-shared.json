@@ -1,0 +1,65 @@
+{
+  "coredump-ref": "11bb3b7a95c3d91babea09c348b9d234ccb149610298c507d1adfd3b4d899908",
+  "threads": [
+    {
+      "lwp": 137,
+      "frames": [
+        "recur_fibo+1 in <string>:2",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "<module>+6 in <string>:7",
+        "libpython3.15.so.1.0+0x1d0e6c",
+        "libpython3.15.so.1.0+0x1ce82c",
+        "libpython3.15.so.1.0+0x27199a",
+        "libpython3.15.so.1.0+0x2b7bee",
+        "libpython3.15.so.1.0+0x2b1c1a",
+        "libpython3.15.so.1.0+0x2b1b24",
+        "libpython3.15.so.1.0+0x12f0a9",
+        "embed_shared+0x1165",
+        "libc.so.6+0x29ca7",
+        "libc.so.6+0x29d64",
+        "embed_shared+0x1080"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "a04164596bf85860e07740ece9c8ae055641505ea9cbc1638a02b4023ea72ba6",
+      "local-path": "/usr/local/lib/libpython3.15.so.1.0"
+    },
+    {
+      "ref": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "df8040f51cfb8732b63a10443e919f5a1ae0ab126e0aaec5741ee24e5e328df9",
+      "local-path": "/tmp/work/embed_shared"
+    },
+    {
+      "ref": "6d567d53e895273ca14a1f9dc164fc6c8d39aed2f60aa46a733c2784228915f3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    }
+  ]
+}
