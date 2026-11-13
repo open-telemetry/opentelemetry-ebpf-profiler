@@ -301,7 +301,7 @@ func TestReader_InitSlideView(t *testing.T) {
 	})
 }
 
-func TestReader_SubReader(t *testing.T) {
+func TestReader_InitSubReader(t *testing.T) {
 	data := make([]byte, 4096)
 	for i := range data {
 		data[i] = byte(i % 251)
@@ -322,12 +322,12 @@ func TestReader_SubReader(t *testing.T) {
 		parent.InitFromView(cached, 0, 128)
 		defer parent.Release()
 
-		sub, err := parent.SubReader(32)
-		require.NoError(t, err)
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 32))
 		defer sub.Release()
 		require.True(t, sub.zeroCopy)
 		require.Equal(t, int64(96), sub.Remaining())
-		require.Equal(t, data[32:96], readN(t, sub, 64))
+		require.Equal(t, data[32:96], readN(t, &sub, 64))
 
 		// The parent is suspended while the sub-reader is active, and
 		// stays valid after Release.
@@ -342,11 +342,30 @@ func TestReader_SubReader(t *testing.T) {
 		// Advance the parent so it is not fully loaded.
 		require.Equal(t, data[0:100], readN(t, &parent, 100))
 
-		sub, err := parent.SubReader(10)
-		require.NoError(t, err)
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 10))
 		defer sub.Release()
 		require.False(t, sub.zeroCopy)
-		require.Equal(t, data[10:74], readN(t, sub, 64))
+		require.Equal(t, data[10:74], readN(t, &sub, 64))
+	})
+
+	t.Run("ReusedSubReader", func(t *testing.T) {
+		parent := Reader{}
+		parent.InitSlideView(cached, 0, 4096)
+		defer parent.Release()
+
+		// First use leaves the sub-reader with an own buffer mid-stream.
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 10))
+		require.Equal(t, data[10:74], readN(t, &sub, 64))
+		sub.Release()
+
+		// Re-initialization must reset the old state and buffer.
+		require.NoError(t, parent.InitSubReader(&sub, 20))
+		defer sub.Release()
+		require.False(t, sub.zeroCopy)
+		require.Equal(t, int64(20), sub.Tell())
+		require.Equal(t, data[20:84], readN(t, &sub, 64))
 	})
 
 	t.Run("NestedSubReader", func(t *testing.T) {
@@ -354,17 +373,17 @@ func TestReader_SubReader(t *testing.T) {
 		parent.InitFromView(cached, 0, 128)
 		defer parent.Release()
 
-		sub, err := parent.SubReader(16)
-		require.NoError(t, err)
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 16))
 		defer sub.Release()
 
 		// The sub-reader's view covers [32, 128): a nested sub-reader at
 		// offset 32 is fully covered and lends from it.
-		subsub, err := sub.SubReader(32)
-		require.NoError(t, err)
+		var subsub Reader
+		require.NoError(t, sub.InitSubReader(&subsub, 32))
 		defer subsub.Release()
 		require.True(t, subsub.zeroCopy)
-		require.Equal(t, data[32:96], readN(t, subsub, 64))
+		require.Equal(t, data[32:96], readN(t, &subsub, 64))
 	})
 
 	t.Run("OutOfRangeOffset", func(t *testing.T) {
@@ -372,10 +391,9 @@ func TestReader_SubReader(t *testing.T) {
 		parent.InitFromView(cached, 0, 128)
 		defer parent.Release()
 
-		_, err := parent.SubReader(-1)
-		require.Error(t, err)
-		_, err = parent.SubReader(129)
-		require.Error(t, err)
+		var sub Reader
+		require.Error(t, parent.InitSubReader(&sub, -1))
+		require.Error(t, parent.InitSubReader(&sub, 129))
 	})
 
 	t.Run("PositionAndTell", func(t *testing.T) {
@@ -383,12 +401,12 @@ func TestReader_SubReader(t *testing.T) {
 		parent.InitSlideView(cached, 0, 4096)
 		defer parent.Release()
 
-		sub, err := parent.SubReader(100)
-		require.NoError(t, err)
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 100))
 		defer sub.Release()
 		require.Equal(t, int64(100), sub.Tell())
 
-		readN(t, sub, 30)
+		readN(t, &sub, 30)
 		require.Equal(t, int64(130), sub.Tell())
 	})
 }

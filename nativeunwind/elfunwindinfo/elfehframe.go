@@ -848,11 +848,9 @@ func processCIE(r *reader, ciePos int64, cieCache *lru.LRU[int64, *cieInfo]) (*c
 		debugFrame: r.debugFrame,
 		vaddr:      r.vaddr,
 	}
-	sub, err := r.SubReader(ciePos)
-	if err != nil {
+	if err := r.InitSubReader(&cr.Reader, ciePos); err != nil {
 		return nil, err
 	}
-	cr.Reader = *sub
 	defer cr.Release()
 	cr.SetBufferSize(256) // CIE entry is typically 20-80 bytes
 

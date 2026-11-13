@@ -141,21 +141,22 @@ func (r *Reader) InitSlideView(source libpf.ViewAtReader, start, maxLen int64) {
 	r.slideView = true
 }
 
-// SubReader returns a new Reader over the same source with the same area
-// bounds, positioned at offset relative to the start. While the sub-reader
-// is active, the parent must not be used, and the parent must remain valid
-// until the sub-reader is released.
+// InitSubReader initializes sub as a Reader over the same source with the
+// same area bounds as r, positioned at offset relative to the start. While
+// the sub-reader is active, the parent must not be used, and the parent
+// must remain valid until the sub-reader is released. A previously used
+// sub is reset.
 //
 // If the parent holds a fully loaded zero-copy view, the sub-reader borrows
 // a sub-view of it: no I/O is performed, and the view is read-only. In all
 // other cases the sub-reader gets its own buffer and reads through the
 // source. The current implementation never invalidates the parent on
 // Release: the parent stays usable after the sub-reader is released.
-func (r *Reader) SubReader(offset int64) (*Reader, error) {
+func (r *Reader) InitSubReader(sub *Reader, offset int64) error {
 	if offset < 0 || offset > r.limit-r.start {
-		return nil, errOffset
+		return errOffset
 	}
-	sub := &Reader{}
+	sub.dropBuf()
 	abs := r.start + offset
 	if r.zeroCopy && r.off == r.limit && abs >= r.off-int64(r.nbuf) {
 		// The parent's view fully covers [abs, limit): lend a read-only
@@ -171,7 +172,7 @@ func (r *Reader) SubReader(offset int64) (*Reader, error) {
 		sub.nbuf = int(r.limit - abs)
 		sub.nlim = sub.nbuf
 		sub.bufSize = r.bufSize
-		return sub, nil
+		return nil
 	}
 	// Serve from the source with an own buffer. Sliding is deliberately
 	// not inherited: the sub-reader must not move the source's view pin
@@ -182,7 +183,7 @@ func (r *Reader) SubReader(offset int64) (*Reader, error) {
 	if sub.buf == nil {
 		sub.buf = libpf.GetBuffer(maxBufferSize)
 	}
-	return sub, nil
+	return nil
 }
 
 // init sets the reader source and area bounds.
