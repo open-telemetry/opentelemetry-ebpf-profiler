@@ -52,6 +52,8 @@ type luajitData struct {
 
 type luajitInstance struct {
 	interpreter.InstanceStubs
+	rm         remotememory.RemoteMemory
+	protos     map[libpf.Address]*proto
 	jitRegions regionMap
 
 	// Currently mapped prefixes for entire memory regions
@@ -212,4 +214,19 @@ func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID)
 	// that we learned about from the eBPF side, and add the traces they contain to the
 	// interpreter mapping. Until then, it is a no-op.
 	return nil
+}
+
+func (l *luajitInstance) getGCproto(pt libpf.Address) (*proto, error) {
+	if pt == 0 {
+		return nil, nil
+	}
+	if gc, ok := l.protos[pt]; ok {
+		return gc, nil
+	}
+	gc, err := newProto(l.rm, pt)
+	if err != nil {
+		return nil, err
+	}
+	l.protos[pt] = gc
+	return gc, nil
 }
