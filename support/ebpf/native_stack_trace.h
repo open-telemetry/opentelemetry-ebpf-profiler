@@ -13,9 +13,11 @@
 
 // The minimal size of a machine opcode
 #if defined(__aarch64__)
-  #define MACHINE_OPCODE_SZ_LOG2 2 // 4 bytes
+  // 4 bytes/opocde
+  #define MACHINE_OPCODE_SZ_LOG2 2
 #else
-  #define MACHINE_OPCODE_SZ_LOG2 0 // 1 bytes
+  // 1 byte, but variable length and opcode merging max average 2 bytes/opcode
+  #define MACHINE_OPCODE_SZ_LOG2 1
 #endif
 
 // Get the outer map based on the number of stack delta entries.
