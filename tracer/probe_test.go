@@ -23,38 +23,34 @@ func TestParseProbe(t *testing.T) {
 		"kprobe_valid": {
 			input: "kprobe:vfs_read",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeKprobe,
-				Symbol:   "vfs_read",
-				ProgName: "kprobe__generic",
+				Mode:   ProbeModeKprobe,
+				Symbol: "vfs_read",
 			},
 			wantErr: false,
 		},
 		"kretprobe_valid": {
 			input: "kretprobe:vfs_read",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeKretprobe,
-				Symbol:   "vfs_read",
-				ProgName: "kprobe__generic",
+				Mode:   ProbeModeKretprobe,
+				Symbol: "vfs_read",
 			},
 			wantErr: false,
 		},
 		"uprobe_valid": {
 			input: "uprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeUprobe,
-				Target:   "/usr/lib/libc.so.6",
-				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
+				Mode:   ProbeModeUprobe,
+				Target: "/usr/lib/libc.so.6",
+				Symbol: "malloc",
 			},
 			wantErr: false,
 		},
 		"uretprobe_valid": {
 			input: "uretprobe:/usr/lib/libc.so.6:malloc",
 			expected: &ProbeSpec{
-				Mode:     ProbeModeUretprobe,
-				Target:   "/usr/lib/libc.so.6",
-				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
+				Mode:   ProbeModeUretprobe,
+				Target: "/usr/lib/libc.so.6",
+				Symbol: "malloc",
 			},
 			wantErr: false,
 		},
@@ -85,13 +81,8 @@ func TestParseProbe(t *testing.T) {
 		},
 		"uprobe_missing_target": {
 			input:   "uprobe::malloc",
-			wantErr: false, // This will parse but target will be empty
-			expected: &ProbeSpec{
-				Mode:     ProbeModeUprobe,
-				Target:   "",
-				Symbol:   "malloc",
-				ProgName: "kprobe__generic",
-			},
+			wantErr: true,
+			errMsg:  "invalid format",
 		},
 		"uretprobe_empty_symbol": {
 			input:   "uretprobe:/bin/bash:",
@@ -131,9 +122,6 @@ func TestParseProbe(t *testing.T) {
 				if tc.expected.Target != "" {
 					assert.Equal(t, tc.expected.Target, got.Target)
 				}
-				if tc.expected.ProgName != "" {
-					assert.Equal(t, tc.expected.ProgName, got.ProgName)
-				}
 			}
 		})
 	}
@@ -158,7 +146,7 @@ func (p *snapshotTestProbe) ProduceSnapshots() []samples.SnapshotProfile {
 func TestEnableRegistersSnapshotSource(t *testing.T) {
 	profileType := &samples.TypeMetadata{}
 	probe := &snapshotTestProbe{profile: samples.SnapshotProfile{ProfileType: profileType}}
-	tracer := &Tracer{origins: &originRegistry{}}
+	tracer := &Tracer{origins: &originRegistry{}, lifecycleCtx: context.Background()}
 
 	require.NoError(t, tracer.Enable(context.Background(), probe))
 
