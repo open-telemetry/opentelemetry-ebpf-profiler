@@ -471,6 +471,7 @@ static EBPF_INLINE void maybe_add_golang_labels(PerCPURecord *record)
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
+SEC("multi/unwind_stop")
 static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
@@ -539,6 +540,5 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   return 0;
 }
-MULTI_USE_FUNC(unwind_stop)
 
 char _license[] SEC("license") = "GPL";
