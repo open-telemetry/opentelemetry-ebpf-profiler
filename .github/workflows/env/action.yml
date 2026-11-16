@@ -1,10 +1,14 @@
 name: Common environment setup
 
 inputs:
-  go-cache-dependency-path:
-    description: 'Files hashed into the setup-go cache key. Jobs with different Go module needs must pass different lists.'
+  go-version:
+    description: 'Go version to install (e.g. "stable"). Defaults to the version pinned in go.mod.'
     required: false
-    default: go.sum
+    default: ''
+  go-build-cache-key:
+    description: 'Cache key fragment identifying the job and its matrix flavor for the Go build cache. Defaults to the job id.'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -31,6 +35,27 @@ runs:
     - name: Set up Go
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version-file: go.mod
-        cache-dependency-path: ${{ inputs.go-cache-dependency-path }}
+        go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.go-version == '' && 'go.mod' || '' }}
+        cache: false
       id: go
+    - name: Cache Go modules
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/go/pkg/mod
+        key: go-mod-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum', 'internal/tools/go.mod', 'internal/tools/go.sum', 'interpreter/go/integrationtests/pprof/go.mod', 'tools/coredump/go.mod', 'tools/coredump/go.sum', 'tools/luajitoffsets/go.mod', 'tools/luajitoffsets/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
+        restore-keys: |
+          go-mod-${{ steps.go.outputs.go-version }}-
+          go-mod-
+      id: go-mod-cache
+    - name: Download Go modules
+      if: steps.go-mod-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: make go-mod-download
+    - name: Cache Go build artifacts
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/go-build
+        key: go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum', 'internal/tools/go.mod', 'internal/tools/go.sum', 'interpreter/go/integrationtests/pprof/go.mod', 'tools/coredump/go.mod', 'tools/coredump/go.sum', 'tools/luajitoffsets/go.mod', 'tools/luajitoffsets/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
+        restore-keys: |
+          go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-
