@@ -395,10 +395,9 @@ typedef enum TracePrograms {
   NUM_TRACER_PROGS,
 } TracePrograms;
 
-// Maximum number of unique stack deltas needed on a system. This is based on
-// normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
-// Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
-#define UNWIND_INFO_MAX_ENTRIES 16384
+// Maximum number of unique stack deltas needed on a system. The maximum
+// we can use since STACK_DELTA_COMMAND_FLAG uses the top bit.
+#define UNWIND_INFO_MAX_ENTRIES 32768
 
 // TSDInfo contains data needed to extract Thread Specific Data (TSD) values
 typedef struct TSDInfo {
@@ -458,7 +457,10 @@ typedef struct PyProcInfo {
   // The address of the autoTLSkey variable
   u64 autoTLSKeyAddr;
   u64 noneStructAddr;
-  s16 tls_offset;
+  // Location of _Py_tss_gilstate on Python 3.15+. It is invalid if
+  // _Py_tss_gilstate was not found, or if it is in dynamic TLS and the DTV
+  // layout was not known when this was filled in.
+  TLSVarInfo tls_tstate;
   TSDInfo tsdInfo;
   // The Python object member offsets
   u8 PyThreadState_frame;
