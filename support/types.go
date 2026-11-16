@@ -58,7 +58,7 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const UnwindInfoMaxEntries = 0x4000
+const UnwindInfoMaxEntries = 0x8000
 
 const (
 	MetricIDBeginCumulative = 0x75
