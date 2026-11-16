@@ -121,6 +121,9 @@ reviewed and merged.
 To understand how this project works and learn more about profiling, check out
 [Profiling internals](doc/internals.md).
 
+New probes are covered by the [probe guidelines](probes/README.md), which also
+list probes maintained outside this repository.
+
 This project is developed by the OpenTelemetry Profiling SIG, which meets
 regularly. See the OpenTelemetry
 [community repository](https://github.com/open-telemetry/community) for the
