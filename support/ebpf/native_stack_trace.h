@@ -13,7 +13,7 @@
 
 // The minimal size of a machine opcode
 #if defined(__aarch64__)
-  // 4 bytes/opocde
+  // 4 bytes/opcode
   #define MACHINE_OPCODE_SZ_LOG2 2
 #else
   // 1 byte, but variable length and opcode merging max average 2 bytes/opcode
