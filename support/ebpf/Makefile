@@ -77,11 +77,18 @@ $(TRACER_NAME): $(OBJS)
 		--enable-deterministic-archives $@
 	@./print_instruction_count.sh $@
 
-baseline: $(TRACER_NAME)
-	cp $< $(TRACER_NAME).$@
+# Commit that the eBPF blob sizes are compared against.
+BASE_COMMIT ?= origin/main
 
-bloatcheck: $(TRACER_NAME)
-	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
+bloatcheck:
+	@test -n "$(BASE_COMMIT)" || { echo "Error: set BASE_COMMIT, e.g.: make bloatcheck BASE_COMMIT=origin/main" >&2; exit 1; }
+	$(MAKE) TARGET_ARCH=amd64
+	$(MAKE) TARGET_ARCH=arm64
+	@git show "$(BASE_COMMIT):support/ebpf/tracer.ebpf.amd64" > tracer.ebpf.amd64.baseline
+	@git show "$(BASE_COMMIT):support/ebpf/tracer.ebpf.arm64" > tracer.ebpf.arm64.baseline
+	@python3 bloat-o-meter \
+		--arch amd64 tracer.ebpf.amd64.baseline tracer.ebpf.amd64 \
+		--arch arm64 tracer.ebpf.arm64.baseline tracer.ebpf.arm64
 
 lint:
 	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch] ../../tools/coredump/*.[ch]
