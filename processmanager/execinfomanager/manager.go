@@ -391,6 +391,7 @@ func (state *executableInfoManagerState) loadDeltas(
 			return err
 		}
 		if numDeltas := len(ebpfDeltas); numDeltas > 0 &&
+			fallbackInfo.MergeOpcode == 0 &&
 			ebpfDeltas[numDeltas-1].UnwindInfo == unwindInfoIndex {
 			// Deduplicate consecutive deltas with identical unwind info.
 			return nil
