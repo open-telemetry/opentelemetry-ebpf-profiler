@@ -199,6 +199,56 @@ func TestResolveUnsupported(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupportedModel)
 }
 
+// TestResolveAccessor checks that resolving a variable through its getter
+// matches resolving it by symbol. For hidden variables the relocation has no
+// symbol, so the offset must be recovered from the relocation and the code.
+func TestResolveAccessor(t *testing.T) {
+	tests := map[string]struct {
+		file string
+		// hidden fixtures also have other_tls_var.
+		hidden bool
+	}{
+		// There is no musl variant as static executables have no .dynsym.
+		"local-exec":                    {file: "tlsvar_exe_glibc_get"},
+		"general-dynamic, desc dialect": {file: "libtlsvar_glibc_desc_get.so"},
+		"general-dynamic, GNU dialect":  {file: "libtlsvar_glibc_gnu_get.so"},
+		"general-dynamic, big TLS":      {file: "libtlsvar_glibc_desc_big_get.so"},
+		"initial-exec":                  {file: "libtlsvar_glibc_ie_get.so"},
+		"initial-exec, hidden symbol":   {file: "libtlsvar_glibc_ie_hidden_get.so", hidden: true},
+		"local-dynamic, GNU dialect":    {file: "libtlsvar_glibc_ld_get.so", hidden: true},
+		"local-dynamic, desc dialect":   {file: "libtlsvar_glibc_ld_desc_get.so", hidden: true},
+		"general-dynamic, musl":         {file: "libtlsvar_musl_desc_get.so"},
+		"local-dynamic, musl":           {file: "libtlsvar_musl_ld_get.so", hidden: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ef := openFixture(t, tc.file)
+			vars := map[libpf.SymbolName]string{"tls_var_get": "tls_var"}
+			if tc.hidden {
+				vars["other_tls_var_get"] = "other_tls_var"
+			}
+
+			for accessor, varName := range vars {
+				want, err := Resolve(ef, tlsSymbol(t, ef, varName))
+				require.NoError(t, err)
+
+				got, err := ResolveAccessor(ef, accessor)
+				require.NoError(t, err, "resolving %s through %s", varName, accessor)
+				assert.Equal(t, want, got, "%s resolved through %s", varName, accessor)
+			}
+		})
+	}
+}
+
+// The noreloc fixture has no getter.
+func TestResolveAccessorMissing(t *testing.T) {
+	ef := openFixture(t, "libtlsvar_glibc_noreloc.so")
+
+	_, err := ResolveAccessor(ef, "tls_var_get")
+	require.Error(t, err)
+}
+
 // dynamicTLS disables the static TLS surplus glibc would otherwise hand a
 // module as small as the fixture library, keeping a dlopen'd module's TLS
 // dynamic.

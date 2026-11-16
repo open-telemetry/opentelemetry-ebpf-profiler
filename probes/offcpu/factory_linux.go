@@ -28,7 +28,8 @@ func NewFactory() extension.Factory {
 func createExtension(_ context.Context, _ extension.Settings, cfg component.Config) (extension.Extension, error) {
 	c := cfg.(*Config)
 	return &offCPUExtension{p: &probe{
-		threshold:   uint32(c.Threshold * math.MaxUint32),
-		minDuration: c.MinDuration,
+		threshold:         uint32(c.Threshold * math.MaxUint32),
+		minDuration:       c.MinDuration,
+		maxTrackedThreads: c.MaxTrackedThreads,
 	}}, nil
 }

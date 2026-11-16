@@ -110,6 +110,19 @@ func DecodeRegister(reg string) (aa.Reg, bool) {
 	return aa.Reg(res), true
 }
 
+// immShift splits an arm64asm ImmShift into the immediate and the left shift
+// applied to it. The fields "#imm" or "#imm, LSL #shift" are not exported.
+// https://github.com/golang/go/issues/51517
+func immShift(arg aa.ImmShift) (imm uint64, shift uint, ok bool) {
+	if n, _ := fmt.Sscanf(arg.String(), "#%v, LSL #%d", &imm, &shift); n == 2 {
+		return imm, shift, true
+	}
+	if n, _ := fmt.Sscanf(arg.String(), "#%v", &imm); n == 1 {
+		return imm, 0, true
+	}
+	return 0, 0, false
+}
+
 // DecodeImmediate converts an arm64asm Arg of immediate type to it's value.
 func DecodeImmediate(arg aa.Arg) (int64, bool) {
 	switch val := arg.(type) {
