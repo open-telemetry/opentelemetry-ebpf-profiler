@@ -67,11 +67,6 @@ func (c *Controller) Start(ctx context.Context) error {
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)
 
-	err := c.reporter.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start reporter: %w", err)
-	}
-
 	envVars := libpf.Set[string]{}
 	for envVar := range strings.SplitSeq(c.config.IncludeEnvVars, ",") {
 		envVar = strings.TrimSpace(envVar)
@@ -109,6 +104,14 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	c.tracer = trc
 	log.Info("eBPF tracer loaded")
+
+	// Wire probe snapshot sources into the reporter before starting its
+	// collection loop.
+	c.reporter.SetSnapshotSource(trc)
+
+	if err := c.reporter.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start reporter: %w", err)
+	}
 
 	now := time.Now()
 
