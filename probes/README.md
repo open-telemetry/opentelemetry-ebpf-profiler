@@ -23,7 +23,7 @@ change to the tracer. A probe is accepted only when that cost is justified.
 - Sample types follow the OTel Profiles data model and reuse names and units
   already in use where they fit. When the probe samples, the reported values
   allow the full population to be estimated.
-- The attach points are stable across the supported kernels. Tracepoints are
+- The attach points are stable across the supported kernels and architectures. Tracepoints are
   preferred over kprobes where one exists.
 - The cost per event is bounded. High frequency events are filtered or sampled
   in eBPF before stack unwinding, and the rate is configurable.
