@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 var errInvalidConfig = errors.New("invalid config")
@@ -63,11 +64,15 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			return nil, errInvalidConfig
 		}
 
-		controllerOption := &controllerOption{}
+		opts := &controllerOption{reporterFactory: newCollectorReporter}
 		for _, option := range options {
-			controllerOption = option.apply(controllerOption)
+			option.apply(opts)
 		}
 
-		return newProfilesReceiver(cfg, controllerOption, rs, nextConsumer)
+		return newProfilesReceiver(cfg, opts, rs, nextConsumer)
 	}
+}
+
+func newCollectorReporter(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+	return reporter.NewCollector(cfg, nextConsumer)
 }

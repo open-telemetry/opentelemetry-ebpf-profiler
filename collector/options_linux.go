@@ -13,7 +13,7 @@ import (
 )
 
 type Option interface {
-	apply(*controllerOption) *controllerOption
+	apply(*controllerOption)
 }
 
 type controllerOption struct {
@@ -23,32 +23,29 @@ type controllerOption struct {
 	onShutdown           func() error
 }
 
-type optFunc func(*controllerOption) *controllerOption
+type optFunc func(*controllerOption)
 
-func (f optFunc) apply(c *controllerOption) *controllerOption { return f(c) }
+func (f optFunc) apply(c *controllerOption) { f(c) }
 
 // WithExecutableReporter is a function that allows to configure a ExecutableReporter.
 func WithExecutableReporter(executableReporter reporter.ExecutableReporter) Option {
-	return optFunc(func(option *controllerOption) *controllerOption {
+	return optFunc(func(option *controllerOption) {
 		option.executableReporter = executableReporter
-		return option
 	})
 }
 
 // WithOnShutdown is a function that allows to configure a function to be called when the controller is shutdown.
 func WithOnShutdown(onShutdown func() error) Option {
-	return optFunc(func(option *controllerOption) *controllerOption {
+	return optFunc(func(option *controllerOption) {
 		option.onShutdown = onShutdown
-		return option
 	})
 }
 
 // WithReporterFactory is a function that allows to define a custom collector reporter factory.
-// If reporterFactory is not set, the default reporter will be used (reporter.NewCollector).
+// Without it the default reporter (reporter.NewCollector) is used.
 func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) Option {
-	return optFunc(func(option *controllerOption) *controllerOption {
+	return optFunc(func(option *controllerOption) {
 		option.reporterFactory = reporterFactory
-		return option
 	})
 }
 
@@ -58,8 +55,7 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 // to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
 // resource or sample attributes on outgoing profiles.
 func WithProcessMetaEnricher(enrichers ...process.MetaEnricher) Option {
-	return optFunc(func(option *controllerOption) *controllerOption {
+	return optFunc(func(option *controllerOption) {
 		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
-		return option
 	})
 }

@@ -164,8 +164,7 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("failed to get kernel version: %v", err)
 	}
 
-	var minMajor, minMinor uint32
-	minMajor, minMinor = 5, 10
+	const minMajor, minMinor = 5, 10
 	if major < minMajor || (major == minMajor && minor < minMinor) {
 		return fmt.Errorf("host Agent requires kernel version "+
 			"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)

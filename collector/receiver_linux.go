@@ -49,14 +49,7 @@ func newProfilesReceiver(cfg *config.Config, opts *controllerOption, rs receiver
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
-	reporterFactory := opts.reporterFactory
-	if reporterFactory == nil {
-		reporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
-			return reporter.NewCollector(cfg, nextConsumer)
-		}
-	}
-
-	rep, err := reporterFactory(&reporter.Config{
+	rep, err := opts.reporterFactory(&reporter.Config{
 		Name:           metadata.ScopeName,
 		Version:        moduleVersion(rs.BuildInfo.Version),
 		ReportInterval: intervals.ReportInterval(),
@@ -82,23 +75,22 @@ func newProfilesReceiver(cfg *config.Config, opts *controllerOption, rs receiver
 // Falls back to the collector's build version (e.g. set by ocb) if the
 // module isn't found, which happens when built outside of a real module context.
 func moduleVersion(fallback string) string {
-	version := fallback
-	if buildInfo, ok := debug.ReadBuildInfo(); ok {
-		for i := range buildInfo.Deps {
-			dep := buildInfo.Deps[i]
-			if dep.Path == metadata.ScopeName {
-				// dep.Version reflects the required directive and stays set to the original
-				// version even when a replace directive redirects the module. Therefore use the
-				// replacement's actual version instead.
-				if dep.Replace != nil {
-					version = dep.Replace.Version
-				} else {
-					version = dep.Version
-				}
-			}
-		}
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return fallback
 	}
-	return version
+	for _, dep := range buildInfo.Deps {
+		if dep.Path != metadata.ScopeName {
+			continue
+		}
+		// dep.Version keeps the required version even when a replace directive
+		// redirects the module.
+		if dep.Replace != nil {
+			return dep.Replace.Version
+		}
+		return dep.Version
+	}
+	return fallback
 }
 
 // Start the receiver.
@@ -115,34 +107,23 @@ func moduleVersion(fallback string) string {
 // See:
 // https://github.com/open-telemetry/opentelemetry-collector/blob/v0.144.0/otelcol/collector.go#L258-L260
 func (r *profilesReceiver) Start(ctx context.Context, host component.Host) error {
-	if err := r.startProfiler(ctx); err != nil {
-		if r.cfg.ErrorMode == config.IgnoreError {
-			r.Shutdown(ctx)
-			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
-			return nil
-		}
-		return err
+	err := r.startProfiler(ctx)
+	if err == nil {
+		err = r.enableProbes(ctx, host)
 	}
-
-	if err := r.enableProbes(ctx, host); err != nil {
-		if r.cfg.ErrorMode == config.IgnoreError {
-			r.Shutdown(ctx)
-			log.Errorf("Failed to enable probe extensions, continuing without them: %v", err)
-			return nil
-		}
-		return err
+	if err != nil && r.cfg.ErrorMode == config.IgnoreError {
+		r.Shutdown(ctx)
+		log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
+		return nil
 	}
-
-	return nil
+	return err
 }
 
 // Shutdown the receiver.
 func (r *profilesReceiver) Shutdown(_ context.Context) error {
 	var shutdownErr error
 	for _, probe := range r.probes {
-		if err := probe.Unload(); err != nil {
-			shutdownErr = errors.Join(shutdownErr, err)
-		}
+		shutdownErr = errors.Join(shutdownErr, probe.Unload())
 	}
 	r.probes = nil
 
@@ -167,7 +148,7 @@ func (r *profilesReceiver) startProfiler(ctx context.Context) error {
 	times.StartRealtimeSync(ctx, r.cfg.ClockSyncInterval)
 
 	// Load the eBPF code and map definitions
-	trc, err := tracer.NewTracer(ctx, tracerConfig(r.cfg, r.opts, r.intervals, r.reporter))
+	trc, err := tracer.NewTracer(ctx, r.tracerConfig())
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
 	}
@@ -198,10 +179,8 @@ func (r *profilesReceiver) startProfiler(ctx context.Context) error {
 	if r.cfg.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
 		log.Info("Enabled probabilistic profiling")
-	} else {
-		if err := trc.EnableProfiling(); err != nil {
-			return fmt.Errorf("failed to enable perf events: %w", err)
-		}
+	} else if err := trc.EnableProfiling(); err != nil {
+		return fmt.Errorf("failed to enable perf events: %w", err)
 	}
 
 	if err := trc.AttachSchedMonitor(); err != nil {
@@ -219,9 +198,27 @@ func (r *profilesReceiver) startProfiler(ctx context.Context) error {
 		log.Info("Attached prctl monitor")
 	}
 
-	if err := r.startTraceHandling(ctx, trc); err != nil {
-		return fmt.Errorf("failed to start trace handling: %w", err)
+	traceCh := make(chan *libpf.EbpfTrace)
+	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
+		return fmt.Errorf("failed to start map monitors: %w", err)
 	}
+
+	go func() {
+		for {
+			select {
+			case trace := <-traceCh:
+				if trace != nil {
+					trc.HandleTrace(trace)
+				}
+			case <-trc.Done():
+				log.Errorf("Shutting down controller due to unrecoverable tracer error")
+				r.stopProfiler()
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	return nil
 }
@@ -244,9 +241,8 @@ func (r *profilesReceiver) stopProfiler() {
 }
 
 // tracerConfig translates the receiver configuration into a tracer configuration.
-func tracerConfig(cfg *config.Config, opts *controllerOption, intervals *times.Times,
-	rep reporter.Reporter,
-) *tracer.Config {
+func (r *profilesReceiver) tracerConfig() *tracer.Config {
+	cfg, opts := r.cfg, r.opts
 	envVars := libpf.Set[string]{}
 	for envVar := range strings.SplitSeq(cfg.IncludeEnvVars, ",") {
 		envVar = strings.TrimSpace(envVar)
@@ -256,8 +252,8 @@ func tracerConfig(cfg *config.Config, opts *controllerOption, intervals *times.T
 	}
 
 	return &tracer.Config{
-		TraceReporter:               rep,
-		Intervals:                   intervals,
+		TraceReporter:               r.reporter,
+		Intervals:                   r.intervals,
 		InterpretersConfig:          cfg.Interpreters,
 		FilterErrorFrames:           !cfg.SendErrorFrames,
 		FilterIdleFrames:            !cfg.SendIdleFrames,
@@ -304,34 +300,5 @@ func (r *profilesReceiver) enableProbes(ctx context.Context, host component.Host
 		r.probes = append(r.probes, probe)
 		log.Infof("Enabled probe from extension %q", id)
 	}
-	return nil
-}
-
-func (r *profilesReceiver) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
-	// Spawn monitors for the various result maps
-	traceCh := make(chan *libpf.EbpfTrace)
-
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
-		return fmt.Errorf("failed to start map monitors: %v", err)
-	}
-
-	go func() {
-		// Poll the output channels
-		for {
-			select {
-			case trace := <-traceCh:
-				if trace != nil {
-					trc.HandleTrace(trace)
-				}
-			case <-trc.Done():
-				log.Errorf("Shutting down controller due to unrecoverable tracer error")
-				r.stopProfiler()
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	return nil
 }
