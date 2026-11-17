@@ -891,9 +891,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 //
 // The incremental fast path is not always sufficient; in these cases it escalates
 // to a full SynchronizeProcess instead of patching state piecemeal:
-//   - the mapping attaches a new interpreter, which must be seeded with the
-//     process's full mapping set and anonymous-mapping interest, neither of which
-//     a single mmap event can supply; and
+//   - the mapping attaches a new interpreter that needs anonymous mappings and
+//     must be seeded with the process's full mapping set and anonymous-mapping
+//     interest, neither of which a single mmap event can supply; and
 //   - a different mapping has reused an address already tracked (address reuse
 //     after munmap/dlclose), where the stale entry must be reconciled away.
 //
@@ -956,7 +956,8 @@ func (pm *ProcessManager) SynchronizeMapping(pr process.Process, rm *process.Raw
 	// newFrameMapping attaches matching probes and, if the mapping is itself an
 	// interpreter, attaches it. An invalid FrameMapping means a non-ELF file or a
 	// transient error; there is then nothing to register for unwinding.
-	fm, _, newInterpreterAttached, err := pm.newFrameMapping(pr, &m, collectAnonymousMappings)
+	fm, collectAnonymousMappings, newInterpreterAttached, err :=
+		pm.newFrameMapping(pr, &m, collectAnonymousMappings)
 	if err != nil || !fm.Valid() {
 		return
 	}
@@ -981,13 +982,13 @@ func (pm *ProcessManager) SynchronizeMapping(pr process.Process, rm *process.Raw
 	}
 	pm.mu.Unlock()
 
-	if newInterpreterAttached {
-		// A newly attached interpreter must be initialized with the process's full
-		// set of relevant mappings (via each instance's SynchronizeMappings), plus
-		// the anonymous-mapping interest marker, which a single mmap event cannot
-		// supply. Hand off to a full sync: the mapping just added is matched by
-		// vaddr+inode and its FrameMapping reused, so it is not re-referenced or
-		// double-counted.
+	if newInterpreterAttached && collectAnonymousMappings {
+		// A newly attached interpreter that needs anonymous mappings must be
+		// initialized with the process's full set of relevant mappings (via each
+		// instance's SynchronizeMappings), plus the anonymous-mapping interest marker,
+		// which a single mmap event cannot supply. Hand off to a full sync: the mapping
+		// just added is matched by vaddr+inode and its FrameMapping reused, so it is
+		// not re-referenced or double-counted.
 		pm.SynchronizeProcess(pr)
 	}
 }
