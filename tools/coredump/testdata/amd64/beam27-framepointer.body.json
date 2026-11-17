@@ -19,13 +19,13 @@
         "libc.so.6+0x9a9ee",
         "libc.so.6+0x8f667",
         "libc.so.6+0x8f6ac",
-        "libc.so.6+0x10e286",
-        "beam.smp+0x44c81f",
-        "beam.smp+0x2fe1cf",
-        "beam.smp+0x2035f9",
+        "libc.so.6+0x10e286 (__select)",
+        "beam.smp+0x44c81f (erts_sys_main_thread)",
+        "beam.smp+0x2fe1cf (erl_start)",
+        "beam.smp+0x2035f9 (main)",
         "libc.so.6+0x29ca7",
-        "libc.so.6+0x29d64",
-        "beam.smp+0x204770"
+        "libc.so.6+0x29d64 (__libc_start_main)",
+        "beam.smp+0x204770 (_start)"
       ]
     },
     {
@@ -34,11 +34,11 @@
         "libc.so.6+0x9a9ee",
         "libc.so.6+0x8f667",
         "libc.so.6+0x8f6ac",
-        "libc.so.6+0x110aac",
-        "beam.smp+0x45e088",
-        "beam.smp+0x463f2e",
-        "beam.smp+0x206e19",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x110aac (epoll_wait)",
+        "beam.smp+0x45e088 (erts_poll_wait)",
+        "beam.smp+0x463f2e (erts_check_io)",
+        "beam.smp+0x206e19 (poll_thread)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -49,11 +49,11 @@
         "libc.so.6+0x9a9ee",
         "libc.so.6+0x8f667",
         "libc.so.6+0x8f6ac",
-        "libc.so.6+0x103ead",
-        "beam.smp+0x470031",
-        "beam.smp+0x463f8c",
-        "beam.smp+0x20f07b",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x103ead (ppoll)",
+        "beam.smp+0x470031 (erts_poll_wait_flbk)",
+        "beam.smp+0x463f8c (erts_check_io)",
+        "beam.smp+0x20f07b (aux_thread)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -61,13 +61,13 @@
     {
       "lwp": 51,
       "frames": [
-        "libc.so.6+0x10e7b9",
-        "beam.smp+0x4d7de4",
-        "beam.smp+0x20fedb",
-        "beam.smp+0x21a712",
-        "beam.smp+0x2c27e6",
-        "beam.smp+0x204de7",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x10e7b9 (syscall)",
+        "beam.smp+0x4d7de4 (ethr_event_twait)",
+        "beam.smp+0x20fedb (scheduler_wait)",
+        "beam.smp+0x21a712 (erts_schedule)",
+        "beam.smp+0x2c27e6 (erts_dirty_process_main)",
+        "beam.smp+0x204de7 (sched_dirty_io_thread_func)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -75,13 +75,13 @@
     {
       "lwp": 50,
       "frames": [
-        "libc.so.6+0x10e7b9",
-        "beam.smp+0x4d7de4",
-        "beam.smp+0x20fedb",
-        "beam.smp+0x21a712",
-        "beam.smp+0x2c2a73",
-        "beam.smp+0x2096b1",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x10e7b9 (syscall)",
+        "beam.smp+0x4d7de4 (ethr_event_twait)",
+        "beam.smp+0x20fedb (scheduler_wait)",
+        "beam.smp+0x21a712 (erts_schedule)",
+        "beam.smp+0x2c2a73 (erts_dirty_process_main)",
+        "beam.smp+0x2096b1 (sched_dirty_cpu_thread_func)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -89,10 +89,10 @@
     {
       "lwp": 41,
       "frames": [
-        "libc.so.6+0x10e7b9",
-        "beam.smp+0x4d7bef",
-        "beam.smp+0x3d5f8a",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x10e7b9 (syscall)",
+        "beam.smp+0x4d7bef (ethr_event_wait)",
+        "beam.smp+0x3d5f8a (async_main)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -103,10 +103,10 @@
         "libc.so.6+0x9a9ee",
         "libc.so.6+0x8f667",
         "libc.so.6+0x8fc8b",
-        "libc.so.6+0x92157",
-        "beam.smp+0x4d5c48",
-        "beam.smp+0x329010",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x92157 (pthread_cond_wait)",
+        "beam.smp+0x4d5c48 (ethr_cond_wait)",
+        "beam.smp+0x329010 (sys_msg_dispatcher_func)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]
@@ -117,9 +117,9 @@
         "libc.so.6+0x9a9ee",
         "libc.so.6+0x8f667",
         "libc.so.6+0x8f6ac",
-        "libc.so.6+0x103ee5",
-        "beam.smp+0x44b533",
-        "beam.smp+0x4d7129",
+        "libc.so.6+0x103ee5 (__read)",
+        "beam.smp+0x44b533 (signal_dispatcher_thread_func)",
+        "beam.smp+0x4d7129 (thr_wrapper)",
         "libc.so.6+0x92b7a",
         "libc.so.6+0x1107f7"
       ]

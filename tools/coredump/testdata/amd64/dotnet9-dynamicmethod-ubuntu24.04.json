@@ -5,7 +5,7 @@
       "lwp": 1,
       "frames": [
         "libc.so.6+0x98e51",
-        "libc.so.6+0x9b8cc",
+        "libc.so.6+0x9b8cc (pthread_cond_wait)",
         "libcoreclr.so+0x66ba81",
         "libcoreclr.so+0x66b689",
         "libcoreclr.so+0x670998",
@@ -18,33 +18,33 @@
         "libcoreclr.so+0x1e8263",
         "libcoreclr.so+0x1e86db",
         "libcoreclr.so+0x211d13",
-        "libcoreclr.so+0x1d44df",
+        "libcoreclr.so+0x1d44df (coreclr_execute_assembly)",
         "libhostpolicy.so+0x2e380",
-        "libhostpolicy.so+0x2f478",
+        "libhostpolicy.so+0x2f478 (corehost_main)",
         "libhostfxr.so+0x206b4",
         "libhostfxr.so+0x1f6ac",
-        "libhostfxr.so+0x19621",
+        "libhostfxr.so+0x19621 (hostfxr_main_startupinfo)",
         "dotnet+0x7a6c",
         "dotnet+0x7d8e",
         "libc.so.6+0x2a1c9",
-        "libc.so.6+0x2a28a",
+        "libc.so.6+0x2a28a (__libc_start_main)",
         "dotnet+0x6e38"
       ]
     },
     {
       "lwp": 16,
       "frames": [
-        "libc.so.6+0x11bbca",
+        "libc.so.6+0x11bbca (read)",
         "libSystem.Native.so+0x1481e",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 15,
       "frames": [
-        "libc.so.6+0xfa655",
-        "libSystem.Native.so+0xedb0",
+        "libc.so.6+0xfa655 (pwrite)",
+        "libSystem.Native.so+0xedb0 (SystemNative_PWrite)",
         "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
         "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
         "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
@@ -59,14 +59,14 @@
         "libcoreclr.so+0x316acb",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 14,
       "frames": [
-        "libc.so.6+0xfa655",
-        "libSystem.Native.so+0xedb0",
+        "libc.so.6+0xfa655 (pwrite)",
+        "libSystem.Native.so+0xedb0 (SystemNative_PWrite)",
         "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
         "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
         "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
@@ -81,14 +81,14 @@
         "libcoreclr.so+0x316acb",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 13,
       "frames": [
-        "libc.so.6+0xfa655",
-        "libSystem.Native.so+0xedb0",
+        "libc.so.6+0xfa655 (pwrite)",
+        "libSystem.Native.so+0xedb0 (SystemNative_PWrite)",
         "Interop/Sys.PWrite+0 in System.Private.CoreLib.dll:0",
         "System.IO.RandomAccess.WriteAtOffset+0 in System.Private.CoreLib.dll:0",
         "System.IO.StreamWriter.Flush+0 in System.Private.CoreLib.dll:0",
@@ -103,14 +103,14 @@
         "libcoreclr.so+0x316acb",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 11,
       "frames": [
         "libc.so.6+0x98e51",
-        "libc.so.6+0x9bd6d",
+        "libc.so.6+0x9bd6d (pthread_cond_timedwait)",
         "libcoreclr.so+0x66ba24",
         "libcoreclr.so+0x66b689",
         "libcoreclr.so+0x670261",
@@ -122,14 +122,14 @@
         "libcoreclr.so+0x33d7a7",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 10,
       "frames": [
         "libc.so.6+0x98e51",
-        "libc.so.6+0x9b8cc",
+        "libc.so.6+0x9b8cc (pthread_cond_wait)",
         "libcoreclr.so+0x66ba81",
         "libcoreclr.so+0x66b689",
         "libcoreclr.so+0x670261",
@@ -139,42 +139,42 @@
         "libcoreclr.so+0x56d524",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 9,
       "frames": [
-        "libc.so.6+0x11b315",
+        "libc.so.6+0x11b315 (__open)",
         "libcoreclr.so+0x57507e",
         "libcoreclr.so+0x570096",
         "libcoreclr.so+0x56f204",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 8,
       "frames": [
-        "libc.so.6+0x11b5fd",
+        "libc.so.6+0x11b5fd (__poll)",
         "libcoreclr.so+0x57568b",
         "libcoreclr.so+0x4ef84a",
         "libcoreclr.so+0x4f45a5",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     },
     {
       "lwp": 7,
       "frames": [
-        "libc.so.6+0x11b5fd",
+        "libc.so.6+0x11b5fd (__poll)",
         "libcoreclr.so+0x66e10f",
         "libcoreclr.so+0x66d772",
         "libcoreclr.so+0x6772ad",
         "libc.so.6+0x9cb83",
-        "libc.so.6+0x129b63"
+        "libc.so.6+0x129b63 (clone)"
       ]
     }
   ],

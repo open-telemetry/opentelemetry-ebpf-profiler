@@ -4,15 +4,15 @@
     {
       "lwp": 1212873,
       "frames": [
-        "perl+0x1228d0",
+        "perl+0x1228d0 (Perl_hv_common)",
         "perl+0x13426f",
         "<top-level>+0 in hi.pl:19",
-        "perl+0x128563",
-        "perl+0x6d5d7",
-        "perl+0x44907",
+        "perl+0x128563 (Perl_runops_standard)",
+        "perl+0x6d5d7 (perl_run)",
+        "perl+0x44907 (main)",
         "libc.so.6+0x26dc3",
-        "libc.so.6+0x26e97",
-        "perl+0x4496f"
+        "libc.so.6+0x26e97 (__libc_start_main)",
+        "perl+0x4496f (_start)"
       ]
     }
   ],

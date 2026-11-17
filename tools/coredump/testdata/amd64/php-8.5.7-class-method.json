@@ -7,15 +7,15 @@
         "php+0x77e2fc",
         "PrimeChecker::isPrime+11 in /agent/tools/coredump/testsources/php/class_method.php:16",
         "<top-level>+29 in /agent/tools/coredump/testsources/php/class_method.php:30",
-        "php+0x7c2242",
-        "php+0x7c0292",
-        "php+0x82a83f",
-        "php+0x6bdc12",
+        "php+0x7c2242 (execute_ex)",
+        "php+0x7c0292 (zend_execute)",
+        "php+0x82a83f (zend_execute_script)",
+        "php+0x6bdc12 (php_execute_script_ex)",
         "php+0x82c811",
         "php+0x25cd0a",
         "libc.so.6+0x29ca7",
-        "libc.so.6+0x29d64",
-        "php+0x25e110"
+        "libc.so.6+0x29d64 (__libc_start_main)",
+        "php+0x25e110 (_start)"
       ]
     }
   ],

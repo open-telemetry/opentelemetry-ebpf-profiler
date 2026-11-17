@@ -4,15 +4,15 @@
     {
       "lwp": 95340,
       "frames": [
-        "libc.so.6+0xeca7a",
-        "libc.so.6+0xf9a26",
-        "libc.so.6+0x10ec92",
-        "vfork+0x12a1",
-        "vfork+0x12eb",
-        "vfork+0x114e",
+        "libc.so.6+0xeca7a (clock_nanosleep)",
+        "libc.so.6+0xf9a26 (__nanosleep)",
+        "libc.so.6+0x10ec92 (sleep)",
+        "vfork+0x12a1 (child_func)",
+        "vfork+0x12eb (parent_func)",
+        "vfork+0x114e (main)",
         "libc.so.6+0x2a1c9",
-        "libc.so.6+0x2a28a",
-        "vfork+0x1184"
+        "libc.so.6+0x2a28a (__libc_start_main)",
+        "vfork+0x1184 (_start)"
       ]
     }
   ],

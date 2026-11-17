@@ -45,7 +45,7 @@ func defaultConfig() component.Config {
 		FrameCacheSize:         uint(pm.DefaultFrameCacheSize),
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
-		Interpreters:           interpreterconfig.AllInterpreters(),
+		Interpreters:           interpreterconfig.DefaultInterpreters(),
 		ClockSyncInterval:      3 * time.Minute,
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,

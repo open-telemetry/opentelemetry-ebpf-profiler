@@ -4,11 +4,11 @@
     {
       "lwp": 8043,
       "frames": [
-        "libc.so.6+0xd7d14",
-        "node+0x15ce15f",
-        "node+0xc2cf5b",
-        "node+0xc2969f",
-        "node+0xc297ff",
+        "libc.so.6+0xd7d14 (write)",
+        "node+0x15ce15f (uv__try_write.isra.5)",
+        "node+0xc2cf5b (non-virtual thunk to node::LibuvStreamWrap::DoTryWrite(uv_buf_t**, unsigned long*))",
+        "node+0xc2969f (int node::StreamBase::WriteString<(node::encoding)1>(v8::FunctionCallbackInfo<v8::Value> const&))",
+        "node+0xc297ff (void node::StreamBase::JSMethod<&(node::StreamBase::WriteString<(node::encoding)1>)>(v8::FunctionCallbackInfo<v8::Value> const&))",
         "V8::ExitFrame+0 in :0",
         "handleWriteReq+16 in node:internal/stream_base_commons:61:20",
         "writeGeneric+2 in node:internal/stream_base_commons:149:14",
@@ -21,18 +21,18 @@
         "warn+1 in node:internal/console/constructor:381:25",
         "V8::InternalFrame+0 in :0",
         "V8::EntryFrame+0 in :0",
-        "node+0xe625a7",
-        "node+0xe634d7",
-        "node+0xd3a70f",
-        "node+0xc58973",
+        "node+0xe625a7 (v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&))",
+        "node+0xe634d7 (v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*))",
+        "node+0xd3a70f (v8::Function::Call(v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*))",
+        "node+0xc58973 (node::inspector::(anonymous namespace)::InspectorConsoleCall(v8::FunctionCallbackInfo<v8::Value> const&))",
         "V8::ExitFrame+0 in :0",
         "trace+6 in node:internal/console/constructor:427:9",
         "V8::InternalFrame+0 in :0",
         "V8::EntryFrame+0 in :0",
-        "node+0xe625a7",
-        "node+0xe634d7",
-        "node+0xd3a70f",
-        "node+0xc58973",
+        "node+0xe625a7 (v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&))",
+        "node+0xe634d7 (v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*))",
+        "node+0xd3a70f (v8::Function::Call(v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*))",
+        "node+0xc58973 (node::inspector::(anonymous namespace)::InspectorConsoleCall(v8::FunctionCallbackInfo<v8::Value> const&))",
         "V8::ExitFrame+0 in :0",
         "add+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:3:9",
         "add3+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:8:15",
@@ -48,28 +48,28 @@
         "<anonymous>+0 in node:internal/main/run_main_module:0",
         "V8::InternalFrame+0 in :0",
         "V8::EntryFrame+0 in :0",
-        "node+0xe625a7",
-        "node+0xe634d7",
-        "node+0xd3a70f",
-        "node+0xb1dc8b",
-        "node+0xb1dd57",
-        "node+0xb1f17b",
-        "node+0xab0623",
-        "node+0xb9a04f",
-        "node+0xb1e767",
-        "node+0xb219ab",
+        "node+0xe625a7 (v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&))",
+        "node+0xe634d7 (v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*))",
+        "node+0xd3a70f (v8::Function::Call(v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*))",
+        "node+0xb1dc8b (node::ExecuteBootstrapper(node::Environment*, char const*, std::vector<v8::Local<v8::Value>, std::allocator<v8::Local<v8::Value> > >*))",
+        "node+0xb1dd57 (node::StartExecution(node::Environment*, char const*))",
+        "node+0xb1f17b (node::StartExecution(node::Environment*, std::function<v8::MaybeLocal<v8::Value> (node::StartExecutionCallbackInfo const&)>))",
+        "node+0xab0623 (node::LoadEnvironment(node::Environment*, std::function<v8::MaybeLocal<v8::Value> (node::StartExecutionCallbackInfo const&)>))",
+        "node+0xb9a04f (node::NodeMainInstance::Run())",
+        "node+0xb1e767 (node::LoadSnapshotDataAndRun(node::SnapshotData const**, node::InitializationResult*))",
+        "node+0xb219ab (node::Start(int, char**))",
         "libc.so.6+0x273fb",
-        "libc.so.6+0x274cb",
+        "libc.so.6+0x274cb (__libc_start_main)",
         "node+0xaab7df"
       ]
     },
     {
       "lwp": 8044,
       "frames": [
-        "libc.so.6+0xe5f3c",
-        "node+0x15d4a13",
-        "node+0x15c30c7",
-        "node+0xbc168b",
+        "libc.so.6+0xe5f3c (epoll_pwait)",
+        "node+0x15d4a13 (uv__io_poll)",
+        "node+0x15c30c7 (uv_run)",
+        "node+0xbc168b (node::WorkerThreadsTaskRunner::DelayedTaskScheduler::Start()::{lambda(void*)#1}::_FUN(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -78,9 +78,9 @@
       "lwp": 8045,
       "frames": [
         "libc.so.6+0x79df8",
-        "libc.so.6+0x7c8fb",
-        "node+0x15d120f",
-        "node+0xbbc81f",
+        "libc.so.6+0x7c8fb (pthread_cond_wait)",
+        "node+0x15d120f (uv_cond_wait)",
+        "node+0xbbc81f (node::(anonymous namespace)::PlatformWorkerThread(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -89,9 +89,9 @@
       "lwp": 8046,
       "frames": [
         "libc.so.6+0x79df8",
-        "libc.so.6+0x7c8fb",
-        "node+0x15d120f",
-        "node+0xbbc81f",
+        "libc.so.6+0x7c8fb (pthread_cond_wait)",
+        "node+0x15d120f (uv_cond_wait)",
+        "node+0xbbc81f (node::(anonymous namespace)::PlatformWorkerThread(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -100,9 +100,9 @@
       "lwp": 8047,
       "frames": [
         "libc.so.6+0x79df8",
-        "libc.so.6+0x7c8fb",
-        "node+0x15d120f",
-        "node+0xbbc81f",
+        "libc.so.6+0x7c8fb (pthread_cond_wait)",
+        "node+0x15d120f (uv_cond_wait)",
+        "node+0xbbc81f (node::(anonymous namespace)::PlatformWorkerThread(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -111,9 +111,9 @@
       "lwp": 8048,
       "frames": [
         "libc.so.6+0x79df8",
-        "libc.so.6+0x7c8fb",
-        "node+0x15d120f",
-        "node+0xbbc81f",
+        "libc.so.6+0x7c8fb (pthread_cond_wait)",
+        "node+0x15d120f (uv_cond_wait)",
+        "node+0xbbc81f (node::(anonymous namespace)::PlatformWorkerThread(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -123,8 +123,8 @@
       "frames": [
         "libc.so.6+0x79df8",
         "libc.so.6+0x85a5b",
-        "node+0x15d0fbf",
-        "node+0xc4ac7b",
+        "node+0x15d0fbf (uv_sem_wait)",
+        "node+0xc4ac7b (node::inspector::(anonymous namespace)::StartIoThreadMain(void*))",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]

@@ -6,9 +6,9 @@
       "frames": [
         "libc.so.6+0x8ef68",
         "libc.so.6+0x82617",
-        "libc.so.6+0xbe25b",
-        "libc.so.6+0xc887f",
-        "libc.so.6+0xd8fcf",
+        "libc.so.6+0xbe25b (clock_nanosleep)",
+        "libc.so.6+0xc887f (__nanosleep)",
+        "libc.so.6+0xd8fcf (sleep)",
         "runtime.asmcgocall+0 in /usr/local/go/src/runtime/asm_arm64.s:1050",
         "runtime.cgocall+0 in /usr/local/go/src/runtime/cgocall.go:185",
         "main._Cfunc_c_outer+0 in _cgo_gotypes.go:49",

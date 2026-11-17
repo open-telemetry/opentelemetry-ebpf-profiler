@@ -6,15 +6,15 @@
       "frames": [
         "is_prime+13 in /Users/dpacak/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/prime.php:16",
         "<top-level>+33 in /Users/dpacak/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/prime.php:34",
-        "php8.4+0x3b29f0",
-        "php8.4+0x3aca5f",
-        "php8.4+0x418533",
-        "php8.4+0x29f02b",
+        "php8.4+0x3b29f0 (execute_ex)",
+        "php8.4+0x3aca5f (zend_execute)",
+        "php8.4+0x418533 (zend_execute_script)",
+        "php8.4+0x29f02b (php_execute_script_ex)",
         "php8.4+0x41a303",
         "php8.4+0x114133",
         "libc.so.6+0x273ff",
-        "libc.so.6+0x274d7",
-        "php8.4+0x11422f"
+        "libc.so.6+0x274d7 (__libc_start_main)",
+        "php8.4+0x11422f (_start)"
       ]
     }
   ],

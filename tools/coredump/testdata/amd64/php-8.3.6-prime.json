@@ -7,15 +7,15 @@
         "php8.3+0x338210",
         "is_prime+13 in /home/paplo/sources/prodfiler/utils/coredump/testsources/php/prime.php:16",
         "<top-level>+33 in /home/paplo/sources/prodfiler/utils/coredump/testsources/php/prime.php:34",
-        "php8.3+0x3780e6",
-        "php8.3+0x381c24",
-        "php8.3+0x30c62f",
-        "php8.3+0x2a0a69",
+        "php8.3+0x3780e6 (execute_ex)",
+        "php8.3+0x381c24 (zend_execute)",
+        "php8.3+0x30c62f (zend_execute_scripts)",
+        "php8.3+0x2a0a69 (php_execute_script)",
         "php8.3+0x3fa312",
         "php8.3+0x12faa5",
         "libc.so.6+0x29d8f",
-        "libc.so.6+0x29e3f",
-        "php8.3+0x130b24"
+        "libc.so.6+0x29e3f (__libc_start_main)",
+        "php8.3+0x130b24 (_start)"
       ]
     }
   ],

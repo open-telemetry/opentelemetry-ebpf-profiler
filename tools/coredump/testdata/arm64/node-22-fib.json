@@ -41,97 +41,97 @@
         "processTimers+0 in node:internal/timers:0",
         "V8::InternalFrame+0 in :0",
         "V8::EntryFrame+0 in :0",
-        "node+0x119a27b",
-        "node+0x1199bf7",
-        "node+0x10634e3",
-        "node+0xda83cb",
-        "libuv.so.1.0.0+0x14557",
-        "libuv.so.1.0.0+0x187bb",
-        "node+0xd2a2c7",
-        "node+0xe74967",
-        "node+0xdd8e07",
-        "libc.so.6+0x308bb",
-        "libc.so.6+0x30997",
-        "node+0xd2836f"
+        "node+0x119a27b (v8::internal::(anonymous namespace)::Invoke(v8::internal::Isolate*, v8::internal::(anonymous namespace)::InvokeParams const&))",
+        "node+0x1199bf7 (v8::internal::Execution::Call(v8::internal::Isolate*, v8::internal::Handle<v8::internal::Object>, v8::internal::Handle<v8::internal::Object>, int, v8::internal::Handle<v8::internal::Object>*))",
+        "node+0x10634e3 (v8::Function::Call(v8::Local<v8::Context>, v8::Local<v8::Value>, int, v8::Local<v8::Value>*))",
+        "node+0xda83cb (node::Environment::RunTimers(uv_timer_s*))",
+        "libuv.so.1.0.0+0x14557 (uv__run_timers)",
+        "libuv.so.1.0.0+0x187bb (uv_run)",
+        "node+0xd2a2c7 (node::SpinEventLoopInternal(node::Environment*))",
+        "node+0xe74967 (node::NodeMainInstance::Run())",
+        "node+0xdd8e07 (node::Start(int, char**))",
+        "libc.so.6+0x308bb (__libc_start_call_main)",
+        "libc.so.6+0x30997 (__libc_start_main_impl)",
+        "node+0xd2836f (_start)"
       ]
     },
     {
       "lwp": 10038,
       "frames": [
-        "libc.so.6+0x957e8",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89ddf",
-        "libc.so.6+0x95687",
-        "libuv.so.1.0.0+0x25823",
-        "node+0xf96413",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957e8 (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89ddf (__futex_abstimed_wait_cancelable64)",
+        "libc.so.6+0x95687 (__new_sem_wait_slow64.constprop.0)",
+        "libuv.so.1.0.0+0x25823 (uv_sem_wait)",
+        "node+0xf96413 (node::inspector::(anonymous namespace)::StartIoThreadMain(void*))",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     },
     {
       "lwp": 10037,
       "frames": [
-        "libc.so.6+0x957e8",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89ddf",
-        "libc.so.6+0x8c587",
-        "libuv.so.1.0.0+0x2578b",
-        "node+0xeab8af",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957e8 (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89ddf (__futex_abstimed_wait_cancelable64)",
+        "libc.so.6+0x8c587 (___pthread_cond_wait)",
+        "libuv.so.1.0.0+0x2578b (uv_cond_wait)",
+        "node+0xeab8af (node::(anonymous namespace)::PlatformWorkerThread(void*))",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     },
     {
       "lwp": 10036,
       "frames": [
-        "libc.so.6+0x957e8",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89ddf",
-        "libc.so.6+0x8c587",
-        "libuv.so.1.0.0+0x2578b",
-        "node+0xeab8af",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957e8 (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89ddf (__futex_abstimed_wait_cancelable64)",
+        "libc.so.6+0x8c587 (___pthread_cond_wait)",
+        "libuv.so.1.0.0+0x2578b (uv_cond_wait)",
+        "node+0xeab8af (node::(anonymous namespace)::PlatformWorkerThread(void*))",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     },
     {
       "lwp": 10035,
       "frames": [
-        "libc.so.6+0x957e8",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89ddf",
-        "libc.so.6+0x8c587",
-        "libuv.so.1.0.0+0x2578b",
-        "node+0xeab8af",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957e8 (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89ddf (__futex_abstimed_wait_cancelable64)",
+        "libc.so.6+0x8c587 (___pthread_cond_wait)",
+        "libuv.so.1.0.0+0x2578b (uv_cond_wait)",
+        "node+0xeab8af (node::(anonymous namespace)::PlatformWorkerThread(void*))",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     },
     {
       "lwp": 10034,
       "frames": [
-        "libc.so.6+0x957e8",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89ddf",
-        "libc.so.6+0x8c587",
-        "libuv.so.1.0.0+0x2578b",
-        "node+0xeab8af",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957e8 (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89ddf (__futex_abstimed_wait_cancelable64)",
+        "libc.so.6+0x8c587 (___pthread_cond_wait)",
+        "libuv.so.1.0.0+0x2578b (uv_cond_wait)",
+        "node+0xeab8af (node::(anonymous namespace)::PlatformWorkerThread(void*))",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     },
     {
       "lwp": 10033,
       "frames": [
-        "libc.so.6+0x957ec",
-        "libc.so.6+0x89a53",
-        "libc.so.6+0x89a8f",
-        "libc.so.6+0xee75f",
-        "libuv.so.1.0.0+0x2a0b7",
-        "libuv.so.1.0.0+0x186df",
-        "node+0xeaecc7",
-        "libc.so.6+0x8d03f",
-        "libc.so.6+0xee4cb"
+        "libc.so.6+0x957ec (__syscall_cancel_arch)",
+        "libc.so.6+0x89a53 (__internal_syscall_cancel)",
+        "libc.so.6+0x89a8f (__syscall_cancel)",
+        "libc.so.6+0xee75f (__GI_epoll_pwait)",
+        "libuv.so.1.0.0+0x2a0b7 (uv__io_poll)",
+        "libuv.so.1.0.0+0x186df (uv_run)",
+        "node+0xeaecc7 (node::WorkerThreadsTaskRunner::DelayedTaskScheduler::Run())",
+        "libc.so.6+0x8d03f (start_thread)",
+        "libc.so.6+0xee4cb (thread_start)"
       ]
     }
   ],

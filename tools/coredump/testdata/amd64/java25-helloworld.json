@@ -5,14 +5,14 @@
       "lwp": 7232,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x67898",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x67898 (__pthread_timedjoin_np)",
         "libjli.so+0x8753",
         "libjli.so+0x5a79",
-        "libjli.so+0x6889",
+        "libjli.so+0x6889 (JLI_Launch)",
         "java+0x1162",
-        "ld-musl-x86_64.so.1+0x41a2f",
+        "ld-musl-x86_64.so.1+0x41a2f (libc_start_main_stage2)",
         "java+0x11f1"
       ]
     },
@@ -20,9 +20,9 @@
       "lwp": 7253,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8df6c",
         "libjvm.so+0x483bba",
@@ -30,7 +30,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -38,13 +38,13 @@
       "lwp": 7252,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf58e0",
         "libjvm.so+0xbbce1d",
         "libjvm.so+0xf29f67",
-        "libjvm.so+0x8748f0",
+        "libjvm.so+0x8748f0 (JVM_MonitorWait)",
         "void java.lang.Object.wait0(long)+0 in Object.java:0",
         "void java.lang.Object.wait(long)+13 in Object.java:389",
         "java.lang.ref.Reference java.lang.ref.ReferenceQueue.remove0(long)+4 in ReferenceQueue.java:123",
@@ -60,7 +60,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -68,16 +68,16 @@
       "lwp": 7251,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5fcc",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0xbab7ca",
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -85,9 +85,9 @@
       "lwp": 7250,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8df6c",
         "libjvm.so+0x483bba",
@@ -95,7 +95,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -103,9 +103,9 @@
       "lwp": 7249,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8df6c",
         "libjvm.so+0x483bba",
@@ -113,7 +113,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -121,16 +121,16 @@
       "lwp": 7248,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0xb7f443",
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -138,16 +138,16 @@
       "lwp": 7247,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0xcc8578",
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -155,16 +155,16 @@
       "lwp": 7246,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x689fd",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x689fd (sem_timedwait)",
         "libjvm.so+0xcb8ab3",
         "libjvm.so+0xe55f65",
         "libjvm.so+0xbd9e75",
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -172,13 +172,13 @@
       "lwp": 7245,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf571d",
         "libjvm.so+0xbbcf11",
         "libjvm.so+0xf29f67",
-        "libjvm.so+0x8748f0",
+        "libjvm.so+0x8748f0 (JVM_MonitorWait)",
         "void java.lang.Object.wait0(long)+0 in Object.java:0",
         "void java.lang.Object.wait(long)+13 in Object.java:389",
         "void java.lang.Object.wait()+0 in Object.java:351",
@@ -192,7 +192,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -200,12 +200,12 @@
       "lwp": 7244,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5fcc",
         "libjvm.so+0xb8df6c",
-        "libjvm.so+0x872872",
+        "libjvm.so+0x872872 (JVM_WaitForReferencePendingList)",
         "void java.lang.ref.Reference.waitForReferencePendingList()+0 in Reference.java:0",
         "void java.lang.ref.Reference.processPendingReferences()+0 in Reference.java:246",
         "void java.lang.ref.Reference$ReferenceHandler.run()+3 in Reference.java:208",
@@ -216,7 +216,7 @@
         "libjvm.so+0x78eae9",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -224,16 +224,16 @@
       "lwp": 7243,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5fcc",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0x1020edf",
         "libjvm.so+0x102188f",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -241,16 +241,16 @@
       "lwp": 7242,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0xbab1de",
         "libjvm.so+0xbab300",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -258,9 +258,9 @@
       "lwp": 7238,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5f8c",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0x6a008d",
@@ -268,7 +268,7 @@
         "libjvm.so+0x4a316b",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -276,9 +276,9 @@
       "lwp": 7237,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5fcc",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0x62db95",
@@ -286,7 +286,7 @@
         "libjvm.so+0x4a316b",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -294,14 +294,14 @@
       "lwp": 7236,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x689fd",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x689fd (sem_timedwait)",
         "libjvm.so+0xcb8ab3",
         "libjvm.so+0x10536b8",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -309,16 +309,16 @@
       "lwp": 7235,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libjvm.so+0xbf5fcc",
         "libjvm.so+0xb8dee9",
         "libjvm.so+0x6267ca",
         "libjvm.so+0x4a316b",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -326,14 +326,14 @@
       "lwp": 7234,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x689fd",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x689fd (sem_timedwait)",
         "libjvm.so+0xcb8ab3",
         "libjvm.so+0x10536b8",
         "libjvm.so+0xf7855e",
         "libjvm.so+0xbe8eca",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -341,11 +341,11 @@
       "lwp": 7233,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x6b5e8",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x6b5e8 (write)",
         "libjava.so+0x134e9",
         "libjava.so+0x12f2c",
-        "libjava.so+0xb647",
+        "libjava.so+0xb647 (Java_java_io_FileOutputStream_writeBytes)",
         "void java.io.FileOutputStream.writeBytes(byte[], int, int, boolean)+0 in FileOutputStream.java:0",
         "void java.io.FileOutputStream.write(byte[], int, int)+5 in FileOutputStream.java:352",
         "void java.lang.System$Out.write(byte[], int, int)+2 in System.java:1910",
@@ -366,7 +366,7 @@
         "libjli.so+0x36b9",
         "libjli.so+0x479c",
         "libjli.so+0x7e79",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     }
