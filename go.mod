@@ -18,7 +18,7 @@ require (
 	github.com/klauspost/compress v1.20.4
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261109092835-f894ee81d1e5
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261112141130-5c1a0919b69c
 	github.com/stretchr/testify v1.12.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.71.0
@@ -39,11 +39,10 @@ require (
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.1
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.33.0
-	golang.org/x/exp v0.0.0-20261109185158-a52e3aef5920
+	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4
 	golang.org/x/mod v0.43.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
-	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -84,4 +83,5 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/grpc v1.85.0 // indirect
 )

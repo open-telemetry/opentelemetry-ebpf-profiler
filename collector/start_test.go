@@ -28,6 +28,7 @@ type dummyReporter struct{}
 
 func (d *dummyReporter) Start(context.Context) error                                  { return fmt.Errorf("dummy error") }
 func (d *dummyReporter) Stop()                                                        {}
+func (d *dummyReporter) SetSnapshotSource(samples.SnapshotSource)                     {}
 func (d *dummyReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error { return nil }
 
 // TestStartErrorMode tests the error_mode config option on controller Start().
