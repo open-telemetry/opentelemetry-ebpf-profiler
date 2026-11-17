@@ -97,6 +97,6 @@ format:
 	$(CLANG_FORMAT) -i -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 clean:
-	rm -f *.o *.d
+	rm -f *.o *.d *.baseline
 
 -include $(DEPS)
