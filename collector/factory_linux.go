@@ -18,9 +18,7 @@ import (
 	"go.uber.org/zap/exp/zapslog"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
@@ -70,14 +68,6 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			controllerOption = option.apply(controllerOption)
 		}
 
-		controlerCfg := &controller.Config{
-			Config:               *cfg,
-			ExecutableReporter:   controllerOption.executableReporter,
-			ProcessMetaEnrichers: controllerOption.processMetaEnrichers,
-			ReporterFactory:      controllerOption.reporterFactory,
-			OnShutdown:           controllerOption.onShutdown,
-		}
-
-		return internal.NewController(controlerCfg, rs, nextConsumer)
+		return newProfilesReceiver(cfg, controllerOption, rs, nextConsumer)
 	}
 }
