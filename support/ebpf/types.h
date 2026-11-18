@@ -362,6 +362,12 @@ enum {
   // number of thread context attribute payloads truncated to fit the buffer
   metricID_UnwindThreadContextAttrsTruncated,
 
+  // number of failures to read V8 heap objects on the Node.js thread context walk
+  metricID_UnwindThreadContextNodeErrRead,
+
+  // number of Node.js thread context walks stopped at an inconsistent V8 object
+  metricID_UnwindThreadContextNodeErrInvalid,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -623,6 +629,23 @@ typedef struct __attribute__((packed)) ThreadContextBuf {
   // Payload length in bytes.
   u16 attrs_data_size;
 } ThreadContextBuf;
+
+// NodeThreadCtx is the discovery struct a Node.js process publishes through the
+// otel_thread_ctx_nodejs_v1 thread-local, per
+// design-docs/01861-nodejs-thread-context.
+typedef struct NodeThreadCtx {
+  // Address of the isolate's CPED slot. Zero gates all other fields.
+  u64 cped_slot;
+  // v8::Global of the published AsyncLocalStorage, the frame map key.
+  u64 als_handle;
+  // JS identity hash of that AsyncLocalStorage, selecting the bucket.
+  s32 als_identity_hash;
+  // Offset of the record pointer within the wrapper JSObject.
+  u8 record_slot_offset;
+  u8 _reserved[3];
+  // Tagged address of the isolate's undefined.
+  u64 undefined_addr;
+} NodeThreadCtx;
 
 typedef struct GolangLabel {
   u8 key[16];

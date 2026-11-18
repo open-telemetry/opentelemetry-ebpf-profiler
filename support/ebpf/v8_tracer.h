@@ -1,5 +1,7 @@
 // This file contains definitions for the V8 tracer
 
+#pragma once
+
 // V8 constants for the tags. Hard coded to optimize code size and speed.
 // They are unlikely to change, and likely require larger modifications on change.
 
