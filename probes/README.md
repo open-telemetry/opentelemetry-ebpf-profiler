@@ -29,16 +29,26 @@ change to the tracer. A probe is accepted only when that cost is justified.
   in eBPF before stack unwinding, and the rate is configurable.
 - Probe programs are part of the embedded eBPF ELF and must not raise the
   complexity or the size of the programs shared with the tracer.
-- At least one [code owner](../CONTRIBUTING.md#becoming-a-code-owner) in
-  [CODEOWNERS](../.github/CODEOWNERS) maintains the probe. A probe that loses
-  its owners or stops working on supported kernels may be removed.
+- An approver or maintainer of this project sponsors the probe and agrees to
+  review it.
+- The author becomes a [code owner](../CONTRIBUTING.md#becoming-a-code-owner)
+  of the probe in [CODEOWNERS](../.github/CODEOWNERS) and is responsible for
+  it. A probe that loses its owners or stops working on supported kernels may
+  be removed.
 
 ## Proposing a probe
 
-Open an issue that describes the data the probe collects, who uses it and why
-the generic probes do not cover it. This settles whether the probe belongs in
-tree before code is written. Starting out of tree is a good way to prove the
-probe, and a probe with users is easier to accept.
+Open an issue before code is written. This settles whether the probe belongs
+in tree and is the place to find a sponsor. The issue names
+
+- the code owners of the probe.
+- similar probes, in or out of tree, and why neither they nor the generic
+  probes cover the use case.
+- the data the probe collects, the sample types it reports and who uses it.
+- the configuration options of the probe.
+
+Starting out of tree is a good way to prove the probe, and a probe with users
+is easier to accept.
 
 ## External probes
 
