@@ -197,6 +197,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `make integration-tests` reads these rows with sed. Keep each entry on
+          # one line in this exact format: - { target_arch: <arch>, kernel: <version> }
           # List of available kernels here:
           # https://github.com/cilium/ci-kernels/pkgs/container/ci-kernels/versions?filters%5Bversion_type%5D=tagged
 

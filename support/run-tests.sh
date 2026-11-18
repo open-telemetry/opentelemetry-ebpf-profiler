@@ -30,15 +30,11 @@ do
 done
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ "$qemu_arch" == x86_64 ]]
-then
-  kernel_arch=amd64
-elif [[ "$qemu_arch" == aarch64 ]]
-then
-  kernel_arch=arm64
-else
-  fail "Unsupported QEMU architecture: $qemu_arch"
-fi
+case "$qemu_arch" in
+  x86_64) kernel_arch=amd64 ;;
+  aarch64) kernel_arch=arm64 ;;
+  *) fail "Unsupported QEMU architecture: $qemu_arch" ;;
+esac
 readonly kern_dir="${KERN_DIR:-$repo_root/ci-kernels/$kernel_arch}"
 
 for dependency in bluebox "qemu-system-$qemu_arch"
@@ -51,6 +47,10 @@ download_kernel() (
   if [[ -s "$kernel_dir/vmlinuz" ]]
   then
     return
+  fi
+  if [[ -n "${KERN_DIR:-}" ]]
+  then
+    echo "Kernel image $kernel_dir/vmlinuz is missing or empty; falling back to ghcr.io/cilium/ci-kernels:$kernel_version" >&2
   fi
   command -v docker >/dev/null || fail "Docker is required to download kernel $kernel_version (see support/README.md)"
   # The caller checks this function's status, so failures must return explicitly.
