@@ -77,7 +77,7 @@ BPF_RODATA_VAR(u16, origin_id_sampling, 0)
 
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
-// fileID.
+// fileID. The inner array holds the page descriptors first, then the stack delta pairs.
 #define STACK_DELTA_BUCKET(X)                                                                      \
   struct exe_id_to_##X##_stack_deltas_t {                                                          \
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);                                                       \
@@ -89,7 +89,7 @@ BPF_RODATA_VAR(u16, origin_id_sampling, 0)
         __uint(type, BPF_MAP_TYPE_ARRAY);                                                          \
         __uint(max_entries, 1 << X);                                                               \
         __type(key, u32);                                                                          \
-        __type(value, StackDelta);                                                                 \
+        __type(value, StackDeltaPair);                                                             \
       });                                                                                          \
   } exe_id_to_##X##_stack_deltas SEC(".maps");
 
@@ -131,13 +131,14 @@ struct interpreter_offsets_t {
   __uint(max_entries, 32);
 } interpreter_offsets SEC(".maps");
 
-// Maps fileID and page to information of stack deltas associated with that page.
-struct stack_delta_page_to_info_t {
+// Maps fileID to the location of the stack delta data of the executable in the
+// nested stack delta maps.
+struct exe_id_to_stackdelta_meta_t {
   __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, StackDeltaPageKey);
-  __type(value, StackDeltaPageInfo);
-  __uint(max_entries, 40000);
-} stack_delta_page_to_info SEC(".maps");
+  __type(key, u64);
+  __type(value, StackDeltaMeta);
+  __uint(max_entries, 4096);
+} exe_id_to_stackdelta_meta SEC(".maps");
 
 #include "native_stack_trace.h"
 
