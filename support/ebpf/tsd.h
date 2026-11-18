@@ -61,19 +61,16 @@ static inline EBPF_INLINE bool tls_var_valid(const TLSVarInfo *var)
   return var->valid;
 }
 
-// tls_read_var reads the pointer-sized value of the thread-local variable var
-// locates, in static or dynamic TLS. tsd_base comes from tsd_get_base, whose
-// failure each caller reports its own way.
+// tls_var_addr computes the address of the thread-local variable var locates,
+// in static or dynamic TLS. tsd_base comes from tsd_get_base, whose failure
+// each caller reports its own way.
 // The caller must verify tls_var_valid(var) before calling this function.
 static inline EBPF_INLINE TLSReadResult
-tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
+tls_var_addr(const TLSVarInfo *var, const void *tsd_base, const void **out)
 {
   if (var->dtv_pos == 0) {
-    const void *tls_addr = tsd_base + var->tls_offset;
-    DEBUG_PRINT("readTLS static at 0x%lx", (u64)tls_addr);
-    if (bpf_probe_read_user(out, sizeof(*out), tls_addr)) {
-      return TLS_READ_ERR;
-    }
+    *out = tsd_base + var->tls_offset;
+    DEBUG_PRINT("readTLS static at 0x%lx", (u64)*out);
     return TLS_READ_OK;
   }
 
@@ -104,10 +101,7 @@ tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
     return TLS_READ_ABSENT;
   }
 
-  if (bpf_probe_read_user(out, sizeof(*out), tls_block + var->tls_offset)) {
-    goto err;
-  }
-
+  *out = tls_block + var->tls_offset;
   DEBUG_PRINT("readTLS via DTV, dtv_pos 0x%x, offset 0x%x", var->dtv_pos, (u32)var->tls_offset);
   return TLS_READ_OK;
 
@@ -115,6 +109,26 @@ err:
   DEBUG_PRINT("Failed to read TLS via DTV at dtv_pos 0x%x", var->dtv_pos);
   increment_metric(metricID_UnwindErrBadDTVRead);
   return TLS_READ_ERR;
+}
+
+// tls_read_var reads the pointer-sized value of the thread-local variable var
+// locates, with the contract of tls_var_addr.
+static inline EBPF_INLINE TLSReadResult
+tls_read_var(const TLSVarInfo *var, const void *tsd_base, void **out)
+{
+  const void *addr;
+  TLSReadResult rc = tls_var_addr(var, tsd_base, &addr);
+  if (rc != TLS_READ_OK) {
+    return rc;
+  }
+  if (bpf_probe_read_user(out, sizeof(*out), addr)) {
+    DEBUG_PRINT("Failed to read TLS at 0x%lx", (u64)addr);
+    if (var->dtv_pos != 0) {
+      increment_metric(metricID_UnwindErrBadDTVRead);
+    }
+    return TLS_READ_ERR;
+  }
+  return TLS_READ_OK;
 }
 
 // tsd_get_base looks up the base address for TSD variables (TPBASE).

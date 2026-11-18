@@ -172,6 +172,12 @@ const (
 )
 
 const (
+	// ThreadContextProcInfo schema values from the C header file
+	ThreadCtxSchemaTLSDesc uint8 = C.THREAD_CTX_SCHEMA_TLSDESC
+	ThreadCtxSchemaNodeJS  uint8 = C.THREAD_CTX_SCHEMA_NODEJS
+)
+
+const (
 	// Unwind register base values from the C header file
 	UnwindRegInvalid uint8 = C.UNWIND_REG_INVALID
 	UnwindRegCfa     uint8 = C.UNWIND_REG_CFA

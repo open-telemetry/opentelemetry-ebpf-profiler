@@ -1199,8 +1199,17 @@ typedef struct PIDPageMappingInfo {
 #define PSR_MODE_MASK  0x0000000f
 #define PSR_MODE_EL0t  0x00000000
 
+// THREAD_CTX_SCHEMA_TLSDESC defines the OTEP #4947 thread-local, a pointer to
+// the thread context record.
+#define THREAD_CTX_SCHEMA_TLSDESC 0
+// THREAD_CTX_SCHEMA_NODEJS defines the otel_thread_ctx_nodejs_v1 thread-local,
+// the discovery struct the record is reached from through the V8 heap.
+#define THREAD_CTX_SCHEMA_NODEJS  1
+
 // ThreadContextProcInfo is a container for the data needed to locate the
 // thread context TLS variable of a process.
 typedef struct ThreadContextProcInfo {
   TLSVarInfo tls;
+  // One of THREAD_CTX_SCHEMA_*, selecting what the thread-local holds.
+  u8 schema;
 } ThreadContextProcInfo;

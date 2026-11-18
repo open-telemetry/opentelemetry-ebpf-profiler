@@ -361,7 +361,9 @@ type RubyProcInfo struct {
 	Pad_cgo_0                    [4]byte
 }
 type ThreadContextProcInfo struct {
-	Tls TLSVarInfo
+	Tls       TLSVarInfo
+	Schema    uint8
+	Pad_cgo_0 [3]byte
 }
 type V8ProcInfo struct {
 	Default_isolate_group_addr   uint64
@@ -396,7 +398,12 @@ const (
 
 	sizeof_PHPProcInfo           = 0x18
 	sizeof_RubyProcInfo          = 0x40
-	sizeof_ThreadContextProcInfo = 0xc
+	sizeof_ThreadContextProcInfo = 0x10
+)
+
+const (
+	ThreadCtxSchemaTLSDesc uint8 = 0x0
+	ThreadCtxSchemaNodeJS  uint8 = 0x1
 )
 
 const (
