@@ -64,7 +64,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			return nil, errInvalidConfig
 		}
 
-		opts := &controllerOption{reporterFactory: newCollectorReporter}
+		opts := &receiverOption{reporterFactory: newCollectorReporter}
 		for _, option := range options {
 			option.apply(opts)
 		}

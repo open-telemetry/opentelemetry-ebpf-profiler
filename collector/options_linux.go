@@ -13,7 +13,7 @@ import (
 )
 
 type Option interface {
-	apply(*controllerOption)
+	apply(*receiverOption)
 }
 
 type receiverOption struct {
@@ -23,20 +23,20 @@ type receiverOption struct {
 	onShutdown           func() error
 }
 
-type optFunc func(*controllerOption)
+type optFunc func(*receiverOption)
 
-func (f optFunc) apply(c *controllerOption) { f(c) }
+func (f optFunc) apply(c *receiverOption) { f(c) }
 
 // WithExecutableReporter is a function that allows to configure a ExecutableReporter.
 func WithExecutableReporter(executableReporter reporter.ExecutableReporter) Option {
-	return optFunc(func(option *controllerOption) {
+	return optFunc(func(option *receiverOption) {
 		option.executableReporter = executableReporter
 	})
 }
 
 // WithOnShutdown is a function that allows to configure a function to be called when the controller is shutdown.
 func WithOnShutdown(onShutdown func() error) Option {
-	return optFunc(func(option *controllerOption) {
+	return optFunc(func(option *receiverOption) {
 		option.onShutdown = onShutdown
 	})
 }
@@ -44,7 +44,7 @@ func WithOnShutdown(onShutdown func() error) Option {
 // WithReporterFactory is a function that allows to define a custom collector reporter factory.
 // Without it the default reporter (reporter.NewCollector) is used.
 func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) Option {
-	return optFunc(func(option *controllerOption) {
+	return optFunc(func(option *receiverOption) {
 		option.reporterFactory = reporterFactory
 	})
 }
@@ -55,7 +55,7 @@ func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer
 // to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
 // resource or sample attributes on outgoing profiles.
 func WithProcessMetaEnricher(enrichers ...process.MetaEnricher) Option {
-	return optFunc(func(option *controllerOption) {
+	return optFunc(func(option *receiverOption) {
 		option.processMetaEnrichers = append(option.processMetaEnrichers, enrichers...)
 	})
 }

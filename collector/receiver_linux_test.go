@@ -49,7 +49,7 @@ func TestReceiverShutdownUnloadsProbes(t *testing.T) {
 	mp := &mockProbe{}
 
 	c := &profilesReceiver{
-		opts:   &controllerOption{},
+		opts:   &receiverOption{},
 		probes: []tracer.Probe{mp},
 	}
 
@@ -88,7 +88,7 @@ func TestReceiverEnableProbesErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &profilesReceiver{
 				cfg:  &config.Config{Probes: tt.probes},
-				opts: &controllerOption{},
+				opts: &receiverOption{},
 			}
 			err := r.enableProbes(t.Context(), host)
 			if tt.wantErr == "" {

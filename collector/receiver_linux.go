@@ -32,7 +32,7 @@ import (
 // profilesReceiver implements [xreceiver.Profiles] and runs the eBPF profiler.
 type profilesReceiver struct {
 	cfg  *config.Config
-	opts *controllerOption
+	opts *receiverOption
 
 	intervals *times.Times
 	reporter  reporter.Reporter
@@ -43,7 +43,7 @@ type profilesReceiver struct {
 	shutdownOnceFn sync.Once
 }
 
-func newProfilesReceiver(cfg *config.Config, opts *controllerOption, rs receiver.Settings,
+func newProfilesReceiver(cfg *config.Config, opts *receiverOption, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles,
 ) (*profilesReceiver, error) {
 	intervals := times.New(cfg.ReporterInterval,

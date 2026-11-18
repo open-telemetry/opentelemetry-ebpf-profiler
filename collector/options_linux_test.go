@@ -76,8 +76,8 @@ func TestWithReporterFactory(t *testing.T) {
 		reflect.ValueOf(applyOption(option).reporterFactory).Pointer())
 }
 
-func applyOption(o Option) *controllerOption {
-	opts := &controllerOption{}
+func applyOption(o Option) *receiverOption {
+	opts := &receiverOption{}
 	o.apply(opts)
 	return opts
 }
