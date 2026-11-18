@@ -187,6 +187,11 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
+  // The Node.js thread-local holds no record pointer, and its walk is missing.
+  if (proc->schema != THREAD_CTX_SCHEMA_TLSDESC) {
+    return;
+  }
+
   // Dynamic TLS stays invalid until UpdateLibcInfo supplies the DTV layout.
   if (!tls_var_valid(&proc->tls)) {
     DEBUG_PRINT("Thread context pointer not located yet");
