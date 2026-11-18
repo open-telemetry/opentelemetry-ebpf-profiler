@@ -64,22 +64,27 @@ func newAsyncMapUpdaterPool(ctx context.Context,
 //
 // Update requests for the same file ID are guaranteed to always be routed to
 // the same worker. An `inner` value of `nil` requests deletion. Ownership of
-// the given `inner` map is transferred to the worker pool and `inner` is closed
-// by the background worker after the update was executed.
+// the given `inner` map is transferred to the worker pool, which closes it
+// after the update was executed or immediately, if the request is dropped.
+//
+// Returns an error if the request was dropped, e.g. during shutdown. The
+// error is for the caller's control flow only; the drop is logged here.
 func (p *asyncMapUpdaterPool) EnqueueUpdate(
 	outer *cebpf.Map, fileID host.FileID, inner *cebpf.Map,
-) {
+) error {
 	workerIdx := uint64(fileID) % uint64(len(p.workers))
 	if err := p.workers[workerIdx].ctx.Err(); err != nil {
 		// This spams integration tests
 		log.Debugf("Skipping handling of %v: %v", fileID, err)
-		return
+		_ = inner.Close()
+		return err
 	}
 	p.workers[workerIdx].queue <- asyncMapInMapUpdate{
 		Outer:  outer,
 		FileID: fileID,
 		Inner:  inner,
 	}
+	return nil
 }
 
 // asyncMapInMapUpdate is an asynchronous update request for a map-in-map BPF map.

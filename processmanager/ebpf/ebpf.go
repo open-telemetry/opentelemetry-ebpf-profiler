@@ -496,7 +496,9 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		return 0, fmt.Errorf("failed to clone inner map: %v", err)
 	}
 
-	impl.updateWorkers.EnqueueUpdate(outerMap, fileID, innerMapCloned)
+	if err = impl.updateWorkers.EnqueueUpdate(outerMap, fileID, innerMapCloned); err != nil {
+		return 0, err
+	}
 	defer func() {
 		if err != nil {
 			impl.updateWorkers.EnqueueUpdate(outerMap, fileID, nil)
