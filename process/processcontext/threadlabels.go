@@ -19,9 +19,13 @@ import (
 //
 // [OTEP 4947]: https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md
 const (
-	threadCtxSchemaVersionKey       = "threadlocal.schema_version"
-	supportedThreadCtxSchemaVersion = "tlsdesc_v1_dev"
-	threadCtxKeyMapKey              = "threadlocal.attribute_key_map"
+	threadCtxSchemaVersionKey = "threadlocal.schema_version"
+	// tlsdescThreadCtxSchemaVersion is OTEP 4947's thread-local record pointer.
+	tlsdescThreadCtxSchemaVersion = "tlsdesc_v1_dev"
+	// nodejsThreadCtxSchemaVersion reaches the same record through the V8 async
+	// context frame, per design-docs/01861-nodejs-thread-context.
+	nodejsThreadCtxSchemaVersion = "nodejs_v1_dev"
+	threadCtxKeyMapKey           = "threadlocal.attribute_key_map"
 	// maxThreadCtxAttributeKeys is the largest key map DecodeLabels can address,
 	// since it reads the key index as a single byte.
 	maxThreadCtxAttributeKeys = 256
@@ -61,7 +65,10 @@ func readThreadContextInfo(attrs []*commonpb.KeyValue) (*threadContextInfo, erro
 		// No schema published: the common case, not a fault.
 		return nil, nil
 	}
-	if v := version.GetValue().GetStringValue(); v != supportedThreadCtxSchemaVersion {
+	// Both schemas share the record format, so the key map decodes the same.
+	switch v := version.GetValue().GetStringValue(); v {
+	case tlsdescThreadCtxSchemaVersion, nodejsThreadCtxSchemaVersion:
+	default:
 		return nil, fmt.Errorf("unsupported thread context schema version: %s", v)
 	}
 	if keyMap == nil {
