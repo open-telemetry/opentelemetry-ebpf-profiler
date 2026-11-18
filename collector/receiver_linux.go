@@ -211,7 +211,7 @@ func (r *profilesReceiver) startProfiler(ctx context.Context) error {
 					trc.HandleTrace(trace)
 				}
 			case <-trc.Done():
-				log.Errorf("Shutting down controller due to unrecoverable tracer error")
+				log.Errorf("Shutting down receiver due to unrecoverable tracer error")
 				r.stopProfiler()
 				return
 			case <-ctx.Done():

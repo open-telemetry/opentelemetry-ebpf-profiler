@@ -16,7 +16,7 @@ type Option interface {
 	apply(*controllerOption)
 }
 
-type controllerOption struct {
+type receiverOption struct {
 	executableReporter   reporter.ExecutableReporter
 	processMetaEnrichers []process.MetaEnricher
 	reporterFactory      func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
