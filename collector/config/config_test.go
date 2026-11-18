@@ -29,7 +29,7 @@ func validConfig() *Config {
 	}
 }
 
-func TestValidateIntervals(t *testing.T) {
+func TestValidate(t *testing.T) {
 	for _, tt := range []struct {
 		name      string
 		configure func(*Config)
@@ -63,63 +63,57 @@ func TestValidateIntervals(t *testing.T) {
 			},
 			wantErr: "invalid monitor interval: -1s",
 		},
+		{
+			name: "zero sampling frequency",
+			configure: func(cfg *Config) {
+				cfg.SamplesPerSecond = 0
+			},
+			wantErr: "invalid sampling frequency: 0",
+		},
+		{
+			name: "zero frame cache size",
+			configure: func(cfg *Config) {
+				cfg.FrameCacheSize = 0
+			},
+			wantErr: "invalid frame cache size 0 (min: 1024, max: 1048576)",
+		},
+		{
+			name: "frame cache size below minimum",
+			configure: func(cfg *Config) {
+				cfg.FrameCacheSize = minFrameCacheSize - 1
+			},
+			wantErr: "invalid frame cache size 1023 (min: 1024, max: 1048576)",
+		},
+		{
+			name: "minimum frame cache size",
+			configure: func(cfg *Config) {
+				cfg.FrameCacheSize = minFrameCacheSize
+			},
+		},
+		{
+			name: "maximum frame cache size",
+			configure: func(cfg *Config) {
+				cfg.FrameCacheSize = maxFrameCacheSize
+			},
+		},
+		{
+			name: "frame cache size above maximum",
+			configure: func(cfg *Config) {
+				cfg.FrameCacheSize = maxFrameCacheSize + 1
+			},
+			wantErr: "invalid frame cache size 1048577 (min: 1024, max: 1048576)",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := validConfig()
 			tt.configure(cfg)
 
-			require.EqualError(t, confmap.Validate(cfg), tt.wantErr)
-		})
-	}
-}
-
-func TestValidate(t *testing.T) {
-	cfg := validConfig()
-	cfg.SamplesPerSecond = 0
-	err := confmap.Validate(cfg)
-	require.Error(t, err)
-	require.Equal(t, "invalid sampling frequency: 0", err.Error())
-}
-
-func TestValidateFrameCacheSize(t *testing.T) {
-	for _, tt := range []struct {
-		name           string
-		frameCacheSize uint
-		wantErr        bool
-	}{
-		{
-			name:           "zero is invalid",
-			frameCacheSize: 0,
-			wantErr:        true,
-		},
-		{
-			name:           "below minimum is invalid",
-			frameCacheSize: minFrameCacheSize - 1,
-			wantErr:        true,
-		},
-		{
-			name:           "minimum is valid",
-			frameCacheSize: minFrameCacheSize,
-		},
-		{
-			name:           "maximum is valid",
-			frameCacheSize: maxFrameCacheSize,
-		},
-		{
-			name:           "above maximum is invalid",
-			frameCacheSize: maxFrameCacheSize + 1,
-			wantErr:        true,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := validConfig()
-			cfg.FrameCacheSize = tt.frameCacheSize
 			err := confmap.Validate(cfg)
-			if tt.wantErr {
-				require.Error(t, err)
+			if tt.wantErr == "" {
+				require.NoError(t, err)
 				return
 			}
-			require.NoError(t, err)
+			require.EqualError(t, err, tt.wantErr)
 		})
 	}
 }
