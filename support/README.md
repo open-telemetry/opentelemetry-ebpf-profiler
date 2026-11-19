@@ -2,29 +2,61 @@ This directory is intended for non-Go support functionality. For example, the
 eBPF code and supporting Python scripts for bytecode offsets to line number
 translation.
 
-## Testing eBPF code on different kernel version
-Via the following commands, you can run the eBPF loading tests on kernel version
-5.4.276 or 6.12.16 respectively.
+## Testing on CI kernels
+
+From the repository root, run the QEMU integration tests on a specific kernel:
+
+```sh
+make integration-tests TARGET_ARCH=amd64 KERNEL_VERSIONS=5.10.217
 ```
-$ ./run-tests.sh 5.4.276
-$ ./run-tests.sh 6.12.16
+
+To run on every kernel in the CI matrix for an architecture:
+
+```sh
+make integration-tests TARGET_ARCH=amd64
+make integration-tests TARGET_ARCH=arm64
 ```
-The script loads the provided eBPF code into the kernel in a virtual environment so that it does not affect your local environment.
+
+`TARGET_ARCH` defaults to the host architecture. If `KERNEL_VERSIONS` is omitted,
+the target reads kernel versions from `.github/workflows/unit-test-on-pull-request.yml`.
+To select several kernels, use `KERNEL_VERSIONS="5.10.217 6.12.16"`. The target
+builds the test binaries once, runs every selected kernel, and fails if any
+kernel fails, with a summary of the failed kernels.
+
+`run-tests.sh` always reads test binaries from the repository's `support/`
+directory, regardless of the working directory, and accepts one or more kernel
+versions as arguments. It defaults to the Linux host's
+architecture; set `QEMU_ARCH=x86_64` or `QEMU_ARCH=aarch64` to override it.
+
+Missing images are downloaded from `ghcr.io/cilium/ci-kernels` into
+`ci-kernels/<arch>/<version>/vmlinuz` at the repository root. Cached images are
+never refreshed. Tags such as `6.16` move to newer patch releases, so delete the
+cached image to match CI.
+
+Run `make host-integration-tests` separately for the process context and TLS
+tests, which need shared libraries unavailable in the QEMU initramfs.
 
 ## Requirements
-The tests are built on top of the following dependencies. Make sure you have them installed beforehand.
+Linux with the project build dependencies, QEMU for the target architecture,
+`bluebox`, and Docker for downloading kernels. On Debian or Ubuntu:
 
- * qemu-system-x86
- * statically linked busybox
+```sh
+sudo apt-get install qemu-system-x86 qemu-system-arm ipxe-qemu
+go install github.com/florianl/bluebox@v0.0.1
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
 
- ## Building a Custom Kernel Image
- Kernel images can be build with the script provided in `ci-kernels`. This directory contains also the basic configuration settings needed to enable eBPF features for the kernel image.
+Cross compilation needs the target architecture's C compiler. `run-tests.sh`
+uses `sudo` when `/dev/kvm` is inaccessible. Without KVM, QEMU is much slower.
 
- ## Test a Custom Kernel Image
- By default `run-tests.sh` takes only the kernel version as argument. The script looks for the kernel image with the specified version in `ci-kernels`. As an alternative one can provide a directory to look for this kernel image via `KERN_DIR`.
- ```
- $ KERN_DIR=my-other-kernels/ ./run-tests.sh 5.4.276
- ```
+## Test a Custom Kernel Image
+Kernel images can be built with [cilium/ci-kernels](https://github.com/cilium/ci-kernels).
+Place the image at `$KERN_DIR/<version>/vmlinuz` and pass its version to
+`run-tests.sh`. `KERN_DIR` replaces `ci-kernels/<arch>`, so use one directory
+per architecture.
+```
+$ KERN_DIR=my-other-kernels/ ./support/run-tests.sh 5.4.276
+```
 
  ## Manually Debugging a Custom Kernel Image
 1. Compile eBPF and Go code
