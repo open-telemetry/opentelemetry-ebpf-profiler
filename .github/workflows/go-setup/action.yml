@@ -25,10 +25,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/go/pkg/mod
-        key: go-mod-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum', 'internal/tools/go.mod', 'internal/tools/go.sum', 'interpreter/go/integrationtests/pprof/go.mod', 'tools/coredump/go.mod', 'tools/coredump/go.sum', 'tools/luajitoffsets/go.mod', 'tools/luajitoffsets/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
-        restore-keys: |
-          go-mod-${{ steps.go.outputs.go-version }}-
-          go-mod-
+        key: go-mod-${{ hashFiles('**/go.mod', '**/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
       id: go-mod-cache
     - name: Download Go modules
       if: steps.go-mod-cache.outputs.cache-hit != 'true'
@@ -38,6 +35,6 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/go-build
-        key: go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.mod', 'go.sum', 'internal/tools/go.mod', 'internal/tools/go.sum', 'interpreter/go/integrationtests/pprof/go.mod', 'tools/coredump/go.mod', 'tools/coredump/go.sum', 'tools/luajitoffsets/go.mod', 'tools/luajitoffsets/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
+        key: go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
         restore-keys: |
           go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-
