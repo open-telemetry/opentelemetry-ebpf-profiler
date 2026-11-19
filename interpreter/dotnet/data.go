@@ -34,29 +34,52 @@ type dotnetCdacHeader struct {
 	dataPtr   uint64
 }
 
-// globalVar is a helper type to decode a Global definition from CDAC JSON contract
-// https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/data_descriptor.md#global-values
-type globalVar uint64
+// contractVersion is a helper type to decode a Contract version from CDAC JSON contract
+type contractVersion uint32
 
-func (gv *globalVar) UnmarshalJSON(b []byte) error {
+func (cv *contractVersion) UnmarshalJSON(b []byte) error {
+	var ver uint32
+	var spec string
+
+	if err := json.Unmarshal(b, &spec); err == nil && len(spec) >= 2 {
+		val, err := strconv.ParseUint(spec[1:], 0, 32)
+		if err == nil && spec[0] == 'c' {
+			*cv = contractVersion(val)
+			return nil
+		}
+	} else if err := json.Unmarshal(b, &ver); err == nil {
+		*cv = contractVersion(ver)
+		return nil
+	}
+	return fmt.Errorf("unsupported contract spec: %s", b)
+}
+
+// globalInt is a helper type to decode a Global definition from CDAC JSON contract
+// https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/data_descriptor.md#global-values
+type globalInt uint64
+
+func (gv *globalInt) UnmarshalJSON(b []byte) error {
+	var value string
 	var fields []string
-	if err := json.Unmarshal(b, &fields); err != nil {
+	if err := json.Unmarshal(b, &fields); err == nil {
+		if len(fields) < 2 {
+			return errors.New("unknown global var format")
+		}
+
+		switch fields[1] {
+		case "uint8", "uint16", "uint32", "uint64":
+			value = fields[0]
+		default:
+			return fmt.Errorf("unexpected global var type: %v", fields[1])
+		}
+	} else if err := json.Unmarshal(b, &value); err != nil {
 		return err
 	}
-	if len(fields) < 2 {
-		return errors.New("unknown global var format")
+	val, err := strconv.ParseUint(value, 0, 64)
+	if err != nil {
+		return err
 	}
-
-	switch fields[1] {
-	case "uint8", "uint16", "uint32", "uint64":
-		val, err := strconv.ParseUint(fields[0], 0, 64)
-		if err != nil {
-			return err
-		}
-		*gv = globalVar(val)
-	default:
-		return fmt.Errorf("unexpected global var type: %v", fields[1])
-	}
+	*gv = globalInt(val)
 	return nil
 }
 
@@ -152,12 +175,12 @@ type dotnetCdac struct {
 	}
 
 	Globals struct {
-		MethodDescTokenRemainderBitCount globalVar
-		MethodDescAlignment              globalVar
+		MethodDescTokenRemainderBitCount globalInt
+		MethodDescAlignment              globalInt
 	}
 
 	Contracts struct {
-		ExecutionManager uint
+		ExecutionManager contractVersion
 	}
 
 	// The additional data not present in CDAC that we track or synthesize.
@@ -301,7 +324,7 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 			vms.Module.SimpleName = 0x108
 		}
 		fallthrough
-	case 10:
+	case 10, 11:
 		vms.CodeRangeMapRangeList.RangeListType = 0x120
 		vms.PatchpointInfo.SizeOf = 32
 		vms.PatchpointInfo.NumberOfLocals = 8
@@ -335,7 +358,7 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 	case 8:
 		cdac.dacTable.VirtualCallStubManagerManager = 0xe
 		vms.VirtualCallStubManager.Next = 0x268
-	case 10:
+	case 10, 11:
 		cdac.dacTable.StubLinkStubManager = 0xa
 	}
 
