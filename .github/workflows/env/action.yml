@@ -5,10 +5,6 @@ inputs:
     description: 'Go version to install (e.g. "stable"). Defaults to the version pinned in go.mod.'
     required: false
     default: ''
-  go-build-cache-key:
-    description: 'Cache key fragment identifying the job and its matrix flavor for the Go build cache. Defaults to the job id.'
-    required: false
-    default: ''
 
 runs:
   using: composite
@@ -36,4 +32,3 @@ runs:
       uses: $/.github/workflows/go-setup
       with:
         go-version: ${{ inputs.go-version }}
-        go-build-cache-key: ${{ inputs.go-build-cache-key }}

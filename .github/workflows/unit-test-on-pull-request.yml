@@ -48,8 +48,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-        with:
-          go-build-cache-key: lint-${{ matrix.target_arch }}
       - name: Install binutils-gold
         # Work around for https://github.com/golang/go/issues/22040
         # until the project moved on to Go 1.27.
@@ -91,8 +89,6 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: $/.github/workflows/go-setup
-        with:
-          go-build-cache-key: cross-${{ matrix.goos }}-${{ matrix.goarch }}
       - name: Cross compile
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./collector/...
 
@@ -114,8 +110,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-        with:
-          go-build-cache-key: test-${{ matrix.target_arch }}-${{ matrix.go_flags }}
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -157,8 +151,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-        with:
-          go-build-cache-key: integration-binaries-${{ matrix.target_arch }}
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
@@ -281,8 +273,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-        with:
-          go-build-cache-key: host-integration-${{ matrix.target_arch }}
       - name: Install musl-dev
         run: |
           sudo apt-get update -y

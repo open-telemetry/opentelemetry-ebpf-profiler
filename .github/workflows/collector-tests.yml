@@ -31,7 +31,6 @@ jobs:
         uses: $/.github/workflows/env
         with:
           go-version: stable
-          go-build-cache-key: collector-test-${{ runner.arch }}
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -90,7 +89,6 @@ jobs:
         uses: $/.github/workflows/env
         with:
           go-version: stable
-          go-build-cache-key: otelcol-${{ matrix.use-upstream }}-${{ runner.arch }}
       - name: Clone Collector
         if: ${{ matrix.use-upstream }}
         run: |

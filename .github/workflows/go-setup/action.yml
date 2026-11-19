@@ -1,13 +1,9 @@
 name: Go setup
-description: Install Go and restore/save the Go module and build caches.
+description: Install Go and restore/save the Go module cache.
 
 inputs:
   go-version:
     description: 'Go version to install (e.g. "stable"). Defaults to the version pinned in go.mod.'
-    required: false
-    default: ''
-  go-build-cache-key:
-    description: 'Cache key fragment identifying the job and its matrix flavor for the Go build cache. Defaults to the job id.'
     required: false
     default: ''
 
@@ -31,10 +27,3 @@ runs:
       if: steps.go-mod-cache.outputs.cache-hit != 'true'
       shell: bash
       run: make go-mod-download
-    - name: Cache Go build artifacts
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: ~/.cache/go-build
-        key: go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('**/go.mod', '**/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
-        restore-keys: |
-          go-build-${{ inputs.go-build-cache-key || github.job }}-${{ steps.go.outputs.go-version }}-
