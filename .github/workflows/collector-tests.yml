@@ -29,8 +29,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-      - name: Set up Go Stable
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
       # Restore only: reuse the "Test (amd64)" cache rather than storing a copy.
@@ -88,8 +86,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-      - name: Set up Go Stable
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
       - name: Clone Collector

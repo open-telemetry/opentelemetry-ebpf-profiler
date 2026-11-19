@@ -22,10 +22,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+        uses: $/.github/workflows/go-setup
       - name: Check licenses of dependencies
         run: make license-check
       - name: Check LICENSES is up to date
@@ -90,8 +87,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up environment
-        uses: $/.github/workflows/env
+      - name: Set up Go
+        uses: $/.github/workflows/go-setup
       - name: Cross compile
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./collector/...
 
