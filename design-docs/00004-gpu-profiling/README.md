@@ -376,9 +376,12 @@ activity is its own profile:
 | `gpu_mem_time` | nanoseconds | time of copies and fills | the call's |
 | `gpu_mem_bytes` | bytes | bytes copied or filled | the call's |
 
-The names and units will follow what
-[opentelemetry-proto#794](https://github.com/open-telemetry/opentelemetry-proto/issues/794)
-settles on.
+The values are the measured quantities themselves, already multiplied by the
+sample weight, so these profiles have no period. Their units are the ones that
+[opentelemetry-specification#5409](https://github.com/open-telemetry/opentelemetry-specification/pull/5409)
+asks producers to use, which follows up on
+[opentelemetry-proto#794](https://github.com/open-telemetry/opentelemetry-proto/issues/794).
+It lists no GPU profiles, so the names above are the profiler's own for now.
 
 A `gpu_launches` sample has the application's stack at the call. A sample of GPU
 work starts, at the leaf, with frames the profiler adds, whose frame type is the
@@ -398,6 +401,12 @@ identifies a GPU in the `hw.gpu.*` metrics too, with `hw.type` set to `gpu`:
 work that one process spreads over several GPUs can be told apart, and joined
 with the GPU's metrics. They are stamped with the time of the report that holds
 them, not with the time the work ran.
+
+Samples of GPU work also keep the trace and span IDs of the call that started
+the work, when its thread had a span. The profiler adds these IDs to the stack
+of a GPU call as it does to a CPU sample, so the GPU time of a request is linked
+to its span like its CPU time. The number of samples per process in each report
+stays capped, however many spans there are.
 
 ![Flame graph of GPU kernel time of a PyTorch training job](example-profile.svg)
 
@@ -444,12 +453,13 @@ readability.*
   them.
 - A process sends the stacks of its first GPU calls before the profiler knows
   it, when it loads a producer library the profiler is already attached to.
-  Those stacks are dropped, and the work of the calls is reported without a
-  stack, with its weight, as is work whose stack the profiler could not keep
-  up with. Without configured paths, the first process to load a producer
-  library sends nothing until the profiler scans its mappings, which it does
-  once it samples the process on a CPU: the work of a process that ends before
-  then is not reported.
+  Those stacks cannot be unwound, and the work of the calls is reported without
+  a stack, with its weight, as is work whose stack the profiler could not keep
+  up with. A call that has trace and span IDs is still kept, with an empty
+  stack, so that its work stays linked to its span. Without configured paths,
+  the first process to load a producer library sends nothing until the
+  profiler scans its mappings, which it does once it samples the process on a
+  CPU: the work of a process that ends before then is not reported.
 - Linux raises the counter of a probe just before the probe is in place, so an
   event fired at that moment is lost. A lost `DEVICE` event is made up for by
   the GPU table.
@@ -472,9 +482,19 @@ readability.*
   producer asks as soon as CUDA starts. Next to the producer, PyTorch's
   profiler records no GPU activity and logs why; a tool that asked before CUDA
   started keeps CUPTI, and the producer then disables itself and logs why.
-- Ranges need the application to name its work, such as PyTorch under
-  `emit_nvtx()`, and NVIDIA's NVTX library to be pointed through
-  `NVTX_INJECTION64_PATH` at the CUPTI library that the application loads.
+- GPU work is linked to the span that was active on the thread making the call.
+  Work that an application batches for several requests goes to that one span:
+  dividing it between the requests is left to the application, which knows
+  them, for example with a batch span that links to the requests. A persistent
+  kernel goes to the span active at its launch. With sampling, the GPU time of
+  a span is right on average, but a single request gets either nothing or the
+  time of one call counted as often as its weight.
+- Ranges need the application to name its work with NVTX, and NVIDIA's NVTX
+  library to be pointed through `NVTX_INJECTION64_PATH` at the CUPTI library
+  that the application loads. The names should come from a fixed set: in tests
+  with CUDA 12, a process's memory grew with every new range name while CUPTI
+  passed ranges on to a tool, so names that differ at every call, as PyTorch
+  writes them under `emit_nvtx()`, make it grow without bound.
 - The NVIDIA producer does not report copies between GPUs, nor kernels
   launched by other kernels, which CUPTI did not report in tests with CUDA 12.
   It cuts range names at 127 bytes, keeping at most 64 nested ranges and 1 KiB
@@ -488,18 +508,18 @@ one per other step.
 1. **This document.**
 
 2. **Groundwork in the profiler.** The GPU probe needs these changes, but each
-   one stands on its own:
-   - `usdt`: decode the argument descriptors of probes, such as `8@%rax`, as
-     [#2014](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2014)
-     does, so that the GPU probe can refuse producers that pass the event
-     pointer in any other register.
+   one stands on its own. Two have been merged since this document was opened:
+   [#2014](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2014)
+   decodes the argument descriptors of probes, such as `8@%rax`, so that the
+   GPU probe can refuse producers that pass the event pointer in any other
+   register; and
+   [#2015](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2015)
+   lets a probe add samples that it sums up itself, such as GPU time per stack,
+   to each report. The others:
    - `libpf`: frame types for the frames that the profiler makes itself:
      `cuda`, which the semantic conventions define, and `rocm`.
-   - `tracer`, `reporter`: let a probe add samples that it sums up itself, such
-     as GPU time per stack, to each report, as
-     [#2015](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/2015)
-     does, with sample attributes of their own, such as `hw.id`, which it does
-     not yet.
+   - `reporter`: let the samples that a probe sums up itself carry sample
+     attributes of their own, such as `hw.id`, and trace and span IDs.
    - `processmanager`: attach a probe to a process only once eBPF knows the
      process's memory mappings. A probe can fire as soon as it is attached, and
      until then its stacks cannot be unwound.
@@ -523,7 +543,9 @@ one per other step.
    - optionally, attach at start to producer libraries given by path in the
      extension's configuration;
    - capture the stack at each `LAUNCH` event, and report it in the
-     `gpu_launches` profile, multiplied by the sample weight.
+     `gpu_launches` profile, multiplied by the sample weight;
+   - eBPF: keep the stack of a `LAUNCH` event that cannot be unwound when it
+     has trace and span IDs, instead of dropping it like other such stacks.
 
 5. **GPU time:**
    - eBPF: forward every other event, header and payload, through a ring
@@ -531,7 +553,8 @@ one per other step.
    - `probes/gpu`: decode the payloads, pair the events of GPU work with the
      stacks of step 4 by process and call id, resolve their GPU indexes from
      the GPU table and `DEVICE` events, and report `gpu_kernel_time`,
-     `gpu_mem_time` and `gpu_mem_bytes`, multiplied by the sample weight.
+     `gpu_mem_time` and `gpu_mem_bytes`, multiplied by the sample weight, under
+     the trace and span IDs of their call.
 
 6. **Named ranges:** `probes/gpu` adds the ranges of each event as `range:`
    frames, between the work and the application's stack.
@@ -546,11 +569,18 @@ and a new profile, but no new version of the contract:
 - data exchanged between GPUs in multi-GPU training, from an NCCL plugin;
 - the time of calls into libraries such as cuDNN and cuBLAS.
 
+A producer could also read, at every call, the span that the application
+publishes for the calling thread
+([OTEP 4947](https://github.com/open-telemetry/opentelemetry-specification/blob/main/oteps/profiles/4947-thread-ctx.md)),
+and add up the exact GPU time of each span, while stacks stay sampled.
+
 # Open Questions
 
 - Should `rocm` be proposed as a value of
   [`profile.frame.type`](https://opentelemetry.io/docs/specs/semconv/registry/attributes/profile/#profile-frame-type)
   in the semantic conventions, next to `cuda`?
+- Should the GPU profiles be proposed as known sample types of the Profiles
+  specification, next to those that opentelemetry-specification#5409 lists?
 - Where should the reference producers live: in this repository under
   `tools/`, or in a repository of their own?
 
