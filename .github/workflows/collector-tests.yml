@@ -33,14 +33,13 @@ jobs:
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
-      - name: Cache coredump modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore only: reuse the "Test (amd64)" cache rather than storing a copy.
+      - name: Restore coredump modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/coredump/modulecache
-          key: coredumps-collector-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
-          restore-keys: |
-            coredumps-collector
-            coredumps-
+          key: coredumps-amd64-${{ hashFiles('tools/coredump/testdata/amd64/*.json') }}
+          restore-keys: coredumps-amd64-
       - name: Clone Collector
         run: |
           collector_path=/tmp/opentelemetry-collector
