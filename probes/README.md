@@ -23,8 +23,8 @@ change to the tracer. A probe is accepted only when that cost is justified.
 - Sample types follow the OTel Profiles data model and reuse names and units
   already in use where they fit. When the probe samples, the reported values
   allow the full population to be estimated.
-- The attach points are stable across the supported kernels and architectures. Tracepoints are
-  preferred over kprobes where one exists.
+- The attach points are stable across the supported kernels and
+  architectures. Tracepoints are preferred over kprobes where one exists.
 - The cost per event is bounded. High frequency events are filtered or sampled
   in eBPF before stack unwinding, and the rate is configurable.
 - Probe programs are part of the embedded eBPF ELF and must not raise the
@@ -49,6 +49,17 @@ in tree and is the place to find a sponsor. The issue names
 
 Starting out of tree is a good way to prove the probe, and a probe with users
 is easier to accept.
+
+## Donating a probe
+
+Once the issue is accepted, the probe goes through the normal review and may
+need changes to match the conventions of this repository. The pull request adds
+
+- the probe under `probes/<name>`, following the layout of the existing probes.
+- a `README.md` for the probe that states its purpose, documents its
+  configuration with an example and lists the sample types it reports.
+- tests and CI coverage, as for any other change.
+- an entry in [CODEOWNERS](../.github/CODEOWNERS) for the probe directory.
 
 ## External probes
 
