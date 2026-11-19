@@ -4,29 +4,10 @@
 
 #pragma once
 #include "bpfdefs.h"
+#include "nodejs_thread_context_defs.h"
 #include "tracemgmt.h"
 #include "types.h"
 #include "v8_tracer.h"
-
-// The V8 layout is fixed by the nodejs_v1 schema, which admits only 64-bit
-// builds without pointer compression and the V8 sandbox.
-
-// NODE_TC_TAGGED_SIZE defines the width of a V8 tagged word.
-#define NODE_TC_TAGGED_SIZE        8
-// NODE_TC_JSMAP_TABLE_OFFSET defines the offset of the OrderedHashMap pointer
-// within a JSMap.
-#define NODE_TC_JSMAP_TABLE_OFFSET 24
-// NODE_TC_FIXED_ARRAY_HEADER defines the FixedArray header size preceding the
-// OrderedHashMap counts.
-#define NODE_TC_FIXED_ARRAY_HEADER 16
-// NODE_TC_HASH_COUNTS defines the number of count words ahead of the buckets.
-#define NODE_TC_HASH_COUNTS        3
-// NODE_TC_HASH_ENTRY_SIZE defines the words per entry: key, value and chain.
-#define NODE_TC_HASH_ENTRY_SIZE    3
-// NODE_TC_HASH_LOAD_FACTOR defines the entries per bucket V8 allocates.
-#define NODE_TC_HASH_LOAD_FACTOR   2
-// NODE_TC_MAX_CHAIN defines the bucket chain length walked before giving up.
-#define NODE_TC_MAX_CHAIN          16
 
 static EBPF_INLINE bool node_tc_is_smi(u64 word)
 {

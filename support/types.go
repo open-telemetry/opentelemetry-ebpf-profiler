@@ -463,6 +463,17 @@ const (
 	V8DataCodeKindShift = 0x20
 	V8DataCodeKindMask  = 0xff
 
+	NodeTCTaggedSize       = 0x8
+	NodeTCJSMapTableOffset = 0x18
+	NodeTCFixedArrayHeader = 0x10
+	NodeTCHashCounts       = 0x3
+	NodeTCHashEntrySize    = 0x3
+	NodeTCHashLoadFactor   = 0x2
+	NodeTCMaxChain         = 0x10
+	NodeTCTestNone         = 0x0
+	NodeTCTestExpected     = 0x1
+	NodeTCTestOther        = 0x2
+
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
 	RubyFrameTypeCmeCfunc = 0x2

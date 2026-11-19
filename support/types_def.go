@@ -14,6 +14,7 @@ import (
 #include "./ebpf/usdt_defs.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/nodejs_thread_context_defs.h"
 #include "./ebpf/luajit.h"
 */
 import "C"
@@ -239,6 +240,17 @@ const (
 	V8DataDeltaMask     = C.V8_DATA_DELTA_MASK
 	V8DataCodeKindShift = C.V8_DATA_CODE_KIND_SHIFT
 	V8DataCodeKindMask  = C.V8_DATA_CODE_KIND_MASK
+
+	NodeTCTaggedSize       = C.NODE_TC_TAGGED_SIZE
+	NodeTCJSMapTableOffset = C.NODE_TC_JSMAP_TABLE_OFFSET
+	NodeTCFixedArrayHeader = C.NODE_TC_FIXED_ARRAY_HEADER
+	NodeTCHashCounts       = C.NODE_TC_HASH_COUNTS
+	NodeTCHashEntrySize    = C.NODE_TC_HASH_ENTRY_SIZE
+	NodeTCHashLoadFactor   = C.NODE_TC_HASH_LOAD_FACTOR
+	NodeTCMaxChain         = C.NODE_TC_MAX_CHAIN
+	NodeTCTestNone         = C.NODE_TC_TEST_NONE
+	NodeTCTestExpected     = C.NODE_TC_TEST_EXPECTED
+	NodeTCTestOther        = C.NODE_TC_TEST_OTHER
 
 	RubyFrameTypeNone     = C.RUBY_FRAME_TYPE_NONE
 	RubyFrameTypeCmeIseq  = C.RUBY_FRAME_TYPE_CME_ISEQ
