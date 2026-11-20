@@ -5,6 +5,7 @@
 #include "bpfdefs.h"
 #include "go_runtime.h"
 #include "kernel.h"
+#include "nodejs_thread_context.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
@@ -179,7 +180,8 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
 }
 
 // maybe_add_thread_context_info copies the interrupted thread's trace context
-// and attribute payload, published through otel_thread_ctx_v1, into trace.
+// and attribute payload, published through otel_thread_ctx_v1 or
+// otel_thread_ctx_nodejs_v1, into trace.
 static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 {
   ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &trace->pid);
@@ -200,8 +202,21 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  void *thread_context_buf_ptr;
-  TLSReadResult rc = tls_read_var(&proc->tls, (void *)tsd_base, &thread_context_buf_ptr);
+  void *thread_context_buf_ptr = NULL;
+  const void *tls_addr;
+  TLSReadResult rc;
+  switch (proc->schema) {
+  case THREAD_CTX_SCHEMA_TLSDESC:
+    rc = tls_read_var(&proc->tls, (void *)tsd_base, &thread_context_buf_ptr);
+    break;
+  case THREAD_CTX_SCHEMA_NODEJS:
+    rc = tls_var_addr(&proc->tls, (void *)tsd_base, &tls_addr);
+    if (rc == TLS_READ_OK) {
+      thread_context_buf_ptr = node_tc_record(tls_addr);
+    }
+    break;
+  default: return;
+  }
   if (rc != TLS_READ_OK) {
     // TLS_READ_ABSENT is no failure: glibc allocates a thread's block for a
     // dlopen'd module on its first access.
@@ -216,13 +231,13 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
 
   // Null until the thread publishes, which must not count as a read error.
   if (!thread_context_buf_ptr) {
-    DEBUG_PRINT("Thread context unpublished: null TLS pointer");
+    DEBUG_PRINT("Thread context unpublished: no record");
     return;
   }
 
   // Per OTEP #4947 only the owning thread writes the buffer, and that is the
   // thread we interrupted, so no write races these reads. valid flags a write
-  // interrupted midway.
+  // interrupted midway, or a Node.js record whose span ended.
   ThreadContextBuf thread_context_buf;
   if (bpf_probe_read_user(
         &thread_context_buf, sizeof(thread_context_buf), thread_context_buf_ptr)) {

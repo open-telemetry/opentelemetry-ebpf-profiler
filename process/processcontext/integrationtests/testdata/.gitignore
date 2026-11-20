@@ -2,3 +2,5 @@ processctx_exe_*
 libprocessctx_*.so
 processctx_lib_*
 processctx_dlopen_*
+nodectx_exe_*
+libnodectx_*.so

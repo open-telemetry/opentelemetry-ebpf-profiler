@@ -3,6 +3,7 @@
 #include "bpfdefs.h"
 #include "extmaps.h"
 #include "frametypes.h"
+#include "nodejs_thread_context.h"
 #include "tracemgmt.h"
 #include "types.h"
 
@@ -56,4 +57,19 @@ int tracepoint_integration__sched_switch(void *ctx)
   send_sample_trace(ctx, pid, tid, 1, false);
   send_sample_trace(ctx, pid, tid, 2, true);
   return 0;
+}
+
+// raw_tracepoint_integration__node_tc_record runs the Node.js thread context
+// walk once, through BPF_PROG_TEST_RUN in the context of the calling task, so
+// tests can run it against V8 objects they lay out in their own memory.
+// args[0] is the address of the otel_thread_ctx_nodejs_v1 struct to start
+// from, args[1] the record address the caller expects the walk to return.
+SEC("raw_tracepoint/integration_node_tc_record")
+int raw_tracepoint_integration__node_tc_record(struct bpf_raw_tracepoint_args *ctx)
+{
+  const void *record = node_tc_record((const void *)ctx->args[0]);
+  if (!record) {
+    return NODE_TC_TEST_NONE;
+  }
+  return record == (const void *)ctx->args[1] ? NODE_TC_TEST_EXPECTED : NODE_TC_TEST_OTHER;
 }

@@ -11,15 +11,23 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef NODEJS_CTX
+#include "nodectx.h"
+#define SCHEMA_VERSION "nodejs_v1_dev"
+// Reached through the V8 objects nodectx.c lays out, not a thread-local.
+static otel_thread_ctx_v1_t *otel_thread_ctx_v1;
+#else
+#define SCHEMA_VERSION "tlsdesc_v1_dev"
 // TLS model varies with how this file is linked (static exe vs shared object),
 // which is the point of the build matrix in the Makefile.
 __thread otel_thread_ctx_v1_t *otel_thread_ctx_v1;
+#endif
 
 int init_process_context(void) {
   const char *attribute_key_map[] = {"http_route", "http_method", "user_id",
                                      NULL};
   const otel_thread_ctx_config_data thread_ctx_config = {
-      .schema_version = "tlsdesc_v1_dev",
+      .schema_version = SCHEMA_VERSION,
       .attribute_key_map = attribute_key_map,
   };
   const char *resource_attributes[] = {"resource.key1", "resource.value1",
@@ -56,6 +64,9 @@ void init_thread_context(size_t attrs_data_size) {
     perror("calloc");
     exit(EXIT_FAILURE);
   }
+#ifdef NODEJS_CTX
+  nodectx_publish(otel_thread_ctx_v1);
+#endif
 }
 
 void update_thread_context(uint64_t span_id, uint64_t trace_id_lo,
