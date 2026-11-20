@@ -38,6 +38,13 @@ const (
 	maxEvents = 4096
 )
 
+// pidEvent is a pid_events entry. A zero contextAddress requests a full
+// synchronization, otherwise only a process context refresh.
+type pidEvent struct {
+	pidTID         libpf.PIDTID
+	contextAddress uint64
+}
+
 // StartPIDEventProcessor spawns a goroutine to process PID events.
 func (t *Tracer) StartPIDEventProcessor(ctx context.Context) {
 	go t.processPIDEvents(ctx)
@@ -49,8 +56,13 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 	defer pidCleanupTicker.Stop()
 	for {
 		select {
-		case pidTid := <-t.pidEvents:
-			t.processManager.SynchronizeProcess(process.New(pidTid.PID(), pidTid.TID()))
+		case event := <-t.pidEvents:
+			pr := process.New(event.pidTID.PID(), event.pidTID.TID())
+			if event.contextAddress != 0 {
+				t.processManager.RefreshProcessContext(pr, event.contextAddress)
+			} else {
+				t.processManager.SynchronizeProcess(pr)
+			}
 		case <-pidCleanupTicker.C:
 			t.processManager.CleanupPIDs()
 		case <-ctx.Done():

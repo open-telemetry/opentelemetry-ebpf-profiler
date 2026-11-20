@@ -69,7 +69,7 @@ func (t *Tracer) handleMmapRecord(ctx context.Context, record perf.Record) {
 		return
 	}
 	select {
-	case t.pidEvents <- pidTID:
+	case t.pidEvents <- pidEvent{pidTID: pidTID}:
 	case <-ctx.Done():
 	}
 }

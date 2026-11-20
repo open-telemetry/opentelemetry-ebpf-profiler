@@ -179,11 +179,10 @@ type Tracer struct {
 	// when process events take place (new, exit, unknown PC).
 	triggerPIDProcessing chan bool
 
-	// pidEvents notifies the tracer of new PID events. Each PID event is a 64bit integer
-	// value, see bpf_get_current_pid_tgid for information on how the value is encoded.
+	// pidEvents notifies the tracer of full synchronization or context refresh requests.
 	// It needs to be buffered to avoid locking the writers and stacking up resources when we
 	// read new PIDs at startup or notified via eBPF.
-	pidEvents chan libpf.PIDTID
+	pidEvents chan pidEvent
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
@@ -392,7 +391,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
-		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
+		pidEvents:              make(chan pidEvent, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  xsync.NewRWMutex(hooksState{m: make(map[hookPoint]link.Link)}),
@@ -1209,12 +1208,12 @@ func (t *Tracer) enableEvent(eventType int) {
 }
 
 // monitorPIDEventsMap iterates over the eBPF map pid_events in batches,
-// collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
+// collects PID/TIDs and context addresses and writes them to the events slice.
+func (t *Tracer) monitorPIDEventsMap(events *[]pidEvent) error {
 	eventsMap := t.ebpfMaps["pid_events"]
 
 	removed := make([]uint64, 128)
-	values := make([]bool, len(removed))
+	values := make([]uint64, len(removed))
 
 	cursor := cebpf.MapBatchCursor{}
 
@@ -1223,7 +1222,10 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 
 		// There can be results even if there's an error.
 		for i := range n {
-			*keys = append(*keys, libpf.PIDTID(removed[i]))
+			*events = append(*events, pidEvent{
+				pidTID:         libpf.PIDTID(removed[i]),
+				contextAddress: values[i],
+			})
 		}
 
 		if errors.Is(err, cebpf.ErrKeyNotExist) {
@@ -1428,7 +1430,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		return err
 	}
 
-	pidEvents := make([]libpf.PIDTID, 0)
+	pidEvents := make([]pidEvent, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
@@ -1439,9 +1441,9 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 				return false
 			}
 
-			for _, pidTid := range pidEvents {
-				log.Debugf("=> %v", pidTid)
-				t.pidEvents <- pidTid
+			for _, event := range pidEvents {
+				log.Debugf("=> %v context=0x%x", event.pidTID, event.contextAddress)
+				t.pidEvents <- event
 			}
 
 			// Keep the underlying array alive to avoid GC pressure

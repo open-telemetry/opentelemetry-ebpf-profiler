@@ -581,6 +581,26 @@ func (c *interpreterMappingCollector) mappings() []process.RawMapping {
 	return c.collected
 }
 
+// RefreshProcessContext reads the context at an announced address without scanning mappings.
+// Must not run concurrently with SynchronizeProcess: both read-modify-write processContext.
+func (pm *ProcessManager) RefreshProcessContext(pr process.Process, address uint64) {
+	pm.mu.RLock()
+	info := pm.pidToProcessInfo[pr.PID()]
+	if info == nil {
+		// A pending initial synchronization reads the context.
+		pm.mu.RUnlock()
+		return
+	}
+	old, envVars := info.processContext, info.meta.InternalEnvVariables
+	pm.mu.RUnlock()
+
+	updated := processcontext.Resolve(address, pr.PID(), pr.GetRemoteMemory(), old, envVars)
+
+	pm.mu.Lock()
+	info.processContext = updated
+	pm.mu.Unlock()
+}
+
 // SynchronizeProcess triggers ProcessManager to update its internal information
 // about a process. It synchronizes executable mappings for the given PID by
 // parsing /proc/PID/maps and building the internal mapping state directly in
@@ -684,7 +704,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
 			contextMappingAddr = m.Vaddr
 			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
-			// PID resynchronization when the process names its context mapping "OTEL_CTX".
+			// context refresh when the process names its context mapping "OTEL_CTX".
 		}
 
 		interpreterMapping := isInterpreterMapping(&m)
