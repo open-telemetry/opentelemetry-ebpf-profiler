@@ -431,8 +431,8 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
     return false;
   }
 
-  bool value = true;
-  int errNo  = bpf_map_update_elem(&pid_events, &pid_tgid, &value, BPF_ANY);
+  u64 value = 0;
+  int errNo = bpf_map_update_elem(&pid_events, &pid_tgid, &value, BPF_ANY);
   if (errNo != 0) {
     __attribute__((unused)) u32 tid = pid_tgid & 0xFFFFFFFF;
     DEBUG_PRINT("Failed to update pid_events with PID %d TID: %d: %d", pid, tid, errNo);
