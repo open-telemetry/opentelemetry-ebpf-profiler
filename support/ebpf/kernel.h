@@ -60,6 +60,9 @@ typedef _Bool bool;
 #ifndef ENOENT
   #define ENOENT 2 /* No such file or directory */
 #endif
+#ifndef EEXIST
+  #define EEXIST 17 /* File exists */
+#endif
 
 // Go defines `NULL` in `cgo-builtin-prolog`, so we have to check whether
 // it is already defined here (for when this is included in CGo).
