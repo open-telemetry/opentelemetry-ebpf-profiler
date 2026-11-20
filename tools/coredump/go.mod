@@ -55,8 +55,8 @@ require (
 	go.opentelemetry.io/collector/pdata/pprofile v0.165.0 // indirect
 	go.opentelemetry.io/otel v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.11.1 // indirect
-	go.opentelemetry.io/proto/otlp/processcontext/v1development v0.4.1 // indirect
+	go.opentelemetry.io/proto/slim/otlp v1.11.1 // indirect
+	go.opentelemetry.io/proto/slim/otlp/processcontext/v1development v0.4.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/arch v0.33.0 // indirect
