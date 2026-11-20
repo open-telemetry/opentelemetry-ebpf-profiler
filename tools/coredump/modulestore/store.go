@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -267,13 +268,47 @@ func (store *Store) RemoveRemoteModule(id ID) error {
 
 // UnpackModuleToPath extracts a module from the store to the given local path.
 func (store *Store) UnpackModuleToPath(id ID, outPath string) error {
-	out, err := os.Create(outPath)
+	info, statErr := os.Lstat(outPath)
+	if statErr == nil && !info.Mode().IsRegular() {
+		// Preserve symlinks and non-regular files (e.g. /dev/stdout).
+		out, err := os.Create(outPath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer out.Close()
+
+		err = store.UnpackModule(id, out)
+		if err == nil {
+			err = out.Close()
+		}
+		return err
+	}
+
+	mode := os.FileMode(0o644)
+	if statErr == nil {
+		mode = info.Mode().Perm()
+	}
+
+	out, err := os.CreateTemp(filepath.Dir(outPath), filepath.Base(outPath)+".tmp.")
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+		return fmt.Errorf("failed to create temporary output file: %w", err)
 	}
 	defer out.Close()
 
-	return store.UnpackModule(id, out)
+	err = store.UnpackModule(id, out)
+	if err == nil {
+		err = out.Close()
+	}
+	if err == nil {
+		err = os.Chmod(out.Name(), mode)
+	}
+	if err == nil {
+		err = os.Rename(out.Name(), outPath)
+	}
+	if err != nil {
+		return errors.Join(err, os.Remove(out.Name()))
+	}
+	return nil
 }
 
 // UnpackModule extracts a module from the store, writing it to the given writer.
