@@ -4,12 +4,10 @@
 package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
-	"bytes"
 	"debug/elf"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"reflect"
 	"regexp"
@@ -24,6 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/python/internal/linetable"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -165,15 +164,6 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 		addrToCodeObject: addrToCodeObject,
 	}
 
-	switch {
-	case d.version >= pythonVer(3, 11):
-		i.getFuncOffset = walkLocationTable
-	case d.version == pythonVer(3, 10):
-		i.getFuncOffset = walkLineTable
-	default:
-		i.getFuncOffset = mapByteCodeIndexToLine
-	}
-
 	return i, nil
 }
 
@@ -183,10 +173,6 @@ func (d *pythonData) Unload(_ interpreter.EbpfHandler) {
 // pythonCodeObject contains the information we cache for a corresponding
 // Python interpreter's PyCodeObject structures.
 type pythonCodeObject struct {
-	// As of Python 3.10 elements of PyCodeObject have changed and so we need
-	// to handle them differently. To be able to do so we keep track of the python version.
-	version uint16
-
 	// name is the extracted co_name (the unqualified method or function name)
 	name libpf.String
 
@@ -207,143 +193,6 @@ type pythonCodeObject struct {
 	ebpfChecksum uint32
 }
 
-// readVarint returns a variable length encoded unsigned integer from a location table entry.
-func readVarint(r io.ByteReader) uint32 {
-	val := uint32(0)
-	b := byte(0x40)
-	for shift := 0; b&0x40 != 0; shift += 6 {
-		var err error
-		b, err = r.ReadByte()
-		if err != nil || b&0x80 != 0 {
-			return 0
-		}
-		val |= uint32(b&0x3f) << shift
-	}
-	return val
-}
-
-// readSignedVarint returns a variable length encoded signed integer from a location table entry.
-func readSignedVarint(r io.ByteReader) int32 {
-	uval := readVarint(r)
-	if uval&1 != 0 {
-		return -int32(uval >> 1)
-	}
-	return int32(uval >> 1)
-}
-
-// walkLocationTable implements the algorithm to read entries from the location table.
-// This was introduced in Python 3.11.
-// https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Objects/locations.md
-//
-//nolint:lll
-func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
-	r := bytes.NewReader(m.lineTable)
-	curI := uint32(0)
-	line := int32(0)
-	for curI <= bci {
-		firstByte, err := r.ReadByte()
-		if err != nil || firstByte&0x80 == 0 {
-			log.Debugf("first byte: sync lost (%x) or error: %v",
-				firstByte, err)
-			return 0
-		}
-
-		code := (firstByte >> 3) & 15
-		curI += uint32(firstByte&7) + 1
-
-		// Handle the 16 possible different codes known as _PyCodeLocationInfoKind.
-		//nolint:lll
-		// https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Include/cpython/code.h#L219
-		switch code {
-		case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
-			// PY_CODE_LOCATION_INFO_SHORT does not hold line information.
-			_, _ = r.ReadByte()
-		case 10, 11, 12:
-			// PY_CODE_LOCATION_INFO_ONE_LINE embeds the line information in the code
-			// follows two bytes containing new columns.
-			line += int32(code - 10)
-			_, _ = r.ReadByte()
-			_, _ = r.ReadByte()
-		case 13:
-			// PY_CODE_LOCATION_INFO_NO_COLUMNS
-			line += readSignedVarint(r)
-		case 14:
-			// PY_CODE_LOCATION_INFO_LONG
-			line += readSignedVarint(r)
-			_ = readVarint(r)
-			_ = readVarint(r)
-			_ = readVarint(r)
-		case 15:
-			// PY_CODE_LOCATION_INFO_NONE does not hold line information
-			line = -1
-		default:
-			log.Debugf("Unexpected PyCodeLocationInfoKind %d", code)
-			return 0
-		}
-	}
-	if line < 0 {
-		line = 0
-	}
-	return uint32(line)
-}
-
-// walkLineTable implements the algorithm to walk the line number table that was introduced
-// with Python 3.10. While firstLineNo still holds the line number of the function, the line
-// number table extends this information with the offset into this function.
-func walkLineTable(m *pythonCodeObject, addrq uint32) uint32 {
-	// The co_linetab format is specified in python Objects/lnotab_notes.txt
-	if addrq == 0 {
-		return 0
-	}
-	lineTable := m.lineTable
-	var line, start, end uint32
-	for i := 0; i < len(lineTable); i += 2 {
-		sDelta := lineTable[i]
-		lDelta := int8(lineTable[i+1])
-		if lDelta == 0 {
-			end += uint32(sDelta)
-			continue
-		}
-		start = end
-		end = start + uint32(sDelta)
-		if lDelta == -128 {
-			// A line delta of -128 is a special indicator mentioned in
-			// Objects/lnotab_notes.txt and indicates an invalid line number.
-			continue
-		}
-		line += uint32(lDelta)
-		if end == start {
-			continue
-		}
-		if end > addrq {
-			return line
-		}
-	}
-	return 0
-}
-
-func mapByteCodeIndexToLine(m *pythonCodeObject, bci uint32) uint32 {
-	// The co_lntab format is specified in python Objects/lnotab_notes.txt
-	lineno := uint32(0)
-	addr := uint(0)
-	// The lnotab length is checked to be even before it's extracted in getCodeObject()
-	lnotab := m.lineTable
-	for i := 0; i < len(lnotab); i += 2 {
-		addr += uint(lnotab[i])
-		if addr > uint(bci) {
-			return lineno
-		}
-		lineno += uint32(lnotab[i+1])
-		if lnotab[i+1] >= 0x80 {
-			lineno -= 0x100
-		}
-	}
-	return lineno
-}
-
-// getFuncOffsetFunc provides functionality to return a function offset from a PyCodeObject
-type getFuncOffsetFunc func(m *pythonCodeObject, bci uint32) uint32
-
 type pythonInstance struct {
 	interpreter.InstanceStubs
 
@@ -358,10 +207,6 @@ type pythonInstance struct {
 	// addrToCodeObject maps a Python Code object to a pythonCodeObject which caches
 	// the needed data from it.
 	addrToCodeObject *freelru.LRU[libpf.Address, *pythonCodeObject]
-
-	// getFuncOffset provides fast access in order to get the function offset for different
-	// Python interpreter versions.
-	getFuncOffset getFuncOffsetFunc
 
 	// procInfoInserted tracks whether we've already inserted process info into BPF maps.
 	procInfoInserted bool
@@ -635,7 +480,6 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	}
 
 	pco := &pythonCodeObject{
-		version:        p.d.version,
 		name:           libpf.Intern(name),
 		sourceFileName: libpf.Intern(sourceFileName),
 		firstLineNo:    firstLineNo,
@@ -665,7 +509,7 @@ func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		return fmt.Errorf("failed to get python object %x: %v", objectID, err)
 	}
 
-	functionOffset := p.getFuncOffset(m, lastI)
+	functionOffset := linetable.FunctionOffset(uint8(p.d.version), m.lineTable, lastI)
 	frames.Append(&libpf.Frame{
 		Type:           libpf.PythonFrame,
 		FunctionName:   m.name,
