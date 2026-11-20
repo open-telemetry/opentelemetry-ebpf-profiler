@@ -4,6 +4,7 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -141,6 +142,36 @@ type ProcessManager struct {
 	// Using a set ensures each attacher is Detach-called exactly once per PID
 	// regardless of how many matching mappings triggered Attach. Protected by mu.
 	attachedProbes map[libpf.PID]map[ProbeAttacher]libpf.Void
+
+	// origins holds the registered trace origins.
+	origins *OriginRegistry
+
+	// tracePool is a cache of decoded trace events to avoid GC pressure.
+	tracePool sync.Pool
+
+	// traceOps serializes trace events, batch boundaries and flush barriers
+	// between producers and the trace worker, its only consumer.
+	traceOps chan traceOp
+
+	// maxSeenKTime is the capture time of the most recently processed trace
+	// record.
+	maxSeenKTime times.KTime
+
+	// exitWatermark is the capture time up to which process exit events have
+	// been cleaned up.
+	exitWatermark times.KTime
+
+	// lifecycleCtx cancels the trace worker and unblocks producers waiting
+	// for queue space on shutdown.
+	lifecycleCtx context.Context
+
+	// customLabels validates custom label keys/values pulled from eBPF and
+	// tracks how many were dropped due to invalid UTF-8.
+	customLabels customLabelValidator
+
+	// threadLabels resolves thread-context label payloads and tracks how many
+	// were dropped.
+	threadLabels threadLabelResolver
 }
 
 // Mapping represents an executable memory mapping of a process.

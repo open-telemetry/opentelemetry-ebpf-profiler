@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -142,7 +143,7 @@ func (hp *Probe) Load(_ context.Context, reg tracer.ProbeRegistrar,
 	pctx *tracer.ProbeContext,
 ) (err error) {
 	// Register origin ID. The eBPF program reads this from RODATA.
-	hp.originAlloc, err = reg.Register(&tracer.OriginEntry{
+	hp.originAlloc, err = reg.Register(&pm.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes: []samples.SampleType{
 				{Type: "alloc_space", Unit: "bytes"},
