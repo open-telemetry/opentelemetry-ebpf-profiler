@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/bits"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -21,6 +20,7 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby/linetable"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -205,13 +205,6 @@ type rubyData struct {
 			size_of_iseq_location_struct uint8
 		}
 
-		// succ_index_table_struct
-		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3420
-		succ_index_table_struct struct {
-			small_block_ranks, block_bits, succ_part, succ_dict_block uint8
-			size_of_succ_dict_block                                   uint8
-		}
-
 		// iseq_insn_info_entry
 		// https://github.com/ruby/ruby/blob/4e0a512972cdcbfcd5279f1a2a81ba342ed75b6e/iseq.h#L212
 		iseq_insn_info_entry struct {
@@ -239,10 +232,6 @@ type rubyData struct {
 			as_heap_ptr, as_ary uint8
 			size_of_rarray      uint8
 		}
-
-		// size_of_immediate_table holds the size of the macro IMMEDIATE_TABLE_SIZE as defined in
-		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3418
-		size_of_immediate_table uint8
 
 		// size_of_value holds the size of the macro VALUE as defined in
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
@@ -607,30 +596,6 @@ func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) 
 	return val, err
 }
 
-// rubyPopcount64 is a helper macro.
-// Ruby makes use of __builtin_popcount intrinsics. These builtin intrinsics are not available
-// here so we use the equivalent function of the Go standard library.
-// https://github.com/ruby/ruby/blob/48b94b791997881929c739c64f95ac30f3fd0bb9/internal/bits.h#L408
-func rubyPopcount64(in uint64) uint32 {
-	return uint32(bits.OnesCount64(in))
-}
-
-// smallBlockRankGet is a helper macro.
-// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3432
-func smallBlockRankGet(v uint64, i uint32) uint32 {
-	if i == 0 {
-		return 0
-	}
-	return uint32((v >> ((i - 1) * 9))) & 0x1ff
-}
-
-// immBlockRankGet is a helper macro.
-// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3430
-func immBlockRankGet(v uint64, i uint32) uint32 {
-	tmp := v >> (i * 7)
-	return uint32(tmp) & 0x7f
-}
-
 // getObsoleteRubyLineNo implements a binary search algorithm to get the line number for a position.
 //
 // Implementation according to Ruby:
@@ -761,89 +726,24 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 		return 0, nil
 	}
 
-	// To get the line number iseq_encoded is subtracted from pc. This result also represents the
-	// size of the current instruction sequence. If the calculated size of the instruction sequence
-	// is greater than the value in iseq_encoded we don't report this pc to user space.
-	//
-	//nolint:lll
-	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_backtrace.c#L47-L48
-	pos := (pc - iseqEncoded) / uint64(vms.size_of_value)
-	if pos != 0 {
-		pos--
-	}
-
-	// Ruby 2.6 changed the way of storing line numbers with [0]. As we still want to get
-	// the line number information for older Ruby versions, we have this special
-	// handling here.
-	//
-	// [0] https://github.com/ruby/ruby/commit/83262f24896abeaf1977c8837cbefb1b27040bef
 	if r.r.version < 0x20600 {
+		pos := (pc - iseqEncoded) / uint64(vms.size_of_value)
+		if pos != 0 {
+			pos--
+		}
 		return r.getObsoleteRubyLineNo(iseqBody, uint32(pos), size)
 	}
 
 	offsetSuccTable := vms.iseq_constant_body.succ_index_table
 	succIndexTable := binary.LittleEndian.Uint64(blob[offsetSuccTable : offsetSuccTable+8])
 
-	if succIndexTable == 0 {
-		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L1686
-		return 0, errors.New("failed to get table with line information")
-	}
-
-	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3500-L3517
-	var tableIndex uint32
-	if pos < uint64(vms.size_of_immediate_table) {
-		i := int(pos / 9)
-		j := int(pos % 9)
-		immPart := r.rm.Uint64(libpf.Address(succIndexTable) +
-			libpf.Address(i*int(vms.size_of_value)))
-		if immPart == 0 {
-			return 0, errors.New("failed to read immPart")
-		}
-		tableIndex = immBlockRankGet(immPart, uint32(j))
-	} else {
-		blockIndex := uint32((pos - uint64(vms.size_of_immediate_table)) / 512)
-		blockOffset := libpf.Address(blockIndex *
-			uint32(vms.succ_index_table_struct.size_of_succ_dict_block))
-
-		rank := r.rm.Uint32(libpf.Address(succIndexTable) +
-			libpf.Address(vms.succ_index_table_struct.succ_part) + blockOffset)
-		if rank == 0 {
-			return 0, errors.New("failed to read rank")
-		}
-
-		blockBitIndex := uint32((pos - uint64(vms.size_of_immediate_table)) % 512)
-		smallBlockIndex := blockBitIndex / 64
-		smallBlockOffset := libpf.Address(smallBlockIndex * uint32(vms.size_of_value))
-
-		smallBlockRanks := r.rm.Uint64(libpf.Address(succIndexTable) + blockOffset +
-			libpf.Address(vms.succ_index_table_struct.succ_part+
-				vms.succ_index_table_struct.small_block_ranks))
-		if smallBlockRanks == 0 {
-			return 0, errors.New("failed to read smallBlockRanks")
-		}
-
-		smallBlockPopcount := smallBlockRankGet(smallBlockRanks, smallBlockIndex)
-
-		blockBits := r.rm.Uint64(libpf.Address(succIndexTable) + blockOffset +
-			libpf.Address(vms.succ_index_table_struct.succ_part+
-				vms.succ_index_table_struct.block_bits) + smallBlockOffset)
-		if blockBits == 0 {
-			return 0, errors.New("failed to read blockBits")
-		}
-		popCnt := rubyPopcount64((blockBits << (63 - blockBitIndex%64)))
-
-		tableIndex = rank + smallBlockPopcount + popCnt
-	}
-	tableIndex--
-
 	offsetBody := vms.iseq_constant_body.insn_info_body
-	lineNoAddr := binary.LittleEndian.Uint64(blob[offsetBody : offsetBody+8])
-	if lineNoAddr == 0 {
-		return 0, errors.New("failed to read lineNoAddr")
+	entries := binary.LittleEndian.Uint64(blob[offsetBody : offsetBody+8])
+	lineNo, err := linetable.IndexedLine(r.rm, pc, iseqEncoded, libpf.Address(succIndexTable),
+		libpf.Address(entries), size, uint16(vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry), 0)
+	if err != nil {
+		return 0, err
 	}
-
-	lineNo := r.rm.Uint32(libpf.Address(lineNoAddr) +
-		libpf.Address(tableIndex*uint32(vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry)))
 	if lineNo == 0 {
 		return 0, errors.New("failed to read lineNo")
 	}
@@ -1822,12 +1722,6 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	vms.rarray_struct.as_ary = 16
 	vms.rarray_struct.as_heap_ptr = 32
 	vms.rarray_struct.size_of_rarray = 40
-
-	vms.succ_index_table_struct.small_block_ranks = 8
-	vms.succ_index_table_struct.block_bits = 16
-	vms.succ_index_table_struct.succ_part = 48
-	vms.succ_index_table_struct.size_of_succ_dict_block = 80
-	vms.size_of_immediate_table = 54
 
 	vms.size_of_value = 8
 
