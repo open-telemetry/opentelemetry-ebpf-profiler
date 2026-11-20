@@ -61,6 +61,10 @@ func Start(meter metric.Meter) {
 
 	defs := GetDefinitions()
 	metricTypes = make(map[MetricID]MetricType, len(defs))
+	// Reset instruments so that a repeated call to Start() does not keep
+	// instruments created from a previously provided meter.
+	counters = map[MetricID]metric.Int64Counter{}
+	gauges = map[MetricID]metric.Int64Gauge{}
 	for _, md := range defs {
 		if md.Obsolete || md.Field == "" {
 			continue
