@@ -423,7 +423,19 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	if data == nil {
 		return nil, errNoPclntab
 	}
-	defer ef.SetDontNeed()
+
+	dataRef := ef.Take()
+	succeeded := false
+	setDontNeed := func() {}
+	if dn, ok := dataRef.(interface{ SetDontNeed() }); ok {
+		setDontNeed = dn.SetDontNeed
+	}
+	defer func() {
+		setDontNeed()
+		if !succeeded {
+			dataRef.Close()
+		}
+	}()
 
 	hdrSize := uintptr(pclntabHeaderSize())
 	dataLen := uintptr(len(data))
@@ -433,6 +445,8 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 
 	hdr := (*pclntabHeader)(unsafe.Pointer(&data[0]))
 	g := &Gopclntab{
+		dataRef:      dataRef,
+		setDontNeed:  setDontNeed,
 		headerOffset: headerOffset,
 		data:         data,
 		version:      goMagicToVersion(hdr.magic),
@@ -508,8 +522,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	g.filetab = data[g.filetabOffset:g.pctabOffset]
 	g.pctab = data[g.pctabOffset:g.pclnOffset]
 	g.functab = data[g.pclnOffset:]
-	g.dataRef = ef.Take()
-	g.setDontNeed = ef.SetDontNeed
+	succeeded = true
 
 	return g, nil
 }
@@ -788,14 +801,14 @@ func parseArm64pclntabFunc(bb *sdtypes.BasicBlock, p pcval, s strategy) error {
 	return nil
 }
 
-func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
+func resolveCUStrategies(r libpf.ViewAtReader, g *Gopclntab,
 	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
 	rdr := pfbufio.Reader{}
 	defer rdr.Release()
 
 	// Walk all filenames and record the ones needing a strategy
 	offsetStrategy := make(map[int]strategy)
-	rdr.Init(r, g.headerOffset+int64(g.filetabOffset), int64(g.pctabOffset-g.filetabOffset))
+	rdr.InitFromView(r, g.headerOffset+int64(g.filetabOffset), int64(g.pctabOffset-g.filetabOffset))
 	err := rdr.WalkStrings(int(g.numFiles), func(offs int64, filename string) error {
 		if s := getSourceFileStrategy(filename); s != strategyUnknown {
 			offsetStrategy[int(offs)] = s
@@ -808,7 +821,7 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 
 	// Walk cutab indexes and map them to strategy
 	cuStrategy := make(map[int]strategy)
-	rdr.Init(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
+	rdr.InitFromView(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
 	var offset uint32
 	for idx := 0; ; idx++ {
 		if _, err = rdr.Read(pfunsafe.FromPointer(&offset)); err != nil {
@@ -825,12 +838,12 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	return cuStrategy, nil
 }
 
-func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
+func resolveFunctionUnwindInfo(r libpf.ViewAtReader, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
 	rdr := pfbufio.Reader{}
 	defer rdr.Release()
 
 	functionInfo := make(map[int32]*sdtypes.UnwindInfo)
-	rdr.Init(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))
+	rdr.InitFromView(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))
 	err := rdr.WalkAllStrings(func(offs int64, funcName string) error {
 		if info := getFunctionUnwindInfo(funcName, arch, useFP); info != nil {
 			functionInfo[int32(offs)] = info
