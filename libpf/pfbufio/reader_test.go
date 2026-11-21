@@ -201,6 +201,31 @@ func TestReader_InitFromView(t *testing.T) {
 		require.Equal(t, data[20:64], readAll(t, &r))
 	})
 
+	t.Run("SeekPastSectionEndOnBorrowedView", func(t *testing.T) {
+		// A seek past the section end must not leave the read position
+		// beyond it: ReadSlice and SearchSlice slice the buffer as
+		// [pos:nlim] and would panic.
+		r := Reader{}
+		r.InitFromView(cached, 0, 64)
+		defer r.Release()
+
+		require.NoError(t, r.StartSection(32))
+
+		// Seeking within the section keeps the borrowed view.
+		_, err := r.Seek(16, io.SeekStart)
+		require.NoError(t, err)
+		require.True(t, r.zeroCopy)
+
+		_, err = r.Seek(48, io.SeekStart)
+		require.NoError(t, err)
+		s, err := r.ReadString(0)
+		require.ErrorIs(t, err, io.EOF)
+		require.Empty(t, s)
+
+		r.EndSection()
+		require.Equal(t, data[48:64], readAll(t, &r))
+	})
+
 	t.Run("PlainInitDropsView", func(t *testing.T) {
 		r := Reader{}
 		r.InitFromView(cached, 0, 64)
@@ -366,6 +391,43 @@ func TestReader_InitSubReader(t *testing.T) {
 		require.False(t, sub.zeroCopy)
 		require.Equal(t, int64(20), sub.Tell())
 		require.Equal(t, data[20:84], readN(t, &sub, 64))
+	})
+
+	t.Run("ReusedLentSubReaderWithoutRelease", func(t *testing.T) {
+		parent := Reader{}
+		parent.InitFromView(cached, 0, 128)
+		defer parent.Release()
+
+		// First use consumes part of the lent view.
+		var sub Reader
+		require.NoError(t, parent.InitSubReader(&sub, 32))
+		require.Equal(t, data[32:96], readN(t, &sub, 64))
+
+		// Re-initialization must reset the state without a Release.
+		require.NoError(t, parent.InitSubReader(&sub, 8))
+		defer sub.Release()
+		require.True(t, sub.zeroCopy)
+		require.Equal(t, int64(8), sub.Tell())
+		require.Equal(t, data[8:72], readN(t, &sub, 64))
+	})
+
+	t.Run("ReusedSubReaderDropsSectionState", func(t *testing.T) {
+		parent := Reader{}
+		parent.InitSlideView(cached, 0, 4096)
+		defer parent.Release()
+
+		// A stale slide view, buffered data and an open section must not
+		// leak into the reused reader.
+		var sub Reader
+		sub.InitSlideView(cached, 0, 4096)
+		require.NoError(t, sub.StartSection(100))
+		require.Equal(t, data[0:50], readN(t, &sub, 50))
+
+		require.NoError(t, parent.InitSubReader(&sub, 200))
+		defer sub.Release()
+		require.Empty(t, sub.sectionEnds)
+		require.Equal(t, int64(200), sub.Tell())
+		require.Equal(t, data[200:264], readN(t, &sub, 64))
 	})
 
 	t.Run("NestedSubReader", func(t *testing.T) {

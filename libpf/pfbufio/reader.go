@@ -157,6 +157,9 @@ func (r *Reader) InitSubReader(sub *Reader, offset int64) error {
 		return errOffset
 	}
 	sub.dropBuf()
+	sub.flush()
+	sub.slideView = false
+	sub.sectionEnds = sub.sectionEnds[:0]
 	abs := r.start + offset
 	if r.zeroCopy && r.off == r.limit && abs >= r.off-int64(r.nbuf) {
 		// The parent's view fully covers [abs, limit): lend a read-only
@@ -203,11 +206,6 @@ func (r *Reader) SetBufferSize(size int) {
 	r.bufSize = min(max(size, 1024), maxBufferSize)
 }
 
-// Outer returns the initialization time ReaderAt and segment limits.
-func (r *Reader) Outer() (source io.ReaderAt, start, maxLen int64) {
-	return r.source, r.start, r.limit - r.start
-}
-
 // Remaining returns number of bytes left before end of segment or section.
 func (r *Reader) Remaining() int64 {
 	return r.slimit - r.off + int64(r.nbuf-r.pos)
@@ -229,12 +227,13 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 		return 0, errOffset
 	}
 	if r.zeroCopy {
-		// The borrowed view must never be written to, as it may alias the
-		// internal storage of the source. If the target is within the
-		// loaded view, just adjust the position. Otherwise drop the window
-		// contents and let the next fill() serve the new position.
+		// The borrowed view must never be written to. If the target is
+		// within the loaded view before the section limit, just adjust
+		// the position: ReadSlice and SearchSlice slice the buffer as
+		// [pos:nlim]. Otherwise drop the window and let the next fill()
+		// serve the new position.
 		viewStart := r.off - int64(r.nbuf)
-		if offset >= viewStart && offset <= r.off {
+		if offset >= viewStart && offset <= viewStart+int64(r.nlim) {
 			r.pos = int(offset - viewStart)
 			return offset - r.start, nil
 		}
