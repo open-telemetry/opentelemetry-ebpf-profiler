@@ -55,11 +55,18 @@ LIB_VARIANTS := $(VARIANTS) noreloc
 LIB_SRC := tlsvar_lib.c tlsvar_lib.h
 EXE_SRC := tlsvar.c tlsvar_lib.h
 
+# Fixtures with the TLS_GETTERS accessors for tls.ResolveAccessor. They are
+# separate builds as the getters may add TLS relocations of their own.
+GET_BINARIES := \
+	$(foreach libc,$(LIBCS),$(foreach v,$(VARIANTS),libtlsvar_$(libc)_$(v)_get.so)) \
+	tlsvar_exe_glibc_get
+
 BINARIES := \
 	$(foreach libc,$(LIBCS),tlsvar_exe_$(libc) tlsvar_dlopen_$(libc) \
 		$(foreach v,$(VARIANTS),libtlsvar_$(libc)_$(v).so tlsvar_lib_$(libc)_$(v))) \
 	tlsvar_dlopen_glibc_nopie \
-	libtlsvar_glibc_noreloc.so
+	libtlsvar_glibc_noreloc.so \
+	$(GET_BINARIES)
 
 all: $(BINARIES)
 
@@ -72,18 +79,28 @@ define lib_rule
 libtlsvar_$(1)_$(2).so: $$(LIB_SRC)
 	$$(CC_$(1)) -shared -fPIC $$(FLAGS_$(2)) -o $$@ $$<
 endef
+define get_rule
+libtlsvar_$(1)_$(2)_get.so: $$(LIB_SRC)
+	$$(CC_$(1)) -shared -fPIC -DTLS_GETTERS $$(FLAGS_$(2)) -o $$@ $$<
+endef
 define exe_rule
 tlsvar_lib_$(1)_$(2): $$(EXE_SRC) libtlsvar_$(1)_$(2).so
 	$$(CC_$(1)) -o $$@ $$< -L. -ltlsvar_$(1)_$(2) -Wl,-rpath='$$$$ORIGIN'
 endef
 $(foreach libc,$(LIBCS),\
 	$(foreach v,$(LIB_VARIANTS),$(eval $(call lib_rule,$(libc),$(v))))\
-	$(foreach v,$(VARIANTS),$(eval $(call exe_rule,$(libc),$(v)))))
+	$(foreach v,$(VARIANTS),$(eval $(call exe_rule,$(libc),$(v))))\
+	$(foreach v,$(VARIANTS),$(eval $(call get_rule,$(libc),$(v)))))
 
 # local-exec: the variable sits in the executable's own static TLS block, with
 # no relocation to resolve.
 tlsvar_exe_glibc: $(EXE_SRC) $(LIB_SRC)
 	$(GCC) -o $@ $< tlsvar_lib.c
+
+# Export the getters, as tls.ResolveAccessor looks them up in .dynsym.
+# There is no musl variant as static executables have no .dynsym.
+tlsvar_exe_glibc_get: $(EXE_SRC) $(LIB_SRC)
+	$(GCC) -DTLS_GETTERS -rdynamic -o $@ $< tlsvar_lib.c
 
 tlsvar_exe_musl: $(EXE_SRC) $(LIB_SRC)
 	$(MUSL_GCC) -static -o $@ $< tlsvar_lib.c

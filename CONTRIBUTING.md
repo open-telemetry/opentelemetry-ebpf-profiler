@@ -23,7 +23,6 @@ slack channel for discussions and questions.
 - Linux (5.10+) with eBPF enabled (the profiler currently only runs on Linux)
 - Go as specified in [go.mod](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/go.mod)
 - docker
-- Rust as specified in [Cargo.toml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/Cargo.toml)
 
 ## Development
 

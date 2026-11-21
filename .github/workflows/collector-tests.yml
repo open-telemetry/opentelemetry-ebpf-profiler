@@ -29,18 +29,15 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-      - name: Set up Go Stable
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
-      - name: Cache coredump modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restore only: reuse the "Test (amd64)" cache rather than storing a copy.
+      - name: Restore coredump modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/coredump/modulecache
-          key: coredumps-collector-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
-          restore-keys: |
-            coredumps-collector
-            coredumps-
+          key: coredumps-amd64-${{ hashFiles('tools/coredump/testdata/amd64/*.json') }}
+          restore-keys: coredumps-amd64-
       - name: Clone Collector
         run: |
           collector_path=/tmp/opentelemetry-collector
@@ -53,11 +50,13 @@ jobs:
           go mod edit -modfile=internal/tools/go.mod -replace='google.golang.org/genproto/googleapis/rpc@v0.0.0-20220519153652-3a47de7e79bd=google.golang.org/genproto/googleapis/rpc@v0.0.0-20260226221140-a57be14db171'
           go mod edit -modfile=internal/tools/go.mod -replace="go.opentelemetry.io/ebpf-profiler=$(pwd)"
           go mod tidy
-          go mod tidy -modfile=internal/tools/go.mod
+          go -C internal/tools mod tidy
+          go -C tools/coredump mod tidy
           # Manual run of go generate and go mod tidy to have a clean start for make test-junit
           go generate ./...
           go mod tidy
-          go mod tidy -modfile=internal/tools/go.mod
+          go -C internal/tools mod tidy
+          go -C tools/coredump mod tidy
       - name: Tests
         run: make test-junit
       - name: Generate Issue
@@ -87,8 +86,6 @@ jobs:
           persist-credentials: false
       - name: Set up environment
         uses: $/.github/workflows/env
-      - name: Set up Go Stable
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
       - name: Clone Collector

@@ -17,9 +17,10 @@ through the unwinder code in `gdb`.
 
 ## Running the tests
 
-The coredump test suite is run as part of the top level Makefile's "make tests"
-or `go test ./...` from the repository's root.  All coredump test cases are 
-automatically picked up, ran, and verified.
+The coredump tool lives in a Go module of its own, so it is not covered by
+`go test ./...` in the repository's root. The test suite is run as part of the
+top level Makefile's `make test`, or on its own via `make test-coredump`. All
+coredump test cases are automatically picked up, ran, and verified.
 
 To run just the coredump tests without the remaining test suite – in this 
 directory – run:

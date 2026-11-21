@@ -173,12 +173,12 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	version := perlVersion(verBytes[0], verBytes[1], verBytes[2])
 	log.Debugf("Perl version %v.%v.%v", verBytes[0], verBytes[1], verBytes[2])
 
-	// Currently tested and supported 5.28.x - 5.42.x.
+	// Currently tested and supported 5.28.x - 5.44.x.
 	// Could possibly support older Perl versions somewhere back to 5.14-5.20, by just
 	// checking the introspection offset validity. 5.14 had major rework for internals.
 	// And 5.18 had some HV related changes.
 	minVer := perlVersion(5, 28, 0)
-	maxVer := perlVersion(5, 43, 0)
+	maxVer := perlVersion(5, 45, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Perl %d.%d.%d (need >= %d.%d and < %d.%d)",
 			verBytes[0], verBytes[1], verBytes[2],
@@ -282,6 +282,10 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 
 	if version >= perlVersion(5, 40, 0) {
 		vms.xpvhv_aux.sizeof = 0x70
+	}
+
+	if version >= perlVersion(5, 43, 0) {
+		vms.xpvhv_aux.sizeof = 0x78
 	}
 
 	if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindPerl,

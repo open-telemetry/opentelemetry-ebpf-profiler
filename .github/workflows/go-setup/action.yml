@@ -1,0 +1,29 @@
+name: Go setup
+description: Install Go and restore/save the Go module cache.
+
+inputs:
+  go-version:
+    description: 'Go version to install (e.g. "stable"). Defaults to the version pinned in go.mod.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      with:
+        go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.go-version == '' && 'go.mod' || '' }}
+        cache: false
+      id: go
+    - name: Cache Go modules
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/go/pkg/mod
+        key: go-mod-${{ hashFiles('**/go.mod', '**/go.sum', 'cmd/otelcol-ebpf-profiler/manifest.yaml') }}
+      id: go-mod-cache
+    - name: Download Go modules
+      if: steps.go-mod-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: make go-mod-download

@@ -1,0 +1,54 @@
+{
+  "coredump-ref": "0d7951b84c552e5a922a885ca42d5c3f409384926e6f6bc9b0f4e1657b37fefc",
+  "threads": [
+    {
+      "lwp": 21071,
+      "frames": [
+        "libc.so.6+0xecb7a",
+        "libc.so.6+0xf9b26",
+        "libc.so.6+0x10ed92",
+        "perl+0x1366e5",
+        "main::fib+0 in testsources/perl/a.pl:21",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "<top-level>+0 in testsources/perl/a.pl:32",
+        "perl+0x18d895",
+        "perl+0x750ae",
+        "perl+0x47741",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "perl+0x47784"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1502636e3be8232c9cf801dfb533694aea985d449904f3e1295db26d7b348946",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "067d0ae258bca6612ebeb5a8e6cb62fe8fb08aa45e32b4cbc30801b2bc0d117b",
+      "local-path": "/tmp/perl544/inst/bin/perl"
+    },
+    {
+      "ref": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    }
+  ]
+}

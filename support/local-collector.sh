@@ -18,4 +18,6 @@ go list -m -u all | grep 'go\.opentelemetry\.io/collector' | while read -r line;
   go mod edit -replace="$MODULE=$LOCAL_PATH"
   # Also add replace directive to internal/tools/go.mod
   go mod edit -modfile=internal/tools/go.mod -replace="$MODULE=$LOCAL_PATH"
+  # tools/coredump is its own module and reaches the collector through the root module.
+  go mod edit -modfile=tools/coredump/go.mod -replace="$MODULE=$LOCAL_PATH"
 done

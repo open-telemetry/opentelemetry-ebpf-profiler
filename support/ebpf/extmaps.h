@@ -16,6 +16,7 @@ extern struct interpreter_offsets_t interpreter_offsets;
 extern struct trace_events_t trace_events;
 extern struct go_procs_t go_procs;
 extern struct thread_context_procs_t thread_context_procs;
+extern struct usdt_specs_t usdt_specs;
 
 extern struct exe_id_to_8_stack_deltas_t exe_id_to_8_stack_deltas;
 extern struct exe_id_to_9_stack_deltas_t exe_id_to_9_stack_deltas;
@@ -33,7 +34,7 @@ extern struct exe_id_to_20_stack_deltas_t exe_id_to_20_stack_deltas;
 extern struct exe_id_to_21_stack_deltas_t exe_id_to_21_stack_deltas;
 extern struct exe_id_to_22_stack_deltas_t exe_id_to_22_stack_deltas;
 extern struct exe_id_to_23_stack_deltas_t exe_id_to_23_stack_deltas;
-extern struct stack_delta_page_to_info_t stack_delta_page_to_info;
+extern struct exe_id_to_stackdelta_meta_t exe_id_to_stackdelta_meta;
 extern struct unwind_info_array_t unwind_info_array;
 
 #if defined(TESTING_COREDUMP)
