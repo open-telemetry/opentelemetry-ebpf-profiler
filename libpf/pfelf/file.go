@@ -104,10 +104,8 @@ type File struct {
 	// nothing itself.
 	resources *fileResources
 
-	// elfReader is the ReadAt implementation used for this File. It is
-	// always a ViewAtReader: files are memory mapped if possible (stable
-	// zero-copy views), already-cached sources are borrowed, and raw
-	// sources are wrapped in a page cache.
+	// elfReader is the ViewAtReader used for this File. Sources providing
+	// views are borrowed, and raw sources are wrapped in a page cache.
 	elfReader libpf.ViewAtReader
 
 	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
@@ -209,8 +207,6 @@ type Prog struct {
 // Section represents a section header, and data associated with it
 type Section struct {
 	elf.SectionHeader
-
-	InternedName libpf.String
 
 	// elfReader is the ViewAtReader used for this section's data reads.
 	elfReader libpf.ViewAtReader
@@ -380,12 +376,11 @@ func NewFileFromFS(f fs.File) (*File, error) {
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
-	// Normalize the source to a ViewAtReader. Memory map os.File sources
-	// by default: mapping views are naturally stable and zero-copy.
-	// Sources that already provide views (modulestore chunk caches,
-	// out-of-tree mappings) are borrowed as-is; remaining raw sources are
-	// wrapped in a small page cache so that random access reads do not hit
-	// the kernel for every read.
+	// Normalize the source to a ViewAtReader. Sources that already provide
+	// views (modulestore chunk caches, out-of-tree mappings) are borrowed
+	// as-is. Raw sources are wrapped in a small page cache so that random
+	// access reads do not hit the kernel for every read. An os.File is also
+	// memory mapped, and the mapping serves only the Prog and Section reads.
 	var ownedCache *readatbuf.Reader
 	var ownedMmap *mmap.ReaderAt
 	var elfReader libpf.ViewAtReader
@@ -600,7 +595,8 @@ func (f *File) Underlying() libpf.ViewAtReader {
 	return f.elfReader
 }
 
-// getReader returns the memory mapping if available, or the underlying reader.
+// getReader returns the view source for the Prog and Section data reads:
+// the memory mapping when available, else the File's reader.
 func (f *File) getReader() libpf.ViewAtReader {
 	if f.resources != nil && f.resources.mmap != nil {
 		return f.resources.mmap
@@ -667,7 +663,6 @@ func (f *File) LoadSections() error {
 			return fmt.Errorf("bad section name index (section %d, index %d/%d): %w",
 				i, sections[i].Name, strsh.FileSize, err)
 		}
-		sh.InternedName = name
 		sh.Name = name.String()
 	}
 

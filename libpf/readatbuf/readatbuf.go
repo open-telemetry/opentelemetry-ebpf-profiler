@@ -50,9 +50,8 @@ type Reader struct {
 	pageSize uint
 	stats    Statistics
 
-	// pins tracks the outstanding PinAt views, one record per slot. A
-	// pageIdx of ^uint(0) marks an unused slot. The generation counters
-	// detect stale handles.
+	// pins tracks the outstanding PinAt views, one record per slot.
+	// A pageIdx of ^uint(0) marks an unused slot.
 	pins [maxPins]pinRecord
 }
 
@@ -216,10 +215,9 @@ func (reader *Reader) view(offs int64, minLen int) ([]byte, error) {
 		return nil, io.EOF
 	}
 
-	// The previous transient view is contractually invalid from now on.
-	// Eviction of this page can only be triggered by a subsequent API call
-	// (ReadAt, ViewAt or PinAt), which invalidates the view by contract, so
-	// its buffer can be pooled normally on eviction.
+	// The previous transient view is contractually invalid now: eviction
+	// can only be triggered by a subsequent API call, so the buffer can
+	// be pooled normally when evicted.
 	return data[skip:], nil
 }
 
@@ -243,12 +241,10 @@ func (reader *Reader) addPin(pageIdx uint64) (libpf.PinHandle, error) {
 }
 
 // PinAt returns a view like ViewAt, but pins the backing page: the view
-// stays valid, and the page will not be pooled on eviction, until Unpin is
-// called with the returned handle. Every returned handle must be released
-// exactly once with Unpin. A page that is evicted while pinned is dropped
-// to the GC, and a later re-read of the same page index creates a new
-// incarnation: Unpin of a stale handle does not affect it.
-// ErrTooManyPins is returned if maxPins views are already pinned.
+// stays valid until Unpin, and the page is not pooled on eviction while
+// pinned. An evicted pinned page is dropped to the GC, and a re-read of
+// the same page index creates a new incarnation, so Unpin of a stale
+// handle does not affect it.
 func (reader *Reader) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := reader.view(offs, minLen)
 	if err != nil {

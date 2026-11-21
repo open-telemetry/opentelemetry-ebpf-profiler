@@ -53,20 +53,19 @@ func (b *BytesView) ViewAt(offs int64, minLen int) ([]byte, error) {
 	return b.data[offs:], nil
 }
 
-// PinAt is trivial: the memory is stable for its lifetime.
+// PinAt is trivial.
 func (b *BytesView) PinAt(offs int64, minLen int) ([]byte, PinHandle, error) {
 	view, err := b.ViewAt(offs, minLen)
 	return view, 0, err
 }
 
-// Unpin is a no-op: the memory is stable for its lifetime.
+// Unpin is a no-op.
 func (b *BytesView) Unpin(h PinHandle) {}
 
 var _ StableViewer = &BytesView{}
 
-// StableViewAt returns a zero-copy view of length bytes starting at offs.
-// The memory is stable for the lifetime of the BytesView. Returns nil if
-// the range is out of bounds.
+// StableViewAt returns a zero-copy view of length bytes starting at offs,
+// or nil if the range is out of bounds.
 func (b *BytesView) StableViewAt(offs int64, length int) []byte {
 	if offs < 0 || length <= 0 || offs >= int64(len(b.data)) ||
 		len(b.data)-int(offs) < length {

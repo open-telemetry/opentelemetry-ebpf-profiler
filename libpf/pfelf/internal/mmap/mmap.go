@@ -77,23 +77,20 @@ func (r *ReaderAt) ViewAt(offs int64, minLen int) ([]byte, error) {
 	return r.data[offs:], nil
 }
 
-// PinAt implements the libpf.ViewAtReader interface. The mapping is
-// naturally stable for its full lifetime, so pinning is trivial: the view
-// is valid until the mapping is closed.
+// PinAt implements the libpf.ViewAtReader interface. Pinning is trivial:
+// the mapping is naturally stable, so the view is valid until Close.
 func (r *ReaderAt) PinAt(offs int64, minLen int) ([]byte, libpf.PinHandle, error) {
 	view, err := r.ViewAt(offs, minLen)
 	return view, 0, err
 }
 
-// Unpin implements the libpf.ViewAtReader interface. It is a no-op, as
-// the mapping is naturally stable.
+// Unpin implements the libpf.ViewAtReader interface as a no-op.
 func (r *ReaderAt) Unpin(h libpf.PinHandle) {}
 
 var _ libpf.StableViewer = &ReaderAt{}
 
-// StableViewAt returns a zero-copy view of length bytes starting at offs.
-// The mapping is naturally stable for its full lifetime. Returns nil if
-// the range is out of bounds.
+// StableViewAt returns a zero-copy view of length bytes starting at offs,
+// or nil if the range is out of bounds.
 func (r *ReaderAt) StableViewAt(offs int64, length int) []byte {
 	if offs < 0 || length <= 0 || offs >= int64(r.Len()) ||
 		int64(r.Len())-offs < int64(length) {
