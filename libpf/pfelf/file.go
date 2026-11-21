@@ -664,8 +664,8 @@ func (f *File) LoadSections() error {
 		// Empty section names are valid (e.g. the null section at index 0).
 		name, err := libpf.InternFromView(f.elfReader, offset, strshEnd)
 		if err != nil {
-			return fmt.Errorf("bad section name index (section %d, index %d/%d)",
-				i, sections[i].Name, strsh.FileSize)
+			return fmt.Errorf("bad section name index (section %d, index %d/%d): %w",
+				i, sections[i].Name, strsh.FileSize, err)
 		}
 		sh.InternedName = name
 		sh.Name = name.String()
@@ -1029,13 +1029,12 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
 
-		// Symbol names are read from zero-copy views of the string table.
-		// The relocation stream window is pinned, so the lookups through
-		// the same source cannot invalidate it. A missing string
-		// termination indicates a corrupt string table, and aborts.
+		// Names are read from zero-copy views of the string table; the
+		// pinned stream window is not invalidated by these lookups.
+		// Unreadable names are passed as empty instead of aborting the walk.
 		symStr, err := libpf.StringFromView(f.elfReader,
 			int64(strtabSection.Offset)+int64(sym.Name), strtabEnd)
-		if err != nil {
+		if err != nil && !errors.Is(err, libpf.ErrNoString) {
 			return false, fmt.Errorf("failed to read relocation symbol name: %w", err)
 		}
 		if !visitor(*rela, symStr, relType) {
@@ -1411,12 +1410,14 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 			}
 			break
 		}
-		// Symbol names are read from zero-copy views of the string table.
-		// The symbol table stream window is pinned, so the lookups through
-		// the same source cannot invalidate it. A missing string
-		// termination indicates a corrupt string table, and aborts.
+		// Names are read from zero-copy views of the string table; the
+		// pinned stream window is not invalidated by these lookups.
+		// Unreadable names are skipped instead of aborting the walk.
 		symName, err := libpf.StringFromView(f.elfReader,
 			int64(strtab.Offset)+int64(sym.Name), strtabEnd)
+		if errors.Is(err, libpf.ErrNoString) {
+			continue
+		}
 		if err != nil {
 			return fmt.Errorf("failed to read symbol name from %v: %w", name, err)
 		}

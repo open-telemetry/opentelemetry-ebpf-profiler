@@ -6,6 +6,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
@@ -20,6 +21,8 @@ var ErrNotContiguous = errors.New("requested range is not contiguous within a si
 // ErrNoString is returned by the string view helpers if a NUL-terminated
 // string is not found within the given bounds, or offs is invalid. An
 // empty string is a valid result: only the error reports absence.
+// Multi-view strings are capped to the 4 KiB assembly buffer: longer
+// strings are reported as missing. Other read errors are returned wrapped.
 var ErrNoString = errors.New("NUL-terminated string not found")
 
 // PinHandle identifies an outstanding pinned view created by PinAt. The
@@ -88,6 +91,9 @@ func stringFromView(v ViewAtReader, offs, endOff int64) ([]byte, bool, error) {
 
 	chunk, err := v.ViewAt(offs, 1)
 	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			return nil, false, fmt.Errorf("failed to read string at %d: %w", offs, err)
+		}
 		return nil, false, ErrNoString
 	}
 	if n := endOff - offs; n < int64(len(chunk)) {
@@ -107,6 +113,10 @@ func stringFromView(v ViewAtReader, offs, endOff int64) ([]byte, bool, error) {
 	for offs < endOff {
 		chunk, err = v.ViewAt(offs, 1)
 		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				PutBuffer(buf)
+				return nil, false, fmt.Errorf("failed to read string at %d: %w", offs, err)
+			}
 			break
 		}
 		if n := endOff - offs; n < int64(len(chunk)) {

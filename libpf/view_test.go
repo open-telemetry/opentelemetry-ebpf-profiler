@@ -4,7 +4,9 @@
 package libpf_test
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,11 +16,12 @@ import (
 
 // fakeViewReader is a simple libpf.ViewAtReader with a fixed contiguous
 // region size, backed by an in-memory buffer. Views are only available
-// within one region.
+// within one region; entries in fails inject read errors by offset.
 type fakeViewReader struct {
 	data    []byte
 	region  uint
 	lastOff int64
+	fails   map[int64]error
 }
 
 func (f *fakeViewReader) ReadAt(p []byte, off int64) (int, error) {
@@ -28,6 +31,9 @@ func (f *fakeViewReader) ReadAt(p []byte, off int64) (int, error) {
 
 func (f *fakeViewReader) ViewAt(offs int64, minLen int) ([]byte, error) {
 	f.lastOff = offs
+	if err, ok := f.fails[offs]; ok {
+		return nil, err
+	}
 	if offs < 0 || uint64(offs) >= uint64(len(f.data)) {
 		return nil, fmt.Errorf("offset out of range: %d", offs)
 	}
@@ -160,5 +166,37 @@ func TestUnsafeStringFromView(t *testing.T) {
 		if safeErr == nil {
 			require.Equal(t, safeStr, unsafeStr)
 		}
+	}
+}
+
+func TestStringFromViewAssemblyCap(t *testing.T) {
+	// Multi-view strings are capped to 4 KiB: longer names are reported
+	// as missing.
+	long := strings.Repeat("x", 5000)
+	data := append([]byte(long), 0)
+	v := &fakeViewReader{data: data, region: 512}
+	_, err := libpf.StringFromView(v, 0, int64(len(data)))
+	require.ErrorIs(t, err, libpf.ErrNoString)
+
+	// A string of exactly the buffer size still assembles.
+	short := strings.Repeat("y", 4096)
+	data = append([]byte(short), 0)
+	v = &fakeViewReader{data: data, region: 512}
+	s, err := libpf.StringFromView(v, 0, int64(len(data)))
+	require.NoError(t, err)
+	require.Equal(t, short, s)
+}
+
+func TestStringFromViewErrorPropagation(t *testing.T) {
+	// A read failure is not masked as ErrNoString: it is returned wrapped,
+	// both on the first request and in the multi-view assembly path.
+	data := append([]byte(strings.Repeat("x", 5000)), 0)
+	for _, failAt := range []int64{0, 512} {
+		v := &fakeViewReader{data: data, region: 512, fails: map[int64]error{
+			failAt: errors.New("disk unavailable"),
+		}}
+		_, err := libpf.StringFromView(v, 0, int64(len(data)))
+		require.ErrorContains(t, err, "disk unavailable")
+		require.NotErrorIs(t, err, libpf.ErrNoString)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"debug/elf"
+	"encoding/binary"
 	"go/version"
 	"os"
 	"os/exec"
@@ -314,4 +315,112 @@ func TestFileBorrowedMappingTake(t *testing.T) {
 	view, err := mapping.ViewAt(0, 1)
 	require.NoError(t, err)
 	assert.NotEmpty(t, view)
+}
+
+// elfFixture builds a minimal ELF64 object with a .symtab of the given
+// symbol names.
+func elfFixture(t *testing.T, names []string) []byte {
+	t.Helper()
+	type ehdr struct {
+		Ident                      [16]byte
+		Type, Machine              uint16
+		Version                    uint32
+		Entry, Phoff, Shoff        uint64
+		Flags                      uint32
+		Ehsize, Phentsize, Phnum   uint16
+		Shentsize, Shnum, Shstrndx uint16
+	}
+	type phdr struct {
+		Type, Flags                      uint32
+		Off, Vaddr, Paddr, Filesz, Memsz uint64
+		Align                            uint64
+	}
+	type shdr struct {
+		Name, Type         uint32
+		Flags              uint64
+		Addr, Offset, Size uint64
+		Link, Info         uint32
+		Align, Entsize     uint64
+	}
+
+	shstrtab := []byte{0}
+	shname := map[string]uint32{}
+	for _, name := range []string{".symtab", ".strtab", ".shstrtab"} {
+		shname[name] = uint32(len(shstrtab))
+		shstrtab = append(shstrtab, name...)
+		shstrtab = append(shstrtab, 0)
+	}
+
+	strtab := []byte{0}
+	symNameOffs := make([]uint32, len(names))
+	for i, name := range names {
+		symNameOffs[i] = uint32(len(strtab))
+		strtab = append(strtab, name...)
+		strtab = append(strtab, 0)
+	}
+
+	// Layout: ehdr, phdr, strtab, symtab, shstrtab, section headers.
+	symtabOff := 120 + len(strtab)
+	symtabSize := (len(names) + 1) * 24
+	shstrtabOff := symtabOff + symtabSize
+	shoff := shstrtabOff + len(shstrtab)
+
+	var buf bytes.Buffer
+	hdr := ehdr{
+		Type:      uint16(elf.ET_REL),
+		Machine:   uint16(elf.EM_X86_64),
+		Version:   1,
+		Phoff:     64,
+		Shoff:     uint64(shoff),
+		Ehsize:    64,
+		Phentsize: 56,
+		Phnum:     1,
+		Shentsize: 64,
+		Shnum:     4,
+		Shstrndx:  3,
+	}
+	copy(hdr.Ident[:], []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0})
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &hdr))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &phdr{}))
+	buf.Write(strtab)
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, elf.Sym64{}))
+	for _, nameOff := range symNameOffs {
+		require.NoError(t, binary.Write(&buf, binary.LittleEndian, elf.Sym64{
+			Name: nameOff, Info: byte(elf.STB_GLOBAL)<<4 | byte(elf.STT_FUNC), Shndx: 1,
+		}))
+	}
+	buf.Write(shstrtab)
+	require.Equal(t, shoff, buf.Len())
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".symtab"], Type: uint32(elf.SHT_SYMTAB),
+		Offset: uint64(symtabOff), Size: uint64(symtabSize),
+		Link: 2, Info: 1, Align: 8, Entsize: 24,
+	}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".strtab"], Type: uint32(elf.SHT_STRTAB),
+		Offset: 120, Size: uint64(len(strtab)),
+	}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".shstrtab"], Type: uint32(elf.SHT_STRTAB),
+		Offset: uint64(shstrtabOff), Size: uint64(len(shstrtab)),
+	}))
+	return buf.Bytes()
+}
+
+func TestVisitSymbolsLongNames(t *testing.T) {
+	// A name longer than the 4 KiB assembly buffer is skipped: the walk
+	// must continue with the remaining symbols.
+	longName := strings.Repeat("L", 5000)
+	ef, err := NewFile(bytes.NewReader(elfFixture(t, []string{longName, "main"})), 0, false)
+	require.NoError(t, err)
+	defer ef.Close()
+
+	var names []string
+	err = ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		names = append(names, string(sym.Name))
+		return true
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "main"}, names)
 }
