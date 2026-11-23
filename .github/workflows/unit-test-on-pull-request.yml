@@ -183,7 +183,7 @@ jobs:
 
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
-    runs-on: ubuntu-26.04
+    runs-on: ${{ matrix.target_arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
@@ -227,7 +227,7 @@ jobs:
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
+            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1

@@ -339,7 +339,18 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
-	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
+	// The tracepoint services the request on entry of the next bpf() syscall, which is
+	// the lookup below. We've seen an occasional CI failure where this is missed.
+	// The multi-vCPU QEMU TCG possibly failed to invalidate and retranslate the
+	// tracepoint code. Retry a few times to avoid sporadic test suite failures.
+	for range 10 {
+		if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil {
+			break
+		}
+		if data.Tid == 0 {
+			break
+		}
+	}
 	_ = progLink.Close()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
