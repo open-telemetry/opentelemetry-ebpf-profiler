@@ -1,1 +1,3 @@
 *.test
+initramfs.cpio
+initramfs.manifest

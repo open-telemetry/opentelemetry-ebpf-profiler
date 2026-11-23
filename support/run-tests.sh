@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test the current package under a different kernel.
-# Requires qemu-system-$QEMU_ARCH and bluebox to be installed.
+# Requires qemu-system-$QEMU_ARCH; needs bluebox and Go when support/initramfs.cpio is absent.
 
 set -eu
 set -o pipefail
@@ -31,27 +31,31 @@ test -e "${kern_dir}/${kernel_version}/vmlinuz" || {
   exit 1
 }
 
-echo Generating initramfs
-expected=0
-bb_args=(-o "${output}/initramfs.cpio")
-while IFS='' read -r -d '' line ; do
-    bb_args+=(-e "${line}:-test.v")
-    ((expected=expected+1))
-done < <(find . -name '*.test' -print0 | sort -z)
+initramfs_path="${output}/initramfs.cpio"
+script_dir="$(dirname "$0")"
 
 additionalQemuArgs=""
 kernelCmdline="quiet"
+bb_arch=""
 
 case "$qemu_arch" in
     x86_64)
-        bb_args+=(-a amd64)
+        bb_arch=amd64
         kernelCmdline="console=ttyS0 ${kernelCmdline}"
         ;;
     aarch64)
-        bb_args+=(-a arm64)
+        bb_arch=arm64
         additionalQemuArgs+=" -machine virt"
         ;;
 esac
+
+if [ -e "${script_dir}/initramfs.cpio" ] && [ -e "${script_dir}/initramfs.manifest" ]; then
+    initramfs_path="${script_dir}/initramfs.cpio"
+else
+    echo Generating initramfs
+    "${script_dir}/gen-initramfs.sh" "${initramfs_path}" "${bb_arch}"
+fi
+expected="$(grep -c . "${initramfs_path%.cpio}.manifest")"
 
 # Enable KVM when the guest architecture matches the host and /dev/kvm is
 # available. Otherwise pick a CPU model for full TCG emulation.
@@ -76,8 +80,6 @@ elif [ "$qemu_arch" = "aarch64" ]; then
   fi
 fi
 
-bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
-
 echo Testing on "${kernel_version}"
 smp="$(nproc 2>/dev/null || echo 4)"
 [ "$smp" -gt 4 ] && smp=4
@@ -91,7 +93,7 @@ $sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-no-user-config \
 	-m 4G \
 	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
-	-initrd "${output}/initramfs.cpio" \
+	-initrd "${initramfs_path}" \
 	-append "${kernelCmdline}"
 
 # Qemu will produce an escape sequence that disables line-wrapping in the terminal,

@@ -15,7 +15,7 @@ The script loads the provided eBPF code into the kernel in a virtual environment
 The tests are built on top of the following dependencies. Make sure you have them installed beforehand.
 
  * qemu-system-x86
- * statically linked busybox
+ * [bluebox](https://github.com/florianl/bluebox) and the Go toolchain to generate the initramfs
 
  ## Building a Custom Kernel Image
  Kernel images can be build with the script provided in `ci-kernels`. This directory contains also the basic configuration settings needed to enable eBPF features for the kernel image.
