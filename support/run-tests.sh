@@ -37,7 +37,7 @@ bb_args=(-o "${output}/initramfs.cpio")
 while IFS='' read -r -d '' line ; do
     bb_args+=(-e "${line}:-test.v")
     ((expected=expected+1))
-done < <(find . -name '*.test' -print0)
+done < <(find . -name '*.test' -print0 | sort -z)
 
 additionalQemuArgs=""
 
