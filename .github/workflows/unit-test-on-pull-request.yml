@@ -183,7 +183,7 @@ jobs:
 
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
-    runs-on: ubuntu-26.04
+    runs-on: ${{ matrix.runner }}
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
@@ -194,25 +194,25 @@ jobs:
           # https://github.com/cilium/ci-kernels/pkgs/container/ci-kernels/versions?filters%5Bversion_type%5D=tagged
 
           # AMD64
-          - { target_arch: amd64, kernel: 5.10.217 }
-          - { target_arch: amd64, kernel: 5.15.159 }
-          - { target_arch: amd64, kernel: 6.1.91 }
-          - { target_arch: amd64, kernel: 6.6.31 }
-          - { target_arch: amd64, kernel: 6.8.10 }
-          - { target_arch: amd64, kernel: 6.9.1 }
-          - { target_arch: amd64, kernel: 6.12.16 }
-          - { target_arch: amd64, kernel: 6.16 }
-          - { target_arch: amd64, kernel: 6.18 }
-          - { target_arch: amd64, kernel: 7.1 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 5.10.217 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 5.15.159 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.1.91 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.6.31 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.8.10 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.9.1 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.12.16 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.16 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 6.18 }
+          - { target_arch: amd64, runner: ubuntu-26.04, kernel: 7.1 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
-          - { target_arch: arm64, kernel: 6.6.31 }
-          - { target_arch: arm64, kernel: 6.8.4 }
-          - { target_arch: arm64, kernel: 6.9.1 }
-          - { target_arch: arm64, kernel: 6.12.16 }
-          - { target_arch: arm64, kernel: 6.16 }
-          - { target_arch: arm64, kernel: 6.18 }
-          - { target_arch: arm64, kernel: 7.1.1 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.6.31 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.8.4 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.9.1 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.12.16 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.16 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 6.18 }
+          - { target_arch: arm64, runner: ubuntu-26.04-arm, kernel: 7.1.1 }
     steps:
       - name: Disable man-db
         run: |
@@ -227,7 +227,7 @@ jobs:
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
+            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1

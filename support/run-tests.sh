@@ -41,34 +41,50 @@ done < <(find . -name '*.test' -print0)
 
 additionalQemuArgs=""
 
-supportKVM=$(grep -E 'vmx|svm' /proc/cpuinfo || true)
-if [ -n "$supportKVM" ] && [ "$qemu_arch" = "$(uname -m)" ]; then
-  additionalQemuArgs="-enable-kvm"
-fi
-
 case "$qemu_arch" in
     x86_64)
-        additionalQemuArgs+=" -cpu Haswell -append console=ttyS0"
         bb_args+=(-a amd64)
+        additionalQemuArgs+=" -append console=ttyS0"
         ;;
     aarch64)
-        # Newer Linux kernels may fail to load with QEMU for arm64.
-        # This issue has been addressed in QEMU 9.2+ by
-        # https://github.com/qemu/qemu/commit/1505b651fdbd9af59a4a90876a62ae7ea2d4cd39.
-        #
-        # To test newer Linux kernels with older QEMU versions, a dedicated,
-        # unaffected CPU should be set for the QEMU configuration.
-        additionalQemuArgs+=" -machine virt -cpu cortex-a72"
         bb_args+=(-a arm64)
+        additionalQemuArgs+=" -machine virt"
         ;;
 esac
+
+# Enable KVM when the guest architecture matches the host and /dev/kvm is
+# available. Otherwise pick a CPU model for full TCG emulation.
+if [ -c /dev/kvm ] && [ "$qemu_arch" = "$(uname -m)" ]; then
+  additionalQemuArgs+=" -enable-kvm -cpu host"
+elif [ "$qemu_arch" = "x86_64" ]; then
+  additionalQemuArgs+=" -cpu Haswell"
+elif [ "$qemu_arch" = "aarch64" ]; then
+  # Newer Linux kernels may fail to load with QEMU for arm64 on versions
+  # older than 9.2. This issue has been addressed in QEMU 9.2+ by
+  # https://github.com/qemu/qemu/commit/1505b651fdbd9af59a4a90876a62ae7ea2d4cd39.
+  #
+  # Detect support by probing for the virt-9.2 machine type, which QEMU
+  # first shipped in that same release (plain "virt" aliases the newest
+  # machine type). There prefer -cpu neoverse-n1: it has LSE atomics but
+  # lacks the PAC/SME/SVE extensions that cost TCG emulation time. Older
+  # QEMU versions need the Cortex-A72 model as a fallback.
+  if qemu-system-aarch64 -machine help | grep 'virt-9\.2' >/dev/null; then
+    additionalQemuArgs+=" -cpu neoverse-n1"
+  else
+    additionalQemuArgs+=" -cpu cortex-a72"
+  fi
+fi
 
 bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
 
 echo Testing on "${kernel_version}"
+smp="$(nproc 2>/dev/null || echo 4)"
+[ "$smp" -gt 4 ] && smp=4
 $sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-nographic \
 	-monitor none \
+	-nic none \
+	-smp "$smp" \
 	-chardev stdio,id=char0,logfile="${output}/test.log",signal=off \
 	-serial chardev:char0 \
 	-no-user-config \
