@@ -40,11 +40,12 @@ while IFS='' read -r -d '' line ; do
 done < <(find . -name '*.test' -print0 | sort -z)
 
 additionalQemuArgs=""
+kernelCmdline="quiet"
 
 case "$qemu_arch" in
     x86_64)
         bb_args+=(-a amd64)
-        additionalQemuArgs+=" -append console=ttyS0"
+        kernelCmdline="console=ttyS0 ${kernelCmdline}"
         ;;
     aarch64)
         bb_args+=(-a arm64)
@@ -90,7 +91,8 @@ $sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-no-user-config \
 	-m 4G \
 	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
-	-initrd "${output}/initramfs.cpio"
+	-initrd "${output}/initramfs.cpio" \
+	-append "${kernelCmdline}"
 
 # Qemu will produce an escape sequence that disables line-wrapping in the terminal,
 # end result being truncated output. This restores line-wrapping after the fact.

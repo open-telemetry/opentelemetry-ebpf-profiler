@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	_ "go.opentelemetry.io/ebpf-profiler/internal/integrationtestenv"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
