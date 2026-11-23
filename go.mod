@@ -15,10 +15,10 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.20.4
+	github.com/klauspost/compress v1.20.5
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261111105900-0fa7216d5d04
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20261120131622-f16d8cb17149
 	github.com/stretchr/testify v1.12.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.71.0
@@ -34,16 +34,15 @@ require (
 	go.opentelemetry.io/collector/receiver/xreceiver v0.165.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/metric v1.47.0
-	go.opentelemetry.io/proto/otlp v1.11.1
-	go.opentelemetry.io/proto/otlp/processcontext/v1development v0.4.1
-	go.opentelemetry.io/proto/otlp/profiles/v1development v0.4.1
+	go.opentelemetry.io/proto/slim/otlp v1.11.1
+	go.opentelemetry.io/proto/slim/otlp/processcontext/v1development v0.4.1
+	go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.4.1
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.33.0
-	golang.org/x/exp v0.0.0-20261109185158-a52e3aef5920
+	golang.org/x/exp v0.0.0-20261121134650-e1094eeca1b5
 	golang.org/x/mod v0.43.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
-	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -84,4 +83,5 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
+	google.golang.org/grpc v1.85.0 // indirect
 )

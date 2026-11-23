@@ -1,6 +1,7 @@
 *.o
 *.d
 *.pb.go
+*.baseline
 .cache
 /.idea
 /go

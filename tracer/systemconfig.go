@@ -38,6 +38,8 @@ const (
 
 // SysConfigVars supports collecting system configuration information.
 type SysConfigVars struct {
+	with_debug_output          uint32
+	filter_min_process_age_ns  uint64
 	inverse_pac_mask           uint64
 	tpbase_offset              uint64
 	task_stack_offset          uint32
@@ -276,9 +278,14 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 }
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
+// For read_task_struct, the returned addr is the struct pt_regs pointer on the entry stack.
 func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue, size int,
 ) (code []byte, addr uint64, err error) {
+	// Pin the thread so only its syscalls service the tid-guarded request.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	systemAnalysis := maps["system_analysis"]
 
 	maxSize := int(unsafe.Sizeof(support.SystemAnalysis{}.Code))
@@ -293,7 +300,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	data := support.SystemAnalysis{
 		Address: uint64(address),
 		Size:    uint32(size),
-		Pid:     uint32(os.Getpid()),
+		Tid:     uint32(unix.Gettid()),
 	}
 
 	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
@@ -345,8 +352,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if data.Pid != 0 {
-		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	if data.Tid != 0 {
+		return fmt.Errorf("%w for tid %d at 0x%x", errSystemAnalysisNotHandled, data.Tid, address)
 	}
 
 	if data.Err != 0 {
@@ -700,8 +707,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	pidNamespaceMode := cfg.PIDNamespaceTranslationMode
 	pidNamespaceTranslation := pidNamespaceMode != PIDNamespaceTranslationModeNone
 
+	var withDebugOutput uint32
 	if cfg.VerboseMode {
-		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+		withDebugOutput = 1
+		if err := coll.Variables["with_debug_output"].Set(withDebugOutput); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
 	}
@@ -765,7 +774,8 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
-	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge.Nanoseconds())); err != nil {
+	filterMinProcessAgeNs := uint64(cfg.FilterMinProcessAge.Nanoseconds())
+	if err := coll.Variables["filter_min_process_age_ns"].Set(filterMinProcessAgeNs); err != nil {
 		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
 	}
 
@@ -780,10 +790,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	rodataVars := SysConfigVars{
-		inverse_pac_mask:        ^pacMask,
-		pid_ns_translation_mode: ebpfMode,
-		target_pid_ns_dev:       targetPIDNamespaceDev,
-		target_pid_ns_inode:     targetPIDNamespaceInode,
+		with_debug_output:         withDebugOutput,
+		filter_min_process_age_ns: filterMinProcessAgeNs,
+		inverse_pac_mask:          ^pacMask,
+		pid_ns_translation_mode:   ebpfMode,
+		target_pid_ns_dev:         targetPIDNamespaceDev,
+		target_pid_ns_inode:       targetPIDNamespaceInode,
 	}
 	configureVMALookup(coll, cfg, &rodataVars)
 

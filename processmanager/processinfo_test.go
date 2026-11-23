@@ -104,20 +104,12 @@ func (h *testEbpfHandler) UpdateUnwindInfo(uint16, sdtypes.UnwindInfo) error {
 }
 
 func (h *testEbpfHandler) UpdateExeIDToStackDeltas(
-	host.FileID, []pmebpf.StackDeltaEBPF,
+	host.FileID, []pmebpf.StackDelta, []pmebpf.StackDeltaPageDesc, uint64,
 ) (uint16, error) {
 	return 0, nil
 }
 
 func (h *testEbpfHandler) DeleteExeIDToStackDeltas(host.FileID, uint16) error {
-	return nil
-}
-
-func (h *testEbpfHandler) UpdateStackDeltaPages(host.FileID, []uint16, uint16, uint64) error {
-	return nil
-}
-
-func (h *testEbpfHandler) DeleteStackDeltaPage(host.FileID, uint64) error {
 	return nil
 }
 
