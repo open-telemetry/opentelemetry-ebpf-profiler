@@ -22,10 +22,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+        uses: $/.github/workflows/go-setup
       - name: Check licenses of dependencies
         run: make license-check
       - name: Check LICENSES is up to date
@@ -90,8 +87,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Set up environment
-        uses: $/.github/workflows/env
+      - name: Set up Go
+        uses: $/.github/workflows/go-setup
       - name: Cross compile
         run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build ./collector/...
 
@@ -117,10 +114,8 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/coredump/modulecache
-          key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
-          restore-keys: |
-            coredumps-${{ matrix.target_arch }}
-            coredumps-
+          key: coredumps-${{ matrix.target_arch }}-${{ hashFiles(format('tools/coredump/testdata/{0}/*.json', matrix.target_arch)) }}
+          restore-keys: coredumps-${{ matrix.target_arch }}-
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
@@ -171,24 +166,24 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
-          cache-dependency-path: go.sum
+          cache-dependency-path: |
+            go.sum
+            tools/coredump/go.sum
       - name: Cache coredump modules
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: tools/coredump/modulecache
-          key: coredumps-arm64-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
-          restore-keys: |
-            coredumps-arm64
-            coredumps-
+          key: coredumps-arm64-${{ hashFiles('tools/coredump/testdata/arm64/*.json') }}
+          restore-keys: coredumps-arm64-
       - name: Run coredump tests
-        run: GODEBUG=asyncpreemptoff=1 go test -v ./tools/coredump/
+        run: GODEBUG=asyncpreemptoff=1 go test -C tools/coredump -v .
 
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
-    runs-on: ubuntu-26.04
+    runs-on: ${{ matrix.target_arch == 'arm64' && 'ubuntu-26.04-arm' || 'ubuntu-26.04' }}
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
@@ -232,7 +227,7 @@ jobs:
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
+            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1

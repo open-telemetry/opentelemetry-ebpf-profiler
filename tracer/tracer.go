@@ -207,9 +207,18 @@ type Tracer struct {
 	// to custom probes via Enable so they can reference the same layout.
 	sysConfigVars SysConfigVars
 
+	// maxConcurrentProgLoads caps how many eBPF programs are verified at once,
+	// also when custom probes are loaded via Enable.
+	maxConcurrentProgLoads int
+
 	// origins is the tracer-wide registry origin IDs are assigned from and
 	// profile type metadata is looked up by.
 	origins *originRegistry
+
+	// snapshotSources are probes that implement samples.SnapshotSource and produce
+	// additional profiles at each collection interval. Probes can be enabled
+	// while the reporter is already collecting snapshots, so access is guarded.
+	snapshotSources xsync.RWMutex[[]samples.SnapshotSource]
 
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
@@ -259,6 +268,11 @@ type Config struct {
 	VerboseMode bool
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
+	// MaxConcurrentProgLoads caps how many eBPF programs are loaded and verified
+	// concurrently. Since the memory used during verification is accounted to the
+	// profiler's memory cgroup, lowering this value can prevent OOM kills at startup
+	// when the limit is tight. A value of 0 selects the built-in default.
+	MaxConcurrentProgLoads int
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
@@ -390,6 +404,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		done:                   make(chan libpf.Void),
 		origins:                origins,
 		sysConfigVars:          sysConfigVars,
+		maxConcurrentProgLoads: cfg.maxConcurrentProgLoads(),
 	}
 	tracer.mmapEventOnce = sync.OnceValue(func() error {
 		return tracer.startMmapEventMonitor(tracer.lifecycleCtx)
@@ -536,10 +551,9 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 		}
 	}
 
-	// The perf and the probe unwinders refer to disjoint sets of program
-	// specifications ("perf_" and "kprobe_" prefixed), and the probe unwinders only
-	// depend on already loaded maps, not on the loaded perf programs. Collect the load
-	// jobs of both so that all of them are verified by the kernel concurrently.
+	// The perf and the probe unwinders verify the same program specifications and
+	// the probe unwinders only depend on already loaded maps. Collect the load jobs
+	// of both so that all of them are verified by the kernel concurrently.
 	var perfJobs, probeJobs []progEntry
 	perfJobs, err = perfUnwinderJobs(coll, ebpfMaps["perf_progs"], tailCallProgs)
 	if err != nil {
@@ -558,7 +572,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, origins *orig
 	}
 
 	if err = loadPrograms(append(perfJobs, probeJobs...), cfg.BPFVerifierLogLevel,
-		ebpfProgs); err != nil {
+		cfg.maxConcurrentProgLoads(), ebpfProgs); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load unwinder eBPF programs: %v", err)
 	}
 
@@ -734,14 +748,13 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	const (
 		// The following sizes X are used as 2^X, and determined empirically.
 		// 1 million executable pages / 4GB of executable address space
-		pidPageMappingInfoSize   = 20
-		stackDeltaPageToInfoSize = 16
-		exeIDToStackDeltasSize   = 16
+		pidPageMappingInfoSize = 20
+		exeIDToStackDeltasSize = 16
 	)
 
 	adaption["pid_page_to_mapping_info"] = 1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
 
-	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
+	adaption["exe_id_to_stackdelta_meta"] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
 
 	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case).
 	// As CPU hot-plugging during runtime is currently not supported use the number of online CPUs
@@ -762,8 +775,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	noPrealloc := probeNoPrealloc()
 
 	for mapName, mapSpec := range coll.Maps {
-		if mapName == "sched_times" {
-			// sched_times is owned by the off-CPU probe and created there on demand.
+		if mapName == "sched_times" || mapName == "usdt_specs" || mapName == "ext_probe_value" {
+			// Probe-owned maps are created by their consuming probes on demand.
 			continue
 		}
 		if mapName == obiSpanTracesMap {
@@ -833,6 +846,34 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	return nil
 }
 
+// progSpecForJob resolves the program specification for a load job. The typeless
+// programs are instantiated to the 'progType' requested.
+func progSpecForJob(coll *cebpf.CollectionSpec, job ProgLoaderHelper,
+	progType cebpf.ProgramType, namePrefix string,
+) (*cebpf.ProgramSpec, error) {
+	progSpec, ok := coll.Programs[job.Name]
+	if !ok {
+		return nil, fmt.Errorf("program %s does not exist", job.Name)
+	}
+	if strings.HasPrefix(progSpec.SectionName, "multi/") == job.NoTailCallTarget {
+		return nil, fmt.Errorf("program %s matched unexpected program section %s",
+			job.Name, progSpec.SectionName)
+	}
+	if job.NoTailCallTarget {
+		return progSpec, nil
+	}
+	// cilium/ebpf sets Type to UnspecifiedProgram for programs in 'multi/' sections.
+	// Rewrite the program type here. The perf event programs need only type update
+	// (other types are later modified for certain map references). So mutate
+	// the PerfEvent/ program in the collection to avoid an extra Copy().
+	if progType != cebpf.PerfEvent {
+		progSpec = progSpec.Copy()
+	}
+	progSpec.Type = progType
+	progSpec.Name = namePrefix + "_" + job.Name
+	return progSpec, nil
+}
+
 // perfUnwinderJobs collects the load jobs for all perf eBPF programs and their tail
 // call targets. It only prepares the jobs, it does not load anything into the kernel.
 func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
@@ -865,14 +906,9 @@ func perfUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			continue
 		}
 
-		unwindProgName := unwindProg.Name
-		if !unwindProg.NoTailCallTarget {
-			unwindProgName = "perf_" + unwindProg.Name
-		}
-
-		progSpec, ok := coll.Programs[unwindProgName]
-		if !ok {
-			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
+		progSpec, err := progSpecForJob(coll, unwindProg, cebpf.PerfEvent, "perf")
+		if err != nil {
+			return nil, err
 		}
 
 		jobs = append(jobs, progEntry{
@@ -906,12 +942,12 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 	return insNos
 }
 
-// loadProbeUnwinders reuses large parts of perfUnwinderJobs. By default all eBPF programs
-// are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
-// specification of these programs to xProbe eBPF programs and adjusts tail call maps if needed.
+// loadProbeUnwinders reuses large parts of perfUnwinderJobs. Unwinder programs
+// live in the type-less "multi" section; the probe path loads kprobe-typed
+// alias copies and adjusts the tail call maps if needed.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []ProgLoaderHelper,
-	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
+	bpfVerifierLogLevel uint32, maxConcurrentLoads int, perfTailCallMapFD int,
 	perCPURecordsFD int, perCPURecordsKprobeMap *cebpf.Map,
 ) error {
 	jobs, err := probeUnwinderJobs(coll, tailcallMap, progs, perfTailCallMapFD,
@@ -919,7 +955,7 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 	if err != nil {
 		return err
 	}
-	return loadPrograms(jobs, bpfVerifierLogLevel, ebpfProgs)
+	return loadPrograms(jobs, bpfVerifierLogLevel, maxConcurrentLoads, ebpfProgs)
 }
 
 // probeUnwinderJobs rewrites the probe program specifications and collects their load
@@ -934,18 +970,13 @@ func probeUnwinderJobs(coll *cebpf.CollectionSpec, tailcallMap *cebpf.Map,
 			continue
 		}
 
-		unwindProgName := unwindProg.Name
-		if !unwindProg.NoTailCallTarget {
-			unwindProgName = "kprobe_" + unwindProg.Name
-		}
-
-		progSpec, ok := coll.Programs[unwindProgName]
-		if !ok {
-			return nil, fmt.Errorf("program %s does not exist", unwindProgName)
+		progSpec, err := progSpecForJob(coll, unwindProg, cebpf.Kprobe, "kprobe")
+		if err != nil {
+			return nil, err
 		}
 
 		// Skip rewriting tail call maps for external perf_event based probes.
-		if unwindProgName != "perf_event__external" {
+		if unwindProg.Name != "perf_event__external" {
 			// Replace the prog array for the tail calls.
 			insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
 			for _, ins := range insns {
@@ -995,13 +1026,25 @@ type progEntry struct {
 	loadTime time.Duration
 }
 
-// maxConcurrentProgLoads caps how many eBPF programs are verified at once.
+// defaultMaxConcurrentProgLoads is the default for how many eBPF programs are
+// verified at once.
 //
 // While verifying a program, the kernel allocates temporary memory that is charged
 // to the memory cgroup of the profiler: up to ~9 MiB for the largest programs, and
 // ~80 MiB for all of them together. Four concurrent loads bound this to ~30 MiB,
 // independently of the number of CPUs, and already give most of the speedup.
-const maxConcurrentProgLoads = 4
+const defaultMaxConcurrentProgLoads = 4
+
+// maxConcurrentProgLoads returns the configured concurrency limit for loading
+// eBPF programs, falling back to defaultMaxConcurrentProgLoads if it is unset.
+func (cfg *Config) maxConcurrentProgLoads() int {
+	if cfg.MaxConcurrentProgLoads <= 0 {
+		log.Debugf("MaxConcurrentProgLoads is %d, falling back to %d",
+			cfg.MaxConcurrentProgLoads, defaultMaxConcurrentProgLoads)
+		return defaultMaxConcurrentProgLoads
+	}
+	return cfg.MaxConcurrentProgLoads
+}
 
 // loadPrograms loads the given eBPF programs into the kernel and populates the related
 // maps.
@@ -1010,7 +1053,10 @@ const maxConcurrentProgLoads = 4
 // program is verified independently of the others, so the programs are loaded
 // concurrently. Everything that mutates shared state (registering the programs and
 // updating the tail call maps) is done sequentially once all programs are loaded.
-func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
+//
+// At most maxConcurrentLoads programs are loaded at the same time. Once a load fails,
+// loads that have not started yet are skipped, as the error is returned regardless.
+func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32, maxConcurrentLoads int,
 	ebpfProgs map[string]*cebpf.Program,
 ) error {
 	if len(jobs) == 0 {
@@ -1044,11 +1090,19 @@ func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 		return len(b.progSpec.Instructions) - len(a.progSpec.Instructions)
 	})
 
-	eg := &errgroup.Group{}
-	eg.SetLimit(maxConcurrentProgLoads)
+	eg, ctx := errgroup.WithContext(context.Background())
+	eg.SetLimit(maxConcurrentLoads)
 	for i := range jobs {
+		if ctx.Err() != nil {
+			// A load already failed, so do not start any further loads.
+			break
+		}
 		job := &jobs[i]
 		eg.Go(func() error {
+			if ctx.Err() != nil {
+				// A load failed while this one was waiting for a free slot.
+				return nil
+			}
 			// Load the eBPF program into the kernel. If no error is returned,
 			// the eBPF program can be used/called/triggered from now on.
 			start := time.Now()
@@ -1075,6 +1129,9 @@ func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 		// the first failure in job order is logged in full and returned, and the
 		// others are summarized. Job order keeps the reported error independent of
 		// the order in which the loads happened to complete.
+		//
+		// Jobs that were skipped after the first failure have neither a program
+		// nor an error and are ignored.
 		var firstErr error
 		var alsoFailed []string
 		for i := range jobs {
@@ -1082,6 +1139,8 @@ func loadPrograms(jobs []progEntry, bpfVerifierLogLevel uint32,
 			switch {
 			case job.prog != nil:
 				job.prog.Close()
+			case job.err == nil:
+				continue
 			case firstErr == nil:
 				logLoadError(job.err)
 				firstErr = fmt.Errorf("failed to load %s: %w", job.progSpec.Name, job.err)

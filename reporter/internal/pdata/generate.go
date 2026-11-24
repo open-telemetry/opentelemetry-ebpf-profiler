@@ -8,6 +8,7 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -283,7 +284,9 @@ func (p *Pdata) setProfile(
 			if !exists {
 				// Add a new Location to the dictionary
 				loc := dic.LocationTable().AppendEmpty()
-				loc.SetAddress(locInfo.address)
+				if !locInfo.frameType.IsError() {
+					loc.SetAddress(locInfo.address)
+				}
 				loc.SetMappingIndex(locInfo.mappingIndex)
 				if locInfo.hasLine {
 					line := loc.Lines().AppendEmpty()
@@ -293,6 +296,10 @@ func (p *Pdata) setProfile(
 				}
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),
 					semconv.ProfileFrameTypeKey, locInfo.frameType.String())
+				if locInfo.frameType.IsError() {
+					attrMgr.AppendOptionalString(loc.AttributeIndices(),
+						semconv.ErrorTypeKey, strconv.FormatUint(locInfo.address, 10))
+				}
 			}
 			locationIndices = append(locationIndices, idx)
 		} // End per-frame processing
@@ -318,12 +325,14 @@ func (p *Pdata) setProfile(
 				value.String())
 		}
 
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ThreadNameKey, sampleKey.Comm.String())
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, sampleKey.TID)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		if !profileType.OmitThreadContext {
+			attrMgr.AppendOptionalString(sample.AttributeIndices(),
+				semconv.ThreadNameKey, sampleKey.Comm.String())
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.ThreadIDKey, sampleKey.TID)
+			attrMgr.AppendInt(sample.AttributeIndices(),
+				semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)

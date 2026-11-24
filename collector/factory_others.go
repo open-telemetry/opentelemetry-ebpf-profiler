@@ -34,3 +34,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		return nil, errors.New("profiling receiver is only supported on Linux and arm64 or amd64")
 	}
 }
+
+// Option is a placeholder for platform-specific receiver options.
+// The profiling receiver is only functional on Linux amd64/arm64.
+type Option interface{}

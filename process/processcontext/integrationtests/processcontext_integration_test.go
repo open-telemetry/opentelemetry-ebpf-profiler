@@ -147,13 +147,14 @@ func Test_ProcessContext(t *testing.T) {
 			log.SetLevel(slog.LevelDebug)
 			rep := newCaptureReporter()
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
-				Intervals:              &mockIntervals{},
-				InterpretersConfig:     interpreterconfig.AllInterpreters(),
-				SamplesPerSecond:       20,
-				ProbabilisticInterval:  100,
-				ProbabilisticThreshold: 100,
-				VerboseMode:            true,
-				TraceReporter:          rep,
+				Intervals:                   &mockIntervals{},
+				InterpretersConfig:          interpreterconfig.AllInterpreters(),
+				SamplesPerSecond:            20,
+				ProbabilisticInterval:       100,
+				ProbabilisticThreshold:      100,
+				VerboseMode:                 true,
+				TraceReporter:               rep,
+				PIDNamespaceTranslationMode: tracer.PIDNamespaceTranslationModeAuto,
 			})
 			require.NoError(t, err)
 			defer trc.Close()

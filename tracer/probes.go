@@ -25,6 +25,8 @@ type ProbeContext struct {
 	registerAttacher func(pm.ProbeAttacher) error
 	KernelSymbolizer *kallsyms.Symbolizer
 	reg              ProbeRegistrar
+	// maxConcurrentProgLoads caps how many eBPF programs are verified at once.
+	maxConcurrentProgLoads int
 }
 
 // CollectionSpecWith returns a filtered CollectionSpec built from the tracer's embedded
@@ -111,6 +113,8 @@ type sysVar struct {
 func (c *ProbeContext) sysVarSetters() []sysVar {
 	sv := c.sysVars
 	vars := []sysVar{
+		{"with_debug_output", sv.with_debug_output},
+		{"filter_min_process_age_ns", sv.filter_min_process_age_ns},
 		{"inverse_pac_mask", sv.inverse_pac_mask},
 		{"tpbase_offset", sv.tpbase_offset},
 		{"task_stack_offset", sv.task_stack_offset},
@@ -212,7 +216,7 @@ func (c *ProbeContext) LoadProbeUnwinders(
 	}
 	kprobeProgs := c.maps["kprobe_progs"]
 	if kprobeProgs == nil {
-		return fmt.Errorf("kprobe_progs map not available; ensure the kprobe unwinder chain was loaded at startup")
+		return fmt.Errorf("kprobe_progs map not available")
 	}
 	perfProgs := c.maps["perf_progs"]
 	if perfProgs == nil {
@@ -227,7 +231,8 @@ func (c *ProbeContext) LoadProbeUnwinders(
 		return fmt.Errorf("per_cpu_records_kp map not available")
 	}
 	return loadProbeUnwinders(coll, ebpfProgs, kprobeProgs, progs,
-		bpfVerifierLogLevel, perfProgs.FD(), perCPURecords.FD(), perCPURecordsKp)
+		bpfVerifierLogLevel, c.maxConcurrentProgLoads, perfProgs.FD(), perCPURecords.FD(),
+		perCPURecordsKp)
 }
 
 // CollectTrampolineRef describes what an external probe's eBPF entry program needs
@@ -316,32 +321,7 @@ func (c *ProbeContext) RegisterCollectTrampoline(meta *samples.TypeMetadata, kin
 		return nil, fmt.Errorf("creating %s: %w", ctxMapName, err)
 	}
 
-	// Build a combined map pool: start with tracer-owned maps, then override
-	// ext_probe_value with this probe's dedicated per-probe instance.
-	// kprobe__external references both tracer-shared maps (kprobe_progs, etc.)
-	// and ext_probe_value; both must be rewritten before the program can load.
-	pool := make(map[string]*cebpf.Map, len(c.maps)+1)
-	for k, v := range c.maps {
-		if k == ".rodata.var" {
-			continue
-		}
-		pool[k] = v
-	}
-	pool[ctxMapName] = ctxMap
-
-	toRewrite := make(map[string]*cebpf.Map, len(pool))
-	for name, m := range pool {
-	rewriteOuter:
-		for _, progSpec := range coll.Programs {
-			for _, ins := range progSpec.Instructions {
-				if ins.Reference() == name {
-					toRewrite[name] = m
-					break rewriteOuter
-				}
-			}
-		}
-	}
-	if err := rewriteMaps(coll, toRewrite); err != nil {
+	if err := c.RewriteMaps(coll, map[string]*cebpf.Map{ctxMapName: ctxMap}); err != nil {
 		ctxMap.Close()
 		return nil, err
 	}
@@ -410,8 +390,8 @@ type Probe interface {
 	// then establishes kernel attachments via probeCtx and/or by managing links
 	// directly. System-wide attachments (kprobes, tracepoints, perf events) should
 	// be managed by the probe itself. Per-process PID-filtered
-	// attachments can be registered via AddAttacher to hook into lifecycle management of the
-	// the ProcessManager.
+	// attachments can be registered via AddAttacher to hook into lifecycle management of
+	// ProcessManager.
 	Load(ctx context.Context, reg ProbeRegistrar, probeCtx *ProbeContext) error
 
 	// Unload closes all kernel links opened by the probe. Called on shutdown.
@@ -425,15 +405,17 @@ type Probe interface {
 // Trace handler hooks are attached to registered origin IDs via the
 // ProbeRegistrar; the tracer dispatches traces with a matching origin to them.
 //
-// Enable requires that the kprobe tail-call unwinder chain was loaded at tracer
-// startup, which happens when off-CPU profiling is enabled (OffCPUThreshold > 0).
-// Without the chain the probe attaches successfully but its tail calls into
-// kprobe_progs silently miss, producing no stack samples.
+// If p implements samples.SnapshotSource, its snapshots are included in the
+// tracer's ProduceSnapshots at each collection interval.
 //
 // Origin IDs registered inside p.Load are permanently consumed even if Load
 // subsequently fails; they cannot be reclaimed.
 // Enable returns an error if the tracer has already been closed.
 func (t *Tracer) Enable(ctx context.Context, p Probe) error {
+	if err := t.lifecycleCtx.Err(); err != nil {
+		return fmt.Errorf("tracer is closed: %w", err)
+	}
+
 	probeCtx := &ProbeContext{
 		maps:    t.ebpfMaps,
 		sysVars: t.sysConfigVars,
@@ -446,12 +428,35 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 			t.processManager.RegisterProbeAttacher(a)
 			return nil
 		},
-		KernelSymbolizer: t.kernelSymbolizer,
+		KernelSymbolizer:       t.kernelSymbolizer,
+		maxConcurrentProgLoads: t.maxConcurrentProgLoads,
 	}
 
 	if err := p.Load(ctx, t.origins, probeCtx); err != nil {
 		return fmt.Errorf("failed to load probe: %w", err)
 	}
 
+	if ss, ok := p.(samples.SnapshotSource); ok {
+		sources := t.snapshotSources.WLock()
+		*sources = append(*sources, ss)
+		t.snapshotSources.WUnlock(&sources)
+	}
+
 	return nil
+}
+
+// ProduceSnapshots implements samples.SnapshotSource by combining the snapshots
+// of all enabled probes that implement it. Called by the reporter once per
+// collection interval.
+// The read lock is held while producers run, so a future source removal can't
+// race with an in-flight collection.
+func (t *Tracer) ProduceSnapshots() []samples.SnapshotProfile {
+	sources := t.snapshotSources.RLock()
+	defer t.snapshotSources.RUnlock(&sources)
+
+	var profiles []samples.SnapshotProfile
+	for _, ss := range *sources {
+		profiles = append(profiles, ss.ProduceSnapshots()...)
+	}
+	return profiles
 }

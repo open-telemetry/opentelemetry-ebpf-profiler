@@ -1,0 +1,110 @@
+{
+  "coredump-ref": "a9858bb0a0b7d0957fdee76ff1e61a9513445879e9704a1501aa337e7b552bd8",
+  "threads": [
+    {
+      "lwp": 36124,
+      "frames": [
+        "libc.so.6+0xbbd0c",
+        "libc.so.6+0xc60bb",
+        "libc.so.6+0xd616b",
+        "perl+0x125e6f",
+        "main::fib+0 in testsources/perl/a.pl:21",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "main::fib+0 in testsources/perl/a.pl:24",
+        "<top-level>+0 in testsources/perl/a.pl:32",
+        "perl+0x176fe3",
+        "perl+0x71a6f",
+        "perl+0x46a47",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "perl+0x46aaf"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "390027e5f45f236bd1838bc54bf464c5ff01d260ab9f8b415ea8276641bce505",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "59015993b1b671273461ef1167d7a9ad76dc090d521c91102e962217ed6b6dba",
+      "local-path": "/usr/lib/locale/C.utf8/LC_CTYPE"
+    },
+    {
+      "ref": "47a5f5359a8f324abc39d69a7f6241a2ac0e2fbbeae5b9c3a756e682b75d087b",
+      "local-path": "/usr/lib/locale/C.utf8/LC_COLLATE"
+    },
+    {
+      "ref": "14507aad9f806112e464b9ca94c93b2e4d759ddc612b5f87922d7cac7170697d",
+      "local-path": "/usr/lib/locale/C.utf8/LC_NAME"
+    },
+    {
+      "ref": "26e2800affab801cb36d4ff9625a95c3abceeda2b6553a7aecd0cfcf34c98099",
+      "local-path": "/usr/lib/locale/C.utf8/LC_ADDRESS"
+    },
+    {
+      "ref": "f5976e6b3e6b24dfe03caad6a5b98d894d8110d8bd15507e690fd60fd3e04ab2",
+      "local-path": "/usr/lib/locale/C.utf8/LC_NUMERIC"
+    },
+    {
+      "ref": "cde048b81e2a026517cc707c906aebbd50f5ee3957b6f0c1c04699dffcb7c015",
+      "local-path": "/usr/lib/locale/C.utf8/LC_PAPER"
+    },
+    {
+      "ref": "f4caf0d12844219b65ba42edc7ec2f5ac1b2fc36a3c88c28887457275daca1ee",
+      "local-path": "/usr/lib/locale/C.utf8/LC_TELEPHONE"
+    },
+    {
+      "ref": "bb14a6f2cbd5092a755e8f272079822d3e842620dd4542a8dfa1e5e72fc6115b",
+      "local-path": "/usr/lib/locale/C.utf8/LC_MEASUREMENT"
+    },
+    {
+      "ref": "38a1d8e5271c86f48910d9c684f64271955335736e71cec35eeac942f90eb091",
+      "local-path": "/usr/lib/locale/C.utf8/LC_IDENTIFICATION"
+    },
+    {
+      "ref": "db76dcae7c0243e1c657a58cc3af9324c891dbfb663068b4e276ecb564aae898",
+      "local-path": "/tmp/perl544/inst/bin/perl"
+    },
+    {
+      "ref": "5e0391562de36de323fb9cb0f2c1b6bd6d034c840b1dac018499f5fe4ded1b4a",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "0910b595d1d5d4e52cc0f415bbb1ff07c015d6860d34aae02505dd9973a63154",
+      "local-path": "/usr/lib/locale/C.utf8/LC_TIME"
+    },
+    {
+      "ref": "f9ad02f1d8eba721d4cbd50c365b5c681c39aec008f90bfc2be2dc80bfbaddcb",
+      "local-path": "/usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES"
+    },
+    {
+      "ref": "c4c52c0df6f3809f1b85927a85f322d102cffebb6b517b44b37048f6fd620c01",
+      "local-path": "/usr/lib/aarch64-linux-gnu/gconv/gconv-modules.cache"
+    },
+    {
+      "ref": "7a31de159ded19d74c73126489d3f714c1684d5b9262cddae10bbe4fd8581a2b",
+      "local-path": "/usr/lib/locale/locale-archive"
+    },
+    {
+      "ref": "0f1905dc27dbc6715875c70527bc8da846a10084c9c483e9d8ff76dce8d69d0e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "b41cebf0be70f869bf60228cb5761f875ced865b0f4016f544d82f7a9ded28b0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "bfd9e9975443b834582493fe9a8d7aefcd989376789c17470a1e548aee76fd55",
+      "local-path": "/usr/lib/locale/C.utf8/LC_MONETARY"
+    }
+  ]
+}

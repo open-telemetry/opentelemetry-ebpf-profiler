@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	v1profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	v1profiles "go.opentelemetry.io/proto/slim/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/open-telemetry/sig-profiling/profcheck"
@@ -751,6 +751,123 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.True(t, foundComm, "Sample should have Comm attribute set")
 	assert.True(t, foundTID, "Sample should have TID attribute set")
 	assert.True(t, foundCPU, "Sample should have CPU attribute set")
+}
+
+func TestGenerate_ErrorFrames(t *testing.T) {
+	cases := []struct {
+		frameType libpf.FrameType
+		address   libpf.AddressOrLineno
+		errorType string
+	}{
+		{libpf.DotnetFrame, 6002, ""},
+		{libpf.DotnetFrame.Error(), 6002, "6002"},
+		{libpf.UnknownFrame.Error(), 6001, "6001"},
+	}
+
+	var frames libpf.Frames
+	for _, tc := range cases {
+		frames.Append(&libpf.Frame{Type: tc.frameType, AddressOrLineno: tc.address})
+	}
+	tree := samples.TraceEventsTree{
+		samples.ResourceKey{}: {
+			Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
+					{}: {Frames: frames, Timestamps: []uint64{uint64(testCollectionStart.UnixNano())}},
+				},
+			},
+		},
+	}
+	d, err := New(nil)
+	require.NoError(t, err)
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	dic := profiles.Dictionary()
+	sample := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0).Samples().At(0)
+	locations := dic.StackTable().At(int(sample.StackIndex())).LocationIndices().AsRaw()
+	require.Len(t, locations, len(cases))
+	for i, tc := range cases {
+		loc := dic.LocationTable().At(int(locations[i]))
+		attrs := make(map[string]string)
+		for _, index := range loc.AttributeIndices().AsRaw() {
+			attr := dic.AttributeTable().At(int(index))
+			attrs[dic.StringTable().At(int(attr.KeyStrindex()))] = attr.Value().Str()
+		}
+		if tc.errorType == "" {
+			assert.NotContains(t, attrs, string(semconv.ErrorTypeKey), "frame %d", i)
+			assert.Equal(t, uint64(tc.address), loc.Address(), "frame %d", i)
+		} else {
+			assert.Equal(t, tc.errorType, attrs[string(semconv.ErrorTypeKey)], "frame %d", i)
+			assert.EqualValues(t, 0, loc.Address(), "frame %d", i)
+		}
+	}
+}
+
+// TestOmitThreadContextDropsThreadAttrs verifies that a profile type declaring
+// OmitThreadContext emits no thread name, thread ID, or CPU attributes. Interval
+// snapshots have no meaningful thread context, and zero-valued IDs would
+// misattribute the sample to thread 0 on CPU 0.
+func TestOmitThreadContextDropsThreadAttrs(t *testing.T) {
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(11, 12),
+		}),
+	})
+	frames := singleFrameTrace(libpf.NativeFrame, mapping, 0x1234, "", libpf.NullString, 0)
+
+	for _, tc := range []struct {
+		name        string
+		omit        bool
+		wantThreadA bool
+	}{
+		{name: "omitted", omit: true, wantThreadA: false},
+		{name: "reported", omit: false, wantThreadA: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d, err := New(nil)
+			require.NoError(t, err)
+
+			profileType := &samples.TypeMetadata{
+				SampleTypes:       []samples.SampleType{{Type: "inuse_space", Unit: "bytes"}},
+				ReportValues:      true,
+				OmitThreadContext: tc.omit,
+			}
+			profiles, err := testGenerate(d, samples.TraceEventsTree{
+				{ExecutablePath: libpf.Intern("/bin/app")}: samples.ResourceToProfiles{
+					Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+						profileType: {
+							{Comm: libpf.NewCommFromString("worker"), TID: 7, CPU: 3}: &samples.TraceEvents{
+								Frames:     frames,
+								Timestamps: []uint64{1},
+								Values:     []int64{4096},
+							},
+						},
+					},
+				},
+			}, "agent", "v1")
+			require.NoError(t, err)
+
+			dic := profiles.Dictionary()
+			sample := profiles.ResourceProfiles().At(0).ScopeProfiles().At(0).
+				Profiles().At(0).Samples().At(0)
+
+			var gotName, gotTID, gotCPU bool
+			for _, idx := range sample.AttributeIndices().AsRaw() {
+				attr := dic.AttributeTable().At(int(idx))
+				switch dic.StringTable().At(int(attr.KeyStrindex())) {
+				case string(semconv.ThreadNameKey):
+					gotName = true
+				case string(semconv.ThreadIDKey):
+					gotTID = true
+				case string(semconv.CPULogicalNumberKey):
+					gotCPU = true
+				}
+			}
+			assert.Equal(t, tc.wantThreadA, gotName, "thread.name presence")
+			assert.Equal(t, tc.wantThreadA, gotTID, "thread.id presence")
+			assert.Equal(t, tc.wantThreadA, gotCPU, "cpu.logical_number presence")
+		})
+	}
 }
 
 func TestStackTableOrder(t *testing.T) {

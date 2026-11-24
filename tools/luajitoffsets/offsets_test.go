@@ -197,10 +197,9 @@ func TestStructure(t *testing.T) {
 }
 
 func checkStruct(t *testing.T, typ any, s *dwarf.StructType, base uintptr) {
-	rtyp := reflect.TypeOf(typ)
+	t.Helper()
 	did := 0
-	for i := 0; i < rtyp.NumField(); i++ {
-		f := rtyp.Field(i)
+	for f := range reflect.TypeOf(typ).Fields() {
 		if f.Name != "_" {
 			for s.Field[did].Name != f.Name {
 				did++
@@ -211,6 +210,7 @@ func checkStruct(t *testing.T, typ any, s *dwarf.StructType, base uintptr) {
 }
 
 func cacheLibrary(t *testing.T, tag, platform, libFile string) (string, bool) {
+	t.Helper()
 	baseDir := "/tmp/offsets_artifacts/" + tag + "/" + platform
 	target := baseDir + "/libluajit-5.1.so"
 
@@ -255,6 +255,7 @@ func extractStackDeltas(target string, ef *pfelf.File) (sdtypes.IntervalData, in
 }
 
 func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 

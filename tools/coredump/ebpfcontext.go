@@ -43,9 +43,9 @@ type ebpfContext struct {
 	// support is needed to handle the prefix lookup.
 	pidToPageMapping map[C.PIDPage]unsafe.Pointer
 
-	// pidToPageMapping is the equivalent ebpf map implemented in Go. Special
-	// support is needed to handle the key structure.
-	stackDeltaPageToInfo map[C.StackDeltaPageKey]unsafe.Pointer
+	// exeIDToStackDeltaMeta is the equivalent ebpf map implemented in Go.
+	// Special support is needed to handle the key structure.
+	exeIDToStackDeltaMeta map[C.u64]unsafe.Pointer
 
 	// exeIDToStackDeltaMaps is the equivalent ebpf map implemented in Go.
 	// Implemented separately to handle the nested map, and improve performance.
@@ -84,7 +84,7 @@ func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfCon
 		remoteMemory:          pr.GetRemoteMemory(),
 		PIDandTGID:            C.u64(pid) << 32,
 		pidToPageMapping:      make(map[C.PIDPage]unsafe.Pointer),
-		stackDeltaPageToInfo:  make(map[C.StackDeltaPageKey]unsafe.Pointer),
+		exeIDToStackDeltaMeta: make(map[C.u64]unsafe.Pointer),
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
 		maps:                  make(map[unsafe.Pointer]map[any]unsafe.Pointer),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
@@ -121,9 +121,9 @@ func (ec *ebpfContext) release() {
 		C.free(pageInfo)
 		delete(ec.pidToPageMapping, pidPage)
 	}
-	for deltaKey, deltaInfo := range ec.stackDeltaPageToInfo {
-		C.free(deltaInfo)
-		delete(ec.stackDeltaPageToInfo, deltaKey)
+	for fileID, meta := range ec.exeIDToStackDeltaMeta {
+		C.free(meta)
+		delete(ec.exeIDToStackDeltaMeta, fileID)
 	}
 
 	for fileID, stackDeltaMap := range ec.exeIDToStackDeltaMaps {

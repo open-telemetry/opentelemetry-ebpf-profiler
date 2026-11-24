@@ -20,7 +20,7 @@ import (
 
 const (
 	// 1TB of executable address space
-	maxArgMapScaleFactor = 8
+	maxMapScaleFactor = 8
 
 	minFrameCacheSize = 1024
 	maxFrameCacheSize = 1024 * 1024
@@ -65,9 +65,8 @@ type Config struct {
 	IncludeEnvVars              string                             `mapstructure:"include_env_vars"`
 	MapScaleFactor              uint                               `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel         uint                               `mapstructure:"bpf_verifier_log_level"`
+	MaxConcurrentProgLoads      uint                               `mapstructure:"max_concurrent_prog_loads"`
 	NoKernelVersionCheck        bool                               `mapstructure:"no_kernel_version_check"`
-	MaxGRPCRetries              uint32                             `mapstructure:"max_grpc_retries"`
-	MaxRPCMsgSize               int                                `mapstructure:"max_rpc_msg_size"`
 	BPFFSRoot                   string                             `mapstructure:"bpf_fs_root"`
 	ErrorMode                   ErrorMode                          `mapstructure:"error_mode"`
 	OBIProcessCtx               bool                               `mapstructure:"obi_process_ctx"`
@@ -85,7 +84,7 @@ type Config struct {
 // This is automatically called by the config parser as it implements the confmap.Validator interface.
 func (cfg *Config) Validate() error {
 	if err := cfg.PIDNamespaceTranslationMode.Validate(); err != nil {
-		return fmt.Errorf("invalid argument for pid-namespace-translation-mode: %w", err)
+		return fmt.Errorf("invalid argument for pid_namespace_translation_mode: %w", err)
 	}
 
 	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
@@ -109,10 +108,10 @@ func (cfg *Config) Validate() error {
 			cfg.FrameCacheSize, minFrameCacheSize, maxFrameCacheSize)
 	}
 
-	if cfg.MapScaleFactor > maxArgMapScaleFactor {
+	if cfg.MapScaleFactor > maxMapScaleFactor {
 		return fmt.Errorf(
 			"eBPF map scaling factor %d exceeds limit (max: %d)",
-			cfg.MapScaleFactor, maxArgMapScaleFactor,
+			cfg.MapScaleFactor, maxMapScaleFactor,
 		)
 	}
 
@@ -122,27 +121,27 @@ func (cfg *Config) Validate() error {
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {
 		return errors.New(
-			"invalid argument for probabilistic-interval: use " +
+			"invalid argument for probabilistic_interval: use " +
 				"a duration between 1 and 5 minutes",
 		)
 	}
 
 	if cfg.FilterMinProcessAge < 0 {
 		return errors.New(
-			"invalid argument for filter-min-process-age. The value " +
+			"invalid argument for filter_min_process_age. The value " +
 				"should be a non-negative duration. 0 disables minimum process age filtering")
 	}
 
 	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {
 		return errors.New(
-			"invalid argument for reporter-jitter. The value " +
+			"invalid argument for reporter_jitter. The value " +
 				"should be in the range [0..1]. 0 disables jitter")
 	}
 
 	if cfg.TargetCPUIDs != "" {
 		cpus, err := tracer.ReadCPURange(cfg.TargetCPUIDs)
 		if err != nil {
-			return fmt.Errorf("invalid argument for target-cpu-ids: %v", err)
+			return fmt.Errorf("invalid argument for target_cpu_ids: %v", err)
 		}
 		cfg.PinnedCPUIDs = cpus
 	}
@@ -165,10 +164,9 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("failed to get kernel version: %v", err)
 	}
 
-	var minMajor, minMinor uint32
-	minMajor, minMinor = 5, 10
+	const minMajor, minMinor = 5, 10
 	if major < minMajor || (major == minMajor && minor < minMinor) {
-		return fmt.Errorf("host Agent requires kernel version "+
+		return fmt.Errorf("receiver requires kernel version "+
 			"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
 	}
 

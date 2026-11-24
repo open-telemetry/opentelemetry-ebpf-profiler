@@ -18,6 +18,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
@@ -86,6 +87,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 		log.SetLevel(slog.LevelDebug)
 	}
 
+	interpretersConfig := interpreterconfig.AllInterpreters()
 	var proc process.Process
 	switch {
 	case cmd.pid != 0:
@@ -99,6 +101,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to read test case: %w", err)
 		}
+		interpretersConfig = testCase.interpretersConfig()
 
 		proc, err = OpenStoreCoredump(cmd.store, testCase.CoredumpRef, testCase.Modules)
 		if err != nil {
@@ -112,7 +115,8 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	}
 	defer proc.Close()
 
-	threads, err := ExtractTraces(context.Background(), proc, cmd.debugEbpf, lwpFilter, nil)
+	threads, err := ExtractTraces(context.Background(), proc, cmd.debugEbpf,
+		lwpFilter, nil, interpretersConfig)
 	if err != nil {
 		return fmt.Errorf("failed to extract traces: %w", err)
 	}
