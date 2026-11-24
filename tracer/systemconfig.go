@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -339,11 +340,13 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
-	// The tracepoint services the request on entry of the next bpf() syscall, which is
-	// the lookup below. We've seen an occasional CI failure where this is missed.
-	// The multi-vCPU QEMU TCG possibly failed to invalidate and retranslate the
-	// tracepoint code. Retry a few times to avoid sporadic test suite failures.
-	for range 10 {
+	// The tracepoint services the request on entry of the next syscall of this
+	// pinned thread, which is the lookup below. We've seen occasional CI
+	// failures where this is missed: the multi-vCPU QEMU TCG emulation can be
+	// late in propagating the freshly patched tracepoint to the requesting
+	// vCPU, so back-to-back syscalls all execute inside the stale window.
+	// Retry the lookups for a bounded wall-clock time.
+	for end := time.Now().Add(250 * time.Millisecond); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
 		if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil {
 			break
 		}
