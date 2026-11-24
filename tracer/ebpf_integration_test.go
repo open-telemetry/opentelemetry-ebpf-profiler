@@ -451,6 +451,10 @@ func runPIDNamespaceTranslationWorkload(comm string) int {
 	duration := 15 * time.Second
 	deadline := time.Now().Add(duration)
 	errs := make(chan error, 2)
+	// Burn CPU in bursts for context switches, but leave idle gaps so the
+	// vCPUs stay responsive under QEMU TCG. Like the golabels pprof workload.
+	const busyInterval = 50 * time.Millisecond
+	const idleInterval = 250 * time.Millisecond
 	run := func() {
 		runtime.LockOSThread()
 		if err := os.WriteFile("/proc/thread-self/comm", []byte(comm), 0o644); err != nil {
@@ -458,7 +462,12 @@ func runPIDNamespaceTranslationWorkload(comm string) int {
 			return
 		}
 		for time.Now().Before(deadline) {
-			runtime.Gosched()
+			for start := time.Now(); time.Since(start) < busyInterval; {
+				runtime.Gosched()
+			}
+			if time.Now().Before(deadline) {
+				time.Sleep(idleInterval)
+			}
 		}
 		errs <- nil
 	}
