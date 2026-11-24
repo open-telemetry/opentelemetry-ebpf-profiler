@@ -192,6 +192,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # `make integration-tests` reads these rows with sed. Keep each entry on
+          # one line in this exact format: - { target_arch: <arch>, kernel: <version> }
           # List of available kernels here:
           # https://github.com/cilium/ci-kernels/pkgs/container/ci-kernels/versions?filters%5Bversion_type%5D=tagged
 
@@ -234,14 +236,9 @@ jobs:
           esac
       - name: Fetch integration test initramfs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with: { name: "integration-initramfs-${{ matrix.target_arch }}", path: support }
-      - name: Fetch precompiled kernel
-        run: |
-          install -d ci-kernels
-          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel }}" \
-            | docker buildx build --platform linux/${{ matrix.target_arch }} \
-              --quiet --pull --output="ci-kernels" -
-          mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel }}/
+        with:
+          name: "integration-initramfs-${{ matrix.target_arch }}"
+          path: support
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
           case "${{ matrix.target_arch }}" in
