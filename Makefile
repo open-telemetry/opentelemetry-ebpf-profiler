@@ -62,7 +62,7 @@ clean:
 	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
 	@$(MAKE) -C tls/testdata clean
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
+	@rm -rf go .cache support/*.test support/initramfs*.cpio support/initramfs*.manifest interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 
 generate:
@@ -175,7 +175,7 @@ CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^
 KERNEL_VERSIONS ?= $(CI_KERNELS)
 
 integration-tests: integration-test-binaries
-	QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh $(KERNEL_VERSIONS)
+	QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh --initramfs support/initramfs-$(TARGET_ARCH).cpio $(KERNEL_VERSIONS)
 
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
@@ -222,6 +222,7 @@ integration-test-binaries: generate ebpf pprof-execs
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)
+	cd support && ./gen-initramfs.sh initramfs-$(TARGET_ARCH).cpio $(TARGET_ARCH)
 
 docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .

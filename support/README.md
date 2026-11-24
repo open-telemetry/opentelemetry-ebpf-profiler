@@ -20,13 +20,22 @@ make integration-tests TARGET_ARCH=arm64
 `TARGET_ARCH` defaults to the host architecture. If `KERNEL_VERSIONS` is omitted,
 the target reads kernel versions from `.github/workflows/unit-test-on-pull-request.yml`.
 To select several kernels, use `KERNEL_VERSIONS="5.10.217 6.12.16"`. The target
-builds the test binaries once, runs every selected kernel, and fails if any
-kernel fails, with a summary of the failed kernels.
+builds the test binaries and initramfs once, runs every selected kernel, and
+fails if any kernel fails, with a summary of the failed kernels.
 
 `run-tests.sh` always reads test binaries from the repository's `support/`
 directory, regardless of the working directory, and accepts one or more kernel
 versions as arguments. It defaults to the Linux host's
 architecture; set `QEMU_ARCH=x86_64` or `QEMU_ARCH=aarch64` to override it.
+
+By default `run-tests.sh` generates a fresh initramfs with
+`support/gen-initramfs.sh`, which needs either a preinstalled `bluebox` or
+the Go toolchain. Pass
+`--initramfs support/initramfs-<arch>.cpio` as the first argument to instead
+reuse a prebuilt image, validated against its sibling `.manifest`; the arch
+suffix keeps a build for the other architecture from being picked up.
+`make integration-tests` passes the image it just built automatically, as
+does CI.
 
 Missing images are downloaded from `ghcr.io/cilium/ci-kernels` into
 `ci-kernels/<arch>/<version>/vmlinuz` at the repository root. Cached images are
@@ -38,12 +47,10 @@ tests, which need shared libraries unavailable in the QEMU initramfs.
 
 ## Requirements
 Linux with the project build dependencies, QEMU for the target architecture,
-`bluebox`, and Docker for downloading kernels. On Debian or Ubuntu:
+and Docker for downloading kernels. On Debian or Ubuntu:
 
 ```sh
 sudo apt-get install qemu-system-x86 qemu-system-arm ipxe-qemu
-go install github.com/florianl/bluebox@v0.0.1
-export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
 Cross compilation needs the target architecture's C compiler. `run-tests.sh`

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Run prebuilt integration tests on one or more kernels.
-# Requires qemu-system-$QEMU_ARCH and bluebox to be installed.
-# Missing kernel images are downloaded from Cilium using Docker.
+# Requires qemu-system-$QEMU_ARCH; needs bluebox or Go when --initramfs is not
+# used. Missing kernel images are downloaded from Cilium using Docker.
+# --initramfs <path> reuses a prebuilt initramfs (with sibling .manifest) as
+# the first argument instead of generating one.
 
 set -eu
 set -o pipefail
@@ -23,6 +25,13 @@ if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
 fi
 readonly sudo
 
+prebuilt_initramfs=""
+if [[ "${1:-}" == "--initramfs" ]]; then
+  (( $# >= 2 )) || fail "--initramfs requires a path argument"
+  prebuilt_initramfs="$2"
+  shift 2
+fi
+
 (( $# > 0 )) || fail "Expecting one or more kernel versions as arguments"
 for kernel_version in "$@"
 do
@@ -37,10 +46,10 @@ case "$qemu_arch" in
 esac
 readonly kern_dir="${KERN_DIR:-$repo_root/ci-kernels/$kernel_arch}"
 
-for dependency in bluebox "qemu-system-$qemu_arch"
-do
-  command -v "$dependency" >/dev/null || fail "Missing dependency: $dependency (see support/README.md)"
-done
+command -v "qemu-system-$qemu_arch" >/dev/null || fail "Missing dependency: qemu-system-$qemu_arch (see support/README.md)"
+if [[ -z "${prebuilt_initramfs}" ]]; then
+  command -v bluebox >/dev/null || command -v go >/dev/null || fail "Missing dependency: bluebox or go (see support/README.md)"
+fi
 
 download_kernel() (
   kernel_dir="$kern_dir/$kernel_version"
@@ -64,32 +73,32 @@ download_kernel() (
   mv "$download_dir/boot/vmlinuz" "$kernel_dir/vmlinuz"
 )
 
-echo Generating initramfs
-expected=0
-bb_args=()
-while IFS='' read -r -d '' line ; do
-    bb_args+=(-e "${line}:-test.v")
-    ((expected=expected+1))
-done < <(find "$repo_root/support" -name '*.test' -print0 | sort -z)
-((expected > 0)) || fail "No test binaries in $repo_root/support"
 output="$(mktemp -d --suffix=-output)"
 readonly output
 trap '$sudo rm -rf "$output"' EXIT
-bb_args+=(-o "${output}/initramfs.cpio")
 
 additionalQemuArgs=""
 kernelCmdline="quiet"
 
 case "$qemu_arch" in
     x86_64)
-        bb_args+=(-a amd64)
         kernelCmdline="console=ttyS0 ${kernelCmdline}"
         ;;
     aarch64)
-        bb_args+=(-a arm64)
         additionalQemuArgs+=" -machine virt"
         ;;
 esac
+
+if [[ -n "${prebuilt_initramfs}" ]]; then
+    [ -e "$prebuilt_initramfs" ] && [ -e "${prebuilt_initramfs%.cpio}.manifest" ] || fail "Prebuilt initramfs or manifest missing: $prebuilt_initramfs"
+    initramfs_path="$prebuilt_initramfs"
+else
+    echo Generating initramfs
+    initramfs_path="${output}/initramfs-${kernel_arch}.cpio"
+    (cd "$repo_root/support" && ./gen-initramfs.sh "${initramfs_path}" "${kernel_arch}") || fail "failed to generate initramfs"
+fi
+expected="$(grep -c . "${initramfs_path%.cpio}.manifest" || true)"
+((expected > 0)) || fail "No test binaries in ${initramfs_path%.cpio}.manifest"
 
 # Enable KVM when the guest architecture matches the host and /dev/kvm is
 # available. Otherwise pick a CPU model for full TCG emulation.
@@ -113,8 +122,6 @@ elif [ "$qemu_arch" = "aarch64" ]; then
     additionalQemuArgs+=" -cpu cortex-a72"
   fi
 fi
-
-bluebox "${bb_args[@]}" || fail "failed to generate initramfs"
 
 smp="$(nproc 2>/dev/null || echo 4)"
 [ "$smp" -gt 4 ] && smp=4
@@ -141,7 +148,7 @@ do
 	-no-user-config \
 	-m 4G \
 	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
-	-initrd "${output}/initramfs.cpio" \
+	-initrd "${initramfs_path}" \
 	-append "${kernelCmdline}" || qemu_status=$?
 
   # Qemu disables terminal line-wrapping; restore it after each run.
