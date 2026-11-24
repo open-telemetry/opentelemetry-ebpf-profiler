@@ -1,5 +1,11 @@
 name: Common environment setup
 
+inputs:
+  go-version:
+    description: 'Go version to install (e.g. "stable"). Defaults to the version pinned in go.mod.'
+    required: false
+    default: ''
+
 runs:
   using: composite
   steps:
@@ -23,8 +29,6 @@ runs:
       run: |
         sudo apt-get install -y --no-install-recommends --no-install-suggests llvm-17 clang-17 clang-format-17
     - name: Set up Go
-      uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      uses: $/.github/workflows/go-setup
       with:
-        go-version-file: go.mod
-        cache-dependency-path: go.sum
-      id: go
+        go-version: ${{ inputs.go-version }}

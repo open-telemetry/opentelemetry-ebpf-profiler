@@ -1,0 +1,91 @@
+{
+  "coredump-ref": "d2caf98a768abb08e9290f7436b6de1b729bd42e7fa3bfd745e1e8e6378d4683",
+  "threads": [
+    {
+      "lwp": 1,
+      "frames": [
+        "recur_fibo+1 in <string>:2",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "recur_fibo+3 in <string>:4",
+        "<module>+6 in <string>:7",
+        "libpython3.13.so.1.0+0x199ca7",
+        "libpython3.13.so.1.0+0x22d113",
+        "libpython3.13.so.1.0+0x26aaf2",
+        "libpython3.13.so.1.0+0x2679c9",
+        "libpython3.13.so.1.0+0x2634c3",
+        "libpython3.13.so.1.0+0x263230",
+        "libpython3.13.so.1.0+0x109a72",
+        "embed_shared+0x1184",
+        "libc.so.6+0x29ca7",
+        "libc.so.6+0x29d64",
+        "embed_shared+0x1080"
+      ]
+    },
+    {
+      "lwp": 138,
+      "frames": [
+        "libc.so.6+0x9a72e",
+        "libc.so.6+0x8f387",
+        "libc.so.6+0xdbcf9",
+        "libpython3.13.so.1.0+0x2b9e1f",
+        "sleeps_without_gil+2 in <string>:6",
+        "calls_sleep+1 in <string>:9",
+        "Thread.run+11 in /usr/local/lib/python3.13/threading.py:995",
+        "Thread._bootstrap_inner+16 in /usr/local/lib/python3.13/threading.py:1044",
+        "Thread._bootstrap+14 in /usr/local/lib/python3.13/threading.py:1015",
+        "libpython3.13.so.1.0+0x199deb",
+        "libpython3.13.so.1.0+0x1da161",
+        "libpython3.13.so.1.0+0x2aa176",
+        "libpython3.13.so.1.0+0x2aa0fb",
+        "libc.so.6+0x928ba",
+        "libc.so.6+0x110537"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "6d567d53e895273ca14a1f9dc164fc6c8d39aed2f60aa46a733c2784228915f3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "52c227df9d53248238602c1ddaccd2c8ddc4cc6a61aa45d7c425af590b8806a5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache"
+    },
+    {
+      "ref": "ec303851aafe84b4f8b2aa0af80b332b85c790aa1f49b08e5458d0babc769332",
+      "local-path": "/usr/local/lib/libpython3.13.so.1.0"
+    },
+    {
+      "ref": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "7cec29a001bfcb14d926a0fffd86e60597be58a4d9d0683734c3205817a6702e",
+      "local-path": "/tmp/work/embed_shared"
+    },
+    {
+      "ref": "1257597210f43630e7c8a745ae95127e96b93a43515ac5163cab459ddc1664b3",
+      "local-path": "/usr/lib/locale/C.utf8/LC_CTYPE"
+    }
+  ]
+}

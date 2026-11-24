@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	commonpb "go.opentelemetry.io/proto/slim/otlp/common/v1"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"

@@ -103,10 +103,10 @@ func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
 
 	t.Run("not handled", func(t *testing.T) {
-		err := validateSystemAnalysisResult(support.SystemAnalysis{Pid: 77}, address)
+		err := validateSystemAnalysisResult(support.SystemAnalysis{Tid: 77}, address)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errSystemAnalysisNotHandled)
-		require.ErrorContains(t, err, "pid 77")
+		require.ErrorContains(t, err, "tid 77")
 	})
 
 	t.Run("helper failure", func(t *testing.T) {

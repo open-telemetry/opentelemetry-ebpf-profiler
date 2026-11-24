@@ -20,8 +20,8 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
+	commonpb "go.opentelemetry.io/proto/slim/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/slim/otlp/processcontext/v1development"
 	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"

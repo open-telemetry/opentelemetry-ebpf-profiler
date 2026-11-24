@@ -190,7 +190,7 @@ type StackDeltaPageDesc struct {
 type SystemAnalysis struct {
 	Address   uint64
 	Size      uint32
-	Pid       uint32
+	Tid       uint32
 	Err       int32
 	Code      [128]uint8
 	Pad_cgo_0 [4]byte

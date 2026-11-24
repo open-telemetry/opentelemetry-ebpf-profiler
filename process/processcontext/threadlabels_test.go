@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	commonpb "go.opentelemetry.io/proto/slim/otlp/common/v1"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )

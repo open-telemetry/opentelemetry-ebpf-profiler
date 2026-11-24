@@ -20,9 +20,9 @@ import (
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
-	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
-	processcontextpb "go.opentelemetry.io/proto/otlp/processcontext/v1development"
-	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
+	commonpb "go.opentelemetry.io/proto/slim/otlp/common/v1"
+	processcontextpb "go.opentelemetry.io/proto/slim/otlp/processcontext/v1development"
+	resourcepb "go.opentelemetry.io/proto/slim/otlp/resource/v1"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
