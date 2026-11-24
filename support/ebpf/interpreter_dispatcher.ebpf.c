@@ -80,14 +80,15 @@ struct reported_pids_t {
 // User space code will periodically iterate through the map and process each entry.
 // Additionally, each time eBPF code writes a value into the map, user space is notified
 // through event_send_trigger (which uses maps/report_events). As key we use the PID/TID
-// of the process/thread and as value always true. When sizing this map, we are thinking
+// of the process/thread. The value is 0 for a full synchronization, or the announced
+// OTEL_CTX header address for a context refresh. When sizing this map, we are thinking
 // about the maximum number of unique PIDs that could generate events we're interested in
 // (process new, thread group exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
 struct pid_events_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, u64);
-  __type(value, bool);
+  __type(value, u64);
   __uint(max_entries, 65536);
 } pid_events SEC(".maps");
 
@@ -506,7 +507,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
     break;
   case metricID_UnwindNativeErrWrongTextSection:;
     u64 pid_tgid = (u64)trace->pid << 32 | trace->tid;
-    if (report_pid(ctx, pid_tgid, record->ratelimitAction)) {
+    if (report_pid(ctx, pid_tgid, record->ratelimitAction, 0)) {
       increment_metric(metricID_NumUnknownPC);
     }
     // fallthrough

@@ -2206,7 +2206,7 @@
     "id": 300
   },
   {
-    "description": "Number of PID resynchronizations triggered by the prctl monitor",
+    "description": "Number of process context refresh notifications from the prctl monitor",
     "type": "counter",
     "name": "NumSyncsFromPrctl",
     "field": "bpf.num_syncs_from_prctl",

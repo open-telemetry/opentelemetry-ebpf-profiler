@@ -416,9 +416,10 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
 
 // report_pid informs userspace about a PID that needs to be processed.
 // See pid_event_ratelimit for ratelimit_action functional specifics.
+// value is 0 for a full synchronization, or a context refresh address.
 // Returns true if userspace was notified, false if the event was dropped or (for
 // RATELIMIT_ACTION_PRIORITY) deferred.
-static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit_action)
+static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit_action, u64 value)
 {
   u32 pid = pid_tgid >> 32;
 
@@ -431,9 +432,9 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
     return false;
   }
 
-  bool value = true;
-  int errNo  = bpf_map_update_elem(&pid_events, &pid_tgid, &value, BPF_ANY);
-  if (errNo != 0) {
+  // A refresh must not replace a pending full synchronization.
+  int errNo = bpf_map_update_elem(&pid_events, &pid_tgid, &value, value ? BPF_NOEXIST : BPF_ANY);
+  if (errNo != 0 && !(value && errNo == -EEXIST)) {
     __attribute__((unused)) u32 tid = pid_tgid & 0xFFFFFFFF;
     DEBUG_PRINT("Failed to update pid_events with PID %d TID: %d: %d", pid, tid, errNo);
     increment_metric(metricID_PIDEventsErr);
@@ -1239,7 +1240,7 @@ unwind_trace(struct pt_regs *ctx, PerCPURecord *record, bool kernel_frames)
   PIDPageMappingInfo *pidInfo = pid_information(pid);
   if (!pidInfo) {
     u64 pid_tgid = (u64)pid << 32 | trace->tid;
-    if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
+    if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT, 0)) {
       increment_metric(metricID_NumProcNew);
     }
     return 0;

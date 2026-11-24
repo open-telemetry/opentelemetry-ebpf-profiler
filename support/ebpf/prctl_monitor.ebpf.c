@@ -11,12 +11,10 @@
 #define PR_SET_VMA_ANON_NAME 0
 
 // tracepoint__sys_exit_prctl detects when a process names an anonymous VMA
-// "OTEL_CTX" and triggers a PID resynchronization so the profiler can discover
-// the newly published process context mapping.
+// "OTEL_CTX" and requests a refresh from the announced process context address.
 //
-// We hook syscall exit, not entry, so the resync runs after the kernel has applied
-// the rename; otherwise user space could re-read /proc/<pid>/maps before
-// "[anon:OTEL_CTX]" is visible and miss the freshly published context.
+// We hook syscall exit so a pending full synchronization sees the renamed mapping
+// when it takes precedence over this refresh.
 //
 // The exit tracepoint only carries the return value, so the prctl arguments are
 // recovered from the task's entry pt_regs (preserved across the syscall).
@@ -35,28 +33,30 @@ int tracepoint__sys_exit_prctl(void *ctx)
   }
 
 // prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4,
-//       unsigned long arg5): we only need option, arg2 and arg5 (the name).
+//       unsigned long arg5): arg3 is the header address, arg5 is the name.
 #if defined(__x86_64__)
   u64 option   = regs.di;
   u64 arg2     = regs.si;
+  u64 address  = regs.dx;
   u64 name_ptr = regs.r8;
 #elif defined(__aarch64__)
   // At exit x0 (regs[0]) holds the return value, arg1 is preserved in orig_x0.
   u64 option   = regs.orig_x0;
   u64 arg2     = regs.regs[1];
+  u64 address  = regs.regs[2];
   u64 name_ptr = regs.regs[4];
 #else
   #error unsupported architecture
 #endif
 
-  if (option != PR_SET_VMA || arg2 != PR_SET_VMA_ANON_NAME) {
+  if (option != PR_SET_VMA || arg2 != PR_SET_VMA_ANON_NAME || !address) {
     goto exit;
   }
 
   // The prctl return value is intentionally ignored. Per OTEP 4719, naming the
   // mapping is best-effort and fails on kernels without CONFIG_ANON_VMA_NAME.
   // A memfd-backed context is still discoverable as "/memfd:OTEL_CTX" in that
-  // case, so the attempt itself is the signal to resynchronize.
+  // case, so the attempt itself is the signal to refresh.
 
   u32 pid = 0;
   u32 tid = 0;
@@ -83,7 +83,8 @@ int tracepoint__sys_exit_prctl(void *ctx)
     goto exit;
   }
 
-  if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_PRIORITY)) {
+  // OTEP 4719 fixes the address once published, so a pending refresh never goes stale.
+  if (report_pid(ctx, ((u64)pid << 32) | tid, RATELIMIT_ACTION_PRIORITY, address)) {
     increment_metric(metricID_NumSyncsFromPrctl);
   }
 
