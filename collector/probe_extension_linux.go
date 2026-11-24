@@ -8,14 +8,8 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 import (
 	"go.opentelemetry.io/collector/extension"
 
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
-
-// ProbeExtension must satisfy internal.ProbeProvider.The receiver uses
-// ProbeProvider to avoid a circular import.
-// If either interface changes, this line will fail to compile.
-var _ internal.ProbeProvider = (ProbeExtension)(nil)
 
 // ProbeExtension is implemented by OTel Collector extensions that provide a
 // custom eBPF probe to the ebpf_profiler receiver. Implement this interface

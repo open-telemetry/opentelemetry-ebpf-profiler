@@ -58,7 +58,7 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const UnwindInfoMaxEntries = 0x4000
+const UnwindInfoMaxEntries = 0x8000
 
 const (
 	MetricIDBeginCumulative = 0x75
@@ -173,19 +173,24 @@ type StackDelta struct {
 	AddrLow    uint16
 	UnwindInfo uint16
 }
-type StackDeltaPageInfo struct {
-	FirstDelta uint32
-	NumDeltas  uint16
-	MapID      uint16
+type StackDeltaPair struct {
+	First  StackDelta
+	Second StackDelta
 }
-type StackDeltaPageKey struct {
-	FileID uint64
-	Page   uint64
+type StackDeltaMeta struct {
+	FirstPage uint32
+	NumPages  uint32
+	MapID     uint32
+}
+type StackDeltaPageDesc struct {
+	FirstPair    uint32
+	NumPairs     uint16
+	FallbackInfo uint16
 }
 type SystemAnalysis struct {
 	Address   uint64
 	Size      uint32
-	Pid       uint32
+	Tid       uint32
 	Err       int32
 	Code      [128]uint8
 	Pad_cgo_0 [4]byte
@@ -312,7 +317,7 @@ type PerlProcInfo struct {
 type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
 	NoneStructAddr                 uint64
-	Tls_offset                     int16
+	Tls_tstate                     TLSVarInfo
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
 	PyCFrame_current_frame         uint8
@@ -328,6 +333,7 @@ type PyProcInfo struct {
 	PyCodeObject_sizeof            uint8
 	Lasti_is_codeunit              uint8
 	Frame_is_cframe                uint8
+	Pad_cgo_0                      [6]byte
 }
 type RubyProcInfo struct {
 	Tls_ec                       TLSVarInfo

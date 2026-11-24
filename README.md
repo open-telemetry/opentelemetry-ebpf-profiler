@@ -103,9 +103,13 @@ backends have yet to emerge. The following open source projects can be used as b
   reimplements the backend (collection, data storage, symbolization and UI)
   portion of the eBPF profiler. Note that devfiler is not a real production
   backend and should not be used as such. It is solely aimed at testing,
-  experimentation and development.
+  experimentation and development, and it is no longer actively maintained.
 - [Pyroscope](https://github.com/grafana/pyroscope) — an open source continuous
   profiling database that natively supports ingesting OTel profiling data.
+- [eprofiler-tui](https://github.com/rogercoll/eprofiler-tui) — a terminal UI
+  that receives OTel profiles and renders them as flame graphs.
+- [firepit](https://github.com/florianl/firepit) — a lightweight OTel profiles
+  receiver with non-persistent storage and multiple visualizations.
 
 ## Contributing
 
@@ -141,6 +145,7 @@ For more information about the maintainer role, see the
 
 - [Roger Coll](https://github.com/rogercoll), Grafana Labs
 - [Florian Lehner](https://github.com/florianl), Datadog
+- [Martin Levesque](https://github.com/wehzzz), Datadog
 - [Tim Rühsen](https://github.com/rockdaboot)
 - [Nicolas Savoire](https://github.com/nsavoire), Datadog
 

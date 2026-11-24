@@ -18,12 +18,11 @@ import (
 	"go.uber.org/zap/exp/zapslog"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 var errInvalidConfig = errors.New("invalid config")
@@ -47,8 +46,6 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Interpreters:           interpreterconfig.DefaultInterpreters(),
 		ClockSyncInterval:      3 * time.Minute,
-		MaxGRPCRetries:         5,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
 	}
@@ -67,19 +64,15 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 			return nil, errInvalidConfig
 		}
 
-		controllerOption := &controllerOption{}
+		opts := &receiverOption{reporterFactory: newCollectorReporter}
 		for _, option := range options {
-			controllerOption = option.apply(controllerOption)
+			option.apply(opts)
 		}
 
-		controlerCfg := &controller.Config{
-			Config:               *cfg,
-			ExecutableReporter:   controllerOption.executableReporter,
-			ProcessMetaEnrichers: controllerOption.processMetaEnrichers,
-			ReporterFactory:      controllerOption.reporterFactory,
-			OnShutdown:           controllerOption.onShutdown,
-		}
-
-		return internal.NewController(controlerCfg, rs, nextConsumer)
+		return newProfilesReceiver(cfg, opts, rs, nextConsumer)
 	}
+}
+
+func newCollectorReporter(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+	return reporter.NewCollector(cfg, nextConsumer)
 }

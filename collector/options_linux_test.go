@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux && (amd64 || arm64)
+
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
@@ -21,7 +23,7 @@ import (
 func TestWithExecutableReporter(t *testing.T) {
 	executableReporter := &executableReporterTest{}
 	option := WithExecutableReporter(executableReporter)
-	require.Equal(t, executableReporter, option.apply(&controllerOption{}).executableReporter)
+	require.Equal(t, executableReporter, applyOption(option).executableReporter)
 }
 
 // empty struct that implements the ExecutableReporter interface
@@ -35,7 +37,7 @@ func TestWithOnShutdown(t *testing.T) {
 	require.Equal(
 		t,
 		reflect.ValueOf(onShutdown).Pointer(),
-		reflect.ValueOf(option.apply(&controllerOption{}).onShutdown).Pointer())
+		reflect.ValueOf(applyOption(option).onShutdown).Pointer())
 }
 
 func TestWithProcessMetaEnricher(t *testing.T) {
@@ -55,7 +57,7 @@ func TestWithProcessMetaEnricher(t *testing.T) {
 	})
 
 	opt := WithProcessMetaEnricher(loginUIDEnricher)
-	result := opt.apply(&controllerOption{})
+	result := applyOption(opt)
 	require.Len(t, result.processMetaEnrichers, 1)
 
 	meta := &process.Meta{}
@@ -71,5 +73,11 @@ func TestWithReporterFactory(t *testing.T) {
 	require.Equal(
 		t,
 		reflect.ValueOf(reporterFactory).Pointer(),
-		reflect.ValueOf(option.apply(&controllerOption{}).reporterFactory).Pointer())
+		reflect.ValueOf(applyOption(option).reporterFactory).Pointer())
+}
+
+func applyOption(o Option) *receiverOption {
+	opts := &receiverOption{}
+	o.apply(opts)
+	return opts
 }

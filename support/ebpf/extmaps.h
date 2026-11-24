@@ -34,7 +34,7 @@ extern struct exe_id_to_20_stack_deltas_t exe_id_to_20_stack_deltas;
 extern struct exe_id_to_21_stack_deltas_t exe_id_to_21_stack_deltas;
 extern struct exe_id_to_22_stack_deltas_t exe_id_to_22_stack_deltas;
 extern struct exe_id_to_23_stack_deltas_t exe_id_to_23_stack_deltas;
-extern struct stack_delta_page_to_info_t stack_delta_page_to_info;
+extern struct exe_id_to_stackdelta_meta_t exe_id_to_stackdelta_meta;
 extern struct unwind_info_array_t unwind_info_array;
 
 #if defined(TESTING_COREDUMP)

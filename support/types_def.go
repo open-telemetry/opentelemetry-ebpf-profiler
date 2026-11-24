@@ -141,8 +141,9 @@ type USDTArgumentSpec C.USDTArgumentSpec
 type USDTSpec C.USDTSpec
 type USDTSpecKey C.USDTSpecKey
 type StackDelta C.StackDelta
-type StackDeltaPageInfo C.StackDeltaPageInfo
-type StackDeltaPageKey C.StackDeltaPageKey
+type StackDeltaPair C.StackDeltaPair
+type StackDeltaMeta C.StackDeltaMeta
+type StackDeltaPageDesc C.StackDeltaPageDesc
 type SystemAnalysis C.SystemAnalysis
 type TSDInfo C.TSDInfo
 type TLSVarInfo C.TLSVarInfo

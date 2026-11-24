@@ -1,5 +1,5 @@
-.PHONY: all all-common clean ebpf generate generate-collector test test-deps \
-	test-junit test-luajit-offsets test-coredump tidy protobuf docker-image agent license-check license-save \
+.PHONY: all all-common bloatcheck clean ebpf generate generate-collector test test-deps \
+	test-junit test-luajit-offsets test-coredump tidy go-mod-download protobuf docker-image agent license-check license-save \
 	integration-test-binaries \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
@@ -72,6 +72,10 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
+# Blob size report against a base commit; see support/ebpf/Makefile.
+bloatcheck:
+	$(MAKE) -C support/ebpf bloatcheck
+
 generate-collector:
 	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
@@ -119,6 +123,11 @@ format-ebpf:
 tidy:
 	for mod in $(GO_MODULES); do \
 		go -C $$mod mod tidy || exit ; \
+	done
+
+go-mod-download:
+	for mod in $(GO_MODULES); do \
+		go -C $$mod mod download || exit ; \
 	done
 
 vanity-import-check:
