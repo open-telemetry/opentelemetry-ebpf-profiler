@@ -12,7 +12,7 @@
         "libc.so.6+0x8efa8",
         "libc.so.6+0x82657",
         "libc.so.6+0x8269b",
-        "libc.so.6+0xeb443 (__select)",
+        "libc.so.6+0xeb443 (select)",
         "libruby.so.3.5.0+0x2c9073 (do_select)",
         "libruby.so.3.5.0+0x129e3f (rb_ensure)",
         "libruby.so.3.5.0+0x2c955b (rb_thread_fd_select)",

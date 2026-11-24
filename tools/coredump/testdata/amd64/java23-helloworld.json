@@ -11,7 +11,7 @@
         "libjli.so+0x7180 (JLI_Launch)",
         "java+0xae0 (main)",
         "libc.so.6+0x2958f (__libc_start_call_main)",
-        "libc.so.6+0x2963f (__libc_start_main_alias_1)",
+        "libc.so.6+0x2963f (__libc_start_main)",
         "java+0xb74",
         "<unwinding aborted due to error native_stack_delta_invalid>"
       ]
@@ -20,7 +20,7 @@
       "lwp": 23204,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd2106 (Parker::park(bool, long))",
         "libjvm.so+0xedfeb2 (Unsafe_Park)",
         "void jdk.internal.misc.Unsafe.park(boolean, long)+0 in Unsafe.java:0",
@@ -41,14 +41,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23203,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd24cb (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0xc970b1 (NotificationThread::notification_thread_entry(JavaThread*, JavaThread*))",
@@ -56,14 +56,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23202,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d4db (Monitor::wait(unsigned long))",
         "libjvm.so+0x642229 (CompileQueue::get(CompilerThread*))",
@@ -72,14 +72,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23201,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d4db (Monitor::wait(unsigned long))",
         "libjvm.so+0x642229 (CompileQueue::get(CompilerThread*))",
@@ -88,14 +88,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23200,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0xc70aa2 (MonitorDeflationThread::monitor_deflation_thread_entry(JavaThread*, JavaThread*))",
@@ -103,14 +103,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23199,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0xd86a96 (ServiceThread::service_thread_entry(JavaThread*, JavaThread*))",
@@ -118,7 +118,7 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
@@ -133,14 +133,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23197,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd1c8a (PlatformEvent::park())",
         "libjvm.so+0xca2564 (ObjectMonitor::wait(long, bool, JavaThread*))",
         "libjvm.so+0xe5ceb6 (ObjectSynchronizer::wait(Handle, long, JavaThread*))",
@@ -160,14 +160,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23196,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd24cb (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d4db (Monitor::wait(unsigned long))",
         "libjvm.so+0x9ac489 (JVM_WaitForReferencePendingList)",
@@ -182,14 +182,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23195,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd24cb (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0xf3f2f8 (VMThread::wait_for_operation())",
@@ -197,14 +197,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23194,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0xc96b1a (WatcherThread::sleep() const)",
@@ -212,14 +212,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23193,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x892b3 (__GI___pthread_cond_timedwait)",
+        "libc.so.6+0x892b3 (pthread_cond_timedwait)",
         "libjvm.so+0xcd243b (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0x80d8bd (G1ServiceThread::wait_for_task())",
@@ -228,14 +228,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23192,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd24cb (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0x7b1582 (G1PrimaryConcurrentRefineThread::wait_for_completed_buffers())",
@@ -244,7 +244,7 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
@@ -257,14 +257,14 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23190,
       "frames": [
         "libc.so.6+0x867aa (__futex_abstimed_wait_common)",
-        "libc.so.6+0x88faf (___pthread_cond_wait)",
+        "libc.so.6+0x88faf (pthread_cond_wait)",
         "libjvm.so+0xcd24cb (PlatformMonitor::wait(unsigned long))",
         "libjvm.so+0xc7d458 (Monitor::wait_without_safepoint_check(unsigned long))",
         "libjvm.so+0x7ab6b9 (G1ConcurrentMarkThread::run_service())",
@@ -272,7 +272,7 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
@@ -285,13 +285,13 @@
         "libjvm.so+0xeaa40e (Thread::call_run())",
         "libjvm.so+0xcc61b4 (thread_native_entry(Thread*))",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     },
     {
       "lwp": 23188,
       "frames": [
-        "libc.so.6+0xfdb0f (__libc_write)",
+        "libc.so.6+0xfdb0f (write)",
         "libjava.so+0x169a7 (handleWrite)",
         "libjava.so+0x1641b (writeBytes)",
         "libjava.so+0xf416 (Java_java_io_FileOutputStream_writeBytes)",
@@ -320,7 +320,7 @@
         "libjli.so+0x5379 (JavaMain)",
         "libjli.so+0x7f98 (ThreadJavaMain)",
         "libc.so.6+0x89c11 (start_thread)",
-        "libc.so.6+0x10df53 (__GI___clone)"
+        "libc.so.6+0x10df53 (clone)"
       ]
     }
   ],

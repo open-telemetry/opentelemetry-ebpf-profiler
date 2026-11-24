@@ -5,7 +5,7 @@
       "lwp": 95340,
       "frames": [
         "libc.so.6+0xeca7a (clock_nanosleep)",
-        "libc.so.6+0xf9a26 (__nanosleep)",
+        "libc.so.6+0xf9a26 (nanosleep)",
         "libc.so.6+0x10ec92 (sleep)",
         "vfork+0x12a1 (child_func)",
         "vfork+0x12eb (parent_func)",

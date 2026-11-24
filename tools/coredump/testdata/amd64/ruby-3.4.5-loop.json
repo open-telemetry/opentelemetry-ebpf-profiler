@@ -43,7 +43,7 @@
         "libc.so.6+0x110a6c (epoll_wait)",
         "libruby.so.3.4.5+0x2e8504 (timer_thread_func)",
         "libc.so.6+0x92b7a",
-        "libc.so.6+0x1105ef (__clone)"
+        "libc.so.6+0x1105ef (clone)"
       ]
     }
   ],

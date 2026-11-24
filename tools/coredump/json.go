@@ -30,11 +30,21 @@ type CoredumpTestCase struct {
 	FaultAddresses []string `json:"fault-addresses,omitempty"`
 }
 
+// allInterpreters also names native frames from debug symbols.
+func allInterpreters() interpreterconfig.Config {
+	return withDebugSymbols(interpreterconfig.AllInterpreters())
+}
+
+func withDebugSymbols(cfg interpreterconfig.Config) interpreterconfig.Config {
+	cfg.Symtab.DebugSymbols = true
+	return cfg
+}
+
 func (c *CoredumpTestCase) interpretersConfig() interpreterconfig.Config {
 	if c.Interpreters == nil {
-		return interpreterconfig.AllInterpreters()
+		return allInterpreters()
 	}
-	return *c.Interpreters
+	return withDebugSymbols(*c.Interpreters)
 }
 
 // ModuleInfo stores information about a module that was loaded when the coredump was created.

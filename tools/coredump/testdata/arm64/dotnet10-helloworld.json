@@ -4,7 +4,7 @@
     {
       "lwp": 430615,
       "frames": [
-        "libc.so.6+0xddc9c (__write)",
+        "libc.so.6+0xddc9c (write)",
         "libSystem.Native.so+0x1d49f (SystemNative_Write)",
         "System.IO.StreamWriter.Flush+477 in System.Private.CoreLib.dll:0",
         "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
@@ -34,7 +34,7 @@
     {
       "lwp": 430616,
       "frames": [
-        "libc.so.6+0xe1c3c (__poll)",
+        "libc.so.6+0xe1c3c (poll)",
         "libcoreclr.so+0x6044cb",
         "libcoreclr.so+0x603e9f",
         "libcoreclr.so+0x60e19f",
@@ -45,7 +45,7 @@
     {
       "lwp": 430617,
       "frames": [
-        "libc.so.6+0xe1c3c (__poll)",
+        "libc.so.6+0xe1c3c (poll)",
         "libcoreclr.so+0x2969c7",
         "libcoreclr.so+0x210353",
         "libcoreclr.so+0x21494f",
@@ -57,7 +57,7 @@
     {
       "lwp": 430618,
       "frames": [
-        "libc.so.6+0xdd90c (__open)",
+        "libc.so.6+0xdd90c (open)",
         "libcoreclr.so+0x296373",
         "libcoreclr.so+0x29197f",
         "libcoreclr.so+0x29094f",
@@ -102,7 +102,7 @@
     {
       "lwp": 430622,
       "frames": [
-        "libc.so.6+0xddbc8 (__read)",
+        "libc.so.6+0xddbc8 (read)",
         "libSystem.Native.so+0x2415b",
         "libc.so.6+0x8202f",
         "libc.so.6+0xebf5b"

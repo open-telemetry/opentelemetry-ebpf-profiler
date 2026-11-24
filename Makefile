@@ -157,6 +157,7 @@ test-junit: generate ebpf test-deps
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
+	interpreter/native/testdata \
 	reporter/testdata
 
 GOLABELS_TESTDATA_TARGETS := pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie

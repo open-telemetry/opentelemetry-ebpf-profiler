@@ -4,7 +4,7 @@
     {
       "lwp": 28749,
       "frames": [
-        "libc.so.6+0x11b4fd (__poll)",
+        "libc.so.6+0x11b4fd (poll)",
         "gdb+0x7849dd",
         "gdb+0x7854f7",
         "gdb+0x3d3ea9",

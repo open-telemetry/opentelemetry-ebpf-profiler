@@ -44,7 +44,7 @@
     {
       "lwp": 31322,
       "frames": [
-        "ld-musl-x86_64.so.1+0x570f4 (__munmap)",
+        "ld-musl-x86_64.so.1+0x570f4 (munmap)",
         "libcoreclr.so+0x672415",
         "ld-musl-x86_64.so.1+0x6799f (__pthread_tsd_run_dtors)",
         "ld-musl-x86_64.so.1+0x6731a (pthread_exit)",

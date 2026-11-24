@@ -11,6 +11,10 @@ const defaultNameCacheSize = interpreter.LruFunctionCacheSize
 type Config struct {
 	interpreter.BaseConfig `mapstructure:",squash"`
 
+	// DebugSymbols also reads .symtab and the debug link file, which name
+	// local functions too but cost more memory.
+	DebugSymbols bool `mapstructure:"debug_symbols" json:"debug_symbols,omitempty"`
+
 	// NameCacheSize is the number of names cached per executable, 1024 if zero.
 	NameCacheSize uint32 `mapstructure:"name_cache_size" json:"name_cache_size,omitempty"`
 }

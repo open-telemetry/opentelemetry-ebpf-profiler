@@ -145,7 +145,7 @@
     {
       "lwp": 9,
       "frames": [
-        "libc.so.6+0x11b315 (__open)",
+        "libc.so.6+0x11b315 (open)",
         "libcoreclr.so+0x57507e",
         "libcoreclr.so+0x570096",
         "libcoreclr.so+0x56f204",
@@ -157,7 +157,7 @@
     {
       "lwp": 8,
       "frames": [
-        "libc.so.6+0x11b5fd (__poll)",
+        "libc.so.6+0x11b5fd (poll)",
         "libcoreclr.so+0x57568b",
         "libcoreclr.so+0x4ef84a",
         "libcoreclr.so+0x4f45a5",
@@ -169,7 +169,7 @@
     {
       "lwp": 7,
       "frames": [
-        "libc.so.6+0x11b5fd (__poll)",
+        "libc.so.6+0x11b5fd (poll)",
         "libcoreclr.so+0x66e10f",
         "libcoreclr.so+0x66d772",
         "libcoreclr.so+0x6772ad",

@@ -7,7 +7,7 @@
         "ld-musl-x86_64.so.1+0x68ef4",
         "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
         "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
-        "ld-musl-x86_64.so.1+0x67898 (__pthread_timedjoin_np)",
+        "ld-musl-x86_64.so.1+0x67898 (pthread_timedjoin_np)",
         "libjli.so+0x8753",
         "libjli.so+0x5a79",
         "libjli.so+0x6889 (JLI_Launch)",

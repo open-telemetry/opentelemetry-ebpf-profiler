@@ -1,17 +1,19 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package native names native frames from ELF symbol tables. It is off by
-// default since the symbol tables cost memory per executable.
+// Package native names native frames from ELF symbol tables. It reads only
+// .dynsym unless debug symbols are enabled, as those cost more memory.
 package native // import "go.opentelemetry.io/ebpf-profiler/interpreter/native"
 
 import (
 	"bytes"
+	"cmp"
 	"debug/elf"
 	"fmt"
 	"io"
 	"io/fs"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -34,12 +36,18 @@ var (
 	_ interpreter.Instance = &nativeInstance{}
 )
 
-const maxNesting = 8 // nested and aliased symbols checked per lookup
+const maxNesting = 8 // nested symbols checked per lookup
 
 type symbolEntry struct {
 	address uint32
 	size    uint32
 	nameOff uint32
+}
+
+// rankedSymbol carries what picks one name among the aliases of a function.
+type rankedSymbol struct {
+	symbolEntry
+	local bool
 }
 
 type nativeData struct {
@@ -84,7 +92,8 @@ func load(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 		return nil, nil
 	}
 
-	symbols, strtab, dynstrAddr, dataRef := loadSymbols(ef, info.FileName(), info.FS())
+	symbols, strtab, dynstrAddr, dataRef := loadSymbols(ef, info.FileName(), info.FS(),
+		cfg.DebugSymbols)
 	if len(symbols) == 0 {
 		return nil, nil
 	}
@@ -107,18 +116,21 @@ func load(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	return d, nil
 }
 
-// loadSymbols tries .symtab, then the debug ELF's .symtab, then .dynsym.
-func loadSymbols(ef *pfelf.File, elfPath string, fsys fs.FS) (
+// loadSymbols tries .dynsym last. With debugSymbols it first tries .symtab,
+// then the debug ELF's .symtab.
+func loadSymbols(ef *pfelf.File, elfPath string, fsys fs.FS, debugSymbols bool) (
 	map[uint32][]symbolEntry, []byte, uint64, io.Closer) {
-	if syms, strtab, _ := collectSymbolOffsets(ef, ".symtab"); len(syms) > 0 {
-		return syms, strtab, 0, ef.Take()
-	}
-
-	if debugELF, _ := ef.OpenDebugLink(elfPath, fsys); debugELF != nil {
-		if syms, strtab, _ := collectSymbolOffsets(debugELF, ".symtab"); len(syms) > 0 {
-			return syms, strtab, 0, debugELF
+	if debugSymbols {
+		if syms, strtab, _ := collectSymbolOffsets(ef, ".symtab"); len(syms) > 0 {
+			return syms, strtab, 0, ef.Take()
 		}
-		_ = debugELF.Close()
+
+		if debugELF, _ := ef.OpenDebugLink(elfPath, fsys); debugELF != nil {
+			if syms, strtab, _ := collectSymbolOffsets(debugELF, ".symtab"); len(syms) > 0 {
+				return syms, strtab, 0, debugELF
+			}
+			_ = debugELF.Close()
+		}
 	}
 
 	if syms, _, dynstr := collectSymbolOffsets(ef, ".dynsym"); len(syms) > 0 &&
@@ -145,7 +157,7 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) (
 		return nil, nil, nil
 	}
 
-	symbols := make(map[uint32][]symbolEntry)
+	ranked := make(map[uint32][]rankedSymbol)
 	err = ef.VisitSymbolOffsets(sectionName, func(sym *elf.Sym64) bool {
 		t := elf.ST_TYPE(sym.Info)
 		if t != elf.STT_FUNC && t != elf.STT_GNU_IFUNC || sym.Value == 0 || sym.Size == 0 ||
@@ -153,22 +165,68 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) (
 			return true
 		}
 		high := uint32(sym.Value >> 32)
-		symbols[high] = append(symbols[high], symbolEntry{
-			address: uint32(sym.Value),
-			size:    uint32(sym.Size),
-			nameOff: sym.Name,
+		ranked[high] = append(ranked[high], rankedSymbol{
+			symbolEntry: symbolEntry{
+				address: uint32(sym.Value),
+				size:    uint32(sym.Size),
+				nameOff: sym.Name,
+			},
+			local: elf.ST_BIND(sym.Info) == elf.STB_LOCAL,
 		})
 		return true
 	})
-	if err != nil || len(symbols) == 0 {
+	if err != nil || len(ranked) == 0 {
 		return nil, nil, nil
 	}
-	for high := range symbols {
-		sort.Slice(symbols[high], func(i, j int) bool {
-			return symbols[high][i].address < symbols[high][j].address
-		})
+	symbols := make(map[uint32][]symbolEntry, len(ranked))
+	for high, syms := range ranked {
+		symbols[high] = dedupeAliases(strtab, syms)
 	}
 	return symbols, strtab, strTab
+}
+
+// dedupeAliases sorts syms by address, an enclosing symbol before the ones it
+// nests, and keeps the best ranked name of each address and size.
+func dedupeAliases(strtab []byte, syms []rankedSymbol) []symbolEntry {
+	slices.SortFunc(syms, func(a, b rankedSymbol) int {
+		if c := cmp.Or(cmp.Compare(a.address, b.address), cmp.Compare(b.size, a.size)); c != 0 {
+			return c
+		}
+		return compareAliases(strtab, a, b)
+	})
+	syms = slices.CompactFunc(syms, func(a, b rankedSymbol) bool {
+		return a.address == b.address && a.size == b.size
+	})
+	symbols := make([]symbolEntry, len(syms))
+	for i := range syms {
+		symbols[i] = syms[i].symbolEntry
+	}
+	return symbols
+}
+
+// compareAliases ranks exported names before local ones, then fewer leading
+// underscores, then the shorter name.
+func compareAliases(strtab []byte, a, b rankedSymbol) int {
+	if a.local != b.local {
+		if b.local {
+			return -1
+		}
+		return 1
+	}
+	an, bn := rawName(strtab, a.nameOff), rawName(strtab, b.nameOff)
+	return cmp.Or(
+		cmp.Compare(len(an)-len(bytes.TrimLeft(an, "_")), len(bn)-len(bytes.TrimLeft(bn, "_"))),
+		cmp.Compare(len(an), len(bn)),
+		bytes.Compare(an, bn),
+		cmp.Compare(a.nameOff, b.nameOff),
+	)
+}
+
+// rawName returns the name at nameOff without its symbol version.
+func rawName(strtab []byte, nameOff uint32) []byte {
+	name, _, _ := bytes.Cut(strtab[nameOff:], []byte{0})
+	name, _, _ = bytes.Cut(name, []byte{'@'})
+	return name
 }
 
 func demangleSymbol(name string) string {
@@ -188,13 +246,12 @@ func (inst *nativeInstance) symbolName(nameOff uint32) libpf.String {
 
 	var raw string
 	if d.strtab != nil {
-		if end := bytes.IndexByte(d.strtab[nameOff:], 0); end >= 0 {
-			raw = string(d.strtab[nameOff : int(nameOff)+end])
-		}
+		raw = string(rawName(d.strtab, nameOff))
 	} else {
-		raw = inst.rm.String(inst.bias + libpf.Address(d.dynstrAddr+uint64(nameOff)))
+		raw, _, _ = strings.Cut(
+			inst.rm.String(inst.bias+libpf.Address(d.dynstrAddr+uint64(nameOff))), "@")
 	}
-	if raw, _, _ = strings.Cut(raw, "@"); raw == "" {
+	if raw == "" {
 		return libpf.NullString
 	}
 	name := libpf.Intern(demangleSymbol(raw))

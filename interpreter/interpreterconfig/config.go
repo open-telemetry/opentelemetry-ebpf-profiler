@@ -40,13 +40,6 @@ type Config struct {
 // AllInterpreters returns a Config with all interpreters enabled.
 func AllInterpreters() Config { return Config{} }
 
-// DefaultInterpreters is AllInterpreters without native symbolization.
-func DefaultInterpreters() Config {
-	cfg := AllInterpreters()
-	cfg.Symtab.Disabled = true
-	return cfg
-}
-
 // NoInterpreters returns a Config with all interpreters disabled.
 func NoInterpreters() Config {
 	disabled := interpreter.BaseConfig{Disabled: true}
@@ -103,7 +96,6 @@ func (cfg *Config) Loaders() []interpreter.Loader {
 	if !cfg.ThreadContext.IsDisabled() {
 		loaders = append(loaders, threadcontext.GetLoader(cfg.ThreadContext))
 	}
-	// Last, so interpreter symbolizers win.
 	if !cfg.Symtab.IsDisabled() {
 		loaders = append(loaders, native.GetLoader(cfg.Symtab))
 	}

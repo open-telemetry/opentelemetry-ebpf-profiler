@@ -12,7 +12,7 @@
         "libc.so.6+0x8efa8",
         "libc.so.6+0x82657",
         "libc.so.6+0x8269b",
-        "libc.so.6+0xeb443 (__select)",
+        "libc.so.6+0xeb443 (select)",
         "libruby.so.3.4.5+0x2d1033 (do_select)",
         "libruby.so.3.4.5+0x12d7df (rb_ensure)",
         "libruby.so.3.4.5+0x2d151b (rb_thread_fd_select)",
@@ -33,7 +33,7 @@
     {
       "lwp": 907049,
       "frames": [
-        "libc.so.6+0x89478 (__pthread_mutex_lock)",
+        "libc.so.6+0x89478 (pthread_mutex_lock)",
         "libruby.so.3.4.5+0x2c4533 (rb_native_mutex_lock)",
         "libruby.so.3.4.5+0x33ddb3 (vm_lock_enter)",
         "libruby.so.3.4.5+0x312d43 (callable_method_entry_or_negative)",

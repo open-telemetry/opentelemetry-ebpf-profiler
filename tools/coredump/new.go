@@ -18,7 +18,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -186,7 +185,7 @@ func (cmd *newCmd) exec(context.Context, []string) (err error) {
 	testCase := &CoredumpTestCase{}
 
 	testCase.Threads, err = ExtractTraces(context.Background(), core, cmd.debugEbpf, nil, nil,
-		interpreterconfig.AllInterpreters())
+		allInterpreters())
 	if err != nil {
 		return fmt.Errorf("failed to extract traces: %w", err)
 	}

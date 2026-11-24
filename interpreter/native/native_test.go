@@ -7,8 +7,8 @@ import (
 	"debug/elf"
 	"io"
 	"os"
-	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -22,19 +22,79 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/testsupport"
 )
 
-func requireNativeTestBin(t *testing.T) {
+func requireNativeTestBin(t *testing.T, path string) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
 		t.Skip("native ELF test binary is only built on Linux")
 	}
-	if _, err := os.Stat("testdata/testbin-dynsym"); err == nil {
-		return
+	testsupport.RequireGeneratedTestFile(t, path)
+}
+
+func TestDedupeAliases(t *testing.T) {
+	var strtab []byte
+	sym := func(name string, address, size uint32, local bool) rankedSymbol {
+		strtab = append(strtab, 0)
+		nameOff := uint32(len(strtab))
+		strtab = append(strtab, name...)
+		return rankedSymbol{symbolEntry{address, size, nameOff}, local}
 	}
-	cmd := exec.Command("make", "-C", "testdata")
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "failed to build native test binary: %s", out)
+	syms := []rankedSymbol{
+		sym("__GI___clone", 0x1000, 0x10, true),
+		sym("__clone", 0x1000, 0x10, false),
+		sym("clone", 0x1000, 0x10, false),
+		sym("___pthread_cond_wait", 0x2000, 0x10, true),
+		sym("pthread_cond_wait@GLIBC_2.17", 0x2000, 0x10, false),
+		sym("pthread_cond_wait@@GLIBC_2.34", 0x2000, 0x10, false),
+		sym("__libc_start_main_impl", 0x3000, 0x10, true),
+		sym("__libc_start_main@@GLIBC_2.34", 0x3000, 0x10, false),
+		sym("Py_RunMain.localalias", 0x4000, 0x10, true),
+		sym("Py_RunMain", 0x4000, 0x10, false),
+		sym("a_local", 0x5000, 0x10, true),
+		sym("the_exported", 0x5000, 0x10, false),
+		sym("inner", 0x6000, 0x10, false),
+		sym("outer", 0x6000, 0x20, false),
+	}
+	strtab = append(strtab, 0)
+
+	want := []string{"clone", "pthread_cond_wait", "__libc_start_main", "Py_RunMain",
+		"the_exported", "outer", "inner"}
+	for _, reversed := range []bool{false, true} {
+		in := slices.Clone(syms)
+		if reversed {
+			slices.Reverse(in)
+		}
+		var got []string
+		for _, s := range dedupeAliases(strtab, in) {
+			got = append(got, string(rawName(strtab, s.nameOff)))
+		}
+		assert.Equal(t, want, got, "reversed input: %v", reversed)
+	}
+}
+
+func TestDebugSymbolsOptIn(t *testing.T) {
+	requireNativeTestBin(t, "testdata/testbin-symtab")
+
+	tests := []struct {
+		name       string
+		cfg        Config
+		wantSymtab bool
+	}{
+		{"dynsym only by default", Config{}, false},
+		{"symtab with debug symbols", Config{DebugSymbols: true}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			elfRef := pfelf.NewReference("testbin-symtab", os.DirFS("testdata"))
+			data, err := load(tt.cfg, interpreter.NewLoaderInfo(host.FileID(1), elfRef, nil))
+			require.NoError(t, err)
+			require.NotNil(t, data)
+			defer data.Unload(nil)
+			assert.Equal(t, tt.wantSymtab, data.(*nativeData).strtab != nil)
+		})
+	}
 }
 
 func TestLoaderSkipsGoBinary(t *testing.T) {
@@ -149,7 +209,7 @@ func (m fileMemory) ReadAt(p []byte, addr int64) (int, error) {
 }
 
 func TestSymbolizeDynsym(t *testing.T) {
-	requireNativeTestBin(t)
+	requireNativeTestBin(t, "testdata/testbin-dynsym")
 
 	f, err := os.Open("testdata/testbin-dynsym")
 	require.NoError(t, err)
