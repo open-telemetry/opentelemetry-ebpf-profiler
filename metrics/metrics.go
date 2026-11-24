@@ -46,7 +46,8 @@ var (
 
 	// OTel metric instrumentation
 	counters = map[MetricID]metric.Int64Counter{}
-	gauges   = map[MetricID]metric.Int64Gauge{}
+counters map[MetricID]metric.Int64Counter{}
+gauges   map[MetricID]metric.Int64Gauge{}
 )
 
 // Enabled reports whether a real (non-noop) metric meter was provided to Start().
@@ -63,8 +64,8 @@ func Start(meter metric.Meter) {
 	metricTypes = make(map[MetricID]MetricType, len(defs))
 	// Reset instruments so that a repeated call to Start() does not keep
 	// instruments created from a previously provided meter.
-	counters = map[MetricID]metric.Int64Counter{}
-	gauges = map[MetricID]metric.Int64Gauge{}
+	counters = make(map[MetricID]metric.Int64Counter)
+	gauges = make(map[MetricID]metric.Int64Gauge)
 	for _, md := range defs {
 		if md.Obsolete || md.Field == "" {
 			continue
