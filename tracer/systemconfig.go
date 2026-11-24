@@ -341,18 +341,22 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
 	// The tracepoint services the request on entry of the next syscall of this
-	// pinned thread, which is the lookup below. We've seen occasional CI
-	// failures where this is missed: the multi-vCPU QEMU TCG emulation can be
-	// late in propagating the freshly patched tracepoint to the requesting
-	// vCPU, so back-to-back syscalls all execute inside the stale window.
-	// Retry the lookups for a bounded wall-clock time.
-	for end := time.Now().Add(250 * time.Millisecond); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
-		if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil {
-			break
+	// pinned thread, which is the lookup below.
+	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
+	if err == nil && data.Tid != 0 {
+		// We've seen occasional CI failures where this is missed: the
+		// multi-vCPU QEMU TCG emulation can be late in propagating the
+		// freshly patched tracepoint to the requesting vCPU, so back-to-back
+		// syscalls all execute inside the stale window. Retry the lookups for
+		// a bounded wall-clock time so at least one attempt runs after the
+		// propagation has landed.
+		start := time.Now()
+		for ; time.Since(start) < 250*time.Millisecond; time.Sleep(5 * time.Millisecond) {
+			if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil || data.Tid == 0 {
+				break
+			}
 		}
-		if data.Tid == 0 {
-			break
-		}
+		log.Infof("System analysis needed retries, waited %v", time.Since(start))
 	}
 	_ = progLink.Close()
 	if err != nil {
