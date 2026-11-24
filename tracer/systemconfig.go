@@ -278,9 +278,14 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 }
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
+// For read_task_struct, the returned addr is the struct pt_regs pointer on the entry stack.
 func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue, size int,
 ) (code []byte, addr uint64, err error) {
+	// Pin the thread so only its syscalls service the tid-guarded request.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	systemAnalysis := maps["system_analysis"]
 
 	maxSize := int(unsafe.Sizeof(support.SystemAnalysis{}.Code))
@@ -295,7 +300,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	data := support.SystemAnalysis{
 		Address: uint64(address),
 		Size:    uint32(size),
-		Pid:     uint32(os.Getpid()),
+		Tid:     uint32(unix.Gettid()),
 	}
 
 	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
@@ -334,7 +339,18 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
-	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
+	// The tracepoint services the request on entry of the next bpf() syscall, which is
+	// the lookup below. We've seen an occasional CI failure where this is missed.
+	// The multi-vCPU QEMU TCG possibly failed to invalidate and retranslate the
+	// tracepoint code. Retry a few times to avoid sporadic test suite failures.
+	for range 10 {
+		if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil {
+			break
+		}
+		if data.Tid == 0 {
+			break
+		}
+	}
 	_ = progLink.Close()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
@@ -347,8 +363,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if data.Pid != 0 {
-		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	if data.Tid != 0 {
+		return fmt.Errorf("%w for tid %d at 0x%x", errSystemAnalysisNotHandled, data.Tid, address)
 	}
 
 	if data.Err != 0 {
