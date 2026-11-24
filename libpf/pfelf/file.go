@@ -1026,10 +1026,13 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string, RelocTy
 
 		// Names are read from zero-copy views of the string table; the
 		// pinned stream window is not invalidated by these lookups.
-		// Unreadable names are passed as empty instead of aborting the walk.
+		// Unreadable names are skipped instead of aborting the walk.
 		symStr, err := libpf.StringFromView(f.elfReader,
 			int64(strtabSection.Offset)+int64(sym.Name), strtabEnd)
-		if err != nil && !errors.Is(err, libpf.ErrNoString) {
+		if errors.Is(err, libpf.ErrNoString) {
+			continue
+		}
+		if err != nil {
 			return false, fmt.Errorf("failed to read relocation symbol name: %w", err)
 		}
 		if !visitor(*rela, symStr, relType) {
