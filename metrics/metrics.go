@@ -45,9 +45,8 @@ var (
 	metricTypes map[MetricID]MetricType
 
 	// OTel metric instrumentation
-	counters = map[MetricID]metric.Int64Counter{}
-counters map[MetricID]metric.Int64Counter{}
-gauges   map[MetricID]metric.Int64Gauge{}
+	counters map[MetricID]metric.Int64Counter
+	gauges   map[MetricID]metric.Int64Gauge
 )
 
 // Enabled reports whether a real (non-noop) metric meter was provided to Start().
