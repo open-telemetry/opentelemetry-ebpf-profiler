@@ -17,5 +17,12 @@ while IFS='' read -r -d '' line ; do
     echo "${line##*/}" >> "${output%.cpio}.manifest"
 done < <(find . -name '*.test' -print0 | sort -z)
 
-# GOARCH= keeps bluebox itself running on the host despite a cross GOARCH.
-GOARCH= go run github.com/florianl/bluebox@v0.0.1 "${bb_args[@]}"
+if command -v bluebox >/dev/null; then
+    bluebox "${bb_args[@]}"
+elif command -v go >/dev/null; then
+    # GOARCH= keeps bluebox itself running on the host despite a cross GOARCH.
+    GOARCH= go run github.com/florianl/bluebox@v0.0.1 "${bb_args[@]}"
+else
+    echo "bluebox or go is required to generate the initramfs (see support/README.md)" >&2
+    exit 1
+fi

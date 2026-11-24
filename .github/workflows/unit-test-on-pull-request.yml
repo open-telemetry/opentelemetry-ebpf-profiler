@@ -150,14 +150,14 @@ jobs:
       - name: Set up environment
         uses: $/.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
-        run: make integration-initramfs TARGET_ARCH=${{ matrix.target_arch }}
+        run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test initramfs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: integration-initramfs-${{ matrix.target_arch }}
           path: |
-            support/initramfs.cpio
-            support/initramfs.manifest
+            support/initramfs-${{ matrix.target_arch }}.cpio
+            support/initramfs-${{ matrix.target_arch }}.manifest
 
   coredump-test-macos:
     name: Coredump tests (macOS)
@@ -246,7 +246,7 @@ jobs:
             arm64) export QEMU_ARCH=aarch64;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
-          support/run-tests.sh ${{ matrix.kernel }}
+          support/run-tests.sh --initramfs "support/initramfs-${{ matrix.target_arch }}.cpio" ${{ matrix.kernel }}
 
   # Not in the qemu matrix: that initramfs cannot load shared libraries.
   host-integration-tests:
