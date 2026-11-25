@@ -1,6 +1,6 @@
 .PHONY: all all-common bloatcheck clean ebpf generate generate-collector test test-deps \
 	test-junit test-luajit-offsets test-coredump tidy go-mod-download protobuf docker-image agent license-check license-save \
-	integration-test-binaries \
+	integration-test-binaries integration-tests \
 	codespell lint format format-ebpf format-go pprof-execs \
 	processctx-execs tlsvar-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
@@ -62,7 +62,7 @@ clean:
 	@$(MAKE) -C process/processcontext/integrationtests/testdata clean
 	@$(MAKE) -C tls/testdata clean
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache support/*.test interpreter/go/integrationtests/pprof_1_*
+	@rm -rf go .cache support/*.test support/initramfs*.cpio support/initramfs*.manifest interpreter/go/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 
 generate:
@@ -169,6 +169,15 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
 
+CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^ ,}]+) \}.*/\1/p' \
+		.github/workflows/unit-test-on-pull-request.yml)
+
+# Run on one kernel, or every CI kernel for TARGET_ARCH.
+KERNEL_VERSIONS ?= $(CI_KERNELS)
+
+integration-tests: integration-test-binaries
+	QEMU_ARCH=$(ARCH_PREFIX) ./support/run-tests.sh --initramfs support/initramfs-$(TARGET_ARCH).cpio $(KERNEL_VERSIONS)
+
 processctx-execs:
 	$(MAKE) -C process/processcontext/integrationtests/testdata
 
@@ -214,6 +223,7 @@ integration-test-binaries: generate ebpf pprof-execs
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)
+	cd support && ./gen-initramfs.sh initramfs-$(TARGET_ARCH).cpio $(TARGET_ARCH)
 
 docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .

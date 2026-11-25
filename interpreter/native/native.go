@@ -135,7 +135,7 @@ func loadSymbols(ef *pfelf.File, elfPath string, fsys fs.FS, debugSymbols bool) 
 
 	if syms, _, dynstr := collectSymbolOffsets(ef, ".dynsym"); len(syms) > 0 &&
 		dynstr.Flags&elf.SHF_ALLOC != 0 && dynstr.Addr != 0 {
-		return syms, nil, dynstr.Addr, pfelf.NoMmapCloser{}
+		return syms, nil, dynstr.Addr, pfelf.NoOpCloser{}
 	}
 	return nil, nil, 0, nil
 }
