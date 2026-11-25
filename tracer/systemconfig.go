@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -279,9 +280,14 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 }
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
+// For read_task_struct, the returned addr is the struct pt_regs pointer on the entry stack.
 func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue, size int,
 ) (code []byte, addr uint64, err error) {
+	// Pin the thread so only its syscalls service the tid-guarded request.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	systemAnalysis := maps["system_analysis"]
 
 	maxSize := int(unsafe.Sizeof(support.SystemAnalysis{}.Code))
@@ -296,7 +302,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	data := support.SystemAnalysis{
 		Address: uint64(address),
 		Size:    uint32(size),
-		Pid:     uint32(os.Getpid()),
+		Tid:     uint32(unix.Gettid()),
 	}
 
 	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
@@ -335,7 +341,24 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
+	// The tracepoint services the request on entry of the next syscall of this
+	// pinned thread, which is the lookup below.
 	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
+	if err == nil && data.Tid != 0 {
+		// We've seen occasional CI failures where this is missed: the
+		// multi-vCPU QEMU TCG emulation can be late in propagating the
+		// freshly patched tracepoint to the requesting vCPU, so back-to-back
+		// syscalls all execute inside the stale window. Retry the lookups for
+		// a bounded wall-clock time so at least one attempt runs after the
+		// propagation has landed.
+		start := time.Now()
+		for ; time.Since(start) < 250*time.Millisecond; time.Sleep(5 * time.Millisecond) {
+			if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil || data.Tid == 0 {
+				break
+			}
+		}
+		log.Infof("System analysis needed retries, waited %v", time.Since(start))
+	}
 	_ = progLink.Close()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
@@ -348,8 +371,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if data.Pid != 0 {
-		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	if data.Tid != 0 {
+		return fmt.Errorf("%w for tid %d at 0x%x", errSystemAnalysisNotHandled, data.Tid, address)
 	}
 
 	if data.Err != 0 {
