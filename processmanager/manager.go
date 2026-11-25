@@ -439,9 +439,11 @@ func (pm *ProcessManager) processTrace(e *traceEvent) {
 	}
 
 	trace := pm.handleDecodedTrace(e, entry.Meta)
-	pm.tracePool.Put(e)
 
+	// The context aliases the pooled record: pool the event only after the
+	// hook ran.
 	entry.Hooks.PostHandleTrace(ctx, trace)
+	pm.tracePool.Put(e)
 }
 
 // handleDecodedTrace processes and reports the given decoded trace event.

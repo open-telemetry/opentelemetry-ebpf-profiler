@@ -15,7 +15,7 @@ import (
 )
 
 // TraceContext carries origin-scoped trace information. ContextValues alias
-// the pooled buffer and are valid only during the call.
+// the pooled buffer and are valid until PostHandleTrace returns.
 type TraceContext struct {
 	// Origin is the trace origin ID.
 	Origin uint16
