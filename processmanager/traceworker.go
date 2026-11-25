@@ -4,8 +4,6 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
-	"context"
-
 	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
@@ -25,30 +23,21 @@ type traceOp struct {
 }
 
 // submit enqueues op for the trace worker, blocking while the queue is full.
-// On shutdown, the operation is dropped.
 func (pm *ProcessManager) submit(op traceOp) {
-	select {
-	case pm.traceOps <- op:
-	case <-pm.lifecycleCtx.Done():
-		if op.event != nil {
-			pm.tracePool.Put(op.event)
-		}
-	}
+	pm.traceOps <- op
 }
 
 // traceWorker processes queued operations in FIFO order, so a cleanup
 // boundary applies only after all prior events were processed.
-func (pm *ProcessManager) traceWorker(ctx context.Context) {
-	for {
-		select {
-		case op := <-pm.traceOps:
-			if op.event != nil {
-				pm.processTrace(op.event)
-			} else {
-				pm.processedUntil(op.boundaryKTime)
-			}
-		case <-ctx.Done():
-			return
+func (pm *ProcessManager) traceWorker() {
+	defer pm.workersWG.Done()
+	// Ranging drains the queue after Close closed traceOps, so queued
+	// traces are processed before shared resources are released.
+	for op := range pm.traceOps {
+		if op.event != nil {
+			pm.processTrace(op.event)
+		} else {
+			pm.processedUntil(op.boundaryKTime)
 		}
 	}
 }

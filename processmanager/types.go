@@ -4,7 +4,6 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 
@@ -157,9 +156,12 @@ type ProcessManager struct {
 	// been cleaned up. Published under mu only after the cleanup completed.
 	exitWatermark atomic.Int64
 
-	// lifecycleCtx cancels the trace worker and unblocks producers waiting
-	// for queue space on shutdown.
-	lifecycleCtx context.Context
+	// closed reports that traceOps was closed, making Close idempotent.
+	closed atomic.Bool
+
+	// workersWG tracks the trace workers; Close waits for them to drain the
+	// queue and exit.
+	workersWG sync.WaitGroup
 
 	// customLabels validates custom label keys/values pulled from eBPF and
 	// tracks how many were dropped due to invalid UTF-8.

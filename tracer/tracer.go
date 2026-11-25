@@ -169,6 +169,10 @@ type Tracer struct {
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
 
+	// traceReaderWG tracks the trace event reader goroutines; Close waits
+	// for them before stopping the process manager.
+	traceReaderWG sync.WaitGroup
+
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
 	// when process events take place (new, exit, unknown PC).
@@ -426,6 +430,8 @@ func (t *Tracer) Close() {
 	}
 	t.hooks.WUnlock(&h)
 
+	// Stop the trace event readers: they may still be submitting traces.
+	t.traceReaderWG.Wait()
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
 	t.signalDone()

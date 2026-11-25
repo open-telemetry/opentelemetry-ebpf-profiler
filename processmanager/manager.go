@@ -156,13 +156,13 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		origins:                  cfg.Origins,
 		tracePool:                newTraceEventPool(),
 		traceOps:                 make(chan traceOp, traceEventQueueSize),
-		lifecycleCtx:             ctx,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
 	// HandleTrace is a drop point: submitted traces are processed on a
 	// dedicated worker goroutine.
-	go pm.traceWorker(ctx)
+	pm.workersWG.Add(1)
+	go pm.traceWorker()
 
 	return pm, nil
 }
@@ -240,7 +240,15 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	})
 }
 
+// Close closes the trace operation queue and waits until queued and
+// in-flight trace operations were processed. All producers (HandleTrace,
+// BatchSubmitted) must be stopped beforehand; Close may be called multiple
+// times in succession.
 func (pm *ProcessManager) Close() {
+	if pm.closed.CompareAndSwap(false, true) {
+		close(pm.traceOps)
+	}
+	pm.workersWG.Wait()
 }
 
 func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping) error {

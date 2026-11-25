@@ -161,7 +161,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 	var ckptTime times.KTime
 	var ckptBytes int
 	var ckptPending bool
+	t.traceReaderWG.Add(1)
 	go func() {
+		defer t.traceReaderWG.Done()
 		defer eventReader.Close()
 		var data ringbuf.Record
 		var eventCount int

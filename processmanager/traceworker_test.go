@@ -123,6 +123,20 @@ func TestBatchBoundaryWaitsForQueuedTraces(t *testing.T) {
 		"cleanup ran before the trace submitted before the boundary")
 }
 
+// TestCloseDrainsQueuedTraces verifies that Close processes the queued
+// traces before returning.
+func TestCloseDrainsQueuedTraces(t *testing.T) {
+	capture := &traceCapture{}
+	pm, originID := newTestWorkerPM(t, capture)
+
+	for range 8 {
+		require.NoError(t, pm.HandleTrace(testRecord(t, originID, 123)))
+	}
+	pm.Close()
+
+	require.Len(t, capture.traces, 8, "Close did not process the queued traces")
+}
+
 // TestBatchBoundaryKeepsNewerExits verifies that an exit observed after the
 // boundary watermark survives the cleanup.
 func TestBatchBoundaryKeepsNewerExits(t *testing.T) {
