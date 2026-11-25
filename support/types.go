@@ -58,6 +58,11 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
+const (
+	SysAnalysisReadMem  = 0x1
+	SysAnalysisReadTask = 0x2
+)
+
 const UnwindInfoMaxEntries = 0x8000
 
 const (
@@ -188,12 +193,12 @@ type StackDeltaPageDesc struct {
 	FallbackInfo uint16
 }
 type SystemAnalysis struct {
-	Address   uint64
-	Size      uint32
-	Tid       uint32
-	Err       int32
-	Code      [128]uint8
-	Pad_cgo_0 [4]byte
+	Type    uint32
+	Tid     uint32
+	Size    uint32
+	Err     int32
+	Address uint64
+	Code    [128]uint8
 }
 type TSDInfo struct {
 	Offset       int16
