@@ -34,7 +34,7 @@ Trusted input.
 - The Collector pipeline and the backend the exporter sends to.
 - Test fixtures and coredumps under `testdata/`, including `tools/coredump`.
 
-The project's position, from `SECURITY.md`, is that a crafted executable or interpreter library in the profiled process
+The project's position, from [SECURITY.md](SECURITY.md), is that a crafted executable or interpreter library in the profiled process
 causing denial of service or excessive resource use is a bug and not a vulnerability. See the severity section for how
 that is handled.
 
@@ -49,8 +49,7 @@ Intended operations, which are not findings by themselves.
 What the agent promises.
 
 - Data read from one process is not attributed to another process or container, and is not disclosed to one.
-- A process cannot make the agent read, write or execute anything beyond the memory and files it is meant to read for
-  that process.
+- A process cannot make the agent execute arbitrary code.
 - A process cannot corrupt the attribution of another process, by colliding or reusing identifiers such as file IDs,
   trace hashes, pids or cache entries.
 
@@ -152,7 +151,7 @@ misattribution no attacker is needed, an accidental one is rated the same way.
   gives no recipient new access, because the backend may already see the data, is a bug and not a vulnerability.
 - Low, labelled "bug, not a vulnerability". Denial of service or resource exhaustion in the agent from crafted memory,
   files or libraries, including a crash, hang, leak or an unbounded allocation sized by a value from process memory.
-  These follow `SECURITY.md` and the maintainers handle them as normal bugs. If the same flaw also gives memory
+  These follow [SECURITY.md](SECURITY.md) and the maintainers handle them as normal bugs. If the same flaw also gives memory
   corruption or data disclosure, rate that consequence instead.
 - Low, labelled "bug, not a vulnerability". A stack or attribution that is wrong with no attacker involved and contains no data of another
   process or container. Give the input and the expected and actual frames. If it does contain such data, rate it as
@@ -170,8 +169,9 @@ A crash, assertion or out of bounds access in the coredump harness alone support
 A wrong value from the eBPF code that only changes the stack in the report is a correctness bug, unless the stack or the
 map entry holds data of another process. That is misattribution or disclosure as above.
 
-A finding needs a concrete path from the profiled process to the flawed code, ideally with a reproducer. If a step
-cannot be shown, do not report it.
+A finding needs a concrete path from the input that reaches the agent to the unintended behavior, ideally with a
+reproducer. The input can be a profiled process, a file, or anything else the agent interacts with. If a step cannot be
+shown, do not report it.
 
 ## Anything to leave alone / out of scope
 
