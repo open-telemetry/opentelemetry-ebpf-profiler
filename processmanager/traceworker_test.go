@@ -42,7 +42,7 @@ func newTestWorkerPM(t *testing.T, reporter *traceCapture) (*ProcessManager, uin
 }
 
 // testRecord builds a minimal valid trace record with a single native frame.
-func testRecord(t *testing.T, originID uint16) []byte {
+func testRecord(t *testing.T, originID uint16, pid libpf.PID) []byte {
 	t.Helper()
 	// With no mapping and no interpreter instances, symbolization falls
 	// back to a raw native frame.
@@ -50,7 +50,7 @@ func testRecord(t *testing.T, originID uint16) []byte {
 	frame[1] = 0x4567
 	end := uint16(8 * len(frame))
 	header := support.Trace{
-		Pid:               123,
+		Pid:               uint32(pid),
 		Origin:            originID,
 		Frame_data_end:    end,
 		Thread_label_end:  end,
@@ -61,13 +61,26 @@ func testRecord(t *testing.T, originID uint16) []byte {
 	return append(pfunsafe.FromPointer(&header), pfunsafe.FromSlice(frame)...)
 }
 
+// awaitBoundary submits a flush barrier and waits for the worker to process
+// it and all prior operations.
+func awaitBoundary(t *testing.T, pm *ProcessManager) {
+	t.Helper()
+	boundary := traceOp{done: make(chan struct{})}
+	pm.submit(boundary)
+	select {
+	case <-boundary.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for the worker queue to drain")
+	}
+}
+
 // TestHandleTraceSyncProcessesSubmittedTrace verifies that the synchronous
 // trace path decodes, symbolizes and reports a record before it returns.
 func TestHandleTraceSyncProcessesSubmittedTrace(t *testing.T) {
 	capture := &traceCapture{}
 	pm, originID := newTestWorkerPM(t, capture)
 
-	require.NoError(t, pm.HandleTraceSync(testRecord(t, originID)))
+	require.NoError(t, pm.HandleTraceSync(testRecord(t, originID, 123)))
 
 	require.Len(t, capture.traces, 1)
 	require.Len(t, capture.traces[0].Frames, 1)
@@ -76,29 +89,33 @@ func TestHandleTraceSyncProcessesSubmittedTrace(t *testing.T) {
 	require.Equal(t, libpf.AddressOrLineno(21), frame.AddressOrLineno)
 }
 
-// TestBatchBoundaryWaitsForQueuedTraces verifies that the process exit
-// cleanup does not run before the traces submitted before the batch
-// boundary were processed.
+// TestBatchBoundaryWaitsForQueuedTraces verifies that the exit cleanup runs
+// only after the traces submitted before the boundary were processed.
 func TestBatchBoundaryWaitsForQueuedTraces(t *testing.T) {
+	pid := libpf.PID(42)
+	ckptTime := times.KTime(1000)
+
+	// exitPending records, at report time, whether the exit of pid was
+	// still waiting for cleanup.
+	var exitPending bool
 	capture := &traceCapture{}
 	pm, originID := newTestWorkerPM(t, capture)
+	capture.onReport = func() {
+		pm.mu.RLock()
+		_, pending := pm.exitEvents[pid]
+		pm.mu.RUnlock()
+		exitPending = pending
+	}
 
-	pid := libpf.PID(42)
 	pm.mu.Lock()
-	pm.exitEvents[pid] = times.KTime(100)
+	pm.exitEvents[pid] = ckptTime
 	pm.pidToProcessInfo[pid] = &processInfo{}
 	pm.mu.Unlock()
 
-	pm.HandleTrace(testRecord(t, originID))
-	pm.BatchSubmitted()
-	// Await the boundary: it applies only after all prior operations.
-	boundary := traceOp{done: make(chan struct{})}
-	pm.submit(boundary)
-	select {
-	case <-boundary.done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for the batch boundary")
-	}
+	pm.HandleTrace(testRecord(t, originID, pid))
+	pm.BatchSubmitted(ckptTime)
+	// The boundary applies only after all prior operations.
+	awaitBoundary(t, pm)
 
 	pm.mu.RLock()
 	_, processLeft := pm.pidToProcessInfo[pid]
@@ -106,6 +123,31 @@ func TestBatchBoundaryWaitsForQueuedTraces(t *testing.T) {
 	pm.mu.RUnlock()
 	require.False(t, processLeft, "process exit event was not cleaned up")
 	require.False(t, exitLeft, "process exit event was not cleaned up")
+	require.True(t, exitPending,
+		"cleanup ran before the trace submitted before the boundary")
+}
+
+// TestBatchBoundaryKeepsNewerExits verifies that an exit observed after the
+// boundary watermark survives the cleanup.
+func TestBatchBoundaryKeepsNewerExits(t *testing.T) {
+	pid := libpf.PID(42)
+	capture := &traceCapture{}
+	pm, _ := newTestWorkerPM(t, capture)
+
+	pm.mu.Lock()
+	pm.exitEvents[pid] = times.KTime(1001)
+	pm.pidToProcessInfo[pid] = &processInfo{}
+	pm.mu.Unlock()
+
+	pm.BatchSubmitted(times.KTime(1000))
+	awaitBoundary(t, pm)
+
+	pm.mu.RLock()
+	_, processLeft := pm.pidToProcessInfo[pid]
+	_, exitLeft := pm.exitEvents[pid]
+	pm.mu.RUnlock()
+	require.True(t, processLeft, "exit newer than the watermark was cleaned up")
+	require.True(t, exitLeft, "exit newer than the watermark was cleaned up")
 }
 
 // TestHandleTraceRejectsMalformedRecords verifies the fatal record error

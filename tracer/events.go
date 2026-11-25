@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 const (
@@ -135,8 +136,9 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // the kernel by periodically polling the underlying ringbuffer.
 // Events written to the ringbuffer do not wake userspace immediately.
 //
-// Every received record is handed to the process manager; after each batch,
-// a boundary advances the exit cleanup watermark.
+// Every received record is handed to the process manager; periodically a
+// boundary advances the exit cleanup watermark to a checkpoint time, once
+// the ring buffer bytes unread at that time were consumed.
 //
 // Returns a function that can be called to retrieve ringbuffer error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
@@ -153,6 +155,12 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 	eventReader.SetDeadline(time.Unix(1, 0))
 
 	var readErrorCount, noDataCount atomic.Uint64
+	// Exit cleanup checkpoint: ckptBytes counts the ring buffer bytes that
+	// were unread when ckptTime was taken. Once they are consumed, all
+	// records committed up to ckptTime were read and queued.
+	var ckptTime times.KTime
+	var ckptBytes int
+	var ckptPending bool
 	go func() {
 		defer eventReader.Close()
 		var data ringbuf.Record
@@ -180,6 +188,14 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 				// Continue execution below
 			}
 
+			// Clock is read before the buffer position, so records committed
+			// up to ckptTime are all accounted in the unread bytes.
+			if !ckptPending {
+				ckptTime = times.GetKTime()
+				ckptBytes = eventReader.AvailableBytes()
+				ckptPending = true
+			}
+
 			eventCount = 0
 
 			// Eagerly read events until the buffer is exhausted or we reach maxEvents
@@ -190,6 +206,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 					}
 					break
 				}
+
+				// A record occupies an 8-byte header plus the sample padded
+				// to an 8-byte boundary.
+				ckptBytes -= 8 + (len(data.RawSample)+7)&^7
 
 				// There's a theoretical possibility that this inner loop never exits if the
 				// following two error cases are continuously being hit. In practice this would
@@ -225,9 +245,14 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 					break
 				}
 			}
-			// A batch was submitted; let the process manager advance the
-			// exit cleanup watermark.
-			t.processManager.BatchSubmitted()
+			if ckptPending && (ckptBytes <= 0 || eventReader.AvailableBytes() == 0) {
+				// The records present at ckptTime are consumed and queued;
+				// the boundary applies the cleanup once they are processed.
+				// The caught-up check covers kernel-discarded records, which
+				// the reader skips without delivering.
+				t.processManager.BatchSubmitted(ckptTime)
+				ckptPending = false
+			}
 		}
 	}()
 

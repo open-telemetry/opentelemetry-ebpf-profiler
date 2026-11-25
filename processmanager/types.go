@@ -149,17 +149,13 @@ type ProcessManager struct {
 	// tracePool is a cache of decoded trace events to avoid GC pressure.
 	tracePool sync.Pool
 
-	// traceOps serializes trace events, batch boundaries and flush barriers
-	// between producers and the trace worker, its only consumer.
+	// traceOps delivers copied trace events and cleanup boundaries to the
+	// trace worker, its only consumer.
 	traceOps chan traceOp
 
-	// maxSeenKTime is the capture time of the most recently processed trace
-	// record.
-	maxSeenKTime times.KTime
-
 	// exitWatermark is the capture time up to which process exit events have
-	// been cleaned up.
-	exitWatermark times.KTime
+	// been cleaned up. Published under mu only after the cleanup completed.
+	exitWatermark atomic.Int64
 
 	// lifecycleCtx cancels the trace worker and unblocks producers waiting
 	// for queue space on shutdown.

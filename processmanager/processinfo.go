@@ -487,9 +487,9 @@ func compareMapping(a, b Mapping) int {
 }
 
 // processPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
-// exitKTime is stored for later cleanup, once traces up to this time were processed.
-// processed. There can be a race condition if we can not clean up the references for this process
-// fast enough and this particular pid is reused again by the system.
+// exitKTime is stored for later cleanup, once traces up to this time were processed. There can be
+// a race condition if we can not clean up the references for this process fast enough and this
+// particular pid is reused again by the system.
 func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
@@ -959,34 +959,18 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	return libpf.FrameMapping{}
 }
 
-// BatchSubmitted signals a batch of records was submitted; the exit cleanup
-// watermark advances once they are all processed.
-func (pm *ProcessManager) BatchSubmitted() {
-	pm.submit(traceOp{})
+// BatchSubmitted records that the reader consumed the records submitted so
+// far; ckptTime is the clock snapshot taken before reading them. A boundary
+// op advances the exit cleanup watermark to ckptTime once the worker
+// processed the records queued before it. Callers pass monotonic clock
+// snapshots.
+func (pm *ProcessManager) BatchSubmitted(ckptTime times.KTime) {
+	pm.submit(traceOp{boundaryKTime: ckptTime})
 }
 
-// watermarkSlop subtracted from the boundary clock when advancing the exit
-// cleanup watermark: records are committed to the ring buffer microseconds
-// after their ktime is captured, so the clock can briefly lead records that
-// are not yet written or processed.
-const watermarkSlop = times.KTime(time.Millisecond)
-
-// batchBoundary advances the exit cleanup watermark to the maximum of the
-// processed frontier (maxSeenKTime) and the boundary clock minus
-// watermarkSlop: it never passes processed traces, and records committed
-// after the boundary never precede it.
-func (pm *ProcessManager) batchBoundary() {
-	watermark := pm.maxSeenKTime
-	if clock := times.GetKTime() - watermarkSlop; clock > watermark {
-		watermark = clock
-	}
-	if watermark <= pm.exitWatermark {
-		return
-	}
-	pm.exitWatermark = watermark
-	pm.processedUntil(watermark)
-}
-
+// processedUntil advances the exit cleanup watermark and deletes the state
+// of process exits up to it. Concurrent calls with the same or older
+// watermarks are idempotent.
 func (pm *ProcessManager) processedUntil(watermark times.KTime) {
 	var err error
 	defer func() {
@@ -996,6 +980,10 @@ func (pm *ProcessManager) processedUntil(watermark times.KTime) {
 	}()
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+
+	if watermark <= times.KTime(pm.exitWatermark.Load()) {
+		return
+	}
 
 	nowKTime := times.GetKTime()
 	log.Debugf("exit cleanup watermark %v, latency %v ms",
@@ -1020,4 +1008,8 @@ func (pm *ProcessManager) processedUntil(watermark times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
+
+	// Publish the watermark only after the cleanup completed: observers of
+	// the watermark know the exits up to it were processed.
+	pm.exitWatermark.Store(int64(watermark))
 }

@@ -36,10 +36,15 @@ func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) 
 
 type traceCapture struct {
 	traces []*libpf.Trace
+	// onReport, when set, is called for each reported trace.
+	onReport func()
 }
 
 func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
 	tc.traces = append(tc.traces, trace)
+	if tc.onReport != nil {
+		tc.onReport()
+	}
 	return nil
 }
 

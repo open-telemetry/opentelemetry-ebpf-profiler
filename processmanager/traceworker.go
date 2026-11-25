@@ -5,17 +5,24 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 
 import (
 	"context"
+
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 // traceEventQueueSize bounds the queued trace operations; a full queue
 // blocks producers, applying backpressure to the ringbuf reader.
 const traceEventQueueSize = 256
 
-// traceOp is a trace event to process, or a batch boundary.
+// traceOp is a trace event to process, a cleanup boundary carrying the
+// checkpoint time of a consumed ring buffer snapshot, or a done barrier for
+// tests.
 type traceOp struct {
 	// event, when non-nil, is processed by the worker, which returns it to
 	// the pool.
 	event *traceEvent
+	// boundaryKTime is the checkpoint time of a cleanup boundary, which has
+	// event nil.
+	boundaryKTime times.KTime
 	// done, when non-nil, is closed once this and all prior operations were
 	// processed; used by tests.
 	done chan struct{}
@@ -33,8 +40,8 @@ func (pm *ProcessManager) submit(op traceOp) {
 	}
 }
 
-// traceWorker processes queued operations in FIFO order, so batch
-// boundaries apply only after all prior events were processed.
+// traceWorker processes queued operations in FIFO order, so a cleanup
+// boundary applies only after all prior events were processed.
 func (pm *ProcessManager) traceWorker(ctx context.Context) {
 	for {
 		select {
@@ -45,7 +52,7 @@ func (pm *ProcessManager) traceWorker(ctx context.Context) {
 			case op.event != nil:
 				pm.processTrace(op.event)
 			default:
-				pm.batchBoundary()
+				pm.processedUntil(op.boundaryKTime)
 			}
 		case <-ctx.Done():
 			return

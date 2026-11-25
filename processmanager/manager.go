@@ -413,9 +413,6 @@ func (pm *ProcessManager) processTrace(e *traceEvent) {
 		pm.tracePool.Put(e)
 		return
 	}
-	if ktime := times.KTime(e.KTime); ktime > pm.maxSeenKTime {
-		pm.maxSeenKTime = ktime
-	}
 
 	entry := pm.origins.Lookup(e.Origin)
 	if entry == nil {
