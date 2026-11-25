@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"debug/elf"
+	"encoding/binary"
 	"go/version"
 	"os"
 	"os/exec"
@@ -20,6 +21,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 )
 
 func getPFELF(t *testing.T, path string) *File {
@@ -244,4 +247,180 @@ func TestGetGoBuildID(t *testing.T) {
 	require.NoError(t, err)
 	expectedBuildID := strings.TrimRight(string(out), "\n")
 	assert.Equal(t, expectedBuildID, buildID)
+}
+
+// TestFileTakeRefcount verifies that the underlying reader stays readable
+// after Close while a Take reference is outstanding, and is closed when the
+// last reference is dropped.
+func TestFileTakeRefcount(t *testing.T) {
+	ef := getPFELF(t, "testdata/go-binary")
+
+	// Open() owns the source file, its page cache, and a memory mapping.
+	require.IsType(t, &os.File{}, ef.resources.closer)
+	assert.NotNil(t, ef.resources.cache)
+	assert.NotNil(t, ef.resources.mmap)
+
+	dataRef := ef.Take()
+	// Close the File: the reference keeps the underlying reader open.
+	require.NoError(t, ef.Close())
+
+	// The File is closed, but the reference keeps the reader readable.
+	progs := make([]byte, 64)
+	_, err := ef.Underlying().ReadAt(progs, 0)
+	require.NoError(t, err)
+
+	// Dropping the last reference closes the reader and unmaps the mapping.
+	require.NoError(t, dataRef.Close())
+	assert.Nil(t, dataRef.(*fileResources).mmap)
+	_, err = ef.Underlying().ReadAt(progs, 0)
+	assert.Error(t, err)
+}
+
+// TestFileBorrowedReaderTake verifies that Take returns the no-op closer,
+// and Close releases nothing, for Files that only borrow the reader from
+// the caller.
+func TestFileBorrowedReaderTake(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/go-binary")
+	f, err := os.Open("testdata/go-binary")
+	require.NoError(t, err)
+	defer f.Close()
+
+	cache, err := readatbuf.New(f, 4096, 4)
+	require.NoError(t, err)
+
+	ef, err := NewFile(cache, 0, false)
+	require.NoError(t, err)
+
+	assert.IsType(t, NoOpCloser{}, ef.Take())
+	require.NoError(t, ef.Close())
+	// The borrowed reader remains fully functional.
+	_, err = cache.ReadAt(make([]byte, 4), 0)
+	assert.NoError(t, err)
+}
+
+// TestFileBorrowedMappingTake verifies that a File built on a caller-created
+// memory mapping borrows it: Close does not unmap it, and it stays usable.
+func TestFileBorrowedMappingTake(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/go-binary")
+	mapping, err := mmap.Open("testdata/go-binary")
+	require.NoError(t, err)
+	defer mapping.Close()
+
+	ef, err := NewFile(mapping, 0, false)
+	require.NoError(t, err)
+
+	assert.IsType(t, NoOpCloser{}, ef.Take())
+	require.NoError(t, ef.Close())
+	// The File must not unmap a mapping it does not own.
+	view, err := mapping.ViewAt(0, 1)
+	require.NoError(t, err)
+	assert.NotEmpty(t, view)
+}
+
+// elfFixture builds a minimal ELF64 object with a .symtab of the given
+// symbol names.
+func elfFixture(t *testing.T, names []string) []byte {
+	t.Helper()
+	type ehdr struct {
+		Ident                      [16]byte
+		Type, Machine              uint16
+		Version                    uint32
+		Entry, Phoff, Shoff        uint64
+		Flags                      uint32
+		Ehsize, Phentsize, Phnum   uint16
+		Shentsize, Shnum, Shstrndx uint16
+	}
+	type phdr struct {
+		Type, Flags                      uint32
+		Off, Vaddr, Paddr, Filesz, Memsz uint64
+		Align                            uint64
+	}
+	type shdr struct {
+		Name, Type         uint32
+		Flags              uint64
+		Addr, Offset, Size uint64
+		Link, Info         uint32
+		Align, Entsize     uint64
+	}
+
+	shstrtab := []byte{0}
+	shname := map[string]uint32{}
+	for _, name := range []string{".symtab", ".strtab", ".shstrtab"} {
+		shname[name] = uint32(len(shstrtab))
+		shstrtab = append(shstrtab, name...)
+		shstrtab = append(shstrtab, 0)
+	}
+
+	strtab := []byte{0}
+	symNameOffs := make([]uint32, len(names))
+	for i, name := range names {
+		symNameOffs[i] = uint32(len(strtab))
+		strtab = append(strtab, name...)
+		strtab = append(strtab, 0)
+	}
+
+	// Layout: ehdr, phdr, strtab, symtab, shstrtab, section headers.
+	symtabOff := 120 + len(strtab)
+	symtabSize := (len(names) + 1) * 24
+	shstrtabOff := symtabOff + symtabSize
+	shoff := shstrtabOff + len(shstrtab)
+
+	var buf bytes.Buffer
+	hdr := ehdr{
+		Type:      uint16(elf.ET_REL),
+		Machine:   uint16(elf.EM_X86_64),
+		Version:   1,
+		Phoff:     64,
+		Shoff:     uint64(shoff),
+		Ehsize:    64,
+		Phentsize: 56,
+		Phnum:     1,
+		Shentsize: 64,
+		Shnum:     4,
+		Shstrndx:  3,
+	}
+	copy(hdr.Ident[:], []byte{0x7f, 'E', 'L', 'F', 2, 1, 1, 0})
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &hdr))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &phdr{}))
+	buf.Write(strtab)
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, elf.Sym64{}))
+	for _, nameOff := range symNameOffs {
+		require.NoError(t, binary.Write(&buf, binary.LittleEndian, elf.Sym64{
+			Name: nameOff, Info: byte(elf.STB_GLOBAL)<<4 | byte(elf.STT_FUNC), Shndx: 1,
+		}))
+	}
+	buf.Write(shstrtab)
+	require.Equal(t, shoff, buf.Len())
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".symtab"], Type: uint32(elf.SHT_SYMTAB),
+		Offset: uint64(symtabOff), Size: uint64(symtabSize),
+		Link: 2, Info: 1, Align: 8, Entsize: 24,
+	}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".strtab"], Type: uint32(elf.SHT_STRTAB),
+		Offset: 120, Size: uint64(len(strtab)),
+	}))
+	require.NoError(t, binary.Write(&buf, binary.LittleEndian, &shdr{
+		Name: shname[".shstrtab"], Type: uint32(elf.SHT_STRTAB),
+		Offset: uint64(shstrtabOff), Size: uint64(len(shstrtab)),
+	}))
+	return buf.Bytes()
+}
+
+func TestVisitSymbolsLongNames(t *testing.T) {
+	// A name longer than the 4 KiB assembly buffer is skipped: the walk
+	// must continue with the remaining symbols.
+	longName := strings.Repeat("L", 5000)
+	ef, err := NewFile(bytes.NewReader(elfFixture(t, []string{longName, "main"})), 0, false)
+	require.NoError(t, err)
+	defer ef.Close()
+
+	var names []string
+	err = ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		names = append(names, string(sym.Name))
+		return true
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "main"}, names)
 }

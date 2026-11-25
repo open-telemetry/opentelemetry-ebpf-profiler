@@ -17,7 +17,8 @@ struct system_analysis_t {
 } system_analysis SEC(".maps");
 
 // read_kernel_memory reads data from given kernel address. This is
-// invoked once on entry to bpf() syscall on the given pid context.
+// invoked once on entry to bpf() syscall of the requesting thread,
+// which is guarded and pinned by tid.
 SEC("tracepoint/syscalls/sys_enter_bpf")
 int read_kernel_memory(UNUSED void *ctx)
 {
@@ -30,7 +31,7 @@ int read_kernel_memory(UNUSED void *ctx)
   }
 
   u32 pid = 0, tid = 0;
-  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+  if (!get_pid_tgid(&pid, &tid) || sys->tid != tid) {
     // Execute the hook only in the context of the requesting task.
     return 0;
   }
@@ -43,7 +44,7 @@ int read_kernel_memory(UNUSED void *ctx)
   }
 
   // Mark request handled once the helper has finished populating the result.
-  sys->pid = 0;
+  sys->tid = 0;
 
   return 0;
 }
@@ -64,7 +65,7 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   }
 
   u32 pid = 0, tid = 0;
-  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+  if (!get_pid_tgid(&pid, &tid) || sys->tid != tid) {
     // Execute the hook only in the context of the requesting task.
     return 0;
   }
@@ -86,7 +87,7 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   }
 
   // Mark request handled once the helper has finished populating the result.
-  sys->pid = 0;
+  sys->tid = 0;
 
   return 0;
 }
