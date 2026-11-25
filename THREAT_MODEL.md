@@ -169,13 +169,13 @@ profiled process, with no privileges on the host beyond running code in a contai
 attacker is needed, an accidental one is rated the same way. Misattribution is rated by whether a profiled process can
 cause it, see the Medium and Low tiers.
 
-- Critical. Code execution in the agent, or a write to the host or to another process that the attacker controls in
-  content and destination, beyond what the agent writes by design such as logs, metrics and reports. A constrained write
-  with no demonstrated effect is not Critical, rate it by its effect.
-- High. Any of the following. Memory corruption in the agent (out of bounds write, use after free). An out of bounds read
-  in the agent whose result reaches the report or another process. A read of an arbitrary host file
-  or of sensitive agent memory, such as keys, credentials or tokens, whose content reaches the report. Data of one
-  container or process that discloses a secret, such as credentials, keys or tokens, to a recipient not entitled to it.
+- Critical. Any of the following. Code execution in the agent. A write to the host or to another process that the
+  attacker controls in content and destination, beyond what the agent writes by design such as logs, metrics and
+  reports. A constrained write with no demonstrated effect is not Critical, rate it by its effect. Memory corruption in
+  the agent (out of bounds write, use after free). A read of an arbitrary host file or of sensitive agent memory, such
+  as keys, credentials or tokens, whose content reaches the report. Data of one container or process that discloses a
+  secret, such as credentials, keys or tokens, to a recipient not entitled to it.
+- High. An out of bounds read in the agent whose result reaches the report or another process.
 - Medium. Any of the following. Data of one container or process disclosed to a recipient not entitled to it that is
   metadata only, such as command lines, paths, environment-derived attributes or labels. A profiled process that changes
   what is reported for a different process, by colliding or reusing identifiers such as file IDs, trace hashes, pids or
