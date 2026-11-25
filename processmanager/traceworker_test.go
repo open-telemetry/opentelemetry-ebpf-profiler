@@ -61,17 +61,13 @@ func testRecord(t *testing.T, originID uint16, pid libpf.PID) []byte {
 	return append(pfunsafe.FromPointer(&header), pfunsafe.FromSlice(frame)...)
 }
 
-// awaitBoundary submits a flush barrier and waits for the worker to process
-// it and all prior operations.
-func awaitBoundary(t *testing.T, pm *ProcessManager) {
+// awaitQuiescence waits until the exit cleanup watermark reached ckptTime,
+// which implies the traces queued before the boundary were processed.
+func awaitQuiescence(t *testing.T, pm *ProcessManager, ckptTime times.KTime) {
 	t.Helper()
-	boundary := traceOp{done: make(chan struct{})}
-	pm.submit(boundary)
-	select {
-	case <-boundary.done:
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for the worker queue to drain")
-	}
+	require.Eventually(t, func() bool {
+		return times.KTime(pm.exitWatermark.Load()) >= ckptTime
+	}, 10*time.Second, time.Millisecond, "timed out waiting for quiescence")
 }
 
 // TestHandleTraceSyncProcessesSubmittedTrace verifies that the synchronous
@@ -114,8 +110,8 @@ func TestBatchBoundaryWaitsForQueuedTraces(t *testing.T) {
 
 	pm.HandleTrace(testRecord(t, originID, pid))
 	pm.BatchSubmitted(ckptTime)
-	// The boundary applies only after all prior operations.
-	awaitBoundary(t, pm)
+	// Cleanup applies only after the trace was processed.
+	awaitQuiescence(t, pm, ckptTime)
 
 	pm.mu.RLock()
 	_, processLeft := pm.pidToProcessInfo[pid]
@@ -140,7 +136,7 @@ func TestBatchBoundaryKeepsNewerExits(t *testing.T) {
 	pm.mu.Unlock()
 
 	pm.BatchSubmitted(times.KTime(1000))
-	awaitBoundary(t, pm)
+	awaitQuiescence(t, pm, times.KTime(1000))
 
 	pm.mu.RLock()
 	_, processLeft := pm.pidToProcessInfo[pid]
