@@ -164,8 +164,6 @@ func (h *testTraceHooks) PostHandleTrace(ctx *pm.TraceContext, tr *libpf.Trace) 
 	h.traces.Store(comm[3], observed)
 }
 
-// probeTrace is a TraceContext snapshot; it is only valid during the hook
-// call.
 type probeTrace struct {
 	comm string
 	pid  libpf.PID
@@ -406,7 +404,6 @@ func TestPIDNamespaceTranslationRecursive(t *testing.T) {
 	require.Equal(t, selfPIDNamespace, procPIDNamespace, "procfs must represent the profiler namespace")
 
 	_, btfErr := os.Stat("/sys/kernel/btf/vmlinux")
-	// Forward probe traces (0xAA 0xBB 0xCC COMM prefix) to the test goroutine.
 	traceCh := make(chan probeTrace, 1024)
 
 	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{

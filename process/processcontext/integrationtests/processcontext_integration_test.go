@@ -162,8 +162,6 @@ func Test_ProcessContext(t *testing.T) {
 
 			require.NoError(t, trc.StartMapMonitors(ctx))
 
-			// Trace handling resolves the process context onto the meta.
-
 			cmd := exec.CommandContext(ctx, filepath.Join(exeDir, tc.exeName), tc.args...)
 			cmd.Stderr = os.Stderr
 			if len(tc.env) > 0 {
