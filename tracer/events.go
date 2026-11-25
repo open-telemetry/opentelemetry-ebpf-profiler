@@ -163,6 +163,12 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 	var ckptPending bool
 	t.traceReaderWG.Go(func() {
 		defer eventReader.Close()
+		// Exit on the monitor context or on tracer shutdown: Close waits for
+		// this goroutine before stopping the process manager.
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(t.lifecycleCtx, cancel)
+		defer stop()
 		var data ringbuf.Record
 		var eventCount int
 
