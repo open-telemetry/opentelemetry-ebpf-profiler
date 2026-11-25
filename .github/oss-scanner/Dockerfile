@@ -19,13 +19,17 @@ RUN make otelcol-ebpf-profiler \
 RUN make go-mod-download \
     && go -C cmd/otelcol-ebpf-profiler mod download
 
-# Build the fixtures, download the coredump modules into tools/coredump/modulecache and cache the compiled test
-# binaries while there is network. A failing test does not abort the build. The log is kept outside /src to keep the
-# checkout clean. Tests that load eBPF programs need a privileged host and are expected to fail or skip here.
-RUN ( make test-deps \
-      && CGO_ENABLED=1 go test -tags osusergo,netgo ./... \
-      && CGO_ENABLED=1 go test -C tools/coredump -timeout 60m -tags osusergo,netgo ./... ) > /opt/oss-scanner-test.log 2>&1 \
-    || echo "WARNING: tests reported failures, see /opt/oss-scanner-test.log"
+# Fixture setup must succeed so the scanner has the inputs needed to run tests offline.
+RUN make test-deps
+
+# Run both suites independently while there is network, downloading the coredump modules into
+# tools/coredump/modulecache and warming the Go build cache. Test failures do not abort the build;
+# warnings are recorded in the log as well as printed in the build output. Keep the log outside /src
+# to keep the checkout clean. Tests tagged integration or host_integration are not run here.
+RUN CGO_ENABLED=1 go test -tags osusergo,netgo ./... > /opt/oss-scanner-test.log 2>&1 \
+    || echo "WARNING: root module tests failed, see /opt/oss-scanner-test.log" | tee -a /opt/oss-scanner-test.log
+RUN CGO_ENABLED=1 go test -C tools/coredump -timeout 60m -tags osusergo,netgo ./... >> /opt/oss-scanner-test.log 2>&1 \
+    || echo "WARNING: coredump tests failed, see /opt/oss-scanner-test.log" | tee -a /opt/oss-scanner-test.log
 
 # The scan has no network. Fail fast instead of waiting on proxy timeouts if something was missed above.
 ENV GOPROXY=off \
