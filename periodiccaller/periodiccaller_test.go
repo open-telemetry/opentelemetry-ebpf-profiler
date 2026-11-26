@@ -126,12 +126,12 @@ func TestPeriodicCaller(t *testing.T) {
 	interval := 10 * time.Millisecond
 	trigger := make(chan bool)
 
-	tests := map[string]func(context.Context, func()) func(){
-		"Start": func(ctx context.Context, cb func()) func() {
-			return Start(ctx, interval, cb)
+	tests := map[string]func(context.Context, func()){
+		"Start": func(ctx context.Context, cb func()) {
+			Start(ctx, interval, cb)
 		},
-		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+		"StartWithManualTrigger": func(ctx context.Context, cb func()) {
+			StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
 				cb()
 				return true
 			})
@@ -145,7 +145,7 @@ func TestPeriodicCaller(t *testing.T) {
 			done := make(chan bool)
 			var counter atomic.Int32
 
-			stop := testFunc(ctx, func() {
+			testFunc(ctx, func() {
 				result := counter.Load()
 				if result < 2 {
 					result = counter.Add(1)
@@ -167,7 +167,6 @@ func TestPeriodicCaller(t *testing.T) {
 			}
 
 			cancel()
-			stop()
 		})
 	}
 }
@@ -214,12 +213,12 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 	interval := 1 * time.Millisecond
 	trigger := make(chan bool)
 
-	tests := map[string]func(context.Context, func()) func(){
-		"Start": func(ctx context.Context, cb func()) func() {
-			return Start(ctx, interval, cb)
+	tests := map[string]func(context.Context, func()){
+		"Start": func(ctx context.Context, cb func()) {
+			Start(ctx, interval, cb)
 		},
-		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+		"StartWithManualTrigger": func(ctx context.Context, cb func()) {
+			StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
 				cb()
 				return true
 			})
@@ -231,7 +230,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 
 			executions := make(chan struct{}, 20)
-			stop := testFunc(ctx, func() {
+			testFunc(ctx, func() {
 				executions <- struct{}{}
 			})
 
@@ -245,7 +244,6 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			assert.Less(t, len(executions), 12)
 
 			cancel()
-			stop()
 		})
 	}
 }
@@ -264,7 +262,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	trigger := make(chan bool)
 	done := make(chan bool)
 
-	stop := StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
+	StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
 		require.True(t, manualTrigger)
 		n := counter.Add(1)
 		if n == int32(numTrigger) {
@@ -272,7 +270,6 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 		}
 		return true
 	})
-	defer stop()
 
 	for range numTrigger {
 		trigger <- true
@@ -294,7 +291,7 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	trigger := make(chan bool)
 	done := make(chan bool, 1)
 
-	stop := StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
+	StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
 		func(manualTrigger bool) bool {
 			n := counter.Add(1)
 			if n == int32(numIters) {
@@ -303,7 +300,6 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 			}
 			return true
 		})
-	defer stop()
 
 	select {
 	case <-timeout:
