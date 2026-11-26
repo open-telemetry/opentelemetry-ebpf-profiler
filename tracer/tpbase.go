@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 
-	cebpf "github.com/cilium/ebpf"
-
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -36,9 +34,7 @@ import (
 // loadTPBaseOffset extracts the offset of the thread pointer base variable in the `task_struct`
 // kernel struct. This offset varies depending on kernel configuration, so we have to learn
 // it dynamically at runtime.
-func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module,
-) (uint64, error) {
+func loadTPBaseOffset(probes *systemAnalysisProbes, kmod *kallsyms.Module) (uint64, error) {
 	var tpbaseOffset uint32
 	analyzers, err := libc.GetTpBaseAnalyzers()
 	if err != nil {
@@ -50,7 +46,7 @@ func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			continue
 		}
 
-		code, err := loadKernelCode(coll, maps, libpf.SymbolValue(sym), 0)
+		code, err := probes.readKernelCode(libpf.SymbolValue(sym), 0)
 		if err != nil {
 			return 0, err
 		}

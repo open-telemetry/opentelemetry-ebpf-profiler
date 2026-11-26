@@ -1109,12 +1109,20 @@ typedef struct OffsetRange {
   u16 program_index; // The interpreter-specific program index to call.
 } OffsetRange;
 
+// System analysis work types. The values start from 1 so that a zeroed
+// map entry never matches.
+enum SystemAnalysisWork {
+  SYS_ANALYSIS_READ_MEM  = 1,
+  SYS_ANALYSIS_READ_TASK = 2,
+};
+
 // SystemAnalysis is the structure in system_analysis map
 typedef struct SystemAnalysis {
-  u64 address;
-  u32 size;
+  u32 type;
   u32 tid;
+  u32 size;
   s32 err;
+  u64 address;
   u8 code[128];
 } SystemAnalysis;
 

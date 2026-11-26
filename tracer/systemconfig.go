@@ -10,9 +10,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"syscall"
-	"time"
-	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
@@ -27,7 +24,6 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/features"
-	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 )
 
@@ -66,11 +62,6 @@ func (v SysConfigVars) pidNamespaceVars() []sysVar {
 		{name: "pid_namespace_layout", val: v.pid_namespace_layout},
 	}
 }
-
-var (
-	errSystemAnalysisNotHandled = errors.New("system analysis request was not handled")
-	errSystemAnalysisFailed     = errors.New("system analysis helper failed")
-)
 
 func btfMembers(t btf.Type) ([]btf.Member, error) {
 	switch typ := t.(type) {
@@ -278,139 +269,19 @@ func parseBTF(vars *SysConfigVars, needTPBase, needProcessStartTime bool,
 	return nil
 }
 
-// executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
-// For read_task_struct, the returned addr is the struct pt_regs pointer on the entry stack.
-func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue, size int,
-) (code []byte, addr uint64, err error) {
-	// Pin the thread so only its syscalls service the tid-guarded request.
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	systemAnalysis := maps["system_analysis"]
-
-	maxSize := int(unsafe.Sizeof(support.SystemAnalysis{}.Code))
-	if size < 0 || size > maxSize {
-		return nil, 0, fmt.Errorf("invalid read size for system_analysis %d", size)
-	}
-	if size == 0 {
-		size = maxSize
-	}
-
-	key0 := uint32(0)
-	data := support.SystemAnalysis{
-		Address: uint64(address),
-		Size:    uint32(size),
-		Tid:     uint32(unix.Gettid()),
-	}
-
-	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
-		cebpf.UpdateAny); err != nil {
-		return nil, 0, fmt.Errorf("failed to write system_analysis 0x%x: %v",
-			address, err)
-	}
-
-	restoreRlimit, err := rlimit.MaximizeMemlock()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to adjust rlimit: %v", err)
-	}
-	defer restoreRlimit()
-
-	// Load a BPF program to load the function code in systemAnalysis.
-	// It attaches to raw tracepoint of entering syscall and triggers
-	// when running in our PID context.
-	prog, err := cebpf.NewProgram(progSpec)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load read_kernel_function_or_task_struct: %v", err)
-	}
-	defer prog.Close()
-
-	var progLink link.Link
-	switch prog.Type() {
-	case cebpf.RawTracepoint:
-		progLink, err = link.AttachRawTracepoint(link.RawTracepointOptions{
-			Name:    "sys_enter",
-			Program: prog,
-		})
-	case cebpf.TracePoint:
-		progLink, err = link.Tracepoint("syscalls", "sys_enter_bpf", prog, nil)
-	default:
-		err = fmt.Errorf("invalid system analysis program type '%v'", prog.Type())
-	}
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
-	}
-	// The tracepoint services the request on entry of the next syscall of this
-	// pinned thread, which is the lookup below.
-	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
-	if err == nil && data.Tid != 0 {
-		// We've seen occasional CI failures where this is missed: the
-		// multi-vCPU QEMU TCG emulation can be late in propagating the
-		// freshly patched tracepoint to the requesting vCPU, so back-to-back
-		// syscalls all execute inside the stale window. Retry the lookups for
-		// a bounded wall-clock time so at least one attempt runs after the
-		// propagation has landed.
-		start := time.Now()
-		for ; time.Since(start) < 250*time.Millisecond; time.Sleep(5 * time.Millisecond) {
-			if err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data)); err != nil || data.Tid == 0 {
-				break
-			}
-		}
-		log.Infof("System analysis needed retries, waited %v", time.Since(start))
-	}
-	_ = progLink.Close()
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
-	}
-	if err = validateSystemAnalysisResult(data, address); err != nil {
-		return nil, 0, err
-	}
-
-	return data.Code[:size:size], data.Address, nil
-}
-
-func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if data.Tid != 0 {
-		return fmt.Errorf("%w for tid %d at 0x%x", errSystemAnalysisNotHandled, data.Tid, address)
-	}
-
-	if data.Err != 0 {
-		if data.Err < 0 {
-			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)", errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
-		}
-
-		return fmt.Errorf("%w at 0x%x: helper err=%d", errSystemAnalysisFailed, address, data.Err)
-	}
-
-	return nil
-}
-
-// loadKernelCode will request the ebpf code to read the first X bytes from given address.
+// loadKernelCode runs a one-off analysis against the given collection.
 func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue, size int,
 ) ([]byte, error) {
-	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address, size)
-	if err != nil {
-		log.Warnf("Failed to load code: %v.\n"+
-			"Possible reasons include using a kernel without syscall tracepoints enabled.", err)
-	}
-	return code, err
-}
-
-// readTaskStruct will request the ebpf code to read bytes from the given offset from
-// the current task_struct.
-func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue, size int,
-) (code []byte, addr uint64, err error) {
-	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address, size)
+	probes := newSystemAnalysisProbes(coll, maps["system_analysis"])
+	defer probes.Close()
+	return probes.readKernelCode(address, size)
 }
 
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
 // when the `stack` field offset within `task_struct` is already known.
-func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *SysConfigVars,
-) error {
-	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset), 8)
+func determineStackPtregs(probes *systemAnalysisProbes, vars *SysConfigVars) error {
+	data, ptregs, err := probes.readTaskStruct(libpf.SymbolValue(vars.task_stack_offset), 8)
 	if err != nil {
 		return err
 	}
@@ -422,10 +293,8 @@ func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // determineTargetPIDNamespaceLevel reads the profiler's own task_struct to discover
 // its PID namespace nesting level (L). Tasks visible in the profiler's namespace have
 // their PID stored at struct pid's numbers[L] (see kernel pid_nr_ns).
-func determineTargetPIDNamespaceLevel(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *SysConfigVars,
-) error {
-	data, _, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.pid_namespace_layout.Task_thread_pid_offset), 8)
+func determineTargetPIDNamespaceLevel(probes *systemAnalysisProbes, vars *SysConfigVars) error {
+	data, _, err := probes.readTaskStruct(libpf.SymbolValue(vars.pid_namespace_layout.Task_thread_pid_offset), 8)
 	if err != nil {
 		return fmt.Errorf("read task_struct thread_pid: %w", err)
 	}
@@ -434,7 +303,7 @@ func determineTargetPIDNamespaceLevel(coll *cebpf.CollectionSpec, maps map[strin
 		return errors.New("read task_struct thread_pid: null pointer")
 	}
 
-	data, err = loadKernelCode(coll, maps, libpf.SymbolValue(threadPID+uint64(vars.pid_namespace_layout.Pid_level_offset)), 4)
+	data, err = probes.readKernelCode(libpf.SymbolValue(threadPID+uint64(vars.pid_namespace_layout.Pid_level_offset)), 4)
 	if err != nil {
 		return fmt.Errorf("read pid level: %w", err)
 	}
@@ -448,16 +317,14 @@ func determineTargetPIDNamespaceLevel(coll *cebpf.CollectionSpec, maps map[strin
 
 // determineStackLayout scans `task_struct` for offset of the `stack` field, and using
 // its value determines the offset of `struct pt_regs` within the entry stack.
-func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *SysConfigVars,
-) error {
+func determineStackLayout(probes *systemAnalysisProbes, vars *SysConfigVars) error {
 	const maxTaskStructSize = 8 * 1024
 	const maxStackSize = 64 * 1024
 
 	pageSizeMinusOne := uint64(os.Getpagesize() - 1)
 
 	for offs := 0; offs < maxTaskStructSize; {
-		data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(offs), 0)
+		data, ptregs, err := probes.readTaskStruct(libpf.SymbolValue(offs), 0)
 		if err != nil {
 			return err
 		}
@@ -479,8 +346,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	return errors.New("unable to find task stack offset")
 }
 
-// prepareAnalysis creates a new CollectionSpec for the system analysis.
-func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
+// prepareAnalysis creates and loads the system analysis collection. The
+// returned maps are released with closeEBPFResources, the probes with Close.
+func prepareAnalysis(orig *cebpf.CollectionSpec) (*systemAnalysisProbes, map[string]*cebpf.Map, error) {
 	new := &cebpf.CollectionSpec{
 		Maps:      make(map[string]*cebpf.MapSpec),
 		Programs:  make(map[string]*cebpf.ProgramSpec),
@@ -513,7 +381,8 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	return new, maps, nil
+	probes := newSystemAnalysisProbes(new, maps["system_analysis"])
+	return probes, maps, nil
 }
 
 // getCurrentNS returns the device number and inode of the namespace file at filename
@@ -527,7 +396,7 @@ func getCurrentNS(filename string) (dev, ino uint64, err error) {
 	return uint64(stat.Dev), uint64(stat.Ino), nil
 }
 
-func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+func determineSysConfig(probes *systemAnalysisProbes,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, needProcessStartTime bool,
 	pidNamespaceMode PIDNamespaceTranslationMode, vars *SysConfigVars,
 ) error {
@@ -547,13 +416,13 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
 
-		if err = determineStackLayout(coll, maps, vars); err != nil {
+		if err = determineStackLayout(probes, vars); err != nil {
 			return err
 		}
 
 		if needTPBase {
 			var tpbaseOffset uint64
-			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
+			tpbaseOffset, err = loadTPBaseOffset(probes, kmod)
 			if err != nil {
 				return err
 			}
@@ -564,12 +433,12 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		// to calculate the offset of struct pt_regs in the entry stack.
 		// The value also depends of some kernel configurations, so lets
 		// analyze it dynamically for now.
-		if err := determineStackPtregs(coll, maps, vars); err != nil {
+		if err := determineStackPtregs(probes, vars); err != nil {
 			return err
 		}
 
 		if needTPBase && vars.tpbase_offset == 0 {
-			tpbaseOffset, err := loadTPBaseOffset(coll, maps, kmod)
+			tpbaseOffset, err := loadTPBaseOffset(probes, kmod)
 			if err != nil {
 				return err
 			}
@@ -578,7 +447,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	}
 
 	if vars.pid_ns_translation_mode == ebpfPIDNSTranslationModeRecursive {
-		if err := determineTargetPIDNamespaceLevel(coll, maps, vars); err != nil {
+		if err := determineTargetPIDNamespaceLevel(probes, vars); err != nil {
 			if pidNamespaceMode == PIDNamespaceTranslationModeRecursive {
 				return fmt.Errorf("recursive PID namespace translation requires reading PID namespace level: %w", err)
 			}
@@ -817,7 +686,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	configureVMALookup(coll, cfg, &rodataVars)
 
-	systemAnalysisColl, maps, err := prepareAnalysis(coll)
+	probes, maps, err := prepareAnalysis(coll)
 	if err != nil {
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
@@ -825,9 +694,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	// refers to them afterwards, so release them rather than leaving them to the
 	// garbage collector.
 	defer closeEBPFResources(maps, nil)
+	defer probes.Close()
 
 	if err := determineSysConfig(
-		systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
+		probes, kmod, cfg.InterpretersConfig, cfg.FilterMinProcessAge > 0,
 		pidNamespaceMode, &rodataVars,
 	); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)

@@ -66,6 +66,11 @@ const (
 	EventTypeGenericPID = C.EVENT_TYPE_GENERIC_PID
 )
 
+const (
+	SysAnalysisReadMem  = C.SYS_ANALYSIS_READ_MEM
+	SysAnalysisReadTask = C.SYS_ANALYSIS_READ_TASK
+)
+
 const UnwindInfoMaxEntries = C.UNWIND_INFO_MAX_ENTRIES
 
 const (
