@@ -344,6 +344,41 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	}
 }
 
+// TestCloseReleasesTracer checks that Close, without canceling the caller context, stops
+// the goroutines started by the Start methods, so the tracer can be collected.
+func TestCloseReleasesTracer(t *testing.T) {
+	collected := make(chan libpf.Void)
+	func() {
+		ctx := t.Context()
+		tr, err := tracer.NewTracer(ctx, &tracer.Config{
+			Intervals:              &mockIntervals{},
+			InterpretersConfig:     interpreterconfig.AllInterpreters(),
+			SamplesPerSecond:       20,
+			ProbabilisticInterval:  100,
+			ProbabilisticThreshold: 100,
+		})
+		require.NoError(t, err)
+		runtime.AddCleanup(tr, func(c chan libpf.Void) { close(c) }, collected)
+
+		tr.StartPIDEventProcessor(ctx)
+		require.NoError(t, tr.StartMapMonitors(ctx))
+		tr.StartProbabilisticProfiling(ctx)
+		tr.Close()
+	}()
+
+	deadline := time.After(10 * time.Second)
+	for {
+		runtime.GC()
+		select {
+		case <-collected:
+			return
+		case <-deadline:
+			t.Fatal("closed tracer was not garbage collected")
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+}
+
 func TestAllTracers(t *testing.T) {
 	testcases := []struct {
 		name string

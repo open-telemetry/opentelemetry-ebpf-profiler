@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -39,7 +40,8 @@ const (
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
 func (t *Tracer) StartPIDEventProcessor(ctx context.Context) {
-	go t.processPIDEvents(ctx)
+	ctx = t.runCtx(ctx)
+	t.monitorsWG.Go(func() { t.processPIDEvents(ctx) })
 }
 
 // Process the PID events that are incoming in the Tracer channel.
@@ -89,7 +91,7 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 // references into the buffer that it is given: the buffer is reused across
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
-func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
+func startPerfEventMonitor(ctx context.Context, wg *sync.WaitGroup, perfEventMap *ebpf.Map,
 	triggerFunc func([]byte), perCPUBufferSize int,
 ) (func() (lost, noData, readError uint64), error) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
@@ -98,7 +100,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	}
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
-	go func() {
+	wg.Go(func() {
 		defer eventReader.Close()
 		context.AfterFunc(ctx, func() { _ = eventReader.Close() })
 
@@ -122,7 +124,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 			}
 			triggerFunc(data.RawSample)
 		}
-	}()
+	})
 
 	return func() (lost, noData, readError uint64) {
 		lost = lostEventsCount.Swap(0)
@@ -161,14 +163,8 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.M
 	var ckptTime times.KTime
 	var ckptBytes int
 	var ckptPending bool
-	t.traceReaderWG.Go(func() {
+	t.monitorsWG.Go(func() {
 		defer eventReader.Close()
-		// Exit on the monitor context or on tracer shutdown: Close waits for
-		// this goroutine before stopping the process manager.
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		stop := context.AfterFunc(t.lifecycleCtx, cancel)
-		defer stop()
 		var data ringbuf.Record
 		var eventCount int
 
@@ -281,7 +277,8 @@ func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric
 		return nil, fmt.Errorf("map report_events is not available")
 	}
 
-	getPerfErrorCounts, err := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
+	getPerfErrorCounts, err := startPerfEventMonitor(ctx, &t.monitorsWG, eventMap,
+		t.triggerReportEvent, os.Getpagesize())
 	if err != nil {
 		return nil, err
 	}

@@ -177,33 +177,51 @@ func TestStartTracked(t *testing.T) {
 	defer checkForGoRoutineLeaks(t)
 	interval := 1 * time.Millisecond
 
-	ctx, cancel := context.WithCancel(t.Context())
-	var counter atomic.Int32
-	var wg sync.WaitGroup
-
-	StartTracked(ctx, &wg, interval, func() {
-		counter.Add(1)
-	})
-
-	require.Eventually(t, func() bool { return counter.Load() >= 3 },
-		10*time.Second, time.Millisecond, "callback was not called")
-
-	cancel()
-	exited := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(exited)
-	}()
-	select {
-	case <-exited:
-	case <-time.After(10 * time.Second):
-		assert.Fail(t, "timeout - tracked goroutine did not exit after cancellation")
+	tests := map[string]func(context.Context, *sync.WaitGroup, func()){
+		"StartTracked": func(ctx context.Context, wg *sync.WaitGroup, cb func()) {
+			StartTracked(ctx, wg, interval, cb)
+		},
+		"StartWithManualTriggerTracked": func(ctx context.Context, wg *sync.WaitGroup,
+			cb func()) {
+			StartWithManualTriggerTracked(ctx, wg, interval, make(chan bool),
+				func(bool) bool {
+					cb()
+					return true
+				})
+		},
 	}
 
-	// No callbacks may run after the goroutine exited.
-	count := counter.Load()
-	time.Sleep(20 * time.Millisecond)
-	assert.Equal(t, count, counter.Load())
+	for name, start := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			var counter atomic.Int32
+			var wg sync.WaitGroup
+
+			start(ctx, &wg, func() {
+				counter.Add(1)
+			})
+
+			require.Eventually(t, func() bool { return counter.Load() >= 3 },
+				10*time.Second, time.Millisecond, "callback was not called")
+
+			cancel()
+			exited := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(exited)
+			}()
+			select {
+			case <-exited:
+			case <-time.After(10 * time.Second):
+				assert.Fail(t, "timeout - tracked goroutine did not exit after cancellation")
+			}
+
+			// No callbacks may run after the goroutine exited.
+			count := counter.Load()
+			time.Sleep(20 * time.Millisecond)
+			assert.Equal(t, count, counter.Load())
+		})
+	}
 }
 
 // TestPeriodicCallerCancellation tests the cancellation functionality for all

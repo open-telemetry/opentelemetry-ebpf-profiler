@@ -169,9 +169,9 @@ type Tracer struct {
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
 
-	// traceReaderWG tracks the trace event reader goroutines; Close waits
+	// monitorsWG tracks the goroutines started by the Start methods. Close waits
 	// for them before stopping the process manager.
-	traceReaderWG sync.WaitGroup
+	monitorsWG sync.WaitGroup
 
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
@@ -401,6 +401,14 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	return tracer, nil
 }
 
+// runCtx returns a context canceled by either ctx or Close, so goroutines started with
+// a caller context do not outlive the tracer.
+func (t *Tracer) runCtx(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	context.AfterFunc(t.lifecycleCtx, cancel)
+	return ctx
+}
+
 // Close provides functionality for Tracer to perform cleanup tasks.
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
@@ -431,8 +439,8 @@ func (t *Tracer) Close() {
 	}
 	t.hooks.WUnlock(&h)
 
-	// Stop the trace event readers: they may still be submitting traces.
-	t.traceReaderWG.Wait()
+	// The monitors may still be calling into the process manager.
+	t.monitorsWG.Wait()
 	t.processManager.Close()
 	t.kernelSymbolizer.Close()
 	t.signalDone()
@@ -1287,6 +1295,7 @@ func (t *Tracer) eBPFMetricsCollector(
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context) error {
+	ctx = t.runCtx(ctx)
 	onlineCPUs, err := onlineCPUsOnce()
 	if err != nil {
 		return fmt.Errorf("failed to get online cpus: %w", err)
@@ -1305,7 +1314,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context) error {
 	}
 
 	pidEvents := make([]libpf.PIDTID, 0)
-	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
+	periodiccaller.StartWithManualTriggerTracked(ctx, &t.monitorsWG, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMap(&pidEvents)
@@ -1338,7 +1347,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context) error {
 	previousMetricValue := make([]metrics.MetricValue, len(translateIDs))
 
 	if metrics.Enabled() {
-		periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
+		periodiccaller.StartTracked(ctx, &t.monitorsWG, t.intervals.MonitorInterval(), func() {
 			metrics.AddSlice(eventMetricCollector())
 			metrics.AddSlice(traceEventMetricCollector())
 			metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
@@ -1476,7 +1485,7 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	// before getting called.
 	t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 
-	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
+	periodiccaller.StartTracked(t.runCtx(ctx), &t.monitorsWG, t.probabilisticInterval, func() {
 		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 	})
 }

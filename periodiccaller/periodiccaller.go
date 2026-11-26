@@ -57,9 +57,25 @@ type CallbackFunc func(manualTrigger bool) bool
 // The 'trigger' channel can be used to trigger callback immediately.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 	trigger chan bool, callback CallbackFunc) {
+	startManualTriggerLoop(ctx, interval, trigger, callback, nil)
+}
+
+// StartWithManualTriggerTracked is StartWithManualTrigger tracking the goroutine on <wg>.
+// wg.Done runs after any in-flight callback returned.
+func StartWithManualTriggerTracked(ctx context.Context, wg *sync.WaitGroup,
+	interval time.Duration, trigger chan bool, callback CallbackFunc) {
+	wg.Add(1)
+	startManualTriggerLoop(ctx, interval, trigger, callback, wg.Done)
+}
+
+func startManualTriggerLoop(ctx context.Context, interval time.Duration,
+	trigger chan bool, callback CallbackFunc, onExit func()) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		if onExit != nil {
+			defer onExit()
+		}
 
 		for {
 			select {
