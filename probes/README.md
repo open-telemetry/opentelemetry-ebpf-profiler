@@ -68,3 +68,4 @@ Probes maintained outside this repository. Open a pull request to add yours.
 | Probe | Description |
 |-------|-------------|
 | [memcache-probe](https://github.com/florianl/memcache-probe) | Stack traces at hardware cache events such as L1 data cache or last level cache misses. |
+| [ebpf-profile-lockwait](https://github.com/ebpf-profiler-probes/ebpf-profile-lockwait) | Profiles which call sites wait on locks and for how long. |
