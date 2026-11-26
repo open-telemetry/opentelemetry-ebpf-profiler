@@ -21,7 +21,7 @@ import (
 // its registered sampling origin ID.
 func newTestWorkerPM(t *testing.T, reporter *traceCapture) (*ProcessManager, uint16) {
 	t.Helper()
-	pmv, err := New(t.Context(), Config{
+	pmv, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,

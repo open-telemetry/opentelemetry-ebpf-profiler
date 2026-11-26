@@ -79,8 +79,9 @@ type Config struct {
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
-// and unloading of symbols for processes.
-func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
+// and unloading of symbols for processes. It starts background goroutines; the caller
+// must call Close to stop them.
+func New(cfg Config) (*ProcessManager, error) {
 	if cfg.Origins == nil {
 		cfg.Origins = &OriginRegistry{}
 	}
@@ -111,12 +112,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
 
-	periodiccaller.Start(ctx, cfg.ExecutableUnloadDelay, func() {
-		err := em.CleanupUnused(cfg.ExecutableUnloadDelay)
-		if err != nil {
-			log.Errorf("Failed to cleanup unused executables: %v", err)
-		}
-	})
+	lifecycleCtx, cancel := context.WithCancel(context.Background())
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 	var ks kallsyms.Resolver
@@ -156,9 +152,19 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		origins:                  cfg.Origins,
 		tracePool:                newTraceEventPool(),
 		traceOps:                 make(chan traceOp, traceEventQueueSize),
+		lifecycleCancel:          cancel,
 	}
 
-	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
+	// The auxiliary goroutines share the trace worker's WaitGroup.
+	periodiccaller.StartTracked(lifecycleCtx, &pm.workersWG, cfg.ExecutableUnloadDelay, func() {
+		err := em.CleanupUnused(cfg.ExecutableUnloadDelay)
+		if err != nil {
+			log.Errorf("Failed to cleanup unused executables: %v", err)
+		}
+	})
+
+	collectInterpreterMetrics(lifecycleCtx, pm, cfg.MonitorInterval)
+
 	// HandleTrace is a drop point: submitted traces are processed on a
 	// dedicated worker goroutine.
 	pm.workersWG.Add(1)
@@ -190,15 +196,15 @@ func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error
 	return err
 }
 
-// collectInterpreterMetrics starts a goroutine that periodically fetches and reports interpreter
-// metrics.
+// collectInterpreterMetrics starts a goroutine that periodically fetches and reports
+// interpreter metrics. The goroutine is tracked on the manager's WaitGroup.
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	monitorInterval time.Duration,
 ) {
 	if !metrics.Enabled() {
 		return
 	}
-	periodiccaller.Start(ctx, monitorInterval, func() {
+	periodiccaller.StartTracked(ctx, &pm.workersWG, monitorInterval, func() {
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
 
@@ -240,11 +246,11 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 	})
 }
 
-// Close closes the trace operation queue and waits until queued and
-// in-flight trace operations were processed. All producers (HandleTrace,
-// BatchSubmitted) must be stopped beforehand; Close may be called multiple
-// times in succession.
+// Close stops the background goroutines started by New and drains the trace
+// operations queue. All producers (HandleTrace, BatchSubmitted) must be stopped
+// beforehand; Close may be called multiple times in succession.
 func (pm *ProcessManager) Close() {
+	pm.lifecycleCancel()
 	if pm.closed.CompareAndSwap(false, true) {
 		close(pm.traceOps)
 	}

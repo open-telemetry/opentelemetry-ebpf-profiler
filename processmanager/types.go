@@ -4,6 +4,7 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -159,9 +160,12 @@ type ProcessManager struct {
 	// closed reports that traceOps was closed, making Close idempotent.
 	closed atomic.Bool
 
-	// workersWG tracks the trace workers; Close waits for them to drain the
-	// queue and exit.
+	// workersWG tracks the trace worker and the auxiliary goroutines started
+	// by New; Close waits for them to exit.
 	workersWG sync.WaitGroup
+
+	// lifecycleCancel stops the auxiliary goroutines started by New.
+	lifecycleCancel context.CancelFunc
 
 	// customLabels validates custom label keys/values pulled from eBPF and
 	// tracks how many were dropped due to invalid UTF-8.

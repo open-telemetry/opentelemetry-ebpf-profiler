@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"debug/elf"
 	"encoding/json"
 	"fmt"
@@ -115,12 +114,9 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 	return nil
 }
 
-func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
+func ExtractTraces(pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int,
 	interpretersConfig interpreterconfig.Config) ([]ThreadInfo, error) {
-	todo, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	debugFlag := C.int(0)
 	if debug {
 		debugFlag = 1
@@ -186,7 +182,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}
 
-	manager, err := pm.New(todo, pm.Config{
+	manager, err := pm.New(pm.Config{
 		InterpretersConfig:    interpretersConfig,
 		MonitorInterval:       monitorInterval,
 		ExecutableUnloadDelay: executableUnloadDelay,
@@ -200,6 +196,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}
+	defer manager.Close()
 
 	manager.SynchronizeProcess(pr)
 

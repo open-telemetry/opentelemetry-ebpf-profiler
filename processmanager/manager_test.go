@@ -57,7 +57,7 @@ func (f fakeKernelSymbols) Snapshot() kallsyms.Snapshot {
 }
 
 func TestNewConfiguresFrameCacheSize(t *testing.T) {
-	pm, err := New(t.Context(), Config{
+	pm, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,
@@ -66,6 +66,7 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	require.NoError(t, err)
+	t.Cleanup(pm.Close)
 
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
@@ -88,7 +89,7 @@ func enrichEnvVars(t *testing.T, pm *ProcessManager, env ...string) process.Meta
 
 func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 	requestedEnvVars := libpf.Set[string]{"FOO": {}}
-	pm, err := New(t.Context(), Config{
+	pm, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,
@@ -96,6 +97,7 @@ func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 		IncludeEnvVars:        requestedEnvVars,
 	})
 	require.NoError(t, err)
+	t.Cleanup(pm.Close)
 
 	meta := enrichEnvVars(t, pm,
 		"FOO=foo", "OTEL_SERVICE_NAME=svc", "OTEL_RESOURCE_ATTRIBUTES=k=v", "BAR=bar")

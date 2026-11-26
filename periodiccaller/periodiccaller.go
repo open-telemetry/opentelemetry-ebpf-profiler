@@ -6,14 +6,35 @@ package periodiccaller // import "go.opentelemetry.io/ebpf-profiler/periodiccall
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
 // Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
 func Start(ctx context.Context, interval time.Duration, callback func()) func() {
+	return startTickerLoop(ctx, interval, callback, nil)
+}
+
+// StartTracked starts a timer that calls <callback> every <interval> until the <ctx> is
+// canceled, tracking the goroutine on <wg> for deterministic teardown.
+func StartTracked(ctx context.Context, wg *sync.WaitGroup, interval time.Duration,
+	callback func(),
+) (stop func()) {
+	wg.Add(1)
+	return startTickerLoop(ctx, interval, callback, wg.Done)
+}
+
+// startTickerLoop spawns the timer goroutine shared by Start and StartTracked. The
+// optional onExit cleanup runs after any in-flight callback returned.
+func startTickerLoop(ctx context.Context, interval time.Duration, callback func(),
+	onExit func(),
+) (stop func()) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		if onExit != nil {
+			defer onExit()
+		}
 
 		for {
 			select {

@@ -21,7 +21,7 @@ import (
 // registered sampling origin ID.
 func newTestDecodePM(t *testing.T) (*ProcessManager, uint16) {
 	t.Helper()
-	pmv, err := New(t.Context(), Config{
+	pmv, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,

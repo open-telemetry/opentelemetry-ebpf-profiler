@@ -172,6 +172,41 @@ func TestPeriodicCaller(t *testing.T) {
 	}
 }
 
+// TestStartTracked verifies that the tracked goroutine exits after
+// cancellation, and that no callbacks run afterwards.
+func TestStartTracked(t *testing.T) {
+	defer checkForGoRoutineLeaks(t)
+	interval := 1 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(t.Context())
+	var counter atomic.Int32
+	var wg sync.WaitGroup
+
+	StartTracked(ctx, &wg, interval, func() {
+		counter.Add(1)
+	})
+
+	require.Eventually(t, func() bool { return counter.Load() >= 3 },
+		10*time.Second, time.Millisecond, "callback was not called")
+
+	cancel()
+	exited := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(exited)
+	}()
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		assert.Fail(t, "timeout - tracked goroutine did not exit after cancellation")
+	}
+
+	// No callbacks may run after the goroutine exited.
+	count := counter.Load()
+	time.Sleep(20 * time.Millisecond)
+	assert.Equal(t, count, counter.Load())
+}
+
 // TestPeriodicCallerCancellation tests the cancellation functionality for all
 // exported periodiccaller functions
 func TestPeriodicCallerCancellation(t *testing.T) {

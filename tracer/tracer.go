@@ -350,7 +350,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(ctx)
-	processManager, err := pm.New(lifecycleCtx, pm.Config{
+	// Tracer.Close stops the trace producers before processManager.Close().
+	processManager, err := pm.New(pm.Config{
 		InterpretersConfig:    cfg.InterpretersConfig,
 		MonitorInterval:       cfg.Intervals.MonitorInterval(),
 		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),

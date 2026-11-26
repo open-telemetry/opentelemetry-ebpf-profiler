@@ -115,7 +115,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	}
 	defer proc.Close()
 
-	threads, err := ExtractTraces(context.Background(), proc, cmd.debugEbpf,
+	threads, err := ExtractTraces(proc, cmd.debugEbpf,
 		lwpFilter, nil, interpretersConfig)
 	if err != nil {
 		return fmt.Errorf("failed to extract traces: %w", err)

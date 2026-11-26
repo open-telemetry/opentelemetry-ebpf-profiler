@@ -185,7 +185,7 @@ func (cmd *newCmd) exec(context.Context, []string) (err error) {
 
 	testCase := &CoredumpTestCase{}
 
-	testCase.Threads, err = ExtractTraces(context.Background(), core, cmd.debugEbpf, nil, nil,
+	testCase.Threads, err = ExtractTraces(core, cmd.debugEbpf, nil, nil,
 		interpreterconfig.AllInterpreters())
 	if err != nil {
 		return fmt.Errorf("failed to extract traces: %w", err)
