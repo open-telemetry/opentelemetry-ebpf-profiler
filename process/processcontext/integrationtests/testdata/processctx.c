@@ -1,6 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include <errno.h>
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -83,16 +84,17 @@ int main(int argc, char *argv[]) {
 
   signal(SIGTERM, handle_sigterm);
 
-  // OTEL_PROCESS_CTX_PUBLISH_DELAY_MS lets the test exercise the prctl monitor
-  // path: the profiler discovers the PID first, then the publish prctl fires
-  // and triggers a resync. We burn CPU rather than sleep so the process stays
-  // on-CPU and is sampled by the profiler's perf event, which drives process
-  // synchronization before the context is published.
-  const char *delay_str = getenv("OTEL_PROCESS_CTX_PUBLISH_DELAY_MS");
-  if (delay_str != NULL) {
-    int delay_ms = atoi(delay_str);
-    if (delay_ms > 0) {
-      burn(delay_ms);
+  // Keep sampling until the test has observed a frame from this executable and
+  // created the release file, so publication must trigger a resync through the
+  // prctl monitor.
+  const char *publish_file = getenv("OTEL_PROCESS_CTX_PUBLISH_FILE");
+  if (publish_file != NULL) {
+    while (access(publish_file, F_OK) != 0) {
+      if (errno != ENOENT) {
+        perror("access publish file");
+        return 1;
+      }
+      burn(10);
     }
   }
 
