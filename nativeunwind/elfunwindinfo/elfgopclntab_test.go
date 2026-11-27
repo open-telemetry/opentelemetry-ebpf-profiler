@@ -4,13 +4,16 @@
 package elfunwindinfo
 
 import (
-	"fmt"
+	"bytes"
+	"io"
 	"math"
+	"os"
+	"strings"
 	"testing"
-	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
@@ -18,33 +21,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Go 1.2 spec Appendix: PC-Value Table Encoding example
+// Go 1.2 spec Appendix: PC-Value Table Encoding example. Each step returns
+// the PC where a value starts to be in effect, along with that value.
 func TestPcval(t *testing.T) {
 	res := []struct {
 		val int32
 		pc  uint
 	}{
-		{0, 0x2019},
-		{32, 0x206b},
-		{40, 0x206d},
-		{48, 0x2073},
-		{40, 0x2074},
-		{32, 0x209b},
-		{0, 0x209c},
+		{0, 0},
+		{32, 0x19},
+		{40, 0x6b},
+		{48, 0x6d},
+		{40, 0x73},
+		{32, 0x74},
+		{0, 0x9b},
 	}
 	data := []byte{
 		0x02, 0x19, 0x40, 0x52, 0x10, 0x02, 0x10, 0x06,
 		0x0f, 0x01, 0x0f, 0x27, 0x3f, 0x01, 0x00}
-	p, ok := newPcval(data, 0x2000, 1)
-	require.True(t, ok)
+	p := newPcvalDecoder(libpf.NewBytesView(data), 0, int64(len(data)), 1)
 	i := 0
-	for ; ok; ok = p.step() {
-		t.Logf("Pcval %d, %x", p.val, p.pcEnd)
+	for {
+		pc, val, err := p.step()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
 		// Guard the indexing below: a regression that makes the table step
 		// further than expected should fail here, not panic.
 		require.Less(t, i, len(res))
-		assert.Equal(t, res[i].val, p.val)
-		assert.Equal(t, res[i].pc, p.pcEnd)
+		assert.Equal(t, res[i].val, val)
+		assert.Equal(t, res[i].pc, pc)
 		i++
 	}
 	assert.Equal(t, len(res), i)
@@ -55,16 +62,21 @@ func TestPcval(t *testing.T) {
 // leave val at its -1 sentinel while reporting success.
 func TestPcvalInvalid(t *testing.T) {
 	data := []byte{0x81}
-	p, ok := newPcval(data, 0x2000, 1)
-	assert.False(t, ok)
+	p := newPcvalDecoder(libpf.NewBytesView(data), 0, int64(len(data)), 1)
+	_, _, err := p.step()
+	require.ErrorIs(t, err, io.EOF)
 	assert.Equal(t, int32(-1), p.val)
-	assert.False(t, p.step())
+	// The decoder stays at the end of the data: a repeated step keeps
+	// reporting the end of the table.
+	_, _, err = p.step()
+	require.ErrorIs(t, err, io.EOF)
+	assert.Equal(t, int32(-1), p.val)
 }
 
-// TestNewPcvalEmpty verifies that newPcval reports failure when the table has
-// no decodable first entry, so that callers never see the -1 sentinel in val.
-// The parse loops read val before their first step, so a sentinel would be
-// emitted as unwind information: 7 on x86 (val+8) and -1 on arm64.
+// TestNewPcvalEmpty verifies that a table with no decodable first entry is
+// rejected, so that callers never see the -1 sentinel in val. The parse loops
+// read val before their first step, so a sentinel would be emitted as unwind
+// information: 7 on x86 (val+8) and -1 on arm64.
 func TestNewPcvalEmpty(t *testing.T) {
 	for _, test := range []struct {
 		name string
@@ -79,8 +91,9 @@ func TestNewPcvalEmpty(t *testing.T) {
 		{"truncatedContinuation", []byte{0x02, 0x81}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			p, ok := newPcval(test.data, 0x2000, 1)
-			assert.False(t, ok)
+			p := newPcvalDecoder(libpf.NewBytesView(test.data), 0, int64(len(test.data)), 1)
+			_, _, err := p.step()
+			require.Error(t, err)
 			assert.Equal(t, int32(-1), p.val)
 		})
 	}
@@ -140,10 +153,10 @@ func TestTextStart(t *testing.T) {
 	require.NoError(t, err)
 	defer ef.Close()
 
-	var runtimeTextAddr uintptr
+	var runtimeTextAddr uint64
 	ef.VisitSymbols(func(sym libpf.Symbol) bool {
 		if sym.Name == "runtime.text" {
-			runtimeTextAddr = uintptr(sym.Address)
+			runtimeTextAddr = uint64(sym.Address)
 			return false
 		}
 		return true
@@ -170,45 +183,50 @@ func TestTextStart(t *testing.T) {
 	require.Equal(t, runtimeTextAddr, gStripped.textStart)
 }
 
-// TestGetPcvalBounds verifies that an out-of-range pcval offset, which is
-// untrusted data from the pclntab function descriptor, is rejected rather than
-// slicing out of bounds. The negative cases must not panic with "slice bounds
-// out of range".
-func TestGetPcvalBounds(t *testing.T) {
-	g := &Gopclntab{
-		pctab:   []byte{0x02, 0x19, 0x00},
-		quantum: 1,
-	}
+// TestPcvalBounds verifies that an out-of-range pcval offset, which is
+// untrusted data from the pclntab function descriptor, is rejected rather
+// than reading out of bounds. The negative cases must not panic with "slice
+// bounds out of range".
+func TestPcvalBounds(t *testing.T) {
+	data := []byte{0x02, 0x19, 0x00}
 	for _, test := range []struct {
-		name    string
-		offs    int32
-		wantErr string
+		name      string
+		offs      int32
+		outOfBnds bool
 	}{
-		{"negative", -1, "out of bounds"},
-		{"minInt32", math.MinInt32, "out of bounds"},
-		{"pastEnd", int32(len(g.pctab) + 1), "out of bounds"},
-		{"maxInt32", math.MaxInt32, "out of bounds"},
-		// An offset of exactly len(pctab) yields an empty table rather than an
-		// out of range slice, so it has to be caught by the bounds check and
-		// not by the empty table check further down.
-		{"atEnd", int32(len(g.pctab)), "out of bounds"},
+		{"negative", -1, true},
+		{"minInt32", math.MinInt32, true},
+		{"maxInt32", math.MaxInt32, false},
+		// An offset of exactly len(pctab) or past it yields io.EOF from the
+		// bounded reader rather than an out of range slice.
+		{"atEnd", int32(len(data)), false},
 		// In bounds, but pointing at the end-of-table marker.
-		{"terminator", 2, "has no valid first entry"},
+		{"terminator", 2, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := g.getPcval(test.offs, 0x2000)
-			require.ErrorContains(t, err, test.wantErr)
+			p := newPcvalDecoder(libpf.NewBytesView(data), 0, int64(len(data)), 1)
+			p.reset(test.offs, 0)
+			_, _, err := p.step()
+			require.Error(t, err)
+			if test.outOfBnds {
+				assert.ErrorContains(t, err, "out of bounds")
+			} else {
+				assert.ErrorIs(t, err, io.EOF)
+			}
 		})
 	}
 
-	// A valid offset still decodes the table.
-	p, err := g.getPcval(0, 0x2000)
+	// A valid offset still decodes the table: the first entry starts at pc 0
+	// with the value 0 in effect up to 0x19.
+	p := newPcvalDecoder(libpf.NewBytesView(data), 0, int64(len(data)), 1)
+	p.reset(0, 0)
+	pc, val, err := p.step()
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), p.val)
-	assert.Equal(t, uint(0x2019), p.pcEnd)
+	assert.Equal(t, int32(0), val)
+	assert.Equal(t, uint(0), pc)
 }
 
-// TestGetPcvalSentinel verifies that a table whose first entry steps
+// TestPcvalSentinel verifies that a table whose first entry steps
 // successfully, but leaves val negative, is rejected. Rejecting truncated
 // varints is not enough on its own: a non-canonical encoding of zero decodes
 // fine, so the -1 sentinel survives a successful step and would be emitted as
@@ -217,101 +235,212 @@ func TestGetPcvalBounds(t *testing.T) {
 // The expected reason is asserted, not just that some error is returned, so
 // that a case cannot silently start being caught by an earlier check and stop
 // testing what its name says.
-func TestGetPcvalSentinel(t *testing.T) {
+func TestPcvalSentinel(t *testing.T) {
 	for _, test := range []struct {
 		name    string
 		pctab   []byte
+		wantEOF bool
 		wantErr string
 	}{
-		// 0x80 0x00 is a non-canonical encoding of 0, then a pc delta of 2.
-		// The value is unchanged, so val is still the sentinel, but unlike a
-		// truncated table this steps successfully.
-		{"nonCanonicalZero", []byte{0x80, 0x00, 0x02, 0x00},
-			"starts with negative value -1"},
+		// 0x80 0x00 is a non-canonical encoding of zero, and thus decodes as
+		// the end-of-table marker. Kept to pin that behavior: this is
+		// rejected as an empty table, not by value.
+		{"nonCanonicalZero", []byte{0x80, 0x00, 0x02, 0x00}, true, ""},
 		// The same value, with the maximum padding getInt will consume before
 		// the shift stops contributing.
-		{"nonCanonicalZeroLong", []byte{0x80, 0x80, 0x80, 0x00, 0x02, 0x00},
-			"starts with negative value -1"},
-		// A negative delta, taking val below the sentinel rather than leaving
-		// it there. Rejected by value, not by being the sentinel.
-		{"negativeDelta", []byte{0x03, 0x02, 0x00},
-			"starts with negative value -3"},
+		{"nonCanonicalZeroLong", []byte{0x80, 0x80, 0x80, 0x00, 0x02, 0x00}, true, ""},
+		// A negative delta, taking val below the minimum valid value rather
+		// than leaving it at the sentinel. Rejected by value, not by being
+		// the sentinel.
+		{"negativeDelta", []byte{0x03, 0x02, 0x00}, false, "is below 0"},
 		// A canonical zero cannot be encoded as a leading 0x00, because that
 		// byte is the end-of-table marker. That is precisely why the
 		// non-canonical encoding above is the interesting case. Kept to pin
 		// that behavior: this is rejected as an empty table, not by value.
-		{"leadingTerminator", []byte{0x00, 0x02, 0x00},
-			"has no valid first entry"},
+		{"leadingTerminator", []byte{0x00, 0x02, 0x00}, true, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			g := &Gopclntab{pctab: test.pctab, quantum: 1}
-			_, err := g.getPcval(0, 0x2000)
-			require.ErrorContains(t, err, test.wantErr)
+			p := newPcvalDecoder(libpf.NewBytesView(test.pctab), 0, int64(len(test.pctab)), 1)
+			p.reset(0, 0)
+			_, _, err := p.step()
+			if test.wantEOF {
+				assert.ErrorIs(t, err, io.EOF)
+			} else {
+				assert.ErrorContains(t, err, test.wantErr)
+			}
 		})
 	}
 }
 
-// TestGetFuncOverflow verifies that a function offset near the top of the
-// address space does not wrap around the bounds check in getFunc. funcOff is
-// read verbatim from the file as a 64-bit value for pre-Go1.18 pclntab.
-// Check that these cases don't panic with "index out of range", and that the
-// accepted ones return a pclntabFunc that fits in the table.
-//
-// go1_2 is not covered because NewGopclntab rejects it as an unsupported
-// header, so getFunc is unreachable for it.
-func TestGetFuncOverflow(t *testing.T) {
-	// getFunc skips over the function start PC, whose width depends on the
-	// pclntab version, before returning the pclntabFunc that follows it.
-	// funSize has to account for both parts. This mirrors how NewGopclntab
-	// sets funSize; the test builds the struct directly, so it covers getFunc
-	// rather than that assignment, which real binaries exercise.
-	for _, version := range []uint8{go1_16, go1_18, go1_20} {
-		t.Run(fmt.Sprintf("version%d", version), func(t *testing.T) {
-			g := &Gopclntab{
-				functab: make([]byte, 128),
-				version: version,
-				ptrSize: 8,
-			}
-			if version >= go1_18 {
-				g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
-			} else {
-				g.funSize = g.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{}))
-			}
-			tabStart := uintptr(unsafe.Pointer(&g.functab[0]))
-			tabEnd := tabStart + uintptr(len(g.functab))
+// TestSymbolizeBorrowedReader verifies that symbolization shares an
+// underlying readatbuf reader instead of creating a new cache, and does not
+// release it on Close.
+func TestSymbolizeBorrowedReader(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/helloworld")
+	f, err := os.Open("testdata/helloworld")
+	require.NoError(t, err)
+	defer f.Close()
 
-			for _, test := range []struct {
-				name    string
-				funcOff uintptr
-			}{
-				{"maxUintptr", ^uintptr(0)},
-				{"wrapsToZero", ^uintptr(0) - uintptr(g.funSize) + 1},
-				{"justPastEnd", uintptr(len(g.functab))},
-				{"lastByte", uintptr(len(g.functab) - 1)},
-				{"oneTooFar", uintptr(len(g.functab)) - uintptr(g.funSize) + 1},
-			} {
-				t.Run(test.name, func(t *testing.T) {
-					pc, fun := g.getFunc(test.funcOff)
-					assert.Zero(t, pc)
-					assert.Nil(t, fun)
-				})
-			}
+	// The File reads through a cached reader: NewGopclntab must share it
+	// instead of creating a new cache.
+	borrowed, err := readatbuf.New(f, 1024, 4)
+	require.NoError(t, err)
+	ef, err := pfelf.NewFile(borrowed, 0, false)
+	require.NoError(t, err)
 
-			// The last offset that still fits a full function descriptor is
-			// accepted, and the descriptor ends exactly at the end of the
-			// table: the bound is tight, and never returns a pclntabFunc
-			// reaching past the mapping.
-			lastValid := uintptr(len(g.functab)) - uintptr(g.funSize)
-			_, fun := g.getFunc(lastValid)
-			require.NotNil(t, fun)
-			funEnd := uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
-			assert.Equal(t, tabEnd, funEnd)
+	g, err := NewGopclntab(ef)
+	require.NoError(t, err)
 
-			// An in-range offset is still accepted, and stays in bounds.
-			_, fun = g.getFunc(0)
-			require.NotNil(t, fun)
-			funEnd = uintptr(unsafe.Pointer(fun)) + unsafe.Sizeof(pclntabFunc{})
-			assert.GreaterOrEqual(t, tabEnd, funEnd)
+	// Resolve main.main by name, and symbolize it.
+	syms := []libpf.Symbol{{Name: "main.main"}}
+	require.NoError(t, g.LookupSymbols(syms))
+	require.NotZero(t, syms[0].Address)
+
+	sourceFile, line, funcName := g.Symbolize(uint64(syms[0].Address))
+	assert.Equal(t, "main.main", funcName.String())
+	assert.NotZero(t, line)
+	assert.NotEqual(t, libpf.NullString, sourceFile)
+
+	// The underlying cached reader is shared, and is not owned.
+	assert.Same(t, borrowed, g.readerAt)
+
+	// Close drops the reference, but leaves the shared reader functional.
+	require.NoError(t, g.Close())
+	assert.Nil(t, g.readerAt)
+	var buf [4]byte
+	_, err = borrowed.ReadAt(buf[:], 0)
+	require.NoError(t, err)
+}
+
+// TestSymbolizeAfterFileClose verifies that Gopclntab keeps the backing
+// pfelf.File's underlying reader open via Take, and can symbolize lazily
+// after the File itself has been closed.
+func TestSymbolizeAfterFileClose(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/helloworld")
+	ef, err := pfelf.Open("testdata/helloworld")
+	require.NoError(t, err)
+
+	g, err := NewGopclntab(ef)
+	require.NoError(t, err)
+	defer g.Close()
+
+	// Resolve main.main by name while the File is open.
+	syms := []libpf.Symbol{{Name: "main.main"}}
+	require.NoError(t, g.LookupSymbols(syms))
+	require.NotZero(t, syms[0].Address)
+
+	// Close the File; the Gopclntab holds a reference on the reader.
+	require.NoError(t, ef.Close())
+
+	// Symbolization still works: the reference keeps the reader open, and
+	// the lazily initialized caches read through it.
+	sourceFile, line, funcName := g.Symbolize(uint64(syms[0].Address))
+	assert.Equal(t, "main.main", funcName.String())
+	assert.NotZero(t, line)
+	assert.NotEqual(t, libpf.NullString, sourceFile)
+
+	// Repeated lookups are served from the caches.
+	sf, ln, fn := g.Symbolize(uint64(syms[0].Address))
+	assert.Equal(t, sourceFile, sf)
+	assert.Equal(t, ln, line)
+	assert.Equal(t, fn, funcName)
+}
+
+// TestNewGopclntabErrorReleasesRef verifies that a failed NewGopclntab does
+// not leak the reference taken on the backing pfelf.File: after File.Close,
+// the owned reader must be closed.
+func TestNewGopclntabErrorReleasesRef(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/helloworld")
+	data, err := os.ReadFile("testdata/helloworld")
+	require.NoError(t, err)
+
+	// Find the .gopclntab section offset from a valid File.
+	ef, err := pfelf.Open("testdata/helloworld")
+	require.NoError(t, err)
+	sec := ef.Section(".gopclntab")
+	require.NotNil(t, sec)
+	require.NoError(t, ef.Close())
+
+	// Corrupt the pclntab magic so NewGopclntab fails after locating the
+	// section.
+	data[sec.Offset] = 0xab
+
+	tracker := &closeTracker{ReaderAt: bytes.NewReader(data)}
+	bad, err := pfelf.NewFileOwned(tracker)
+	require.NoError(t, err)
+
+	_, err = NewGopclntab(bad)
+	require.ErrorContains(t, err, "unsupported header")
+
+	require.NoError(t, bad.Close())
+	assert.Equal(t, 1, tracker.closed, "owned reader not closed")
+}
+
+// closeTracker counts Close calls on a ReadAtCloser.
+type closeTracker struct {
+	io.ReaderAt
+	closed int
+}
+
+func (c *closeTracker) Close() error {
+	c.closed++
+	return nil
+}
+
+// TestSymbolizeReal symbolizes functions from real Go binaries, exercising
+// the sparse index, the file read caches and the function data LRU.
+func TestSymbolizeReal(t *testing.T) {
+	tests := map[string]struct {
+		elfFile string
+	}{
+		"regular Go binary":       {elfFile: "testdata/helloworld"},
+		"regular ARM64 Go binary": {elfFile: "testdata/helloworld.arm64"},
+		"PIE Go binary":           {elfFile: "testdata/helloworld.pie"},
+		"stripped PIE Go binary":  {elfFile: "testdata/helloworld.stripped.pie"},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			testsupport.RequireGeneratedTestFile(t, test.elfFile)
+			ef, err := pfelf.Open(test.elfFile)
+			require.NoError(t, err)
+
+			g, err := NewGopclntab(ef)
+			require.NoError(t, err)
+			defer g.Close()
+
+			// Resolve main.main by name, and symbolize it.
+			syms := []libpf.Symbol{{Name: "main.main"}}
+			require.NoError(t, g.LookupSymbols(syms))
+			require.NotZero(t, syms[0].Address)
+			require.NotZero(t, syms[0].Size)
+
+			// Symbolize the start of main.main. Do not use a pc in the
+			// middle of the function: for this test binary the middle is
+			// attributed to an inlined function from another source file.
+			at := uint64(syms[0].Address)
+			sourceFile, line, funcName := g.Symbolize(at)
+			assert.Equal(t, "main.main", funcName.String())
+			assert.True(t, strings.HasSuffix(sourceFile.String(), "helloworld.go"), sourceFile.String())
+			assert.NotZero(t, line)
+
+			// Repeat the lookup; it must be served from the function data
+			// cache with identical results.
+			sf, ln, fn := g.Symbolize(at)
+			assert.Equal(t, sourceFile, sf)
+			assert.Equal(t, line, ln)
+			assert.Equal(t, funcName, fn)
+
+			// Symbolize the start and end of every function; the function
+			// name must always resolve.
+			_, _, err = g.walkFuncMap(func(pc, endPc uint64, fun *pclntabFunc) error {
+				for _, at := range []uint64{pc, endPc - 1} {
+					_, _, funcName := g.Symbolize(uint64(at))
+					assert.NotEqual(t, libpf.NullString, funcName, "pc %#x", at)
+				}
+				return nil
+			})
+			require.NoError(t, err)
 		})
 	}
 }
