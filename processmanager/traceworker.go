@@ -9,7 +9,7 @@ import (
 
 // traceEventQueueSize bounds the queued trace events; a full queue blocks
 // producers, applying backpressure to the ringbuf reader.
-const traceEventQueueSize = 256
+const traceEventQueueSize = 2
 
 // traceOp is a trace event to process, or a cleanup boundary carrying the
 // checkpoint time of a consumed ring buffer snapshot.
