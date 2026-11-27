@@ -22,6 +22,10 @@ type Config struct {
 	// DisableECFallback disables the main ractor and global execution-context
 	// pointers, requiring ruby_current_ec to be resolved through TLS.
 	DisableECFallback bool `mapstructure:"disable_ec_fallback" json:"disable_ec_fallback,omitempty"`
+
+	// DisableSymbolLookup skips lookups of internal EC, VM and symbol-table symbols,
+	// requiring discovery from exported accessors as in a stripped shared library.
+	DisableSymbolLookup bool `mapstructure:"disable_symbol_lookup" json:"disable_symbol_lookup,omitempty"`
 }
 
 var _ interpreter.Config = Config{}
