@@ -135,6 +135,14 @@ func Test_ProcessContext(t *testing.T) {
 			env: []string{"GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0"}},
 		"musl_dlopen": {exeName: "processctx_dlopen_musl",
 			args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
+		// The record is reached through otel_thread_ctx_nodejs_v1 and the V8
+		// objects nodectx.c lays out. Node.js addons are dlopen'd TLSDESC.
+		"nodejs_glibc_exe": {exeName: "nodectx_exe_glibc"},
+		"nodejs_glibc_dlopen": {exeName: "processctx_dlopen_glibc",
+			args: []string{filepath.Join(exeDir, "libnodectx_glibc.so")},
+			env:  []string{"GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0"}},
+		"nodejs_musl_dlopen": {exeName: "processctx_dlopen_musl",
+			args: []string{filepath.Join(exeDir, "libnodectx_musl.so")}},
 	}
 
 	for name, tc := range tests {

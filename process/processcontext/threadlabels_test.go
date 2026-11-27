@@ -46,7 +46,7 @@ func manyLibpfStrings(n int) []libpf.String {
 }
 
 func TestReadThreadContextInfo(t *testing.T) {
-	version := attr(threadCtxSchemaVersionKey, strVal(supportedThreadCtxSchemaVersion))
+	version := attr(threadCtxSchemaVersionKey, strVal(tlsdescThreadCtxSchemaVersion))
 
 	tests := map[string]struct {
 		attrs        []*commonpb.KeyValue
@@ -78,6 +78,13 @@ func TestReadThreadContextInfo(t *testing.T) {
 			attrs: []*commonpb.KeyValue{
 				attr(threadCtxKeyMapKey, arrVal(strVal("a"))),
 				version,
+			},
+			wantKeyMap: []libpf.String{libpf.Intern("a")},
+		},
+		"nodejs version": {
+			attrs: []*commonpb.KeyValue{
+				attr(threadCtxSchemaVersionKey, strVal(nodejsThreadCtxSchemaVersion)),
+				attr(threadCtxKeyMapKey, arrVal(strVal("a"))),
 			},
 			wantKeyMap: []libpf.String{libpf.Intern("a")},
 		},

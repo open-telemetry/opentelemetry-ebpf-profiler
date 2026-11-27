@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/threadcontext"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
@@ -215,6 +216,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 
 		summary.Add(dotnet.GetAndResetMetrics())
 		summary.Add(processcontext.GetAndResetMetrics())
+		summary.Add(threadcontext.GetAndResetMetrics())
 		summary.Add(pm.ebpf.CollectMetrics())
 
 		pm.eim.UpdateMetricSummary(summary)

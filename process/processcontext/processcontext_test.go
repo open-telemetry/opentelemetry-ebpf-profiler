@@ -546,7 +546,7 @@ func TestProcessContext_Read_TornPayload(t *testing.T) {
 
 func TestProcessContext_Read_ThreadContext(t *testing.T) {
 	validSchema := []*commonpb.KeyValue{
-		attr(threadCtxSchemaVersionKey, strVal(supportedThreadCtxSchemaVersion)),
+		attr(threadCtxSchemaVersionKey, strVal(tlsdescThreadCtxSchemaVersion)),
 		attr(threadCtxKeyMapKey, arrVal(strVal("route"), strVal("method"))),
 	}
 	malformedSchema := []*commonpb.KeyValue{

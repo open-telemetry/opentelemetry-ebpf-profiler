@@ -166,7 +166,8 @@ test-deps: $(GOLABELS_TESTDATA_TARGETS)
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/go/integrationtests \
+	process/processcontext
 
 CI_KERNELS = $(shell sed -nE 's/^ *- \{ target_arch: $(TARGET_ARCH), kernel: ([^ ,}]+) \}.*/\1/p' \
 		.github/workflows/unit-test-on-pull-request.yml)

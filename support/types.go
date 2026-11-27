@@ -61,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x8000
 
 const (
-	MetricIDBeginCumulative = 0x75
+	MetricIDBeginCumulative = 0x77
 )
 
 const (
@@ -361,7 +361,9 @@ type RubyProcInfo struct {
 	Pad_cgo_0                    [4]byte
 }
 type ThreadContextProcInfo struct {
-	Tls TLSVarInfo
+	Tls       TLSVarInfo
+	Schema    uint8
+	Pad_cgo_0 [3]byte
 }
 type V8ProcInfo struct {
 	Default_isolate_group_addr   uint64
@@ -396,7 +398,12 @@ const (
 
 	sizeof_PHPProcInfo           = 0x18
 	sizeof_RubyProcInfo          = 0x40
-	sizeof_ThreadContextProcInfo = 0xc
+	sizeof_ThreadContextProcInfo = 0x10
+)
+
+const (
+	ThreadCtxSchemaTLSDesc uint8 = 0x0
+	ThreadCtxSchemaNodeJS  uint8 = 0x1
 )
 
 const (
@@ -455,6 +462,17 @@ const (
 	V8DataDeltaMask     = 0xffffffff
 	V8DataCodeKindShift = 0x20
 	V8DataCodeKindMask  = 0xff
+
+	NodeTCTaggedSize       = 0x8
+	NodeTCJSMapTableOffset = 0x18
+	NodeTCFixedArrayHeader = 0x10
+	NodeTCHashCounts       = 0x3
+	NodeTCHashEntrySize    = 0x3
+	NodeTCHashLoadFactor   = 0x2
+	NodeTCMaxChain         = 0x10
+	NodeTCTestNone         = 0x0
+	NodeTCTestExpected     = 0x1
+	NodeTCTestOther        = 0x2
 
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
@@ -575,4 +593,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindThreadContextErrReadThreadCtxBuf,
 	0x73: metrics.IDUnwindThreadContextReadSuccesses,
 	0x74: metrics.IDUnwindThreadContextAttrsTruncated,
+	0x75: metrics.IDUnwindThreadContextNodeErrRead,
+	0x76: metrics.IDUnwindThreadContextNodeErrInvalid,
 }

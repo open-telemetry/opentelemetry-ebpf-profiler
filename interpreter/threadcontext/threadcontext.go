@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package threadcontext locates the thread context an instrumented process
-// publishes through a thread-local pointer, so eBPF can read its trace context
-// and labels at unwind time.
+// publishes through a thread-local, so eBPF can read its trace context and
+// labels at unwind time.
 package threadcontext // import "go.opentelemetry.io/ebpf-profiler/interpreter/threadcontext"
 
 import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -17,15 +19,51 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tls"
 )
 
-const (
-	tlsExport     = "otel_thread_ctx_v1"
-	tlsExportSize = 8
+// tlsExport is a thread-local an instrumented process publishes its thread
+// context through.
+type tlsExport struct {
+	name   libpf.SymbolName
+	size   uint64
+	schema uint8
+}
+
+var tlsExports = [...]tlsExport{
+	// OTEP 4947 pointer to the thread context record.
+	{name: "otel_thread_ctx_v1", size: 8, schema: support.ThreadCtxSchemaTLSDesc},
+	// Node.js discovery struct, per design-docs/01861-nodejs-thread-context.
+	{name: "otel_thread_ctx_nodejs_v1", size: 32, schema: support.ThreadCtxSchemaNodeJS},
+}
+
+var (
+	// exportAmbiguous counts ELF files rejected for defining several exports.
+	exportAmbiguous atomic.Int64
+	// exportConflict counts attaches that replaced another ELF's entry for a PID.
+	exportConflict atomic.Int64
+
+	attachedMu sync.Mutex
+	// attached is the ELF whose export thread_context_procs holds for a PID.
+	attached = map[libpf.PID]*threadcontextData{}
 )
+
+// GetAndResetMetrics returns the thread context counters and resets them to zero.
+func GetAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextExportAmbiguous,
+			Value: metrics.MetricValue(exportAmbiguous.Swap(0)),
+		},
+		{
+			ID:    metrics.IDThreadContextExportConflict,
+			Value: metrics.MetricValue(exportConflict.Swap(0)),
+		},
+	}
+}
 
 func GetLoader(_ Config) interpreter.Loader {
 	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
@@ -44,13 +82,40 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, nil
 	}
 
+	// The exported symbol selects the walk, not threadlocal.schema_version, as
+	// the symbol name pins the layout. An ELF defining two exports is ambiguous.
+	var found *threadcontextData
+	for _, export := range tlsExports {
+		data, err := loadExport(ef, export)
+		if err != nil {
+			return nil, err
+		}
+		if data == nil {
+			continue
+		}
+		if found != nil {
+			exportAmbiguous.Add(1)
+			return nil, fmt.Errorf("both %s and %s are defined",
+				found.export.name, export.name)
+		}
+		found = data
+	}
+	if found == nil {
+		return nil, nil
+	}
+	log.Debugf("%s: %s is %v", info.FileName(), found.export.name, found.tlsVar)
+	return found, nil
+}
+
+// loadExport resolves export in ef, or returns nil when ef does not define it.
+func loadExport(ef *pfelf.File, export tlsExport) (*threadcontextData, error) {
 	// The publisher must export the variable for the profiler to find it.
-	sym, err := ef.LookupSymbol(tlsExport)
+	sym, err := ef.LookupSymbol(export.name)
 	if err != nil {
 		if errors.Is(err, libpf.ErrSymbolNotFound) || errors.Is(err, pfelf.ErrNoSymbolHash) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to look up %s: %w", tlsExport, err)
+		return nil, fmt.Errorf("failed to look up %s: %w", export.name, err)
 	}
 	// A reference to the variable another module defines, which only a DT_HASH
 	// lookup returns.
@@ -59,25 +124,23 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 	tlsVar, err := tls.Resolve(ef, sym)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve %s: %w", tlsExport, err)
+		return nil, fmt.Errorf("failed to resolve %s: %w", export.name, err)
 	}
-	if sym.Size != tlsExportSize {
-		return nil, fmt.Errorf("%s has wrong size %d", tlsExport, sym.Size)
+	if sym.Size != export.size {
+		return nil, fmt.Errorf("%s has wrong size %d", export.name, sym.Size)
 	}
-
-	log.Debugf("%s: %s is %v", info.FileName(), tlsExport, tlsVar)
-
-	return &threadcontextData{tlsVar: tlsVar}, nil
+	return &threadcontextData{tlsVar: tlsVar, export: export}, nil
 }
 
 type threadcontextData struct {
 	tlsVar tls.Var
+	export tlsExport
 }
 
 var _ interpreter.Data = &threadcontextData{}
 
 func (d *threadcontextData) String() string {
-	return fmt.Sprintf("Thread context (%v)", d.tlsVar)
+	return fmt.Sprintf("Thread context %s (%v)", d.export.name, d.tlsVar)
 }
 
 func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
@@ -86,17 +149,33 @@ func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	// Dynamic TLS remains pending until UpdateLibcInfo supplies the DTV layout.
 	tlsInfo, pendingTLS, err := d.tlsVar.Locate(rm, bias)
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate %s: %w", tlsExport, err)
+		return nil, fmt.Errorf("failed to locate %s: %w", d.export.name, err)
 	}
 
-	procInfo := support.ThreadContextProcInfo{Tls: tlsInfo}
+	procInfo := support.ThreadContextProcInfo{Tls: tlsInfo, Schema: d.export.schema}
 	if err = ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
+	d.trackAttach(pid)
 
 	log.Debugf("PID %d: thread context TLS %+v, pending %v", pid, tlsInfo, pendingTLS)
 
-	return &Instance{pendingTLS: pendingTLS}, nil
+	return &Instance{pendingTLS: pendingTLS, schema: d.export.schema}, nil
+}
+
+// trackAttach records d as the owner of the PID entry and reports a replaced owner.
+func (d *threadcontextData) trackAttach(pid libpf.PID) {
+	attachedMu.Lock()
+	prev := attached[pid]
+	attached[pid] = d
+	attachedMu.Unlock()
+
+	// The eBPF map holds one entry per PID, so the last ELF attached wins.
+	if prev != nil && prev != d {
+		exportConflict.Add(1)
+		log.Warnf("PID %d: thread context %s replaces %s from another ELF",
+			pid, d.export.name, prev.export.name)
+	}
 }
 
 func (d *threadcontextData) Unload(_ interpreter.EbpfHandler) {}
@@ -106,6 +185,8 @@ type Instance struct {
 
 	// pendingTLS is non-nil while the DTV layout is awaited.
 	pendingTLS *tls.VarLocation
+	// schema is the THREAD_CTX_SCHEMA_* value of the located thread-local.
+	schema uint8
 }
 
 var _ interpreter.Instance = &Instance{}
@@ -126,7 +207,7 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	if err != nil {
 		return err
 	}
-	procInfo := support.ThreadContextProcInfo{Tls: tlsInfo}
+	procInfo := support.ThreadContextProcInfo{Tls: tlsInfo, Schema: i.schema}
 	if err = ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return err
 	}
@@ -136,5 +217,8 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 }
 
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	attachedMu.Lock()
+	delete(attached, pid)
+	attachedMu.Unlock()
 	return ebpf.DeleteProcData(libpf.ThreadContext, pid)
 }

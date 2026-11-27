@@ -707,6 +707,18 @@ const (
 	// Number of times deleting an element from exeIDToStackDeltaMeta failed
 	IDExeIDToStackDeltaMetaDelete = 315
 
+	// Number of failures to read V8 heap objects on the Node.js thread context walk
+	IDUnwindThreadContextNodeErrRead = 316
+
+	// Number of Node.js thread context walks stopped at an inconsistent V8 object
+	IDUnwindThreadContextNodeErrInvalid = 317
+
+	// Number of ELF files rejected for defining more than one thread context export
+	IDThreadContextExportAmbiguous = 318
+
+	// Number of thread context attaches replacing a different export in the same process
+	IDThreadContextExportConflict = 319
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 316
+	IDMax = 320
 )

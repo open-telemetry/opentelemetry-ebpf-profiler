@@ -2309,5 +2309,33 @@
     "name": "ExeIDToStackDeltaMetaDelete",
     "field": "agent.errors.exe_id_to_stackdelta_meta_delete",
     "id": 315
+  },
+  {
+    "description": "Number of failures to read V8 heap objects on the Node.js thread context walk",
+    "type": "counter",
+    "name": "UnwindThreadContextNodeErrRead",
+    "field": "bpf.threadctx.nodejs.errors.read",
+    "id": 316
+  },
+  {
+    "description": "Number of Node.js thread context walks stopped at an inconsistent V8 object",
+    "type": "counter",
+    "name": "UnwindThreadContextNodeErrInvalid",
+    "field": "bpf.threadctx.nodejs.errors.invalid",
+    "id": 317
+  },
+  {
+    "description": "Number of ELF files rejected for defining more than one thread context export",
+    "type": "counter",
+    "name": "ThreadContextExportAmbiguous",
+    "field": "agent.threadctx.errors.export_ambiguous",
+    "id": 318
+  },
+  {
+    "description": "Number of thread context attaches replacing a different export in the same process",
+    "type": "counter",
+    "name": "ThreadContextExportConflict",
+    "field": "agent.threadctx.errors.export_conflict",
+    "id": 319
   }
 ]

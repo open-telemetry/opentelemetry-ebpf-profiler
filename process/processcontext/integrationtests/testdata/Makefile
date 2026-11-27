@@ -23,7 +23,8 @@ BINARIES := \
 	processctx_exe_glibc \
 	processctx_exe_glibc_prctl_rejected \
 	libprocessctx_glibc.so libprocessctx_musl.so \
-	processctx_dlopen_glibc processctx_dlopen_musl
+	processctx_dlopen_glibc processctx_dlopen_musl \
+	nodectx_exe_glibc libnodectx_glibc.so libnodectx_musl.so
 
 all: $(BINARIES)
 
@@ -51,3 +52,15 @@ processctx_dlopen_glibc: processctx.c
 
 processctx_dlopen_musl: processctx.c
 	$(MUSL_GCC) -o $@ $< -DUSE_DLOPEN
+
+NODECTX_SRC := processctx_lib.c otel_process_ctx.c nodectx.c
+
+# The Node.js variants publish otel_thread_ctx_nodejs_v1 instead.
+nodectx_exe_glibc: processctx.c $(NODECTX_SRC) processctx_lib.h otel_process_ctx.h nodectx.h
+	$(GCC) -DNODEJS_CTX -mtls-dialect=$(TLS_DIALECT) -rdynamic -o $@ $< $(NODECTX_SRC)
+
+libnodectx_glibc.so: $(NODECTX_SRC) processctx_lib.h otel_process_ctx.h nodectx.h
+	$(GCC) -DNODEJS_CTX -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -o $@ $(NODECTX_SRC)
+
+libnodectx_musl.so: $(NODECTX_SRC) processctx_lib.h otel_process_ctx.h nodectx.h
+	$(MUSL_GCC) -DNODEJS_CTX -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -o $@ $(NODECTX_SRC)
