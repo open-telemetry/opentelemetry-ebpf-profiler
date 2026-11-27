@@ -6,14 +6,34 @@ package periodiccaller // import "go.opentelemetry.io/ebpf-profiler/periodiccall
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
 // Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.
-func Start(ctx context.Context, interval time.Duration, callback func()) func() {
+func Start(ctx context.Context, interval time.Duration, callback func()) {
+	startTickerLoop(ctx, interval, callback, nil)
+}
+
+// StartTracked starts a timer that calls <callback> every <interval> until the <ctx> is
+// canceled, tracking the goroutine on <wg> for deterministic teardown. wg.Done runs after
+// any in-flight callback returned.
+func StartTracked(ctx context.Context, wg *sync.WaitGroup, interval time.Duration,
+	callback func()) {
+	wg.Add(1)
+	startTickerLoop(ctx, interval, callback, wg.Done)
+}
+
+// startTickerLoop spawns the timer goroutine shared by Start and StartTracked. The
+// optional onExit cleanup runs after any in-flight callback returned.
+func startTickerLoop(ctx context.Context, interval time.Duration, callback func(),
+	onExit func()) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		if onExit != nil {
+			defer onExit()
+		}
 
 		for {
 			select {
@@ -24,8 +44,6 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 			}
 		}
 	}()
-
-	return ticker.Stop
 }
 
 // CallbackFunc is a function that can be triggered periodically or manually.
@@ -38,10 +56,26 @@ type CallbackFunc func(manualTrigger bool) bool
 // <interval> until the <ctx> is canceled or <callback> returns false.
 // The 'trigger' channel can be used to trigger callback immediately.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration,
-	trigger chan bool, callback CallbackFunc) func() {
+	trigger chan bool, callback CallbackFunc) {
+	startManualTriggerLoop(ctx, interval, trigger, callback, nil)
+}
+
+// StartWithManualTriggerTracked is StartWithManualTrigger tracking the goroutine on <wg>.
+// wg.Done runs after any in-flight callback returned.
+func StartWithManualTriggerTracked(ctx context.Context, wg *sync.WaitGroup,
+	interval time.Duration, trigger chan bool, callback CallbackFunc) {
+	wg.Add(1)
+	startManualTriggerLoop(ctx, interval, trigger, callback, wg.Done)
+}
+
+func startManualTriggerLoop(ctx context.Context, interval time.Duration,
+	trigger chan bool, callback CallbackFunc, onExit func()) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		if onExit != nil {
+			defer onExit()
+		}
 
 		for {
 			select {
@@ -58,6 +92,4 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration,
 			}
 		}
 	}()
-
-	return ticker.Stop
 }

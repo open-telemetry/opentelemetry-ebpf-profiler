@@ -167,23 +167,7 @@ func Test_ProcessContext(t *testing.T) {
 			require.NoError(t, trc.AttachSchedMonitor())
 			require.NoError(t, trc.AttachPrctlMonitor())
 
-			traceCh := make(chan *libpf.EbpfTrace)
-			require.NoError(t, trc.StartMapMonitors(ctx, traceCh))
-
-			// HandleTrace is what resolves the process context onto the meta
-			// the reporter captures.
-			go func() {
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case trace := <-traceCh:
-						if trace != nil {
-							trc.HandleTrace(trace)
-						}
-					}
-				}
-			}()
+			require.NoError(t, trc.StartMapMonitors(ctx))
 
 			cmd := exec.CommandContext(ctx, filepath.Join(exeDir, tc.exeName), tc.args...)
 			cmd.Stderr = os.Stderr

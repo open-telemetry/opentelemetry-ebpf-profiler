@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -17,7 +18,6 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -40,7 +40,8 @@ const (
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
 func (t *Tracer) StartPIDEventProcessor(ctx context.Context) {
-	go t.processPIDEvents(ctx)
+	ctx = t.runCtx(ctx)
+	t.monitorsWG.Go(func() { t.processPIDEvents(ctx) })
 }
 
 // Process the PID events that are incoming in the Tracer channel.
@@ -90,7 +91,7 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 // references into the buffer that it is given: the buffer is reused across
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
-func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
+func startPerfEventMonitor(ctx context.Context, wg *sync.WaitGroup, perfEventMap *ebpf.Map,
 	triggerFunc func([]byte), perCPUBufferSize int,
 ) (func() (lost, noData, readError uint64), error) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
@@ -99,7 +100,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	}
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
-	go func() {
+	wg.Go(func() {
 		defer eventReader.Close()
 		context.AfterFunc(ctx, func() { _ = eventReader.Close() })
 
@@ -123,7 +124,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 			}
 			triggerFunc(data.RawSample)
 		}
-	}()
+	})
 
 	return func() (lost, noData, readError uint64) {
 		lost = lostEventsCount.Swap(0)
@@ -137,10 +138,12 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // the kernel by periodically polling the underlying ringbuffer.
 // Events written to the ringbuffer do not wake userspace immediately.
 //
+// Every received record is handed to the process manager; periodically a
+// boundary advances the exit cleanup watermark to a checkpoint time, once
+// the ring buffer bytes unread at that time were consumed.
+//
 // Returns a function that can be called to retrieve ringbuffer error counts.
-func (t *Tracer) startTraceEventMonitor(ctx context.Context,
-	traceOutChan chan<- *libpf.EbpfTrace,
-) (func() []metrics.Metric, error) {
+func (t *Tracer) startTraceEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := ringbuf.NewReader(eventsMap)
 	if err != nil {
@@ -154,10 +157,15 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	eventReader.SetDeadline(time.Unix(1, 0))
 
 	var readErrorCount, noDataCount atomic.Uint64
-	go func() {
+	// Exit cleanup checkpoint: ckptBytes counts the ring buffer bytes that
+	// were unread when ckptTime was taken. Once they are consumed, all
+	// records committed up to ckptTime were read and queued.
+	var ckptTime times.KTime
+	var ckptBytes int
+	var ckptPending bool
+	t.monitorsWG.Go(func() {
 		defer eventReader.Close()
 		var data ringbuf.Record
-		var oldKTime, minKTime int64
 		var eventCount int
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
@@ -182,8 +190,15 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				// Continue execution below
 			}
 
+			// Clock is read before the buffer position, so records committed
+			// up to ckptTime are all accounted in the unread bytes.
+			if !ckptPending {
+				ckptTime = times.GetKTime()
+				ckptBytes = eventReader.AvailableBytes()
+				ckptPending = true
+			}
+
 			eventCount = 0
-			minKTime = 0
 
 			// Eagerly read events until the buffer is exhausted or we reach maxEvents
 			for {
@@ -193,6 +208,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					}
 					break
 				}
+
+				// A record occupies an 8-byte header plus the sample padded
+				// to an 8-byte boundary.
+				ckptBytes -= 8 + (len(data.RawSample)+7)&^7
 
 				// There's a theoretical possibility that this inner loop never exits if the
 				// following two error cases are continuously being hit. In practice this would
@@ -215,68 +234,29 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 
 				eventCount++
 
-				// Keep track of min KTime seen in this batch processing loop
-				trace, err := t.loadBpfTrace(data.RawSample)
-				switch {
-				case err == nil:
-					// Fast path for no error.
-				case errors.Is(err, errOriginUnexpected):
-					log.Warnf("skip trace handling: %v", err)
-					continue
-				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
+				if err := t.processManager.HandleTrace(data.RawSample); err != nil {
+					// A malformed record breaks the trace layout
+					// contract; stop processing.
 					log.Errorf("Stop receiving traces: %v", err)
 					t.signalDone()
 					return
-				default:
-					log.Warnf("unexpected error handling trace: %v", err)
-					continue
 				}
 
-				if minKTime == 0 || trace.KTime < minKTime {
-					minKTime = trace.KTime
-				}
-				// TODO: This per-event channel send couples event processing in the rest of
-				// the agent with event reading from the ringbuffer slowing down the latter.
-				traceOutChan <- trace
 				if eventCount == maxEvents {
-					// Break this inner loop to ensure ProcessedUntil logic executes
+					// Bound the work done per poll tick.
 					break
 				}
 			}
-			// After we've received and processed all trace events, call
-			// ProcessedUntil if there is a pending oldKTime that we
-			// haven't yet propagated to the rest of the agent.
-			// This introduces both an upper bound to ProcessedUntil
-			// call frequency (dictated by pollTicker) but also skips calls
-			// when none are needed (e.g. no trace events have been read).
-			//
-			// We use oldKTime instead of minKTime (except when the latter is
-			// smaller than the former) to take into account scheduling delays
-			// that could in theory result in observed KTime going back in time.
-			//
-			// For example, as we don't control ordering of trace events being
-			// written by the kernel in per-CPU buffers across CPU cores, it's
-			// possible that given events generated on different cores with
-			// timestamps t0 < t1 < t2 < t3, this poll loop reads [t3 t1 t2]
-			// in a first iteration and [t0] in a second iteration. If we use
-			// the current iteration minKTime we'll call
-			// ProcessedUntil(t1) first and t0 next, with t0 < t1.
-			if oldKTime > 0 {
-				// Ensure that all previously sent trace events have been processed
-				traceOutChan <- nil
-
-				if minKTime > 0 && minKTime <= oldKTime {
-					// If minKTime is smaller than oldKTime, use it and reset it
-					// to avoid a repeat during next iteration.
-					t.processManager.ProcessedUntil(times.KTime(minKTime))
-					minKTime = 0
-				} else {
-					t.processManager.ProcessedUntil(times.KTime(oldKTime))
-				}
+			if ckptPending && (ckptBytes <= 0 || eventReader.AvailableBytes() == 0) {
+				// The records present at ckptTime are consumed and queued;
+				// the boundary applies the cleanup once they are processed.
+				// The caught-up check covers kernel-discarded records, which
+				// the reader skips without delivering.
+				t.processManager.BatchSubmitted(ckptTime)
+				ckptPending = false
 			}
-			oldKTime = minKTime
 		}
-	}()
+	})
 
 	return func() []metrics.Metric {
 		noData := noDataCount.Swap(0)
@@ -297,7 +277,8 @@ func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric
 		return nil, fmt.Errorf("map report_events is not available")
 	}
 
-	getPerfErrorCounts, err := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
+	getPerfErrorCounts, err := startPerfEventMonitor(ctx, &t.monitorsWG, eventMap,
+		t.triggerReportEvent, os.Getpagesize())
 	if err != nil {
 		return nil, err
 	}

@@ -126,12 +126,12 @@ func TestPeriodicCaller(t *testing.T) {
 	interval := 10 * time.Millisecond
 	trigger := make(chan bool)
 
-	tests := map[string]func(context.Context, func()) func(){
-		"Start": func(ctx context.Context, cb func()) func() {
-			return Start(ctx, interval, cb)
+	tests := map[string]func(context.Context, func()){
+		"Start": func(ctx context.Context, cb func()) {
+			Start(ctx, interval, cb)
 		},
-		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+		"StartWithManualTrigger": func(ctx context.Context, cb func()) {
+			StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
 				cb()
 				return true
 			})
@@ -145,7 +145,7 @@ func TestPeriodicCaller(t *testing.T) {
 			done := make(chan bool)
 			var counter atomic.Int32
 
-			stop := testFunc(ctx, func() {
+			testFunc(ctx, func() {
 				result := counter.Load()
 				if result < 2 {
 					result = counter.Add(1)
@@ -167,7 +167,59 @@ func TestPeriodicCaller(t *testing.T) {
 			}
 
 			cancel()
-			stop()
+		})
+	}
+}
+
+// TestStartTracked verifies that the tracked goroutine exits after
+// cancellation, and that no callbacks run afterwards.
+func TestStartTracked(t *testing.T) {
+	defer checkForGoRoutineLeaks(t)
+	interval := 1 * time.Millisecond
+
+	tests := map[string]func(context.Context, *sync.WaitGroup, func()){
+		"StartTracked": func(ctx context.Context, wg *sync.WaitGroup, cb func()) {
+			StartTracked(ctx, wg, interval, cb)
+		},
+		"StartWithManualTriggerTracked": func(ctx context.Context, wg *sync.WaitGroup,
+			cb func()) {
+			StartWithManualTriggerTracked(ctx, wg, interval, make(chan bool),
+				func(bool) bool {
+					cb()
+					return true
+				})
+		},
+	}
+
+	for name, start := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			var counter atomic.Int32
+			var wg sync.WaitGroup
+
+			start(ctx, &wg, func() {
+				counter.Add(1)
+			})
+
+			require.Eventually(t, func() bool { return counter.Load() >= 3 },
+				10*time.Second, time.Millisecond, "callback was not called")
+
+			cancel()
+			exited := make(chan struct{})
+			go func() {
+				wg.Wait()
+				close(exited)
+			}()
+			select {
+			case <-exited:
+			case <-time.After(10 * time.Second):
+				assert.Fail(t, "timeout - tracked goroutine did not exit after cancellation")
+			}
+
+			// No callbacks may run after the goroutine exited.
+			count := counter.Load()
+			time.Sleep(20 * time.Millisecond)
+			assert.Equal(t, count, counter.Load())
 		})
 	}
 }
@@ -179,12 +231,12 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 	interval := 1 * time.Millisecond
 	trigger := make(chan bool)
 
-	tests := map[string]func(context.Context, func()) func(){
-		"Start": func(ctx context.Context, cb func()) func() {
-			return Start(ctx, interval, cb)
+	tests := map[string]func(context.Context, func()){
+		"Start": func(ctx context.Context, cb func()) {
+			Start(ctx, interval, cb)
 		},
-		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+		"StartWithManualTrigger": func(ctx context.Context, cb func()) {
+			StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
 				cb()
 				return true
 			})
@@ -196,7 +248,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 
 			executions := make(chan struct{}, 20)
-			stop := testFunc(ctx, func() {
+			testFunc(ctx, func() {
 				executions <- struct{}{}
 			})
 
@@ -210,7 +262,6 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			assert.Less(t, len(executions), 12)
 
 			cancel()
-			stop()
 		})
 	}
 }
@@ -229,7 +280,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	trigger := make(chan bool)
 	done := make(chan bool)
 
-	stop := StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
+	StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
 		require.True(t, manualTrigger)
 		n := counter.Add(1)
 		if n == int32(numTrigger) {
@@ -237,7 +288,6 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 		}
 		return true
 	})
-	defer stop()
 
 	for range numTrigger {
 		trigger <- true
@@ -259,7 +309,7 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	trigger := make(chan bool)
 	done := make(chan bool, 1)
 
-	stop := StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
+	StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
 		func(manualTrigger bool) bool {
 			n := counter.Add(1)
 			if n == int32(numIters) {
@@ -268,7 +318,6 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 			}
 			return true
 		})
-	defer stop()
 
 	select {
 	case <-timeout:

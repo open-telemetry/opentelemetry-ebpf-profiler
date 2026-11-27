@@ -487,9 +487,9 @@ func compareMapping(a, b Mapping) int {
 }
 
 // processPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
-// exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
-// processed. There can be a race condition if we can not clean up the references for this process
-// fast enough and this particular pid is reused again by the system.
+// exitKTime is stored for later cleanup, once traces up to this time were processed. There can be
+// a race condition if we can not clean up the references for this process fast enough and this
+// particular pid is reused again by the system.
 func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
@@ -598,7 +598,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
 
-	// Abort early if process is waiting for cleanup in ProcessedUntil
+	// Abort early if the process is waiting for exit cleanup
 	pm.mu.Lock()
 	_, ok := pm.exitEvents[pid]
 	pm.mu.Unlock()
@@ -959,7 +959,19 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	return libpf.FrameMapping{}
 }
 
-func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
+// BatchSubmitted records that the reader consumed the records submitted so
+// far; ckptTime is the clock snapshot taken before reading them. A boundary
+// op advances the exit cleanup watermark to ckptTime once the worker
+// processed the records queued before it. Callers pass monotonic clock
+// snapshots.
+func (pm *ProcessManager) BatchSubmitted(ckptTime times.KTime) {
+	pm.submit(traceOp{boundaryKTime: ckptTime})
+}
+
+// processedUntil advances the exit cleanup watermark and deletes the state
+// of process exits up to it. Concurrent calls with the same or older
+// watermarks are idempotent.
+func (pm *ProcessManager) processedUntil(watermark times.KTime) {
 	var err error
 	defer func() {
 		if err != nil {
@@ -969,12 +981,16 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
+	if watermark <= times.KTime(pm.exitWatermark.Load()) {
+		return
+	}
+
 	nowKTime := times.GetKTime()
-	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
-		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
+	log.Debugf("exit cleanup watermark %v, latency %v ms",
+		watermark, (nowKTime-watermark)/1e6)
 
 	for pid, pidExitKTime := range pm.exitEvents {
-		if pidExitKTime > traceCaptureKTime {
+		if pidExitKTime > watermark {
 			continue
 		}
 
@@ -992,4 +1008,8 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
+
+	// Publish the watermark only after the cleanup completed: observers of
+	// the watermark know the exits up to it were processed.
+	pm.exitWatermark.Store(int64(watermark))
 }

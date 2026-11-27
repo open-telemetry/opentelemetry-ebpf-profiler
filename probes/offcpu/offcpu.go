@@ -17,6 +17,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -64,7 +65,7 @@ type probe struct {
 }
 
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&tracer.OriginEntry{
+	originID, err := reg.Register(&pm.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes:  []samples.SampleType{{Type: "off_cpu", Unit: "nanoseconds"}},
 			ReportValues: true,
