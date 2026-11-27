@@ -251,6 +251,86 @@ func TestReader_InitFromView(t *testing.T) {
 	})
 }
 
+func TestReader_SeekWithinBufferedData(t *testing.T) {
+	data := make([]byte, 256)
+	for i := range data {
+		data[i] = byte(i)
+	}
+	cached, err := readatbuf.New(bytes.NewReader(data), 64, 4)
+	require.NoError(t, err)
+
+	t.Run("OwnedBuffer", func(t *testing.T) {
+		r := Reader{}
+		r.Init(cached, 0, int64(len(data)))
+		defer r.Release()
+
+		buf := make([]byte, 8)
+		_, err := r.Read(buf)
+		require.NoError(t, err)
+		require.False(t, r.zeroCopy)
+		require.Equal(t, data[:8], buf)
+
+		// Seek backwards within the buffered data.
+		_, err = r.Seek(3, io.SeekStart)
+		require.NoError(t, err)
+		buf = make([]byte, 5)
+		_, err = r.Read(buf)
+		require.NoError(t, err)
+		require.Equal(t, data[3:8], buf)
+	})
+
+	t.Run("SectionLimitsBufferedData", func(t *testing.T) {
+		r := Reader{}
+		r.Init(cached, 0, int64(len(data)))
+		defer r.Release()
+
+		buf := make([]byte, 8)
+		_, err := r.Read(buf)
+		require.NoError(t, err)
+
+		// A section shorter than the buffered data: nlim < nbuf.
+		require.NoError(t, r.StartSection(16))
+		require.Less(t, r.nlim, r.nbuf)
+
+		// Seeking within the section is served from the buffer.
+		_, err = r.Seek(8, io.SeekStart)
+		require.NoError(t, err)
+		b, err := r.ReadByte()
+		require.NoError(t, err)
+		require.Equal(t, data[8], b)
+
+		// Seeking to the section end is valid; reads return EOF.
+		_, err = r.Seek(24, io.SeekStart)
+		require.NoError(t, err)
+		s, err := r.ReadString(0)
+		require.ErrorIs(t, err, io.EOF)
+		require.Empty(t, s)
+
+		// Seeking into the section overhang must not leave the read
+		// position beyond nlim: ReadSlice and SearchSlice slice the
+		// buffer as [pos:nlim] and would panic.
+		_, err = r.Seek(100, io.SeekStart)
+		require.NoError(t, err)
+		s, err = r.ReadString(0)
+		require.ErrorIs(t, err, io.EOF)
+		require.Empty(t, s)
+
+		// EndSection recovers the outer section.
+		r.EndSection()
+		out := make([]byte, 0, len(data))
+		buf = make([]byte, 7)
+		for {
+			n, err := r.Read(buf)
+			out = append(out, buf[:n]...)
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+		}
+		require.Equal(t, data[100:256], out)
+	})
+}
+
 func TestReader_InitSlideView(t *testing.T) {
 	data := make([]byte, 4096)
 	for i := range data {
