@@ -6,6 +6,7 @@ package tls // import "go.opentelemetry.io/ebpf-profiler/tls"
 import (
 	"debug/elf"
 	"fmt"
+	"math"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
@@ -80,7 +81,7 @@ func resolveSlotAccessor(ef *pfelf.File, accessor libpf.SymbolName,
 			accessor, err)
 	}
 
-	tlsVar, err := slotSymbol(ef, accessor, libpf.Address(slot), disp)
+	tlsVar, err := slotSymbol(ef, libpf.Address(slot), disp, tlsSlotRelocs, false)
 	if err != nil {
 		return Var{}, err
 	}
@@ -91,11 +92,19 @@ func resolveSlotAccessor(ef *pfelf.File, accessor libpf.SymbolName,
 	return v, nil
 }
 
-// slotSymbol returns the TLS symbol referenced by the relocation at slot.
-// For hidden variables without a symbol, one is synthesized from the TLS
-// block offset.
-func slotSymbol(ef *pfelf.File, accessor libpf.SymbolName, slot libpf.Address,
-	disp int64) (*libpf.Symbol, error) {
+const tlsSlotRelocs = pfelf.RelTLSDESC | pfelf.RelDTPMOD64 | pfelf.RelTPOFF64
+
+// AnonymousSlotSymbol identifies a hidden variable from a decoded TLS access.
+// The relocation at slot must be symbol-less and match one of kinds. Address in
+// the returned symbol is the module-relative offset, including disp, so callers
+// can compare accesses through different slots before passing the symbol to Resolve.
+func AnonymousSlotSymbol(ef *pfelf.File, slot libpf.Address, disp int64,
+	kinds pfelf.RelocType) (*libpf.Symbol, error) {
+	return slotSymbol(ef, slot, disp, kinds&tlsSlotRelocs, true)
+}
+
+func slotSymbol(ef *pfelf.File, slot libpf.Address, disp int64, kinds pfelf.RelocType,
+	anonymousOnly bool) (*libpf.Symbol, error) {
 	var found bool
 	var reloc pfelf.ElfReloc
 	var relocSym string
@@ -107,7 +116,7 @@ func slotSymbol(ef *pfelf.File, accessor libpf.SymbolName, slot libpf.Address,
 		}
 		found, reloc, relocSym, relocType = true, r, symName, relType
 		return false
-	}, pfelf.RelTLSDESC|pfelf.RelDTPMOD64|pfelf.RelTPOFF64)
+	}, kinds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to visit TLS relocations: %w", err)
 	}
@@ -115,6 +124,9 @@ func slotSymbol(ef *pfelf.File, accessor libpf.SymbolName, slot libpf.Address,
 		return nil, fmt.Errorf("no TLS relocation for slot 0x%x", slot)
 	}
 
+	if anonymousOnly && (reloc.Info>>32 != 0 || relocSym != "") {
+		return nil, fmt.Errorf("expected an anonymous TLS relocation at slot %#x", slot)
+	}
 	if relocSym != "" {
 		if disp != 0 {
 			return nil, fmt.Errorf("unexpected displacement %d for %s at slot 0x%x",
@@ -127,20 +139,26 @@ func slotSymbol(ef *pfelf.File, accessor libpf.SymbolName, slot libpf.Address,
 	if relocType == pfelf.RelDTPMOD64 {
 		// The tls_index holds the module ID followed by the offset in the
 		// TLS block, which is 0 for local-dynamic.
+		if slot > ^libpf.Address(0)-8 {
+			return nil, fmt.Errorf("invalid tls_index address %#x", slot)
+		}
 		blockOffset, err := ef.GetRemoteMemory().ReadUint64(slot + 8)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read tls_index at 0x%x: %w", slot, err)
 		}
+		if blockOffset > math.MaxInt64 {
+			return nil, fmt.Errorf("invalid TLS block offset %#x at slot %#x", blockOffset, slot)
+		}
 		offset = int64(blockOffset)
 	}
-	offset += disp
-	if offset < 0 {
-		return nil, fmt.Errorf("invalid TLS block offset %d for slot 0x%x", offset, slot)
+	sum := offset + disp
+	if sum < 0 || (disp < 0 && sum > offset) {
+		return nil, fmt.Errorf("invalid TLS block offset %d + %d at slot %#x", offset, disp, slot)
 	}
 	// The name is only used in error messages.
 	return &libpf.Symbol{
-		Name:    "TLS variable of " + accessor,
-		Address: libpf.SymbolValue(offset),
+		Name:    libpf.SymbolName(fmt.Sprintf("TLS variable at slot %#x", slot)),
+		Address: libpf.SymbolValue(sum),
 		Info:    elf.ST_INFO(elf.STB_LOCAL, elf.STT_TLS),
 		Shndx:   uint16(elf.SHN_ABS),
 	}, nil
