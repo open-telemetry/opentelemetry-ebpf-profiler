@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -146,7 +147,7 @@ func (p *snapshotTestProbe) ProduceSnapshots() []samples.SnapshotProfile {
 func TestEnableRegistersSnapshotSource(t *testing.T) {
 	profileType := &samples.TypeMetadata{}
 	probe := &snapshotTestProbe{profile: samples.SnapshotProfile{ProfileType: profileType}}
-	tracer := &Tracer{origins: &originRegistry{}, lifecycleCtx: context.Background()}
+	tracer := &Tracer{origins: &pm.OriginRegistry{}, lifecycleCtx: context.Background()}
 
 	require.NoError(t, tracer.Enable(context.Background(), probe))
 

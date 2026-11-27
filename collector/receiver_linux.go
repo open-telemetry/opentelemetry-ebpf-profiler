@@ -198,25 +198,16 @@ func (r *profilesReceiver) startProfiler(ctx context.Context) error {
 		log.Info("Attached prctl monitor")
 	}
 
-	traceCh := make(chan *libpf.EbpfTrace)
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
+	if err := trc.StartMapMonitors(ctx); err != nil {
 		return fmt.Errorf("failed to start map monitors: %w", err)
 	}
 
 	go func() {
-		for {
-			select {
-			case trace := <-traceCh:
-				if trace != nil {
-					trc.HandleTrace(trace)
-				}
-			case <-trc.Done():
-				log.Errorf("Shutting down receiver due to unrecoverable tracer error")
-				r.stopProfiler()
-				return
-			case <-ctx.Done():
-				return
-			}
+		select {
+		case <-trc.Done():
+			log.Errorf("Shutting down receiver due to unrecoverable tracer error")
+			r.stopProfiler()
+		case <-ctx.Done():
 		}
 	}()
 

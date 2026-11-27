@@ -4,6 +4,7 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 
@@ -141,6 +142,38 @@ type ProcessManager struct {
 	// Using a set ensures each attacher is Detach-called exactly once per PID
 	// regardless of how many matching mappings triggered Attach. Protected by mu.
 	attachedProbes map[libpf.PID]map[ProbeAttacher]libpf.Void
+
+	// origins holds the registered trace origins.
+	origins *OriginRegistry
+
+	// tracePool is a cache of decoded trace events to avoid GC pressure.
+	tracePool sync.Pool
+
+	// traceOps delivers copied trace events and cleanup boundaries to the
+	// trace worker, its only consumer.
+	traceOps chan traceOp
+
+	// exitWatermark is the capture time up to which process exit events have
+	// been cleaned up. Published under mu only after the cleanup completed.
+	exitWatermark atomic.Int64
+
+	// closed reports that traceOps was closed, making Close idempotent.
+	closed atomic.Bool
+
+	// workersWG tracks the trace worker and the auxiliary goroutines started
+	// by New; Close waits for them to exit.
+	workersWG sync.WaitGroup
+
+	// lifecycleCancel stops the auxiliary goroutines started by New.
+	lifecycleCancel context.CancelFunc
+
+	// customLabels validates custom label keys/values pulled from eBPF and
+	// tracks how many were dropped due to invalid UTF-8.
+	customLabels customLabelValidator
+
+	// threadLabels resolves thread-context label payloads and tracks how many
+	// were dropped.
+	threadLabels threadLabelResolver
 }
 
 // Mapping represents an executable memory mapping of a process.

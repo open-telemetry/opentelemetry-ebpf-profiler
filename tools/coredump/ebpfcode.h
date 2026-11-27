@@ -42,15 +42,13 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/system_config.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
 
-void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_resume)
+void initialize_rodata_variables(
+  u64 new_inv_pac_mask, int new_ruby_skip_native_resume, u16 new_origin_id_sampling)
 {
   // Initialize variables set via RODATA.
   inverse_pac_mask        = new_inv_pac_mask;
   ruby_skip_native_resume = new_ruby_skip_native_resume;
-
-  // collect_trace rejects origin == 0. Use UINT16_MAX as a placeholder since
-  // the coredump test harness has no real origin registry.
-  origin_id_sampling = UINT16_MAX;
+  origin_id_sampling      = new_origin_id_sampling;
 }
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)

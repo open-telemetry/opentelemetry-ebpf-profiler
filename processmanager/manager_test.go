@@ -36,10 +36,15 @@ func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) 
 
 type traceCapture struct {
 	traces []*libpf.Trace
+	// onReport, when set, is called for each reported trace.
+	onReport func()
 }
 
 func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
 	tc.traces = append(tc.traces, trace)
+	if tc.onReport != nil {
+		tc.onReport()
+	}
 	return nil
 }
 
@@ -52,7 +57,7 @@ func (f fakeKernelSymbols) Snapshot() kallsyms.Snapshot {
 }
 
 func TestNewConfiguresFrameCacheSize(t *testing.T) {
-	pm, err := New(t.Context(), Config{
+	pm, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,
@@ -61,6 +66,7 @@ func TestNewConfiguresFrameCacheSize(t *testing.T) {
 		IncludeEnvVars:        libpf.Set[string]{},
 	})
 	require.NoError(t, err)
+	t.Cleanup(pm.Close)
 
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
@@ -83,7 +89,7 @@ func enrichEnvVars(t *testing.T, pm *ProcessManager, env ...string) process.Meta
 
 func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 	requestedEnvVars := libpf.Set[string]{"FOO": {}}
-	pm, err := New(t.Context(), Config{
+	pm, err := New(Config{
 		InterpretersConfig:    interpreterconfig.NoInterpreters(),
 		MonitorInterval:       time.Hour,
 		ExecutableUnloadDelay: time.Hour,
@@ -91,6 +97,7 @@ func TestNewSeparatesCapturedAndReportedEnvVars(t *testing.T) {
 		IncludeEnvVars:        requestedEnvVars,
 	})
 	require.NoError(t, err)
+	t.Cleanup(pm.Close)
 
 	meta := enrichEnvVars(t, pm,
 		"FOO=foo", "OTEL_SERVICE_NAME=svc", "OTEL_RESOURCE_ATTRIBUTES=k=v", "BAR=bar")
@@ -135,7 +142,7 @@ func TestKernelFramesUseSharedFrameCacheHit(t *testing.T) {
 	}
 
 	for range 2 {
-		pm.HandleTrace(&libpf.EbpfTrace{
+		pm.handleDecodedTrace(&traceEvent{
 			KernelFrames: []uint64{uint64(address)},
 		}, nil)
 	}
@@ -171,7 +178,7 @@ func TestKernelFrameCacheIgnoresInvalidEntries(t *testing.T) {
 		traceReporter: capture,
 	}
 
-	pm.HandleTrace(&libpf.EbpfTrace{
+	pm.handleDecodedTrace(&traceEvent{
 		KernelFrames: []uint64{uint64(address)},
 	}, nil)
 
@@ -283,7 +290,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	libcFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, uint64(pc))
 	libcFrame[1] = uint64(libcHostFileID)
 
-	pm.HandleTrace(&libpf.EbpfTrace{
+	pm.handleDecodedTrace(&traceEvent{
 		PID:       goPID,
 		TID:       goPID,
 		NumFrames: 1,
@@ -298,7 +305,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	assert.Equal(t, libpf.NativeFrame, goFrame.Type)
 	assert.Empty(t, goFrame.FunctionName.String())
 
-	pm.HandleTrace(&libpf.EbpfTrace{
+	pm.handleDecodedTrace(&traceEvent{
 		PID:       catPID,
 		TID:       catPID,
 		NumFrames: 1,
@@ -347,13 +354,13 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 	nativeFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, 0x222a0)
 	nativeFrame[1] = uint64(fileID)
 
-	pm.HandleTrace(&libpf.EbpfTrace{
+	pm.handleDecodedTrace(&traceEvent{
 		PID:       firstPID,
 		TID:       firstPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
 	}, nil)
-	pm.HandleTrace(&libpf.EbpfTrace{
+	pm.handleDecodedTrace(&traceEvent{
 		PID:       secondPID,
 		TID:       secondPID,
 		NumFrames: 1,

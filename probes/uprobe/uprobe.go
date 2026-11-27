@@ -30,6 +30,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -83,7 +84,7 @@ func New(cfg Config) (tracer.Probe, error) {
 // the probe as a per-process attacher so that SynchronizeProcess drives per-PID
 // attachment rather than a single system-wide link.
 func (p *probe) Load(_ context.Context, reg tracer.ProbeRegistrar, probeCtx *tracer.ProbeContext) error {
-	originID, err := reg.Register(&tracer.OriginEntry{
+	originID, err := reg.Register(&pm.OriginEntry{
 		Meta: &samples.TypeMetadata{
 			SampleTypes:  []samples.SampleType{{Type: "events", Unit: "count"}},
 			AppendValues: samples.AppendFirstContextValue,
