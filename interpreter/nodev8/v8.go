@@ -170,6 +170,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -218,6 +219,9 @@ const (
 
 	// lruMapTypeCacheSize is the LRU size for caching the Map.InstanceType field.
 	lruMapTypeCacheSize = 32
+
+	// lruPositionCacheSize is the LRU size for caching decoded PC positions.
+	lruPositionCacheSize = 1024
 
 	// The native pointer size in bytes for 64-bit architectures
 	pointerSize = 8
@@ -533,6 +537,11 @@ type v8Instance struct {
 	addrToSource *freelru.LRU[libpf.Address, *v8Source]
 	addrToType   *freelru.LRU[libpf.Address, uint16]
 
+	// positionCache caches decoded PC positions. The key uses a code ID so
+	// evicted Code objects are not kept alive.
+	positionCache *freelru.LRU[positionCacheKey, sourcePosition]
+	nextCodeID    uint64
+
 	// mappings is indexed by the RawMapping to its generation
 	mappings map[process.RawMapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
@@ -547,14 +556,24 @@ type v8Source struct {
 	fileName  libpf.String
 }
 
+type positionCacheKey struct {
+	codeID uint64
+	delta  uint32
+}
+
+func (k positionCacheKey) Hash32() uint32 {
+	return uint32(hash.Uint64(k.codeID)) ^ hash.Uint32(k.delta)
+}
+
 // v8Code caches the data we need from V8 class Code
 type v8Code struct {
-	sfi                 *v8SFI
-	isBaseline          bool
-	codeDeltaToPosition map[uint32]sourcePosition
-	codePositionTable   []byte
-	inliningSFIs        []byte
-	inliningPositions   []byte
+	// cacheID is unique per reconstruction as V8 reuses Code addresses.
+	cacheID           uint64
+	sfi               *v8SFI
+	isBaseline        bool
+	codePositionTable []byte
+	inliningSFIs      []byte
+	inliningPositions []byte
 	// sfiPtr and codeKind identify the Code object this data was read from.
 	// They are checked on cache hits as V8 reuses the addresses of freed Code
 	// objects.
@@ -1256,12 +1275,11 @@ func (i *v8Instance) readCode(taggedPtr, sfiPtr libpf.Address, sfi *v8SFI) (*v8C
 			codeAddr, len(codePositionTable))
 
 		return &v8Code{
-			codeDeltaToPosition: make(map[uint32]sourcePosition),
-			sfi:                 sfi,
-			isBaseline:          true,
-			codePositionTable:   codePositionTable,
-			sfiPtr:              sfiPtr,
-			codeKind:            codeKind,
+			sfi:               sfi,
+			isBaseline:        true,
+			codePositionTable: codePositionTable,
+			sfiPtr:            sfiPtr,
+			codeKind:          codeKind,
 		}, nil
 	}
 
@@ -1322,13 +1340,12 @@ func (i *v8Instance) readCode(taggedPtr, sfiPtr libpf.Address, sfi *v8SFI) (*v8C
 		len(inliningPositions))
 
 	return &v8Code{
-		codeDeltaToPosition: make(map[uint32]sourcePosition),
-		sfi:                 sfi,
-		codePositionTable:   codePositionTable,
-		inliningSFIs:        inliningSFIs,
-		inliningPositions:   inliningPositions,
-		sfiPtr:              sfiPtr,
-		codeKind:            codeKind,
+		sfi:               sfi,
+		codePositionTable: codePositionTable,
+		inliningSFIs:      inliningSFIs,
+		inliningPositions: inliningPositions,
+		sfiPtr:            sfiPtr,
+		codeKind:          codeKind,
 	}, nil
 }
 
@@ -1357,6 +1374,8 @@ func (i *v8Instance) getCode(taggedPtr, sfiTaggedPtr libpf.Address,
 		return nil, fmt.Errorf("code %#x kind changed from %d to %d",
 			taggedPtr, codeKind, code.codeKind)
 	}
+	i.nextCodeID++
+	code.cacheID = i.nextCodeID
 	i.addrToCode.Add(taggedPtr, code)
 	return code, nil
 }
@@ -1653,14 +1672,26 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 	}
 }
 
+// codePosition returns the source position or baseline bytecode offset of a PC delta.
+// The delta must already be adjusted for the return address.
+func (i *v8Instance) codePosition(code *v8Code, delta uint32) sourcePosition {
+	key := positionCacheKey{codeID: code.cacheID, delta: delta}
+	if position, ok := i.positionCache.Get(key); ok {
+		return position
+	}
+	var position sourcePosition
+	if code.isBaseline {
+		position = sourcePosition(i.mapBaselineCodeOffsetToBytecode(code, delta))
+	} else {
+		position = decodePosition(code.codePositionTable, uint64(delta))
+	}
+	i.positionCache.Add(key, position)
+	return position
+}
+
 // symbolizeBaselineCode symbolizes and records to a trace a Baseline Code based frame.
 func (i *v8Instance) symbolizeBaselineCode(code *v8Code, delta uint32, frames *libpf.Frames) {
-	bytecodeDelta, ok := code.codeDeltaToPosition[delta]
-	if !ok {
-		// Decode bytecode delta and memoize it
-		bytecodeDelta = sourcePosition(i.mapBaselineCodeOffsetToBytecode(code, delta))
-		code.codeDeltaToPosition[delta] = bytecodeDelta
-	}
+	bytecodeDelta := i.codePosition(code, delta)
 	i.appendBytecodeFrame(code.sfi, uint64(bytecodeDelta), frames)
 }
 
@@ -1683,13 +1714,8 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 		return nil
 	}
 
-	// Memoize the delta to position mapping to improve speed. We can't just
-	// fully skip inlining handling as it may expand this frame to multiple ones.
-	sourcePos, deltaSeen := code.codeDeltaToPosition[uint32(delta)]
-	if !deltaSeen {
-		sourcePos = decodePosition(code.codePositionTable, delta)
-		code.codeDeltaToPosition[uint32(delta)] = sourcePos
-	}
+	// Only the initial position is cached as inlining can expand it to many frames.
+	sourcePos := i.codePosition(code, uint32(delta))
 
 	for sourcePos.inliningID() != 0 {
 		// struct SourcePosition {
@@ -1854,17 +1880,23 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.
 	if err != nil {
 		return nil, err
 	}
+	positionCache, err := freelru.New[positionCacheKey, sourcePosition](lruPositionCacheSize,
+		positionCacheKey.Hash32)
+	if err != nil {
+		return nil, err
+	}
 
 	return &v8Instance{
-		d:            d,
-		rm:           rm,
-		mappings:     make(map[process.RawMapping]*uint32),
-		prefixes:     make(map[lpm.Prefix]*uint32),
-		addrToString: addrToString,
-		addrToCode:   addrToCode,
-		addrToSFI:    addrToSFI,
-		addrToSource: addrToSource,
-		addrToType:   addrToType,
+		d:             d,
+		rm:            rm,
+		mappings:      make(map[process.RawMapping]*uint32),
+		prefixes:      make(map[lpm.Prefix]*uint32),
+		addrToString:  addrToString,
+		addrToCode:    addrToCode,
+		addrToSFI:     addrToSFI,
+		addrToSource:  addrToSource,
+		addrToType:    addrToType,
+		positionCache: positionCache,
 	}, nil
 }
 
