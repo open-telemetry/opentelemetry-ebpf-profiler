@@ -1537,8 +1537,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
 	}
 
-	// A stripped libruby keeps an exported ruby_current_ec in .dynsym, which
-	// this reaches and the .symtab-only VisitSymbols below does not.
+	// Some builds export ruby_current_ec in .dynsym, which this reaches and
+	// the .symtab-only VisitSymbols below does not.
 	currentEcSym, err = ef.LookupSymbol(currentEcSymbolName)
 	if err != nil {
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentEcSymbolName, err)
@@ -1570,9 +1570,29 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 		log.Debugf("failed to visit symbols: %v", err)
 	}
 
-	// A stripped build still works when ruby_current_ec is exported. One that
-	// keeps it local does not: its offset within the TLS block then lives
-	// nowhere but .symtab, and the relocations reaching it carry no symbol.
+	// Recent Ruby builds can make all these symbols local. For stripped builds,
+	// recognize supported access patterns in the remaining exported functions.
+	if version >= rubyVersion(3, 3, 0) {
+		if len(interpRanges) == 0 {
+			interpRanges, err = discoverRubyVM(ef, info)
+			if err != nil {
+				return nil, fmt.Errorf("%s not found: %w", interpSymbolName, err)
+			}
+		}
+		if currentEcSym == nil {
+			currentEcSym, err = discoverRubyEC(ef)
+			if err != nil {
+				log.Debugf("Ruby EC discovery: %v", err)
+			}
+		}
+		if globalSymbols == 0 {
+			globalSymbols, err = discoverRubySymbols(ef)
+			if err != nil {
+				log.Debugf("Ruby symbol table discovery: %v", err)
+			}
+		}
+	}
+
 	var tlsEC *tls.Var
 	if currentEcSym != nil && !cfg.DisableTLS {
 		v, resolveErr := tls.Resolve(ef, currentEcSym)

@@ -1,0 +1,295 @@
+[
+  {
+    "name": "alpine-edge-amd64-3.4.10-r0/rb_thread_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/ruby-libs-3.4.10-r0.apk",
+    "sha256": "62928563a6c0dbe23915d1f4822aaa406316a654ff64a77b682e996385e67006",
+    "address": 2443424,
+    "code": "554889e566488d3dd4f938006648ff159c0139005d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 6177408,
+    "resolver": 6179408,
+    "indirect": true
+  },
+  {
+    "name": "alpine-edge-amd64-3.4.10-r0/rb_fiber_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/x86_64/ruby-libs-3.4.10-r0.apk",
+    "sha256": "62928563a6c0dbe23915d1f4822aaa406316a654ff64a77b682e996385e67006",
+    "address": 778448,
+    "code": "554889e54883ec1066488d3da06152006648ff1568695200488b08488b4128488b40104885c07408c9c3660f1f4400004c8b413048894df0488d1511c2500031f6488b3db81753004c8945f8ff15ce3a52004c8b45f8488b4df04889c2498b4030488b4028498980a8010000488942204889501048c7801002000000000000488b4128488b4010c9c3",
+    "kind": "amd64-tls",
+    "slot": 6177408,
+    "resolver": 6179408,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.20-amd64-3.3.10-r0/rb_thread_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/ruby-libs-3.3.10-r0.apk",
+    "sha256": "cfef045c313e112ba7d0c98febfc75dac92a4e7f5355d17ba62e5323c5f7d940",
+    "address": 2288352,
+    "code": "554889e566488d3d3ca830006648ff158caf30005d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 5477160,
+    "resolver": 5479040,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.20-amd64-3.3.10-r0/rb_fiber_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/ruby-libs-3.3.10-r0.apk",
+    "sha256": "cfef045c313e112ba7d0c98febfc75dac92a4e7f5355d17ba62e5323c5f7d940",
+    "address": 698096,
+    "code": "554889e541545366488d3d29ec48006648ff1579f34800488b18488b4328488b40104885c074095b415c5dc30f1f40004c8b6330488d1575744700488b3d5e96490031f6ff1526c64800498b542430488b52284989942498010000488950204889421048c7822002000000000000488b43285b415c488b40105dc3",
+    "kind": "amd64-tls",
+    "slot": 5477160,
+    "resolver": 5479040,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.21-amd64-3.3.10-r0/rb_thread_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/ruby-libs-3.3.10-r0.apk",
+    "sha256": "25aa68f8a637aee796265d7aa3d8c8da80a7a8ce50e7abe0085ee8940a7a2baa",
+    "address": 2305856,
+    "code": "554889e566488d3dec2331006648ff153c2b31005d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 5526328,
+    "resolver": 5528208,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.21-amd64-3.3.10-r0/rb_fiber_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.21/main/x86_64/ruby-libs-3.3.10-r0.apk",
+    "sha256": "25aa68f8a637aee796265d7aa3d8c8da80a7a8ce50e7abe0085ee8940a7a2baa",
+    "address": 695760,
+    "code": "554889e541545366488d3d59b549006648ff15a9bc4900488b18488b4328488b40104885c074095b415c5dc30f1f40004c8b6330488d15953f4800488b3d7e5f4a0031f6ff15568f4900498b542430488b52284989942498010000488950204889421048c7822002000000000000488b43285b415c488b40105dc3",
+    "kind": "amd64-tls",
+    "slot": 5526328,
+    "resolver": 5528208,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.22-amd64-3.4.4-r0/rb_thread_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/ruby-libs-3.4.4-r0.apk",
+    "sha256": "6ed27c0c969872943f8eef28913d0b127c580e238e6cee36bfff42c4127f2e6d",
+    "address": 2419088,
+    "code": "554889e566488d3dfc083a006648ff15c4103a005d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 6222488,
+    "resolver": 6224488,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.22-amd64-3.4.4-r0/rb_fiber_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/ruby-libs-3.4.4-r0.apk",
+    "sha256": "6ed27c0c969872943f8eef28913d0b127c580e238e6cee36bfff42c4127f2e6d",
+    "address": 769360,
+    "code": "554889e541545366488d3d393553006648ff15013d5300488b18488b4328488b40104885c074095b415c5dc30f1f40004c8b6330488d1515745100488b3ddeea530031f6ff15660e5300498b542430488b522849899424a8010000488950204889421048c7821002000000000000488b43285b415c488b40105dc3",
+    "kind": "amd64-tls",
+    "slot": 6222488,
+    "resolver": 6224488,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.23-amd64-3.4.9-r0/rb_thread_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/ruby-libs-3.4.9-r0.apk",
+    "sha256": "32e39c77eba2700e0d6d58b5ecf533eb4e7f0bca9a1fed13b5a7c29e06418efc",
+    "address": 2443648,
+    "code": "554889e566488d3df4a839006648ff15bcb039005d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 6222464,
+    "resolver": 6224464,
+    "indirect": true
+  },
+  {
+    "name": "alpine-v3.23-amd64-3.4.9-r0/rb_fiber_current",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/x86_64/ruby-libs-3.4.9-r0.apk",
+    "sha256": "32e39c77eba2700e0d6d58b5ecf533eb4e7f0bca9a1fed13b5a7c29e06418efc",
+    "address": 779808,
+    "code": "554889e54883ec1066488d3d500c53006648ff1518145300488b08488b4128488b40104885c07408c9c3660f1f4400004c8b413048894df0488d15014b510031f6488b3d48c253004c8945f8ff157ee552004c8b45f8488b4df04889c2498b4030488b4028498980a8010000488942204889501048c7801002000000000000488b4128488b4010c9c3",
+    "kind": "amd64-tls",
+    "slot": 6222464,
+    "resolver": 6224464,
+    "indirect": true
+  },
+  {
+    "name": "ubuntu-amd64-3.3.7-1ubuntu2.1/rb_thread_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_amd64.deb",
+    "sha256": "b5a34898fc3b04eb5176a3b7ced90bb4c9dd5bf980a98cae3353982bfef5111c",
+    "address": 2838608,
+    "code": "f30f1efa554889e566488d3dd81c2300666648e8d817d8ff5d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 5139768,
+    "resolver": 223296,
+    "indirect": false
+  },
+  {
+    "name": "ubuntu-amd64-3.3.7-1ubuntu2.1/rb_fiber_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_amd64.deb",
+    "sha256": "b5a34898fc3b04eb5176a3b7ced90bb4c9dd5bf980a98cae3353982bfef5111c",
+    "address": 888880,
+    "code": "f30f1efa554889e541545366488d3df5dc4000666648e8f5d7f5ff488b18488b4328488b40104885c074055b415c5dc34c8b6330488b3d457a4100488d15ce19400031f6e827910500498b542430488b522849899424980100004889502048894210488b432848c782c0020000000000005b488b4010415c5dc3",
+    "kind": "amd64-tls",
+    "slot": 5139768,
+    "resolver": 223296,
+    "indirect": false
+  },
+  {
+    "name": "ubuntu-amd64-3.3.8-2.2ubuntu4/rb_thread_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.8-2.2ubuntu4_amd64.deb",
+    "sha256": "bb0bf12d9ee03a9f2ef3d47e534054e2d5a18ce77828d5aee2d02d3772c60d85",
+    "address": 2315216,
+    "code": "f30f1efa554889e566488d3d58992100666648e84814e0ff5d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 4517176,
+    "resolver": 223280,
+    "indirect": false
+  },
+  {
+    "name": "ubuntu-amd64-3.3.8-2.2ubuntu4/rb_fiber_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.8-2.2ubuntu4_amd64.deb",
+    "sha256": "bb0bf12d9ee03a9f2ef3d47e534054e2d5a18ce77828d5aee2d02d3772c60d85",
+    "address": 729552,
+    "code": "f30f1efa554889e54883ec1066488d3d54cb3900666648e84446f8ff488b08488b4128488b40104885c07404c9c366904c8b4130488b3da5683a0031f648894df0488d15080839004c8945f8e89fb204004c8b45f8488b4df04889c2498b4030488b402849898098010000488942204889501048c780c002000000000000488b4128488b4010c9c3",
+    "kind": "amd64-tls",
+    "slot": 4517176,
+    "resolver": 223280,
+    "indirect": false
+  },
+  {
+    "name": "ubuntu-amd64-3.3.8-2ubuntu3.1/rb_thread_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.8-2ubuntu3.1_amd64.deb",
+    "sha256": "708d15c69f6bd74c7f4b8f33c5b95ca2d5183fe02069fb02667e0a55a968d713",
+    "address": 2316304,
+    "code": "f30f1efa554889e566488d3d20e52100666648e80810e0ff5d488b00488b4030488b4010c3",
+    "kind": "amd64-tls",
+    "slot": 4537664,
+    "resolver": 223280,
+    "indirect": false
+  },
+  {
+    "name": "ubuntu-amd64-3.3.8-2ubuntu3.1/rb_fiber_current",
+    "source_url": "https://archive.ubuntu.com/ubuntu/pool/main/r/ruby3.3/libruby3.3_3.3.8-2ubuntu3.1_amd64.deb",
+    "sha256": "708d15c69f6bd74c7f4b8f33c5b95ca2d5183fe02069fb02667e0a55a968d713",
+    "address": 729808,
+    "code": "f30f1efa554889e54883ec1066488d3d5c1a3a00666648e84445f8ff488b08488b4128488b40104885c07404c9c366904c8b4130488b3da5b73a0031f648894df0488d15285739004c8945f8e81fb404004c8b45f8488b4df04889c2498b4030488b402849898098010000488942204889501048c780c002000000000000488b4128488b4010c9c3",
+    "kind": "amd64-tls",
+    "slot": 4537664,
+    "resolver": 223280,
+    "indirect": false
+  },
+  {
+    "name": "alpine-edge-arm64-3.4.10-r0/common_ec_helper",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/edge/main/aarch64/ruby-libs-3.4.10-r0.apk",
+    "sha256": "bbbfa42b64bcc856b80ad4bc30d515555d778acade18335d2dabfcc4bec85e2d",
+    "address": 2484608,
+    "code": "fd7bbfa9fd030091801a00b0010840f90040009120003fd641d03bd5fd7bc1a8206860f8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 5959696
+  },
+  {
+    "name": "alpine-v3.22-arm64-3.4.4-r0/common_ec_helper",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/ruby-libs-3.4.4-r0.apk",
+    "sha256": "ccf31f862127929efaed6c6a9540215b4359f8f7ce9d8a2dbea552523a4922cf",
+    "address": 2469056,
+    "code": "fd7bbfa941d03bd5fd030091201b00b0021040f90080009140003fd6206860f8fd7bc1a8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 6025248
+  },
+  {
+    "name": "alpine-v3.23-arm64-3.4.9-r0/common_ec_helper",
+    "source_url": "https://dl-cdn.alpinelinux.org/alpine/v3.23/main/aarch64/ruby-libs-3.4.9-r0.apk",
+    "sha256": "83b591686b2a4524ab6f572778c29714e960ddcff8c6b59da88a92d67c4403cb",
+    "address": 2483776,
+    "code": "fd7bbfa9fd030091801a00b0010440f90020009120003fd641d03bd5fd7bc1a8206860f8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 5959688
+  },
+  {
+    "name": "debian-arm64-3.3.8-2.2/common_ec_helper",
+    "source_url": "https://deb.debian.org/debian/pool/main/r/ruby3.3/libruby3.3_3.3.8-2.2_arm64.deb",
+    "sha256": "a0989d77a2c49e9edbfc9e51df252a3704d315b79edcd2ba4db5b37e00674cc9",
+    "address": 2506756,
+    "code": "3f2303d5fd7bbfa9fd030091c00f00f0016c41f900600b9120003fd641d03bd5fd7bc1a8bf2303d5206860f8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 4584152
+  },
+  {
+    "name": "debian-arm64-3.4.5-1_exp1/rb_sym_immortal_count",
+    "source_url": "https://deb.debian.org/debian/pool/main/r/ruby3.4/libruby3.4_3.4.5-1~exp1_arm64.deb",
+    "sha256": "c28ad7b6a3b1829ba913656792c10e6769ebe42362185fa3463fa89773f61bac",
+    "address": 2376480,
+    "code": "5f2403d5e0130090005041b9c0035fd6",
+    "kind": "arm64-symbols",
+    "symbol_address": 4981072
+  },
+  {
+    "name": "ubuntu-arm64-3.3.7-1ubuntu2.1/rb_thread_current",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_arm64.deb",
+    "sha256": "22d3793a98d51749b0c8e740ea2b09c3f4418030f3d80e4095c555a4001a8bd1",
+    "address": 2279592,
+    "code": "41d03bd53f2303d5fd7bbfa9fd030091801100f0026441f900200b9140003fd6206860f8fd7bc1a8bf2303d5001840f9000840f9c0035fd6",
+    "kind": "arm64-inline",
+    "slot": 4584136
+  },
+  {
+    "name": "ubuntu-arm64-3.3.7-1ubuntu2.1/rb_fiber_current",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_arm64.deb",
+    "sha256": "22d3793a98d51749b0c8e740ea2b09c3f4418030f3d80e4095c555a4001a8bd1",
+    "address": 693008,
+    "code": "3f2303d5fd7bbea941d03bd5fd030091a01d00d0026441f900200b9140003fd6f35301a9336860f8601640f9000840f9a00000b4f35341a9fd7bc2a8bf2303d5c0035fd6001e0090010080d2741a40f9421d00d0006045f942002591493a0194811a40f9211440f981d200f9621640f9011000f9200800f93f4801f9400840f9f35341a9fd7bc2a8bf2303d5c0035fd6",
+    "kind": "arm64-inline",
+    "slot": 4584136
+  },
+  {
+    "name": "ubuntu-arm64-3.3.7-1ubuntu2.1/rb_current_receiver",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_arm64.deb",
+    "sha256": "22d3793a98d51749b0c8e740ea2b09c3f4418030f3d80e4095c555a4001a8bd1",
+    "address": 2523048,
+    "code": "41d03bd53f2303d5fd7bbfa9fd030091c00f0090025c41f900e00a9140003fd6206860f8e00000b4000840f9a00000b4000c40f9fd7bc1a8bf2303d5c0035fd6c00f009000a443f94105009021000091000040f96d9cf997",
+    "kind": "arm64-inline",
+    "slot": 4584120
+  },
+  {
+    "name": "ubuntu-arm64-3.3.7-1ubuntu2.1/rb_sym_immortal_count",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.7-1ubuntu2.1_arm64.deb",
+    "sha256": "22d3793a98d51749b0c8e740ea2b09c3f4418030f3d80e4095c555a4001a8bd1",
+    "address": 2237128,
+    "code": "3f2303d5fd7bbfa9e01100d0fd030091004841b9fd7bc1a8bf2303d5c0035fd6",
+    "kind": "arm64-symbols",
+    "symbol_address": 4587848
+  },
+  {
+    "name": "ubuntu-arm64-3.3.8-2.2ubuntu4/common_ec_helper",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.8-2.2ubuntu4_arm64.deb",
+    "sha256": "5f40cb8680ab7771d68133359c37b61c4fb10d97c90278c7f09697b0a2af4fd8",
+    "address": 2510240,
+    "code": "3f2303d5fd7bbfa9fd030091c00f00f0016c41f900600b9120003fd641d03bd5fd7bc1a8bf2303d5206860f8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 4584152
+  },
+  {
+    "name": "ubuntu-arm64-3.3.8-2.2ubuntu4/rb_sym_immortal_count",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.8-2.2ubuntu4_arm64.deb",
+    "sha256": "5f40cb8680ab7771d68133359c37b61c4fb10d97c90278c7f09697b0a2af4fd8",
+    "address": 2238212,
+    "code": "3f2303d5fd7bbfa9e01100d0fd030091004841b9fd7bc1a8bf2303d5c0035fd6",
+    "kind": "arm64-symbols",
+    "symbol_address": 4587848
+  },
+  {
+    "name": "ubuntu-arm64-3.3.8-2ubuntu3.1/common_ec_helper",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.8-2ubuntu3.1_arm64.deb",
+    "sha256": "12ddf5bbcbe5cf362749a033d1c4c658c820a2b88b8a50473b162a1d4883040d",
+    "address": 2502944,
+    "code": "3f2303d5fd7bbfa9fd03009160100090016841f900400b9120003fd641d03bd5fd7bc1a8bf2303d5206860f8c0035fd6",
+    "kind": "arm64-helper",
+    "slot": 4649680
+  },
+  {
+    "name": "ubuntu-arm64-3.3.8-2ubuntu3.1/rb_sym_immortal_count",
+    "source_url": "https://ports.ubuntu.com/ubuntu-ports/pool/main/r/ruby3.3/libruby3.3_3.3.8-2ubuntu3.1_arm64.deb",
+    "sha256": "12ddf5bbcbe5cf362749a033d1c4c658c820a2b88b8a50473b162a1d4883040d",
+    "address": 2242884,
+    "code": "3f2303d5fd7bbfa9601200b0fd030091004841b9fd7bc1a8bf2303d5c0035fd6",
+    "kind": "arm64-symbols",
+    "symbol_address": 4653384
+  }
+]
