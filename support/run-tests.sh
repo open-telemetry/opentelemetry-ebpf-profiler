@@ -18,9 +18,10 @@ color_green=$'\033[32m'
 color_red=$'\033[31m'
 color_default=$'\033[39m'
 
-# Use sudo if /dev/kvm isn't accessible by the current user.
+# Use sudo if /dev/kvm isn't accessible by the current user. Root needs none,
+# and container images such as the repository's may not ship it.
 sudo=""
-if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+if [[ $EUID -ne 0 && ( ! -r /dev/kvm || ! -w /dev/kvm ) ]]; then
   sudo="sudo"
 fi
 readonly sudo
