@@ -2233,12 +2233,16 @@ func locateSnapshotArea(info *interpreter.LoaderInfo, syms relevantSymbols) util
 	return util.Range{}
 }
 
+// relevantSymbols holds the V8 symbols needed for unwinding.
+// Fields tagged with `optional:"true"` only exist in some V8 builds and
+// their absence does not trigger a symtab scan in lookupRelevantSymbols.
 type relevantSymbols struct {
 	DefaultSnapshotBlob *libpf.Symbol `sym:"_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"`
 	BytecodeSizes       *libpf.Symbol `sym:"_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"`
 
-	JSDispatchTableAddress *libpf.Symbol `sym:"_ZN2v88internal17ExternalReference25js_dispatch_table_addressEv"`
-	DefaultIsolateGroup    *libpf.Symbol `sym:"_ZN2v88internal12IsolateGroup22default_isolate_group_E"`
+	// Leaptiering symbols, present only when V8 is built with V8_ENABLE_LEAPTIERING.
+	JSDispatchTableAddress *libpf.Symbol `sym:"_ZN2v88internal17ExternalReference25js_dispatch_table_addressEv" optional:"true"`
+	DefaultIsolateGroup    *libpf.Symbol `sym:"_ZN2v88internal12IsolateGroup22default_isolate_group_E" optional:"true"`
 }
 
 // scan gets the symbols needed for Node unwinding
@@ -2343,7 +2347,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	d := &v8Data{
 		version:       version,
 		snapshotRange: locateSnapshotArea(info, syms),
-		leaptiering:   syms.JSDispatchTableAddress != nil,
+		leaptiering:   syms.JSDispatchTableAddress != nil && syms.DefaultIsolateGroup != nil,
 	}
 	if d.leaptiering {
 		offset, err := findJsDispatchTableOffset(ef, syms)
