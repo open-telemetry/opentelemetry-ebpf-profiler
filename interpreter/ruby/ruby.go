@@ -1517,62 +1517,85 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
 		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
 
-	// Symbol discovery strategy:
-	// - Ruby < 3.0.4: Uses currentCtxPtr (global/ractor-based execution context)
-	// - Ruby >= 3.0.4: Uses currentEcSymbol (TLS-based execution context via ruby_current_ec)
-	// When direct lookup fails, VisitSymbols scans all symbols as fallback.
-	// eBPF selects the appropriate method based on version at runtime.
-	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
-	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentCtxSymbol, err)
+	var currentCtxPtr libpf.SymbolValue
+	if !cfg.DisableSymbolLookup {
+		// Symbol discovery strategy:
+		// - Ruby < 3.0.4: Uses currentCtxPtr (global/ractor-based execution context)
+		// - Ruby >= 3.0.4: Uses currentEcSymbol (TLS-based execution context via ruby_current_ec)
+		// When direct lookup fails, VisitSymbols scans all symbols as fallback.
+		// eBPF selects the appropriate method based on version at runtime.
+		currentCtxPtr, err = ef.LookupSymbolAddress(currentCtxSymbol)
+		if err != nil {
+			log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentCtxSymbol, err)
+		}
+
+		interpRanges, err = info.GetSymbolAsRanges(interpSymbolName)
+		if err != nil {
+			log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
+		}
+
+		globalSymbols, err = ef.LookupSymbolAddress(globalSymbolsName)
+		if err != nil {
+			log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
+		}
+
+		// Some builds export ruby_current_ec in .dynsym, which this reaches and
+		// the .symtab-only VisitSymbols below does not.
+		currentEcSym, err = ef.LookupSymbol(currentEcSymbolName)
+		if err != nil {
+			log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentEcSymbolName, err)
+			currentEcSym = nil
+		}
+
+		if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
+			if len(interpRanges) > 0 && currentEcSym != nil && currentCtxPtr != 0 && globalSymbols != libpf.SymbolValueInvalid {
+				return false
+			}
+			if currentEcSym == nil && s.Name == currentEcSymbolName {
+				sym := s
+				currentEcSym = &sym
+			}
+			if s.Name == currentCtxSymbol {
+				currentCtxPtr = s.Address
+			}
+			if s.Name == globalSymbolsName {
+				globalSymbols = s.Address
+			}
+			if len(interpRanges) == 0 && s.Name == interpSymbolName {
+				interpRanges = []util.Range{{
+					Start: uint64(s.Address),
+					End:   uint64(s.Address) + s.Size,
+				}}
+			}
+			return true
+		}); err != nil {
+			log.Debugf("failed to visit symbols: %v", err)
+		}
 	}
 
-	interpRanges, err = info.GetSymbolAsRanges(interpSymbolName)
-	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
+	// Recent Ruby builds can make all these symbols local. For stripped builds,
+	// recognize supported access patterns in the remaining exported functions.
+	if version >= rubyVersion(3, 3, 0) {
+		if len(interpRanges) == 0 {
+			interpRanges, err = discoverRubyVM(ef, info)
+			if err != nil {
+				return nil, fmt.Errorf("%s not found: %w", interpSymbolName, err)
+			}
+		}
+		if currentEcSym == nil {
+			currentEcSym, err = discoverRubyEC(ef)
+			if err != nil {
+				log.Debugf("Ruby EC discovery: %v", err)
+			}
+		}
+		if globalSymbols == 0 {
+			globalSymbols, err = discoverRubySymbols(ef)
+			if err != nil {
+				log.Debugf("Ruby symbol table discovery: %v", err)
+			}
+		}
 	}
 
-	globalSymbols, err = ef.LookupSymbolAddress(globalSymbolsName)
-	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
-	}
-
-	// A stripped libruby keeps an exported ruby_current_ec in .dynsym, which
-	// this reaches and the .symtab-only VisitSymbols below does not.
-	currentEcSym, err = ef.LookupSymbol(currentEcSymbolName)
-	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentEcSymbolName, err)
-		currentEcSym = nil
-	}
-
-	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
-		if len(interpRanges) > 0 && currentEcSym != nil && currentCtxPtr != 0 && globalSymbols != libpf.SymbolValueInvalid {
-			return false
-		}
-		if currentEcSym == nil && s.Name == currentEcSymbolName {
-			sym := s
-			currentEcSym = &sym
-		}
-		if s.Name == currentCtxSymbol {
-			currentCtxPtr = s.Address
-		}
-		if s.Name == globalSymbolsName {
-			globalSymbols = s.Address
-		}
-		if len(interpRanges) == 0 && s.Name == interpSymbolName {
-			interpRanges = []util.Range{{
-				Start: uint64(s.Address),
-				End:   uint64(s.Address) + s.Size,
-			}}
-		}
-		return true
-	}); err != nil {
-		log.Debugf("failed to visit symbols: %v", err)
-	}
-
-	// A stripped build still works when ruby_current_ec is exported. One that
-	// keeps it local does not: its offset within the TLS block then lives
-	// nowhere but .symtab, and the relocations reaching it carry no symbol.
 	var tlsEC *tls.Var
 	if currentEcSym != nil && !cfg.DisableTLS {
 		v, resolveErr := tls.Resolve(ef, currentEcSym)

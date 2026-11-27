@@ -294,6 +294,20 @@ func TestExtractTLSSlot(t *testing.T) {
 			slot:     0x6d10d0, // ADRP page 0x6d1000 + 0xd0
 		},
 		{
+			// X0 names a descriptor but the indirect call does not use its resolver.
+			name: "BLR to unrelated register is not a TLS descriptor call",
+			code: []byte{
+				0x80, 0x00, 0x00, 0x90, // ADRP X0, 0x11000
+				0x01, 0x08, 0x40, 0xf9, // LDR X1, [X0, #16]
+				0x00, 0x40, 0x00, 0x91, // ADD X0, X0, #16
+				0x40, 0x00, 0x3f, 0xd6, // BLR X2 (not X1)
+				0x48, 0xd0, 0x3b, 0xd5, // MRS X8, TPIDR_EL0
+				0x00, 0x69, 0x60, 0xf8, // LDR X0, [X8, X0]
+			},
+			baseAddr:      0x1000,
+			expectedError: "could not find a GOT-based TLS access",
+		},
+		{
 			// Clang emits a descriptor for the module's TLS block
 			// (_TLS_MODULE_BASE_) for a dso_local variable, and adds the
 			// variable's offset with a :dtprel_hi12:/:dtprel_lo12_nc: ADD pair.
