@@ -18,7 +18,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
@@ -87,7 +86,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 		log.SetLevel(slog.LevelDebug)
 	}
 
-	interpretersConfig := interpreterconfig.AllInterpreters()
+	interpretersConfig := allInterpreters()
 	var proc process.Process
 	switch {
 	case cmd.pid != 0:

@@ -5,9 +5,9 @@
       "lwp": 7207,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x6b5e8",
-        "libSystem.Native.so+0xe64b",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x6b5e8 (write)",
+        "libSystem.Native.so+0xe64b (SystemNative_Write)",
         "Interop/Sys.Write+0 in System.Console.dll:0",
         "System.ConsolePal.Write+0 in System.Console.dll:0",
         "System.ConsolePal.WriteFromConsoleStream+0 in System.Console.dll:0",
@@ -22,25 +22,25 @@
         "libcoreclr.so+0x1e8eb1",
         "libcoreclr.so+0x1e9354",
         "libcoreclr.so+0x21336c",
-        "libcoreclr.so+0x1d60ee",
+        "libcoreclr.so+0x1d60ee (coreclr_execute_assembly)",
         "libhostpolicy.so+0x31be2",
-        "libhostpolicy.so+0x3305d",
+        "libhostpolicy.so+0x3305d (corehost_main)",
         "libhostfxr.so+0x20753",
         "libhostfxr.so+0x1f824",
-        "libhostfxr.so+0x1964e",
+        "libhostfxr.so+0x1964e (hostfxr_main_startupinfo)",
         "helloworld+0x8787",
         "helloworld+0x8ad1",
-        "ld-musl-x86_64.so.1+0x41a2f",
+        "ld-musl-x86_64.so.1+0x41a2f (libc_start_main_stage2)",
         "helloworld+0x7165"
       ]
     },
     {
       "lwp": 7216,
       "frames": [
-        "ld-musl-x86_64.so.1+0x56188",
+        "ld-musl-x86_64.so.1+0x56188 (ioctl)",
         "libSystem.Native.so+0x162b8",
         "libSystem.Native.so+0x1506c",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -48,9 +48,9 @@
       "lwp": 7214,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libcoreclr.so+0x69c776",
         "libcoreclr.so+0x69c3ad",
         "libcoreclr.so+0x6a1183",
@@ -61,7 +61,7 @@
         "libcoreclr.so+0x2d4cac",
         "libcoreclr.so+0x3451a5",
         "libcoreclr.so+0x6a84ba",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -69,9 +69,9 @@
       "lwp": 7213,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x65d23",
-        "ld-musl-x86_64.so.1+0x66c04",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x65d23 (__timedwait_cp)",
+        "ld-musl-x86_64.so.1+0x66c04 (pthread_cond_timedwait)",
         "libcoreclr.so+0x69c7df",
         "libcoreclr.so+0x69c3ad",
         "libcoreclr.so+0x6a1183",
@@ -80,7 +80,7 @@
         "libcoreclr.so+0x595858",
         "libcoreclr.so+0x595546",
         "libcoreclr.so+0x6a84ba",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -88,13 +88,13 @@
       "lwp": 7212,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x423c6",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x423c6 (open)",
         "libcoreclr.so+0x59d7df",
         "libcoreclr.so+0x5982d7",
         "libcoreclr.so+0x5972a6",
         "libcoreclr.so+0x6a84ba",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -102,13 +102,13 @@
       "lwp": 7211,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x5e446",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x5e446 (poll)",
         "libcoreclr.so+0x59de4b",
         "libcoreclr.so+0x511dfd",
         "libcoreclr.so+0x517051",
         "libcoreclr.so+0x6a84ba",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
@@ -116,30 +116,30 @@
       "lwp": 7210,
       "frames": [
         "ld-musl-x86_64.so.1+0x68ef4",
-        "ld-musl-x86_64.so.1+0x66867",
-        "ld-musl-x86_64.so.1+0x5e446",
+        "ld-musl-x86_64.so.1+0x66867 (__syscall_cp_c)",
+        "ld-musl-x86_64.so.1+0x5e446 (poll)",
         "libcoreclr.so+0x69ef5d",
         "libcoreclr.so+0x69e562",
         "libcoreclr.so+0x6a84ba",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
     {
       "lwp": 7209,
       "frames": [
-        "ld-musl-x86_64.so.1+0x56911",
+        "ld-musl-x86_64.so.1+0x56911 (syscall)",
         "liblttng-ust.so.1.0.0+0xaf54",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
     {
       "lwp": 7208,
       "frames": [
-        "ld-musl-x86_64.so.1+0x56911",
+        "ld-musl-x86_64.so.1+0x56911 (syscall)",
         "liblttng-ust.so.1.0.0+0xaf54",
-        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x67572 (start)",
         "ld-musl-x86_64.so.1+0x68ec0"
       ]
     }

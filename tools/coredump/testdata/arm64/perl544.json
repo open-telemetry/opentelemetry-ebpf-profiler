@@ -4,10 +4,10 @@
     {
       "lwp": 36124,
       "frames": [
-        "libc.so.6+0xbbd0c",
-        "libc.so.6+0xc60bb",
-        "libc.so.6+0xd616b",
-        "perl+0x125e6f",
+        "libc.so.6+0xbbd0c (clock_nanosleep)",
+        "libc.so.6+0xc60bb (nanosleep)",
+        "libc.so.6+0xd616b (sleep)",
+        "perl+0x125e6f (Perl_pp_sleep)",
         "main::fib+0 in testsources/perl/a.pl:21",
         "main::fib+0 in testsources/perl/a.pl:24",
         "main::fib+0 in testsources/perl/a.pl:24",
@@ -20,12 +20,12 @@
         "main::fib+0 in testsources/perl/a.pl:24",
         "main::fib+0 in testsources/perl/a.pl:24",
         "<top-level>+0 in testsources/perl/a.pl:32",
-        "perl+0x176fe3",
-        "perl+0x71a6f",
-        "perl+0x46a47",
+        "perl+0x176fe3 (Perl_runops_standard)",
+        "perl+0x71a6f (perl_run)",
+        "perl+0x46a47 (main)",
         "libc.so.6+0x284c3",
-        "libc.so.6+0x28597",
-        "perl+0x46aaf"
+        "libc.so.6+0x28597 (__libc_start_main)",
+        "perl+0x46aaf (_start)"
       ]
     }
   ],

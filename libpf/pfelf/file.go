@@ -1396,6 +1396,35 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	strtab := f.Sections[symTab.Link]
 	strtabEnd := int64(strtab.Offset + strtab.FileSize)
 
+	var nameErr error
+	err := f.walkSymbols(symTab, func(sym *elf.Sym64) bool {
+		// Names are read from zero-copy views of the string table; the
+		// pinned stream window is not invalidated by these lookups.
+		// Unreadable names are skipped instead of aborting the walk.
+		symName, err := libpf.StringFromView(f.elfReader,
+			int64(strtab.Offset)+int64(sym.Name), strtabEnd)
+		if errors.Is(err, libpf.ErrNoString) {
+			return true
+		}
+		if err != nil {
+			nameErr = fmt.Errorf("failed to read symbol name from %v: %w", name, err)
+			return false
+		}
+		return visitor(libpf.Symbol{
+			Name:    libpf.SymbolName(symName),
+			Address: libpf.SymbolValue(sym.Value),
+			Size:    sym.Size,
+			Info:    sym.Info,
+			Shndx:   sym.Shndx,
+		})
+	})
+	if err != nil {
+		return err
+	}
+	return nameErr
+}
+
+func (f *File) walkSymbols(symTab *Section, visitor func(*elf.Sym64) bool) error {
 	rdr := pfbufio.Reader{}
 	rdr.InitFromView(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
 	defer rdr.Release()
@@ -1404,33 +1433,26 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	for {
 		if _, err := rdr.Read(pfunsafe.FromPointer(sym)); err != nil {
 			if err != io.EOF {
-				return fmt.Errorf("failed to read symbol from %v: %w", name, err)
+				return fmt.Errorf("failed to read symbol from %v: %w", symTab.Name, err)
 			}
 			break
 		}
-		// Names are read from zero-copy views of the string table; the
-		// pinned stream window is not invalidated by these lookups.
-		// Unreadable names are skipped instead of aborting the walk.
-		symName, err := libpf.StringFromView(f.elfReader,
-			int64(strtab.Offset)+int64(sym.Name), strtabEnd)
-		if errors.Is(err, libpf.ErrNoString) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read symbol name from %v: %w", name, err)
-		}
-		if !visitor(libpf.Symbol{
-			Name:    libpf.SymbolName(symName),
-			Address: libpf.SymbolValue(sym.Value),
-			Size:    sym.Size,
-			Info:    sym.Info,
-			Shndx:   sym.Shndx,
-		}) {
+		if !visitor(sym) {
 			break
 		}
 	}
 	runtime.KeepAlive(f)
 	return nil
+}
+
+// VisitSymbolOffsets iterates through the named symbol table until visitor
+// returns false. Names stay offsets into the linked string table.
+func (f *File) VisitSymbolOffsets(name string, visitor func(*elf.Sym64) bool) error {
+	symTab := f.Section(name)
+	if symTab == nil {
+		return ErrSectionNotPresent
+	}
+	return f.walkSymbols(symTab, visitor)
 }
 
 // VisitSymbols iterates through the symbol table until visitor returns false.

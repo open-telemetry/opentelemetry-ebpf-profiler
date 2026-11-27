@@ -5,6 +5,7 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
 import (
 	"fmt"
+	"io/fs"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -58,6 +59,11 @@ func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]util.Range, e
 // FileID returns the fileID  element of the LoaderInfo struct.
 func (i *LoaderInfo) FileID() host.FileID {
 	return i.fileID
+}
+
+// FS opens other files, like debuglink targets, as the process sees them.
+func (i *LoaderInfo) FS() fs.FS {
+	return i.elfRef
 }
 
 // FileName returns the fileName  element of the LoaderInfo struct.

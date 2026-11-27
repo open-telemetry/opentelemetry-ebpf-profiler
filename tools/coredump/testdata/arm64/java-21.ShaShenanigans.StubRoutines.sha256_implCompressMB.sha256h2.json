@@ -26,10 +26,10 @@
         "libc.so.6+0x806d7",
         "libjli.so+0x7ebf",
         "libjli.so+0x54a3",
-        "libjli.so+0x65bf",
+        "libjli.so+0x65bf (JLI_Launch)",
         "java+0xacb",
         "libc.so.6+0x2777f",
-        "libc.so.6+0x27857",
+        "libc.so.6+0x27857 (__libc_start_main)",
         "java+0xb6f"
       ]
     },
@@ -50,7 +50,7 @@
       "lwp": 121750,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbf393",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0x70aef7",
@@ -78,7 +78,7 @@
       "lwp": 121752,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbf393",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0x711da7",
@@ -94,7 +94,7 @@
       "lwp": 121753,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0x76947b",
@@ -110,7 +110,7 @@
       "lwp": 121754,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0xe57613",
@@ -125,10 +125,10 @@
       "lwp": 121755,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbf393",
         "libjvm.so+0xb6d943",
-        "libjvm.so+0x8f2ff7",
+        "libjvm.so+0x8f2ff7 (JVM_WaitForReferencePendingList)",
         "void java.lang.ref.Reference.waitForReferencePendingList()+0 in Reference.java:0",
         "void java.lang.ref.Reference.processPendingReferences()+0 in Reference.java:246",
         "void java.lang.ref.Reference$ReferenceHandler.run()+3 in Reference.java:208",
@@ -147,11 +147,11 @@
       "lwp": 121756,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbea13",
         "libjvm.so+0xb91b17",
         "libjvm.so+0xd98f2f",
-        "libjvm.so+0x8f49a3",
+        "libjvm.so+0x8f49a3 (JVM_MonitorWait)",
         "void java.lang.Object.wait0(long)+0 in Object.java:0",
         "void java.lang.Object.wait(long)+2 in Object.java:366",
         "void java.lang.Object.wait()+0 in Object.java:339",
@@ -189,7 +189,7 @@
       "lwp": 121758,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbf393",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0xc64313",
@@ -204,7 +204,7 @@
       "lwp": 121759,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0xb60beb",
@@ -219,7 +219,7 @@
       "lwp": 121760,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d943",
         "libjvm.so+0x5c5a9f",
@@ -235,7 +235,7 @@
       "lwp": 121761,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d943",
         "libjvm.so+0x5c5a9f",
@@ -251,7 +251,7 @@
       "lwp": 121762,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e18f",
+        "libc.so.6+0x7e18f (pthread_cond_wait)",
         "libjvm.so+0xbbf393",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0xb8564f",
@@ -266,7 +266,7 @@
       "lwp": 121763,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbf2ef",
         "libjvm.so+0xb6d8b7",
         "libjvm.so+0xb8519b",
@@ -281,7 +281,7 @@
       "lwp": 121764,
       "frames": [
         "libc.so.6+0x7b654",
-        "libc.so.6+0x7e47f",
+        "libc.so.6+0x7e47f (pthread_cond_timedwait)",
         "libjvm.so+0xbbef0f",
         "libjvm.so+0xe00a2b",
         "void jdk.internal.misc.Unsafe.park(boolean, long)+0 in Unsafe.java:0",

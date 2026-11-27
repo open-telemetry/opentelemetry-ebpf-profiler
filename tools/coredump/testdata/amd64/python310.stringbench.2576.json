@@ -7,7 +7,7 @@
         "python3.10+0x1939bf",
         "python3.10+0x1f4f2a",
         "python3.10+0x187eb7",
-        "python3.10+0x17ebc2",
+        "python3.10+0x17ebc2 (_PyObject_MakeTpCall)",
         "find_test_no_match_two_character_bis+2 in /home/admin/stringbench.py:175",
         "inner+1 in <timeit-src>:3",
         "timeit+10 in /usr/lib/python3.10/timeit.py:174",

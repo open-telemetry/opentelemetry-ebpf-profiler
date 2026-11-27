@@ -5,17 +5,17 @@
       "lwp": 17068,
       "frames": [
         "libcrypto.so.3+0x575c0",
-        "libcrypto.so.3+0x22542f",
+        "libcrypto.so.3+0x22542f (CRYPTO_gcm128_encrypt_ctr32)",
         "libcrypto.so.3+0x2b7ec8",
         "libcrypto.so.3+0x2ed50c",
         "libcrypto.so.3+0x2ede24",
-        "libcrypto.so.3+0x14b6d5",
+        "libcrypto.so.3+0x14b6d5 (EVP_EncryptUpdate)",
         "openssl+0x54967",
         "openssl+0x55595",
         "openssl+0x57d15",
         "openssl+0x3a5bb",
         "openssl+0x1c240",
-        "ld-musl-x86_64.so.1+0x1c6d0",
+        "ld-musl-x86_64.so.1+0x1c6d0 (libc_start_main_stage2)",
         "openssl+0x1c2ed"
       ]
     }

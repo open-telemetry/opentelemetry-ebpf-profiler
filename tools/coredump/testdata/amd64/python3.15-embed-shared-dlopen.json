@@ -26,17 +26,17 @@
         "recur_fibo+3 in <string>:4",
         "recur_fibo+3 in <string>:4",
         "<module>+6 in <string>:7",
-        "libpython3.15.so.1.0+0x1d081f",
-        "libpython3.15.so.1.0+0x1ce82c",
-        "libpython3.15.so.1.0+0x27199a",
-        "libpython3.15.so.1.0+0x2b7bee",
-        "libpython3.15.so.1.0+0x2b1c1a",
-        "libpython3.15.so.1.0+0x2b1b24",
-        "libpython3.15.so.1.0+0x12f0a9",
-        "embed_shared_dlopen+0x12a9",
+        "libpython3.15.so.1.0+0x1d081f (_PyEval_EvalFrameDefault)",
+        "libpython3.15.so.1.0+0x1ce82c (_PyEval_Vector)",
+        "libpython3.15.so.1.0+0x27199a (PyEval_EvalCode)",
+        "libpython3.15.so.1.0+0x2b7bee (run_mod.lto_priv.0)",
+        "libpython3.15.so.1.0+0x2b1c1a (_PyRun_String.constprop.0)",
+        "libpython3.15.so.1.0+0x2b1b24 (_PyRun_SimpleString)",
+        "libpython3.15.so.1.0+0x12f0a9 (PyRun_SimpleStringFlags)",
+        "embed_shared_dlopen+0x12a9 (main)",
         "libc.so.6+0x29ca7",
-        "libc.so.6+0x29d64",
-        "embed_shared_dlopen+0x10a0"
+        "libc.so.6+0x29d64 (__libc_start_main)",
+        "embed_shared_dlopen+0x10a0 (_start)"
       ]
     }
   ],

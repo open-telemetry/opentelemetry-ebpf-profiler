@@ -2309,5 +2309,19 @@
     "name": "ExeIDToStackDeltaMetaDelete",
     "field": "agent.errors.exe_id_to_stackdelta_meta_delete",
     "id": 315
+  },
+  {
+    "description": "Number of successfully symbolized native frames",
+    "type": "counter",
+    "name": "NativeSymbolizationSuccess",
+    "field": "agent.native.symbolization.successes",
+    "id": 316
+  },
+  {
+    "description": "Number of native frames that failed symbolization",
+    "type": "counter",
+    "name": "NativeSymbolizationFailure",
+    "field": "agent.native.symbolization.failures",
+    "id": 317
   }
 ]

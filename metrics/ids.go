@@ -707,6 +707,12 @@ const (
 	// Number of times deleting an element from exeIDToStackDeltaMeta failed
 	IDExeIDToStackDeltaMetaDelete = 315
 
+	// Number of successfully symbolized native frames
+	IDNativeSymbolizationSuccess = 316
+
+	// Number of native frames that failed symbolization
+	IDNativeSymbolizationFailure = 317
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 316
+	IDMax = 318
 )

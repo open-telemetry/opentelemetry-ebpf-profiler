@@ -4,9 +4,9 @@
     {
       "lwp": 53260,
       "frames": [
-        "libruby.so.3.4.7+0x1cda60",
-        "libruby.so.3.4.7+0x1cfa43",
-        "libruby.so.3.4.7+0x23001b",
+        "libruby.so.3.4.7+0x1cda60 (rb_class_real)",
+        "libruby.so.3.4.7+0x1cfa43 (rb_obj_alloc)",
+        "libruby.so.3.4.7+0x23001b (rb_range_new)",
         "<unknown jit code>+0 in <jitted code>:0",
         "Object#is_prime+0 in /Users/dalehamel/src/github.com/Shopify/otel-ebpf-pr1102/tools/coredump/testsources/ruby/loop.rb:14",
         "Object#sum_of_primes+0 in /Users/dalehamel/src/github.com/Shopify/otel-ebpf-pr1102/tools/coredump/testsources/ruby/loop.rb:24",
@@ -21,8 +21,8 @@
     {
       "lwp": 53262,
       "frames": [
-        "libc.so.6+0xebe34",
-        "libruby.so.3.4.7+0x2c240b",
+        "libc.so.6+0xebe34 (epoll_pwait)",
+        "libruby.so.3.4.7+0x2c240b (timer_thread_func)",
         "libc.so.6+0x8595b",
         "libc.so.6+0xebb0b"
       ]
