@@ -327,3 +327,9 @@ func (r *Registers) Get(reg Reg) expression.Expression {
 func (r *Registers) NameRegisterArm(reg arm64asm.Reg, name string) {
 	r.setArm64asm(reg, expression.Named(name))
 }
+
+// SetArm models the result of an instruction or call handled by the caller.
+// Like GetArm, it respects the register width and the zero register.
+func (r *Registers) SetArm(reg arm64asm.Reg, value expression.Expression) {
+	r.setArm64asm(reg, value)
+}

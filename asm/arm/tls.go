@@ -18,6 +18,26 @@ import (
 // it has no name for.
 const tpidrEL0 = "S3_3_C13_C0_2"
 
+// IsThreadPointerRead reports whether inst reads TPIDR_EL0 into a register.
+func IsThreadPointerRead(inst aa.Inst) bool {
+	return inst.Op == aa.MRS && inst.Args[1].String() == tpidrEL0
+}
+
+// TLSDescSlot recognizes a descriptor call: X0 holds the address of the
+// descriptor and BLR calls the function pointer loaded from its first word.
+// regs is the state at the call, before its result overwrites X0.
+func TLSDescSlot(regs *Registers, inst aa.Inst) (uint64, bool) {
+	if inst.Op != aa.BLR {
+		return 0, false
+	}
+	reg, ok := inst.Args[0].(aa.Reg)
+	slot, constant := expression.AsConstant(regs.Get(X0))
+	if !ok || !constant || !regs.GetArm(reg).Match(expression.Mem8(expression.Imm(slot))) {
+		return 0, false
+	}
+	return slot, true
+}
+
 // branchTarget represents a branch target to be analyzed
 type branchTarget struct {
 	addr  uint64
@@ -75,7 +95,7 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 			}
 
 			// Check for MRS Xn, TPIDR_EL0
-			if inst.Op == aa.MRS && inst.Args[1].String() == tpidrEL0 {
+			if IsThreadPointerRead(inst) {
 				reg, ok := Xreg2num(inst.Args[0])
 				if !ok {
 					continue
@@ -176,7 +196,7 @@ func extractRelaxedTLSOffset(code []byte, baseAddr uint64) (int32, error) {
 		}
 		switch inst.Op {
 		case aa.MRS:
-			if inst.Args[1].String() != tpidrEL0 {
+			if !IsThreadPointerRead(inst) {
 				continue
 			}
 			if reg, ok := Xreg2num(inst.Args[0]); ok {
@@ -255,12 +275,8 @@ func ExtractTLSSlot(code []byte, baseAddr uint64) (slot uint64, disp int64, err 
 		switch inst.Op {
 		case aa.MRS:
 			s.matchThreadPointer(inst)
-		case aa.BL:
-			// Pattern 3 hands the tls_index to __tls_get_addr in X0
-			matchErr = s.matchCall(&regs, true)
-		case aa.BLR:
-			// Pattern 2 hands the descriptor to the resolver in X0
-			matchErr = s.matchCall(&regs, false)
+		case aa.BL, aa.BLR:
+			matchErr = s.matchCall(&regs, inst)
 		case aa.LDR:
 			done, matchErr = s.matchLoad(&regs, inst, res)
 		case aa.ADD:
@@ -290,7 +306,7 @@ func (s *tlsSlotScan) takeResultReg(inst aa.Inst) int {
 
 // matchThreadPointer notes the register an MRS reads the thread pointer into.
 func (s *tlsSlotScan) matchThreadPointer(inst aa.Inst) {
-	if inst.Args[1].String() != tpidrEL0 {
+	if !IsThreadPointerRead(inst) {
 		return
 	}
 	if reg, ok := Xreg2num(inst.Args[0]); ok {
@@ -301,16 +317,23 @@ func (s *tlsSlotScan) matchThreadPointer(inst aa.Inst) {
 // matchCall captures the slot address that a call to __tls_get_addr or to a
 // TLS descriptor resolver takes in X0. Both clobber only X0 and X30, so the
 // thread pointer register survives the call.
-func (s *tlsSlotScan) matchCall(regs *Registers, viaGetAddr bool) error {
+func (s *tlsSlotScan) matchCall(regs *Registers, inst aa.Inst) error {
 	if s.called {
 		return errors.New("unexpected call after TLS slot lookup")
 	}
-	if !regs.Get(X0).Match(s.capture) {
+	var slot uint64
+	var ok bool
+	if inst.Op == aa.BLR {
+		slot, ok = TLSDescSlot(regs, inst)
+	} else {
+		slot, ok = expression.AsConstant(regs.Get(X0))
+	}
+	if !ok {
 		return nil
 	}
-	s.slot = s.capture.CapturedValue()
+	s.slot = slot
 	s.called = true
-	s.viaGetAddr = viaGetAddr
+	s.viaGetAddr = inst.Op == aa.BL
 	s.resReg = 0
 	return nil
 }
