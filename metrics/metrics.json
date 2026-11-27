@@ -2323,5 +2323,19 @@
     "name": "UnwindThreadContextNodeErrInvalid",
     "field": "bpf.threadctx.nodejs.errors.invalid",
     "id": 317
+  },
+  {
+    "description": "Number of ELF files rejected for defining more than one thread context export",
+    "type": "counter",
+    "name": "ThreadContextExportAmbiguous",
+    "field": "agent.threadctx.errors.export_ambiguous",
+    "id": 318
+  },
+  {
+    "description": "Number of thread context attaches replacing a different export in the same process",
+    "type": "counter",
+    "name": "ThreadContextExportConflict",
+    "field": "agent.threadctx.errors.export_conflict",
+    "id": 319
   }
 ]

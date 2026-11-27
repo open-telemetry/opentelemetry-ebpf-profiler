@@ -10,6 +10,8 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -17,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tls"
@@ -37,6 +40,31 @@ var tlsExports = [...]tlsExport{
 	{name: "otel_thread_ctx_nodejs_v1", size: 32, schema: support.ThreadCtxSchemaNodeJS},
 }
 
+var (
+	// exportAmbiguous counts ELF files rejected for defining several exports.
+	exportAmbiguous atomic.Int64
+	// exportConflict counts attaches that replaced another ELF's entry for a PID.
+	exportConflict atomic.Int64
+
+	attachedMu sync.Mutex
+	// attached is the ELF whose export thread_context_procs holds for a PID.
+	attached = map[libpf.PID]*threadcontextData{}
+)
+
+// GetAndResetMetrics returns the thread context counters and resets them to zero.
+func GetAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDThreadContextExportAmbiguous,
+			Value: metrics.MetricValue(exportAmbiguous.Swap(0)),
+		},
+		{
+			ID:    metrics.IDThreadContextExportConflict,
+			Value: metrics.MetricValue(exportConflict.Swap(0)),
+		},
+	}
+}
+
 func GetLoader(_ Config) interpreter.Loader {
 	return interpreter.NewLoader(loader, []interpreter.InterpreterResource{
 		{MapName: BPFMapName},
@@ -54,18 +82,29 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, nil
 	}
 
-	// A process publishes one schema, so the first export found is the one.
+	// The exported symbol selects the walk, not threadlocal.schema_version, as
+	// the symbol name pins the layout. An ELF defining two exports is ambiguous.
+	var found *threadcontextData
 	for _, export := range tlsExports {
 		data, err := loadExport(ef, export)
 		if err != nil {
 			return nil, err
 		}
-		if data != nil {
-			log.Debugf("%s: %s is %v", info.FileName(), export.name, data.tlsVar)
-			return data, nil
+		if data == nil {
+			continue
 		}
+		if found != nil {
+			exportAmbiguous.Add(1)
+			return nil, fmt.Errorf("both %s and %s are defined",
+				found.export.name, export.name)
+		}
+		found = data
 	}
-	return nil, nil
+	if found == nil {
+		return nil, nil
+	}
+	log.Debugf("%s: %s is %v", info.FileName(), found.export.name, found.tlsVar)
+	return found, nil
 }
 
 // loadExport resolves export in ef, or returns nil when ef does not define it.
@@ -117,10 +156,26 @@ func (d *threadcontextData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	if err = ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
+	d.trackAttach(pid)
 
 	log.Debugf("PID %d: thread context TLS %+v, pending %v", pid, tlsInfo, pendingTLS)
 
 	return &Instance{pendingTLS: pendingTLS, schema: d.export.schema}, nil
+}
+
+// trackAttach records d as the owner of the PID entry and reports a replaced owner.
+func (d *threadcontextData) trackAttach(pid libpf.PID) {
+	attachedMu.Lock()
+	prev := attached[pid]
+	attached[pid] = d
+	attachedMu.Unlock()
+
+	// The eBPF map holds one entry per PID, so the last ELF attached wins.
+	if prev != nil && prev != d {
+		exportConflict.Add(1)
+		log.Warnf("PID %d: thread context %s replaces %s from another ELF",
+			pid, d.export.name, prev.export.name)
+	}
 }
 
 func (d *threadcontextData) Unload(_ interpreter.EbpfHandler) {}
@@ -162,5 +217,8 @@ func (i *Instance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 }
 
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	attachedMu.Lock()
+	delete(attached, pid)
+	attachedMu.Unlock()
 	return ebpf.DeleteProcData(libpf.ThreadContext, pid)
 }
