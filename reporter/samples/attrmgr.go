@@ -4,8 +4,6 @@
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/otel/attribute"
@@ -31,10 +29,20 @@ type SampleAttrProducer interface {
 	ExtraSampleAttrs(attrMgr *AttrTableManager, meta any) []int32
 }
 
+// attrKey is the deduplication key for attribute table entries.
+// Unlike a formatted string it does not allocate and cannot collide on
+// separators or on an int and its string form.
+type attrKey struct {
+	key   attribute.Key
+	str   string
+	num   int64
+	isInt bool
+}
+
 // AttrTableManager maintains index allocation and deduplication for attribute tables.
 type AttrTableManager struct {
-	// indices maps compound keys to the indices in the attribute table.
-	indices map[string]int32
+	// indices maps attribute keys to indices in the attribute table.
+	indices map[attrKey]int32
 
 	// strSet to read and write strings from the string table
 	strSet orderedset.OrderedSet[string]
@@ -45,7 +53,7 @@ type AttrTableManager struct {
 
 func NewAttrTableManager(strSet orderedset.OrderedSet[string], attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
 	return &AttrTableManager{
-		indices:   make(map[string]int32),
+		indices:   make(map[attrKey]int32),
 		strSet:    strSet,
 		attrTable: attrTable,
 	}
@@ -55,8 +63,13 @@ func NewAttrTableManager(strSet orderedset.OrderedSet[string], attrTable pprofil
 func (m *AttrTableManager) AppendInt(
 	attrs pcommon.Int32Slice, key attribute.Key, value int64,
 ) {
-	compound := fmt.Sprintf("%v_%d", key, value)
-	m.appendAny(attrs, key, compound, value)
+	k := attrKey{key: key, num: value, isInt: true}
+	idx, exists := m.indices[k]
+	if !exists {
+		idx = m.newEntry(k)
+		m.attrTable.At(int(idx)).Value().SetInt(value)
+	}
+	attrs.Append(idx)
 }
 
 // AppendOptionalString adds the index for the given string attribute to an
@@ -68,32 +81,20 @@ func (m *AttrTableManager) AppendOptionalString(
 		return
 	}
 
-	compound := fmt.Sprintf("%v_%s", key, value)
-	m.appendAny(attrs, key, compound, value)
+	k := attrKey{key: key, str: value}
+	idx, exists := m.indices[k]
+	if !exists {
+		idx = m.newEntry(k)
+		m.attrTable.At(int(idx)).Value().SetStr(value)
+	}
+	attrs.Append(idx)
 }
 
-func (m *AttrTableManager) appendAny(
-	attrs pcommon.Int32Slice,
-	key attribute.Key,
-	compoundKey string,
-	value any,
-) {
-	if attributeIndex, exists := m.indices[compoundKey]; exists {
-		attrs.Append(attributeIndex)
-		return
-	}
-
+// newEntry adds an entry for k to the attribute table. The caller sets the value.
+func (m *AttrTableManager) newEntry(k attrKey) int32 {
 	newIndex := int32(m.attrTable.Len())
-
 	a := m.attrTable.AppendEmpty()
-	a.SetKeyStrindex(m.strSet.Add(string(key)))
-
-	switch v := value.(type) {
-	case int64:
-		a.Value().SetInt(v)
-	case string:
-		a.Value().SetStr(v)
-	}
-	m.indices[compoundKey] = newIndex
-	attrs.Append(newIndex)
+	a.SetKeyStrindex(m.strSet.Add(string(k.key)))
+	m.indices[k] = newIndex
+	return newIndex
 }

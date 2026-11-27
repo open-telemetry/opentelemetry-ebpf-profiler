@@ -212,6 +212,9 @@ func (p *Pdata) setProfile(
 		sampleType,
 		collectionStartTime, collectionEndTime)
 
+	// labelKeys avoids rebuilding the attribute key for every sample.
+	labelKeys := make(map[libpf.String]attribute.Key)
+
 	for sampleKey := range order {
 		traceInfo := events[sampleKey]
 		sample := profile.Samples().AppendEmpty()
@@ -316,13 +319,18 @@ func (p *Pdata) setProfile(
 		}
 		sample.SetStackIndex(stackIdx)
 
+		// Labels plus the three thread context attributes.
+		sample.AttributeIndices().EnsureCapacity(len(traceInfo.Labels) + 3)
+
 		for key, value := range traceInfo.Labels {
-			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
-			// reached an agreement, use the actual OTel SemConv attribute.
-			attrMgr.AppendOptionalString(
-				sample.AttributeIndices(),
-				attribute.Key("process.context.label."+key.String()),
-				value.String())
+			attrKey, ok := labelKeys[key]
+			if !ok {
+				// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
+				// reached an agreement, use the actual OTel SemConv attribute.
+				attrKey = attribute.Key("process.context.label." + key.String())
+				labelKeys[key] = attrKey
+			}
+			attrMgr.AppendOptionalString(sample.AttributeIndices(), attrKey, value.String())
 		}
 
 		if !profileType.OmitThreadContext {
