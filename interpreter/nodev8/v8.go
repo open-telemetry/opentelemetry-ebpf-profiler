@@ -562,7 +562,7 @@ type positionCacheKey struct {
 }
 
 func (k positionCacheKey) Hash32() uint32 {
-	return uint32(hash.Uint64(k.codeID)) ^ hash.Uint32(k.delta)
+	return uint32(hash.Uint64(k.codeID ^ uint64(k.delta)<<32))
 }
 
 // v8Code caches the data we need from V8 class Code
