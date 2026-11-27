@@ -558,8 +558,26 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		}
 		return f, nil
 	}
-	filename := fmt.Sprintf("%smap_files/%x-%x", sp.procBase, m.Vaddr, m.Vaddr+m.Length)
-	return os.Open(filename)
+	return os.Open(mapFilesPath(sp.procBase, m.Vaddr, m.Vaddr+m.Length))
+}
+
+// mapFilesPath returns the path of the map_files entry for [start, end). It is
+// on the hot path of process synchronization, so avoid fmt.Sprintf.
+func mapFilesPath(procBase string, start, end uint64) string {
+	const mapFiles = "map_files/"
+	// Hex digits needed for math.MaxUint64.
+	const maxHexLen = 16
+
+	var sb strings.Builder
+	sb.Grow(len(procBase) + len(mapFiles) + maxHexLen + len("-") + maxHexLen)
+	sb.WriteString(procBase)
+	sb.WriteString(mapFiles)
+
+	var hex [maxHexLen]byte
+	sb.Write(strconv.AppendUint(hex[:0], start, 16))
+	sb.WriteByte('-')
+	sb.Write(strconv.AppendUint(hex[:0], end, 16))
+	return sb.String()
 }
 
 func (sp *systemProcess) OpenMappingFile(m *RawMapping) (fs.File, error) {
