@@ -1441,7 +1441,11 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 			for _, pidTid := range pidEvents {
 				log.Debugf("=> %v", pidTid)
-				t.pidEvents <- pidTid
+				select {
+				case t.pidEvents <- pidTid:
+				case <-ctx.Done():
+					return false
+				}
 			}
 
 			// Keep the underlying array alive to avoid GC pressure
